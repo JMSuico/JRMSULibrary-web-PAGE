@@ -1,0 +1,8 @@
+export const assets = {
+  logos: {
+    jrmsu: 'https://lh3.googleusercontent.com/aida-public/AB6AXuABIe9XCBcYPIEsrc9KlZAXCjtNQg8zwbdkRWLMxPqmxFpfIh8eqiGW4toa-oWNSExQKbi3G3NGT2UbvoXUfsQ095y5BnyVwukyWEtwJo3rYE9syzP9snDmMY-7uDUiclsKhkHo2x_LXY32xyESJF7tdiA-NRSAZgnX4W3BpYn3LP79v163HAh5RwgNS8bj0OYbzGyzljPTqzp3s3rqMbfW1WBr3b8SHkmTq2igVPyKP4BRfcqHQhJCGPalhZKXcCaY599Z93_DGUpq'
+  },
+  images: {
+    chiefLibrarian: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCF64-Dr5jxyLaAfGblA6TVGOZPELh2cQO4fF1r8aMy47Lvutv-eUBibW_BNfbw2WPH__7A11NSFbQkRReklxenENCThxupL97Q47g2RDxjIlXD6SRbWrRWMal176fwlKcNFzVbcFisPS1Iv44tcJX6VjuyEc2CfhTfiNxv53pd3WbciUCDczqpkSVXZYcCU7KmIy8qaEJh-83GwP4wqY5pim0y2wYFn3oYzhYmnNRClJhhLA_9YdEyETcM_FkPWwl2FsSHr5J5t530'
+  }
+};
