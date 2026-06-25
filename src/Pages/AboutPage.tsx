@@ -28,7 +28,7 @@ export default function AboutPage() {
     <section id="about" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-10">
-          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>About the Library</h2>
+          <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>About the Library</h2>
           <p className="max-w-2xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             Discover the JRMSU Katipunan Campus Library — its commitment to quality service and academic excellence.
           </p>
@@ -46,7 +46,7 @@ export default function AboutPage() {
           ))}
         </div>
 
-        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20 w-fit mx-auto max-w-full" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+        <div className="rounded-3xl p-4 sm:p-8 md:p-12 shadow-2xl border border-gold-light/20 w-fit mx-auto max-w-full" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
           {activeTab === 'org' && (
             <div>
               <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-8 text-center">

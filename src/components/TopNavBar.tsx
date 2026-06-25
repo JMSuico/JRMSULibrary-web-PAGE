@@ -72,27 +72,38 @@ export const TopNavBar: React.FC = () => {
       style={{ background: 'linear-gradient(to right, #ffffff, #001851)' }}
     >
       <div className="flex justify-between items-center max-w-max-width mx-auto px-4 md:px-gutter h-full">
-        {/* Logo — also serves as hamburger toggle on mobile */}
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex items-center gap-4 lg:cursor-pointer cursor-pointer bg-transparent border-none p-0"
-          aria-label={sidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          aria-expanded={sidebarOpen}
-        >
-          <img
-            alt="JRMSU Logo"
-            className="h-14 w-auto object-contain"
-            src={assets.logos.jrmsu}
-          />
-          <div className="hidden sm:block text-left">
-            <span className="font-headline-md text-headline-md font-bold text-primary block leading-tight">
-              JRMSU Library
-            </span>
-            <span className="font-label-caps text-primary/70 tracking-[0.1em] uppercase text-[10px]">
-              Katipunan Campus
-            </span>
-          </div>
-        </button>
+        {/* Left side: Hamburger + Logo + Text */}
+        <div className="flex items-center gap-3">
+          {/* Hamburger icon — visible only on mobile/tablet (left of logo) */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden p-1 text-primary/90 hover:text-primary transition-colors bg-transparent border-none cursor-pointer flex items-center justify-center"
+            aria-label="Open navigation menu"
+          >
+            <span className="material-symbols-outlined text-3xl">menu</span>
+          </button>
+
+          {/* Logo — links to home on desktop, also triggers sidebar on mobile via parent div */}
+          <button
+            onClick={() => handleNavClick('/')}
+            className="flex items-center gap-3 cursor-pointer bg-transparent border-none p-0"
+            aria-label="Go to Home"
+          >
+            <img
+              alt="JRMSU Logo"
+              className="h-12 w-auto object-contain"
+              src={assets.logos.jrmsu}
+            />
+            <div className="text-left">
+              <span className="font-headline-md font-bold text-primary block leading-tight text-sm sm:text-base">
+                JRMSU Library
+              </span>
+              <span className="font-label-caps text-primary/70 tracking-[0.1em] uppercase text-[9px] sm:text-[10px]">
+                Katipunan Campus
+              </span>
+            </div>
+          </button>
+        </div>
 
         {/* Desktop nav */}
         <div className="hidden lg:flex gap-8 items-center font-ui-nav text-ui-nav uppercase tracking-wider">

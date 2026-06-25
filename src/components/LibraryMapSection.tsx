@@ -16,10 +16,10 @@ export const LibraryMapSection: React.FC = () => {
             Find us at the heart of Katipunan, Zamboanga del Norte.
           </p>
         </div>
-        <div className="p-8 md:p-12 bg-transparent">
+        <div className="p-4 sm:p-6 md:p-8 bg-transparent">
 
           {/* 2-Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 items-stretch">
             {/* Left Column: Address Info Card */}
             <div className="flex flex-col justify-center space-y-6">
               <div className="rounded-2xl p-6 md:p-10 border border-gold-light/20 shadow-lg flex-1 flex flex-col justify-center" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>

@@ -33,8 +33,8 @@ export const ServicesSection: React.FC = () => {
   };
 
   return (
-    <section id="services" className={`py-section-py-desktop max-w-max-width mx-auto px-4 md:px-gutter reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
-      <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+    <div id="services" className={`py-section-py-desktop max-w-max-width mx-auto px-4 md:px-gutter reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+      <div className="px-0 sm:p-4 md:p-8 md:p-12 bg-transparent">
         {/* 17 Services List */}
         <div className="mb-12 bg-navy-mid/60 rounded-2xl p-6 md:p-8 border border-gold-light/20">
           <h3 className="font-headline-md font-bold text-xl text-gold-light mb-6">Our 17 Library Services</h3>
@@ -77,7 +77,7 @@ export const ServicesSection: React.FC = () => {
                   onClick={() => toggleAccordion(service.id)}
                   aria-expanded={isOpen}
                 >
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-start sm:items-center gap-3 flex-wrap">
                     <span className={`px-3 py-1 rounded text-[10px] font-bold tracking-widest uppercase ${badgeColors[service.badgeType] || 'bg-primary text-white'}`}>
                       {service.badgeType === 'external' ? 'External' :
                        service.badgeType === 'internal-ext' ? 'Internal/External' :
@@ -155,6 +155,6 @@ export const ServicesSection: React.FC = () => {
           })}
         </div>
       </div>
-    </section>
+    </div>
   );
 };

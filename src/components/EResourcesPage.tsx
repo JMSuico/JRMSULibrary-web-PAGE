@@ -38,6 +38,27 @@ function filterTree(nodes: TreeNodeData[], query: string): TreeNodeData[] {
   }).filter((node): node is TreeNodeData => node !== null);
 }
 
+function sortTree(nodes: TreeNodeData[], order: 'A-Z' | 'Z-A' | 'Folders First' | 'Files First'): TreeNodeData[] {
+  const sorted = nodes.map(node => ({
+    ...node,
+    children: node.children ? sortTree(node.children, order) : undefined
+  }));
+
+  return sorted.sort((a, b) => {
+    if (order === 'Folders First') {
+      if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    }
+    if (order === 'Files First') {
+      if (a.type !== b.type) return a.type === 'file' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    }
+    
+    const comp = a.name.localeCompare(b.name);
+    return order === 'A-Z' ? comp : -comp;
+  });
+}
+
 interface LinkTableProps {
   title: string;
   links: { name: string; url: string }[];
@@ -73,9 +94,13 @@ export const EResourcesPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<TreeNodeData | null>(null);
   const [activeTab, setActiveTab] = useState<'files' | 'online'>('files');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<'Folders First' | 'Files First' | 'A-Z' | 'Z-A'>('Folders First');
 
   const allFiles = useMemo(() => collectFiles(eBooksTree), []);
-  const filteredTree = useMemo(() => filterTree(eBooksTree, searchQuery), [searchQuery]);
+  const filteredTree = useMemo(() => {
+    const filtered = filterTree(eBooksTree, searchQuery);
+    return sortTree(filtered, sortOrder);
+  }, [searchQuery, sortOrder]);
 
   return (
     <section id="e-resources" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
@@ -109,24 +134,14 @@ export const EResourcesPage: React.FC = () => {
 
         {activeTab === 'files' && (
           <div className="max-w-3xl mx-auto mb-12">
-            <div className="mb-6 relative">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-primary/50">search</span>
-              <input
-                type="text"
-                placeholder="Search files and folders..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/50 border border-primary/20 rounded-xl py-3 pl-12 pr-4 text-primary placeholder-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40 shadow-sm backdrop-blur-sm"
-              />
-            </div>
-            {filteredTree.length > 0 ? (
-              <TreeView nodes={filteredTree} onFileSelect={setSelectedFile} />
-            ) : (
-              <div className="text-center py-10 bg-white/50 rounded-xl border border-primary/10">
-                <span className="material-symbols-outlined text-4xl text-primary/30 mb-2">search_off</span>
-                <p className="text-primary/70">No files found matching "{searchQuery}"</p>
-              </div>
-            )}
+            <TreeView
+              nodes={filteredTree}
+              onFileSelect={setSelectedFile}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              sortOrder={sortOrder}
+              onSortChange={(s) => setSortOrder(s as any)}
+            />
           </div>
         )}
 

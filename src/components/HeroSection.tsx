@@ -50,9 +50,9 @@ export const HeroSection: React.FC = () => {
     >
       <div className="absolute inset-0 grid-overlay"></div>
 
-      <div className="relative z-10 w-full max-w-6xl mx-auto px-4">
+      <div className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Desktop: Two-column layout */}
-        <div className="md:grid md:grid-cols-2 md:gap-12 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
 
           {/* LEFT COLUMN: Republic Header + Premier University */}
           <div className={`text-center md:text-left mb-10 md:mb-0 hero-stagger ${isVisible ? 'visible' : ''}`} style={{ transitionDelay: '0ms' }}>
@@ -60,7 +60,7 @@ export const HeroSection: React.FC = () => {
               Republic of the Philippines
             </p>
             <h1
-              className="text-[#001851] font-black text-2xl md:text-4xl lg:text-5xl leading-tight mt-1"
+              className="text-[#001851] font-black text-xl sm:text-2xl md:text-4xl lg:text-5xl leading-tight mt-1"
               style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}
             >
               JOSE RIZAL MEMORIAL STATE UNIVERSITY
@@ -111,7 +111,7 @@ export const HeroSection: React.FC = () => {
           className={`flex justify-center mt-12 hero-stagger ${isVisible ? 'visible' : ''}`}
           style={{ transitionDelay: '240ms' }}
         >
-          <div className="bg-primary rounded-xl px-10 py-8 shadow-2xl inline-block border border-gold-light/20 hover-3d-tilt">
+          <div className="bg-primary rounded-xl px-4 sm:px-8 md:px-10 py-6 md:py-8 shadow-2xl inline-block border border-gold-light/20 hover-3d-tilt w-full md:w-auto">
             <div className="flex flex-col items-center">
               <div className="flex items-center gap-2 mb-2">
                 <div
@@ -122,7 +122,7 @@ export const HeroSection: React.FC = () => {
                 </span>
               </div>
 
-              <div className="font-status-clock text-[3.5rem] tracking-tighter text-gold-light tabular-nums mb-2 leading-none">
+              <div className="font-status-clock text-[2.5rem] sm:text-[3rem] md:text-[3.5rem] tracking-tighter text-gold-light tabular-nums mb-2 leading-none">
                 {timeState.hh}
                 <span className="blinking-colon">:</span>
                 {timeState.mm}
