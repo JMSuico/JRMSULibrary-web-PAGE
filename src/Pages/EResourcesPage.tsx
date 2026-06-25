@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { TreeView } from '../components/TreeView';
 import { FileViewerModal } from '../components/FileViewerModal';
@@ -50,10 +51,17 @@ const LinkTable: React.FC<LinkTableProps> = ({ title, links }) => (
 );
 
 export default function EResourcesPage() {
+  const { tab } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [selectedFile, setSelectedFile] = useState<TreeNodeData | null>(null);
 
+  const activeTab = tab === 'online' ? 'online' : 'files';
   const allFiles = useMemo(() => collectFiles(eBooksTree), []);
+
+  const setActiveTab = (t: string) => {
+    navigate(`/e-resources/${t}`, { replace: true });
+  };
 
   return (
     <section id="e-resources" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
@@ -65,16 +73,34 @@ export default function EResourcesPage() {
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8 mb-12">
-          <div>
+        <div className="flex flex-wrap justify-center gap-2 mb-10">
+          {[
+            { id: 'files', label: 'File Services' },
+            { id: 'online', label: 'Online Access' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              className={`tab-pill ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'files' && (
+          <div className="max-w-3xl mx-auto mb-12">
             <TreeView nodes={eBooksTree} onFileSelect={setSelectedFile} />
           </div>
-          <div className="space-y-6">
+        )}
+
+        {activeTab === 'online' && (
+          <div className="space-y-6 max-w-3xl mx-auto">
             <LinkTable title="Open Access Journals" links={openAccessLinks} />
             <LinkTable title="Resources" links={resourcesLinks} />
             <LinkTable title="Acquired E-Resources" links={acquiredELinks} />
           </div>
-        </div>
+        )}
       </div>
 
       {selectedFile && (

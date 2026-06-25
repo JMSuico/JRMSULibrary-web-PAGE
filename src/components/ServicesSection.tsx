@@ -34,10 +34,10 @@ export const ServicesSection: React.FC = () => {
 
   return (
     <section id="services" className={`py-section-py-desktop max-w-max-width mx-auto px-4 md:px-gutter reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
-      <div className="bg-primary/95 backdrop-blur-md rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20">
+      <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
         <div className="text-center mb-12">
-          <h2 className="font-headline-lg font-bold text-4xl text-white mb-4">Library Services Guide</h2>
-          <p className="text-white/70 max-w-2xl mx-auto">
+          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Library Services Guide</h2>
+          <p className="max-w-2xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             Explore our streamlined processes for borrowing, research, and campus-wide clearances.
           </p>
         </div>

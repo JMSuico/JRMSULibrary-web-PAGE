@@ -43,13 +43,11 @@
 
 /* Body background — library image visible through sections */
 body {
-  background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCOWBy-RFx8oXdQYHjPFVq0Nw4nWIHzwh9JPEKQSNXOKwuLSwoDz5mVCXWkTVwcnsJXEArL9ZYTJ8Ipa1VcetP4wJJ355q-L4Qw83szWpGWSEftrNlR_vN39ODRBFZ05Kf6WgbKIRHAv4WB5WEEBbeXK2ZPOkDaEgENpD8mhSQKrCrUEKLibu_jhVNzYXYYyhOyPZ46f6tUEfz5h5UWZnkiQIgDMg-vTaC5aPGEIXWiEA0ZQx8z27R8eRME3XLBc_TZJspDwtYktUJH');
+  background-image: linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), url('/assets/JRMSU library lib.jpg');
   background-attachment: fixed;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-color: #faf8ff;
-  background-blend-mode: overlay;
 }
 
 /* Sections are fully transparent — no white overlay (body bg shows through) */
@@ -311,30 +309,30 @@ section#home {
     opacity: 1;
     filter: blur(0);
     z-index: 10;
-    box-shadow: 0 0 40px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 0 60px rgba(37, 99, 235, 0.35);
     position: relative;
   }
   .carousel-3d-card.left {
-    transform: translateX(-60%) translateZ(-200px) scale(0.85);
-    opacity: 0.5;
+    transform: translateX(-75%) translateZ(-300px) scale(0.75);
+    opacity: 0.45;
     filter: blur(2px);
     z-index: 5;
   }
   .carousel-3d-card.right {
-    transform: translateX(60%) translateZ(-200px) scale(0.85);
-    opacity: 0.5;
+    transform: translateX(75%) translateZ(-300px) scale(0.75);
+    opacity: 0.45;
     filter: blur(2px);
     z-index: 5;
   }
   .carousel-3d-card.far-left {
-    transform: translateX(-120%) translateZ(-300px) scale(0.7);
-    opacity: 0.25;
+    transform: translateX(-160%) translateZ(-400px) scale(0.6);
+    opacity: 0.15;
     filter: blur(4px);
     z-index: 3;
   }
   .carousel-3d-card.far-right {
-    transform: translateX(120%) translateZ(-300px) scale(0.7);
-    opacity: 0.25;
+    transform: translateX(160%) translateZ(-400px) scale(0.6);
+    opacity: 0.15;
     filter: blur(4px);
     z-index: 3;
   }
@@ -362,32 +360,6 @@ section#home {
     transform: scale(1.1);
     box-shadow: 0 8px 24px rgba(0,0,0,0.2);
     background: white;
-  }
-
-  /* === Cube Slider === */
-  .cube-slider-perspective {
-    perspective: 1200px;
-    background: transparent;
-  }
-  .cube-slider-stage {
-    position: relative;
-    transform-style: preserve-3d;
-    transition: transform 0.8s cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  .cube-slider-face {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    overflow: hidden;
-  }
-  .cube-slider-face img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
   }
 
   /* === Tree View === */

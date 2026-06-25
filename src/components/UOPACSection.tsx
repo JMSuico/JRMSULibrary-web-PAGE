@@ -8,13 +8,14 @@ export const UOPACSection: React.FC = () => {
     <section id="uopac" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div
-          className="bg-gradient-to-br from-navy-dark to-navy-mid p-12 rounded-3xl shadow-2xl border border-gold-light/20"
+          className="p-12 rounded-3xl shadow-2xl border border-gold-light/20"
+          style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}
         >
           <div className="flex flex-col items-center text-center gap-6">
             {/* Header */}
-            <p className="text-sm uppercase tracking-widest text-blue-300">University Libraries</p>
-            <h2 className="text-5xl font-bold text-white font-headline-lg">UOPAC</h2>
-            <p className="text-lg text-blue-200">Union Online Public Access Catalog</p>
+            <p className="text-sm uppercase tracking-widest" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>University Libraries</p>
+            <h2 className="text-5xl font-bold font-headline-lg" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>UOPAC</h2>
+            <p className="text-lg" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>Union Online Public Access Catalog</p>
 
             {/* QR Code */}
             <div className="bg-white p-4 rounded-xl shadow-lg">

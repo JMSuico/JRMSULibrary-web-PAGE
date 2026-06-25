@@ -55,7 +55,7 @@ export const NewlyAcquiredBooks: React.FC = () => {
             Explore our latest additions — curated to support your academic journey and research needs.
           </p>
         </div>
-        <div className="bg-primary/95 backdrop-blur-md rounded-3xl p-6 md:p-10 shadow-2xl border border-gold-light/20">
+        <div className="rounded-3xl p-6 md:p-10 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
           <BlueModalCarousel items={books} />
           <div className="flex justify-center mt-6">
             <button

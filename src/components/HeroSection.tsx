@@ -76,14 +76,8 @@ export const HeroSection: React.FC = () => {
             </p>
           </div>
 
-          {/* RIGHT COLUMN: Excellence in Information + Image Card */}
+          {/* RIGHT COLUMN: Image Card with overlays */}
           <div className="flex flex-col items-center md:items-end">
-            <div className={`text-center md:text-right mb-6 hero-stagger ${isVisible ? 'visible' : ''}`} style={{ transitionDelay: '80ms' }}>
-              <span className="text-[#002B7F] font-bold text-xl md:text-2xl tracking-wider uppercase">
-                Excellence in Information
-              </span>
-            </div>
-
             <div className={`hero-stagger ${isVisible ? 'visible' : ''}`} style={{ transitionDelay: '160ms' }}>
               <div className="max-w-lg mx-auto md:mx-0 relative rounded-3xl overflow-hidden shadow-2xl">
                 <img
@@ -92,11 +86,18 @@ export const HeroSection: React.FC = () => {
                   className="w-full h-auto object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#001851] via-[#001851]/70 to-transparent"></div>
-                <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 text-center">
-                  <h2 className="text-gold-light font-bold text-2xl md:text-3xl font-headline-lg mb-2">
+                {/* "Excellence in Information" — upper left */}
+                <div className="absolute top-0 left-0 p-6 md:p-8">
+                  <span className="text-gold-light font-bold text-lg md:text-2xl tracking-wider uppercase drop-shadow-lg">
+                    Excellence in Information
+                  </span>
+                </div>
+                {/* Bottom text — left aligned */}
+                <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 text-left">
+                  <h2 className="text-gold-light font-bold text-2xl md:text-3xl font-headline-lg mb-2 drop-shadow-lg">
                     The Gateway to Academic Excellence
                   </h2>
-                  <p className="text-white/90 text-xs md:text-sm max-w-lg mx-auto">
+                  <p className="text-white/90 text-xs md:text-sm max-w-lg">
                     Empowering the JRMSU Katipunan community through accessible resources, expert guidance, and a modern digital research environment.
                   </p>
                 </div>

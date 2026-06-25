@@ -9,36 +9,74 @@ export const PersonnelSection: React.FC = () => {
     <section id="staff" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div id="personnel" className="max-w-max-width mx-auto px-4 md:px-gutter">
 
-        {/* ========== PART 1: Library Personnel Org Chart ========== */}
         <div className="text-center mb-16">
-          <h2 className="font-headline-lg text-4xl text-primary mb-4 font-bold">Library Personnel</h2>
-          <p className="text-on-surface-variant max-w-3xl mx-auto">
+          <h2 className="font-headline-lg text-4xl mb-4 font-bold" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+            Library Personnel
+          </h2>
+          <p className="max-w-3xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             Meet the dedicated library professionals committed to supporting learning, research, and academic excellence at JRMSU.
           </p>
         </div>
 
-        <div className="bg-primary/95 backdrop-blur-md rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20 mb-16">
+        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20 mb-16" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
           <div className="flex flex-col items-center">
-            {/* Chief Librarian */}
-            <div className="fade-down-entrance mb-2 w-full max-w-sm">
-              <div className="p-6 rounded-2xl text-center flex flex-col items-center bg-primary text-white shadow-lg">
-                <div className="w-32 h-32 rounded-full border-4 border-gold-light/40 overflow-hidden shadow-xl mb-4">
-                  <img
-                    alt="Kiara Keren M. Alavanza"
-                    className="w-full h-full rounded-full object-cover"
-                    src={assets.images.chiefLibrarian}
-                  />
+            {/* Librarian's Corner + Photo Card merged */}
+            <div className="w-full mb-10">
+              <div className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}>
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                  <div className="flex-1 text-left">
+                    <h3 className="text-3xl font-bold font-headline-lg mb-4 text-gold-light drop-shadow-lg">Librarian's Corner</h3>
+                    <p className="italic mb-4" style={{ color: '#001851', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>
+                      From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence.
+                    </p>
+                    <p className="text-sm leading-relaxed mb-4" style={{ color: '#001851', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>
+                      The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University's Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users.
+                    </p>
+                    <p className="text-sm text-gold-light italic drop-shadow-lg">
+                      Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!
+                    </p>
+                  </div>
+                  <div className="w-48 flex-shrink-0 text-center mx-auto md:mx-0">
+                    <div className="w-28 h-28 rounded-full border-4 border-gold-light/40 overflow-hidden shadow-xl mx-auto mb-3">
+                      <img
+                        alt="Kiara Keren M. Alavanza"
+                        className="w-full h-full rounded-full object-cover"
+                        src={assets.images.chiefLibrarian}
+                      />
+                    </div>
+                    <h3 className="font-headline-md font-bold text-lg mb-0.5" style={{ color: '#F0D97A' }}>Kiara Keren M. Alavanza</h3>
+                    <p className="text-gold-light font-bold tracking-widest text-xs uppercase">Campus Librarian</p>
+                  </div>
                 </div>
-                <h3 className="font-headline-md font-bold text-xl mb-1">Kiara Keren M. Alavanza</h3>
-                <p className="text-gold-light font-bold tracking-widest text-xs uppercase">Campus Librarian</p>
               </div>
             </div>
 
-            {/* Vertical Connector */}
-            <div className="w-0.5 h-8 bg-gold-light"></div>
+            {/* Curved Arrow SVG Connector */}
+            <div className="relative w-full max-w-4xl mx-auto h-20 hidden md:block">
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 800 80"
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <defs>
+                  <marker id="arrowhead-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
+                  </marker>
+                </defs>
+                {/* Vertical trunk from librarian */}
+                <path d="M 400 0 Q 400 10, 400 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
+                {/* Horizontal spine */}
+                <path d="M 130 20 Q 400 20, 670 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
+                {/* Curved drops to each staff with arrowheads */}
+                <path d="M 130 20 Q 130 30, 130 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                <path d="M 400 20 Q 400 30, 400 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                <path d="M 670 20 Q 670 30, 670 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+              </svg>
+            </div>
 
-            {/* Horizontal Bar */}
-            <div className="hidden md:block w-3/4 max-w-3xl h-0.5 bg-gold-light mb-2"></div>
+            {/* Mobile simple connector */}
+            <div className="w-0.5 h-8 bg-gold-light md:hidden"></div>
+            <div className="w-3/4 max-w-3xl h-0.5 bg-gold-light mb-2 md:hidden"></div>
 
             {/* Staff Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mt-2">
@@ -48,57 +86,21 @@ export const PersonnelSection: React.FC = () => {
                 { initials: 'RR', name: 'Reizel C. Rosauro', title: 'Staff, Library', delay: '0.6s' },
               ].map((person, idx) => (
                 <div key={idx} className="fade-up-entrance flex flex-col items-center" style={{ transitionDelay: person.delay }}>
-                  <div className="hidden md:block w-0.5 h-6 bg-gold-light"></div>
-                  <div className="bg-primary/90 border-2 border-gold-light/30 rounded-2xl p-6 text-center w-full shadow-md hover:shadow-lg transition-shadow">
+                  <div className="w-0.5 h-6 bg-gold-light md:hidden"></div>
+                  <div
+                    className="border-2 border-gold-light/30 rounded-2xl p-6 text-center w-full shadow-md hover:shadow-lg transition-shadow"
+                    style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}
+                  >
                     <div className="w-20 h-20 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 shadow-lg">
                       {person.initials}
                     </div>
-                    <h3 className="font-headline-md font-bold text-gold-light mb-1 text-lg leading-tight uppercase">
+                    <h3 className="font-headline-md font-bold mb-1 text-lg leading-tight uppercase" style={{ color: '#F0D97A' }}>
                       {person.name}
                     </h3>
-                    <p className="font-label-caps text-white/80 font-semibold text-xs">{person.title}</p>
+                    <p className="font-label-caps font-semibold text-xs" style={{ color: 'rgba(255,255,255,0.8)' }}>{person.title}</p>
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ========== PART 2: Librarian's Corner — Blue Modal Card ========== */}
-        <div
-          className="bg-primary/95 backdrop-blur-md rounded-3xl p-10 shadow-2xl border border-gold-light/20"
-        >
-          <div className="flex flex-col md:flex-row gap-10 items-center">
-            {/* Left Side — Text Content */}
-            <div className="flex-1 text-left text-white">
-              <h3 className="text-3xl font-bold font-headline-lg mb-4 text-gold-light">Librarian's Corner</h3>
-
-              <p className="italic text-white/80 mb-4">
-                From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence.
-              </p>
-
-              <p className="text-sm text-white/80 leading-relaxed mb-4">
-                The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University's Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users.
-              </p>
-
-              <p className="text-sm text-gold-light italic">
-                Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!
-              </p>
-            </div>
-
-            {/* Right Side — Photo Card matching org chart style */}
-            <div className="w-72 flex-shrink-0">
-              <div className="p-6 rounded-2xl text-center flex flex-col items-center bg-primary text-white shadow-lg border border-gold-light/20">
-                <div className="w-32 h-32 rounded-full border-4 border-gold-light/40 overflow-hidden shadow-xl mb-4">
-                  <img
-                    alt="Kiara Keren M. Alavanza"
-                    className="w-full h-full rounded-full object-cover"
-                    src={assets.images.chiefLibrarian}
-                  />
-                </div>
-                <h3 className="font-headline-md font-bold text-xl mb-1">Kiara Keren M. Alavanza</h3>
-                <p className="text-gold-light font-bold tracking-widest text-xs uppercase">Campus Librarian</p>
-              </div>
             </div>
           </div>
         </div>

@@ -39,8 +39,8 @@ export const TopNavBar: React.FC = () => {
   ];
 
   const eresourcesItems = [
-    { label: 'File Services', path: '/e-resources' },
-    { label: 'Online Access', path: '/e-resources' },
+    { label: 'File Services', path: '/e-resources/files' },
+    { label: 'Online Access', path: '/e-resources/online' },
   ];
 
   const navLinks = [
@@ -68,7 +68,8 @@ export const TopNavBar: React.FC = () => {
 
   return (
     <nav
-      className={`fixed top-0 w-full z-50 h-20 transition-all duration-300 bg-white shadow-sm border-b border-gray-200`}
+      className="fixed top-0 w-full z-50 h-20 transition-all duration-300 bg-white shadow-sm border-b border-gray-200"
+      style={{ background: 'linear-gradient(to right, #ffffff, #001851)' }}
     >
       <div className="flex justify-between items-center max-w-max-width mx-auto px-4 md:px-gutter h-full">
         {/* Logo — also serves as hamburger toggle on mobile */}
@@ -101,13 +102,13 @@ export const TopNavBar: React.FC = () => {
                 <>
                   <button
                     className={`transition-colors relative nav-underline cursor-pointer ${
-                      isActive(link.path) ? 'text-primary' : 'text-primary/70 hover:text-primary'
+                      isActive(link.path) ? 'text-gold-light' : 'text-white/80 hover:text-gold-light'
                     }`}
                     onClick={() => {
                       closeAllDropdowns();
-                      if (link.label === 'About') setAboutOpen(!aboutOpen);
-                      if (link.label === 'Services') setServicesOpen(!servicesOpen);
-                      if (link.label === 'E-Resources') setEresourcesOpen(!eresourcesOpen);
+                      if (link.label === 'About') { setAboutOpen(!aboutOpen); handleNavClick(link.path); }
+                      if (link.label === 'Services') { setServicesOpen(!servicesOpen); handleNavClick(link.path); }
+                      if (link.label === 'E-Resources') { setEresourcesOpen(!eresourcesOpen); handleNavClick(link.path); }
                     }}
                     onMouseEnter={() => {
                       if (link.label === 'About') setAboutOpen(true);
@@ -155,7 +156,7 @@ export const TopNavBar: React.FC = () => {
               ) : (
                 <button
                   className={`transition-colors relative nav-underline cursor-pointer bg-transparent border-none ${
-                    isActive(link.path) ? 'text-primary' : 'text-primary/70 hover:text-primary'
+                    isActive(link.path) ? 'text-gold-light' : 'text-white/80 hover:text-gold-light'
                   }`}
                   onClick={() => handleNavClick(link.path)}
                 >
@@ -215,9 +216,9 @@ export const TopNavBar: React.FC = () => {
                   <button
                     className="w-full text-left text-on-primary/80 text-sm uppercase tracking-wider font-medium py-3 inline-flex items-center gap-1 border-b border-gold-light/10 cursor-pointer bg-transparent border-none"
                     onClick={() => {
-                      if (link.label === 'About') setAboutOpen(!aboutOpen);
-                      if (link.label === 'Services') setServicesOpen(!servicesOpen);
-                      if (link.label === 'E-Resources') setEresourcesOpen(!eresourcesOpen);
+                      if (link.label === 'About') { setAboutOpen(!aboutOpen); handleNavClick(link.path); }
+                      if (link.label === 'Services') { setServicesOpen(!servicesOpen); handleNavClick(link.path); }
+                      if (link.label === 'E-Resources') { setEresourcesOpen(!eresourcesOpen); handleNavClick(link.path); }
                     }}
                     aria-expanded={
                       link.label === 'About' ? aboutOpen :

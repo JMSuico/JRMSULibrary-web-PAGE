@@ -16,6 +16,7 @@ const ITEMS_PER_PAGE = 30;
 
 export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onClose }) => {
   const [page, setPage] = useState(0);
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
 
   const totalPages = Math.max(1, Math.ceil(books.length / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages - 1);
@@ -38,34 +39,88 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="font-headline-md text-lg font-bold text-primary">All Books</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer bg-transparent border-none"
-            aria-label="Close modal"
-          >
-            <span className="material-symbols-outlined text-2xl">close</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+              <button
+                onClick={() => setViewMode('card')}
+                className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border-none ${
+                  viewMode === 'card' ? 'bg-primary text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                }`}
+                aria-label="Card view"
+              >
+                <span className="material-symbols-outlined text-base align-middle">grid_view</span>
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border-none ${
+                  viewMode === 'table' ? 'bg-primary text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                }`}
+                aria-label="Table view"
+              >
+                <span className="material-symbols-outlined text-base align-middle">table_rows</span>
+              </button>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer bg-transparent border-none"
+              aria-label="Close modal"
+            >
+              <span className="material-symbols-outlined text-2xl">close</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid gap-3">
-            {pageItems.map((book, idx) => (
-              <div
-                key={currentPage * ITEMS_PER_PAGE + idx}
-                className="flex items-start gap-3 p-4 rounded-xl bg-gray-50 border border-gray-100"
-              >
-                {book.icon && (
-                  <span className="material-symbols-outlined text-2xl text-primary flex-shrink-0 mt-0.5">
-                    {book.icon}
-                  </span>
-                )}
-                <div>
-                  <h3 className="font-headline-md font-bold text-sm text-primary">{book.title}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{book.description}</p>
+          {viewMode === 'card' ? (
+            <div className="grid gap-3">
+              {pageItems.map((book, idx) => (
+                <div
+                  key={currentPage * ITEMS_PER_PAGE + idx}
+                  className="flex items-start gap-3 p-4 rounded-xl bg-gray-50 border border-gray-100"
+                >
+                  {book.icon && (
+                    <span className="material-symbols-outlined text-2xl text-primary flex-shrink-0 mt-0.5">
+                      {book.icon}
+                    </span>
+                  )}
+                  <div>
+                    <h3 className="font-headline-md font-bold text-sm text-primary">{book.title}</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">{book.description}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider w-10">#</th>
+                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider w-14">Icon</th>
+                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider">Title</th>
+                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider hidden md:table-cell">Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.map((book, idx) => {
+                    const realIdx = currentPage * ITEMS_PER_PAGE + idx + 1;
+                    return (
+                      <tr key={realIdx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
+                        <td className="py-3 px-3">
+                          {book.icon && (
+                            <span className="material-symbols-outlined text-lg text-primary">{book.icon}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-primary">{book.title}</td>
+                        <td className="py-3 px-3 text-gray-500 text-xs hidden md:table-cell">{book.description}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {totalPages > 1 && (
