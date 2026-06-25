@@ -18,21 +18,21 @@ export const PersonnelSection: React.FC = () => {
           </p>
         </div>
 
-        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20 mb-16" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+        <div className="p-8 md:p-12 mb-16 bg-transparent">
           <div className="flex flex-col items-center">
             {/* Librarian's Corner + Photo Card merged */}
             <div className="w-full mb-10">
               <div className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20 hover-3d-tilt" style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}>
                 <div className="flex flex-col md:flex-row gap-8 items-center md:items-center">
                   <div className="flex-1 text-left">
-                    <h3 className="text-3xl font-bold font-headline-lg mb-4 text-gold-light drop-shadow-lg">Librarian's Corner</h3>
-                    <p className="italic mb-4 text-white/90">
+                    <h3 className="text-3xl font-bold font-headline-lg mb-4 text-primary drop-shadow-sm">Librarian's Corner</h3>
+                    <p className="italic mb-4 text-primary/90">
                       From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence.
                     </p>
-                    <p className="text-sm leading-relaxed mb-4 text-white/85">
+                    <p className="text-sm leading-relaxed mb-4 text-primary/85">
                       The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University's Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users.
                     </p>
-                    <p className="text-sm text-gold-light italic drop-shadow-lg">
+                    <p className="text-sm text-secondary italic drop-shadow-sm font-medium">
                       Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!
                     </p>
                   </div>
@@ -58,24 +58,22 @@ export const PersonnelSection: React.FC = () => {
 
             {/* Curved Arrow SVG Connector */}
             <div className="relative w-full max-w-4xl mx-auto h-20 hidden md:block">
-              <svg
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                viewBox="0 0 800 80"
-                preserveAspectRatio="xMidYMid meet"
-              >
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 900 80" preserveAspectRatio="xMidYMid meet">
                 <defs>
                   <marker id="arrowhead-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
                     <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
                   </marker>
                 </defs>
-                {/* Vertical trunk from librarian */}
-                <path d="M 400 0 Q 400 10, 400 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
-                {/* Horizontal spine */}
-                <path d="M 130 20 Q 400 20, 670 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
-                {/* Curved drops to each staff with arrowheads */}
-                <path d="M 130 20 Q 130 30, 130 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
-                <path d="M 400 20 Q 400 30, 400 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
-                <path d="M 670 20 Q 670 30, 670 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                {/* Top center down to horizontal line */}
+                <path d="M 450 0 L 450 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
+                {/* Horizontal line across columns */}
+                <path d="M 150 20 L 750 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
+                {/* Left arrow down */}
+                <path d="M 150 20 L 150 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                {/* Center arrow down */}
+                <path d="M 450 20 L 450 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                {/* Right arrow down */}
+                <path d="M 750 20 L 750 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
               </svg>
             </div>
 

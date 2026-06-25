@@ -16,7 +16,7 @@ export const LibraryMapSection: React.FC = () => {
             Find us at the heart of Katipunan, Zamboanga del Norte.
           </p>
         </div>
-        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+        <div className="p-8 md:p-12 bg-transparent">
 
           {/* 2-Column Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">

@@ -202,7 +202,7 @@ export const LibrarySectionCarousel: React.FC = () => {
           </p>
         </div>
 
-        <div className="rounded-3xl p-6 md:p-10 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+        <div className="p-6 md:p-10 bg-transparent">
           <div className="carousel-3d-perspective w-full py-6 relative">
             <button className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-30" onClick={prev} aria-label="Previous section picture">
               <span className="material-symbols-outlined">chevron_left</span>
@@ -264,7 +264,7 @@ export const LibrarySectionCarousel: React.FC = () => {
             ))}
           </div>
 
-          <p className="text-center text-sm mt-4 font-medium" style={{ color: '#F0D97A', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <p className="text-center text-sm mt-4 font-bold" style={{ color: '#001851' }}>
             {sectionImages[activeIdx].label}
           </p>
 

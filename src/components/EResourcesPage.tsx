@@ -19,6 +19,25 @@ function collectFiles(nodes: TreeNodeData[]): TreeNodeData[] {
   return files;
 }
 
+function filterTree(nodes: TreeNodeData[], query: string): TreeNodeData[] {
+  if (!query.trim()) return nodes;
+  const lowerQuery = query.toLowerCase();
+  
+  return nodes.map(node => {
+    const isMatch = node.name.toLowerCase().includes(lowerQuery);
+    
+    if (node.children) {
+      const filteredChildren = filterTree(node.children, query);
+      if (isMatch || filteredChildren.length > 0) {
+        return { ...node, children: filteredChildren };
+      }
+      return null;
+    }
+    
+    return isMatch ? node : null;
+  }).filter((node): node is TreeNodeData => node !== null);
+}
+
 interface LinkTableProps {
   title: string;
   links: { name: string; url: string }[];
@@ -53,8 +72,10 @@ export const EResourcesPage: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [selectedFile, setSelectedFile] = useState<TreeNodeData | null>(null);
   const [activeTab, setActiveTab] = useState<'files' | 'online'>('files');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const allFiles = useMemo(() => collectFiles(eBooksTree), []);
+  const filteredTree = useMemo(() => filterTree(eBooksTree, searchQuery), [searchQuery]);
 
   return (
     <section id="e-resources" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
@@ -88,7 +109,24 @@ export const EResourcesPage: React.FC = () => {
 
         {activeTab === 'files' && (
           <div className="max-w-3xl mx-auto mb-12">
-            <TreeView nodes={eBooksTree} onFileSelect={setSelectedFile} />
+            <div className="mb-6 relative">
+              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-primary/50">search</span>
+              <input
+                type="text"
+                placeholder="Search files and folders..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/50 border border-primary/20 rounded-xl py-3 pl-12 pr-4 text-primary placeholder-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40 shadow-sm backdrop-blur-sm"
+              />
+            </div>
+            {filteredTree.length > 0 ? (
+              <TreeView nodes={filteredTree} onFileSelect={setSelectedFile} />
+            ) : (
+              <div className="text-center py-10 bg-white/50 rounded-xl border border-primary/10">
+                <span className="material-symbols-outlined text-4xl text-primary/30 mb-2">search_off</span>
+                <p className="text-primary/70">No files found matching "{searchQuery}"</p>
+              </div>
+            )}
           </div>
         )}
 

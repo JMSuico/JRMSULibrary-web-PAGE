@@ -46,7 +46,7 @@ export default function AboutPage() {
           ))}
         </div>
 
-        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20 w-fit mx-auto max-w-full" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
           {activeTab === 'org' && (
             <div>
               <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-8 text-center">

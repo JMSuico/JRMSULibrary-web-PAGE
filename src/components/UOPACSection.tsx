@@ -8,14 +8,13 @@ export const UOPACSection: React.FC = () => {
     <section id="uopac" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div
-          className="p-12 rounded-3xl shadow-2xl border border-gold-light/20"
-          style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}
+          className="p-12 bg-transparent"
         >
           <div className="flex flex-col items-center text-center gap-6">
             {/* Header */}
-            <p className="text-sm uppercase tracking-widest text-gold-light">University Libraries</p>
-            <h2 className="text-5xl font-bold font-headline-lg text-white">UOPAC</h2>
-            <p className="text-lg text-white/90">Union Online Public Access Catalog</p>
+            <p className="text-sm uppercase tracking-widest text-primary font-bold">University Libraries</p>
+            <h2 className="text-5xl font-bold font-headline-lg text-primary drop-shadow-sm">UOPAC</h2>
+            <p className="text-lg text-primary/90 font-medium">Union Online Public Access Catalog</p>
 
             {/* QR Code */}
             <div className="bg-white p-4 rounded-xl shadow-lg">
@@ -25,13 +24,13 @@ export const UOPACSection: React.FC = () => {
                 className="w-48 h-48 mx-auto object-contain"
               />
             </div>
-            <p className="text-white font-bold uppercase tracking-wider">Scan QR to Register</p>
+            <p className="text-primary font-bold uppercase tracking-wider">Scan QR to Register</p>
 
             {/* Divider with OR */}
             <div className="flex items-center gap-4 w-full max-w-xs">
-              <div className="flex-1 h-px bg-white/30"></div>
-              <span className="text-white/70 font-bold text-sm">OR</span>
-              <div className="flex-1 h-px bg-white/30"></div>
+              <div className="flex-1 h-px bg-primary/30"></div>
+              <span className="text-primary/70 font-bold text-sm">OR</span>
+              <div className="flex-1 h-px bg-primary/30"></div>
             </div>
 
             {/* Registration Link */}
