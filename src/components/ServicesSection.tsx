@@ -34,20 +34,13 @@ export const ServicesSection: React.FC = () => {
 
   return (
     <section id="services" className={`py-section-py-desktop max-w-max-width mx-auto px-4 md:px-gutter reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
-      <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
-        <div className="text-center mb-12">
-          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Library Services Guide</h2>
-          <p className="max-w-2xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
-            Explore our streamlined processes for borrowing, research, and campus-wide clearances.
-          </p>
-        </div>
-
+      <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
         {/* 17 Services List */}
         <div className="mb-12 bg-navy-mid/60 rounded-2xl p-6 md:p-8 border border-gold-light/20">
           <h3 className="font-headline-md font-bold text-xl text-gold-light mb-6">Our 17 Library Services</h3>
           <div className="grid md:grid-cols-2 gap-3">
             {allServicesList.map((service, idx) => (
-              <div key={idx} className="flex items-center gap-3 p-3 bg-navy-dark/60 rounded-lg shadow-sm border border-gold-light/10">
+              <div key={idx} className="flex items-center gap-3 p-3 bg-navy-dark/60 rounded-lg shadow-sm border border-gold-light/10 interactive-hover">
                 <span className="w-8 h-8 rounded-full bg-gold-light text-primary flex items-center justify-center text-xs font-bold shrink-0">
                   {idx + 1}
                 </span>
@@ -78,7 +71,7 @@ export const ServicesSection: React.FC = () => {
           {filteredServices.map((service) => {
             const isOpen = openAccordion === service.id;
             return (
-              <div key={service.id} className="accordion-card">
+              <div key={service.id} className="accordion-card hover-3d-tilt">
                 <div
                   className="accordion-header"
                   onClick={() => toggleAccordion(service.id)}

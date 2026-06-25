@@ -18,34 +18,39 @@ export const PersonnelSection: React.FC = () => {
           </p>
         </div>
 
-        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20 mb-16" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
+        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20 mb-16" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
           <div className="flex flex-col items-center">
             {/* Librarian's Corner + Photo Card merged */}
             <div className="w-full mb-10">
-              <div className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}>
-                <div className="flex flex-col md:flex-row gap-6 items-start">
+              <div className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20 hover-3d-tilt" style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}>
+                <div className="flex flex-col md:flex-row gap-8 items-center md:items-center">
                   <div className="flex-1 text-left">
                     <h3 className="text-3xl font-bold font-headline-lg mb-4 text-gold-light drop-shadow-lg">Librarian's Corner</h3>
-                    <p className="italic mb-4" style={{ color: '#001851', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>
+                    <p className="italic mb-4 text-white/90">
                       From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence.
                     </p>
-                    <p className="text-sm leading-relaxed mb-4" style={{ color: '#001851', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>
+                    <p className="text-sm leading-relaxed mb-4 text-white/85">
                       The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University's Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users.
                     </p>
                     <p className="text-sm text-gold-light italic drop-shadow-lg">
                       Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!
                     </p>
                   </div>
-                  <div className="w-48 flex-shrink-0 text-center mx-auto md:mx-0">
-                    <div className="w-28 h-28 rounded-full border-4 border-gold-light/40 overflow-hidden shadow-xl mx-auto mb-3">
+                  
+                  {/* Maam Kiara - Middle Right Side */}
+                  <div className="w-64 flex-shrink-0 flex flex-col justify-center items-center text-center p-4 border-l-0 md:border-l border-gold-light/20">
+                    <div className="w-40 h-40 rounded-full border-4 border-gold-light/40 overflow-hidden shadow-2xl mx-auto mb-4 relative group">
                       <img
                         alt="Kiara Keren M. Alavanza"
-                        className="w-full h-full rounded-full object-cover"
+                        className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
                         src={assets.images.chiefLibrarian}
                       />
                     </div>
-                    <h3 className="font-headline-md font-bold text-lg mb-0.5" style={{ color: '#F0D97A' }}>Kiara Keren M. Alavanza</h3>
-                    <p className="text-gold-light font-bold tracking-widest text-xs uppercase">Campus Librarian</p>
+                    <div className="bg-navy-dark/80 backdrop-blur-sm px-4 py-3 rounded-xl border border-gold-light/10 shadow-lg w-full">
+                      <h3 className="font-headline-md font-bold text-lg mb-1" style={{ color: '#F0D97A' }}>Kiara Keren M. Alavanza</h3>
+                      <div className="h-0.5 w-12 bg-gold-light/50 mx-auto mb-2"></div>
+                      <p className="text-white/90 font-bold tracking-widest text-xs uppercase">Campus Librarian</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -88,7 +93,7 @@ export const PersonnelSection: React.FC = () => {
                 <div key={idx} className="fade-up-entrance flex flex-col items-center" style={{ transitionDelay: person.delay }}>
                   <div className="w-0.5 h-6 bg-gold-light md:hidden"></div>
                   <div
-                    className="border-2 border-gold-light/30 rounded-2xl p-6 text-center w-full shadow-md hover:shadow-lg transition-shadow"
+                    className="border-2 border-gold-light/30 rounded-2xl p-6 text-center w-full shadow-md hover-3d-tilt"
                     style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}
                   >
                     <div className="w-20 h-20 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 shadow-lg">

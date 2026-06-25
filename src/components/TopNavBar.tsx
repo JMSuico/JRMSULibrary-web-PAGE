@@ -27,15 +27,15 @@ export const TopNavBar: React.FC = () => {
   }, [location.pathname]);
 
   const aboutItems = [
-    { label: 'Organizational Structure', path: '/about' },
-    { label: 'History of JRMSU', path: '/about' },
-    { label: 'Library Quality Objectives', path: '/about' },
+    { label: 'Organizational Structure', path: '/about#org' },
+    { label: 'History of JRMSU', path: '/about#history' },
+    { label: 'Library Quality Objectives', path: '/about#objectives' },
   ];
 
   const servicesItems = [
-    { label: 'Library Services', path: '/services' },
-    { label: 'Feedback & Complaints', path: '/services' },
-    { label: 'External Services', path: '/services' },
+    { label: 'Library Services', path: '/services#services' },
+    { label: 'Feedback & Complaints', path: '/services#feedback' },
+    { label: 'External Services', path: '/services#external' },
   ];
 
   const eresourcesItems = [

@@ -111,7 +111,7 @@ export const HeroSection: React.FC = () => {
           className={`flex justify-center mt-12 hero-stagger ${isVisible ? 'visible' : ''}`}
           style={{ transitionDelay: '240ms' }}
         >
-          <div className="bg-primary rounded-xl px-10 py-8 shadow-2xl inline-block border border-gold-light/20">
+          <div className="bg-primary rounded-xl px-10 py-8 shadow-2xl inline-block border border-gold-light/20 hover-3d-tilt">
             <div className="flex flex-col items-center">
               <div className="flex items-center gap-2 mb-2">
                 <div

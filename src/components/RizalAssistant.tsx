@@ -115,7 +115,7 @@ export const RizalAssistant: React.FC = () => {
       )}
 
       {/* Bubble */}
-      <div className="relative">
+      <div className="relative float-bubble">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-16 h-16 rounded-full overflow-hidden shadow-xl cursor-pointer border-2 border-blue-400 hover:ring-4 hover:ring-blue-400/40 hover:scale-110 transition-all duration-300"

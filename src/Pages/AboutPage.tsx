@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 
 const tabs = [
@@ -8,9 +10,19 @@ const tabs = [
 ];
 
 export default function AboutPage() {
+  const location = useLocation();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [activeTab, setActiveTab] = useState('org');
   const [orgImageOpen, setOrgImageOpen] = useState(false);
+
+  useEffect(() => {
+    if (location.hash) {
+      const hash = location.hash.replace('#', '');
+      if (tabs.some(t => t.id === hash)) {
+        setActiveTab(hash);
+      }
+    }
+  }, [location.hash]);
 
   return (
     <section id="about" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
@@ -34,7 +46,7 @@ export default function AboutPage() {
           ))}
         </div>
 
-        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
+        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
           {activeTab === 'org' && (
             <div>
               <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-8 text-center">
@@ -107,7 +119,7 @@ export default function AboutPage() {
         </div>
       </div>
 
-      {orgImageOpen && (
+      {orgImageOpen && createPortal(
         <div
           className="modal-overlay"
           role="dialog"
@@ -127,7 +139,8 @@ export default function AboutPage() {
             className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

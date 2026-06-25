@@ -13,16 +13,7 @@ export const FeedbackSection: React.FC = () => {
       className={`py-section-py-desktop max-w-max-width mx-auto px-4 md:px-gutter reveal ${isVisible ? 'visible' : ''}`}
       ref={ref as any}
     >
-      <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
-        <div className="text-center mb-8">
-          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
-            Feedback & Complaints Mechanism
-          </h2>
-          <p className="max-w-2xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
-            We value your feedback. Browse through the step-by-step guide below.
-          </p>
-        </div>
-
+      <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
         <button
           className="w-full flex items-center justify-between p-4 bg-gold-light/30 rounded-xl hover:bg-gold-light/50 transition-all"
           onClick={() => setExpanded(!expanded)}

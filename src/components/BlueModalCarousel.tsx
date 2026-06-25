@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface CarouselItem {
   title: string;
@@ -15,9 +16,9 @@ interface BlueModalCarouselProps {
   autoSlideInterval?: number;
 }
 
-const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = ({ item, onClose }) => (
+const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = ({ item, onClose }) => createPortal(
   <div
-    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    className="fixed inset-0 z-[200] flex items-center justify-center p-4"
     style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
     onClick={onClose}
   >
@@ -51,7 +52,8 @@ const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = (
         </button>
       </div>
     </div>
-  </div>
+  </div>,
+  document.body
 );
 
 export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
@@ -104,7 +106,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
           <span className="material-symbols-outlined">chevron_left</span>
         </button>
 
-        <div className="carousel-3d-stage relative h-[450px] md:h-[540px]">
+        <div className="carousel-3d-stage relative h-[360px] md:h-[460px]">
           {items.map((item, idx) => {
             const pos = getPosition(idx);
             return (
@@ -112,7 +114,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                 key={idx}
                 className={`carousel-3d-card ${pos}`}
                 style={{
-                  width: pos === 'active' ? '380px' : pos === 'right' || pos === 'left' ? '320px' : '260px',
+                  width: pos === 'active' ? '460px' : pos === 'right' || pos === 'left' ? '360px' : '280px',
                 }}
                 onClick={() => {
                   if (pos === 'active') {
@@ -123,7 +125,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                 }}
               >
                 <div
-                  className={`w-full h-full rounded-2xl p-6 flex flex-col items-center justify-center text-center ${
+                  className={`w-full h-full rounded-2xl p-8 flex flex-col items-center justify-center text-center ${
                     pos === 'active'
                       ? 'bg-gradient-to-br from-navy-dark to-navy-mid text-white shadow-2xl'
                       : 'bg-navy-dark/80 backdrop-blur-md text-white/70 border border-white/10'
@@ -134,18 +136,18 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                     <img
                       src={item.image}
                       alt={item.title}
-                      className="w-20 h-20 md:w-24 md:h-24 object-contain rounded-xl mb-3"
+                      className="w-24 h-24 md:w-32 md:h-32 object-contain rounded-xl mb-4"
                     />
                   )}
                   {item.icon && !item.image && (
-                    <span className="material-symbols-outlined text-3xl md:text-4xl mb-3 text-gold-light">
+                    <span className="material-symbols-outlined text-5xl md:text-6xl mb-4 text-gold-light">
                       {item.icon}
                     </span>
                   )}
-                  <h3 className="font-headline-md font-bold text-sm md:text-base mb-1 leading-tight">
+                  <h3 className="font-headline-md font-bold text-lg md:text-xl mb-2 leading-tight">
                     {item.title}
                   </h3>
-                  <p className={`text-[10px] md:text-xs leading-relaxed ${pos === 'active' ? 'text-blue-100' : 'text-white/50'}`}>
+                  <p className={`text-xs md:text-sm leading-relaxed ${pos === 'active' ? 'text-blue-100' : 'text-white/50'}`}>
                     {item.description}
                   </p>
                 </div>

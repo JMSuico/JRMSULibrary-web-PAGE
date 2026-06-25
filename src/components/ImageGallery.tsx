@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface GalleryImage {
   id: number;
@@ -102,7 +103,7 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, folder }) =>
       </div>
 
       {/* Enlarged Modal */}
-      {modalOpen && (
+      {modalOpen && createPortal(
         <div
           className="modal-overlay"
           onClick={() => setModalOpen(false)}
@@ -145,7 +146,8 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, folder }) =>
               {modalIndex + 1} / {images.length}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 
 interface GalleryModalItem {
@@ -24,6 +25,8 @@ const sectionImages = [
 const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; onClose: () => void }> = ({ images, isOpen, onClose }) => {
   const [page, setPage] = useState(0);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
   const PER_PAGE = 30;
   const totalPages = Math.max(1, Math.ceil(images.length / PER_PAGE));
   const currentPage = Math.min(page, totalPages - 1);
@@ -34,7 +37,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -65,12 +68,20 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 relative">
           {viewMode === 'card' ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {pageItems.map((img, idx) => (
-                <div key={currentPage * PER_PAGE + idx} className="rounded-xl overflow-hidden shadow-md border border-gray-100">
-                  <img src={img.src} alt={img.label} className="w-full h-32 object-cover" />
+                <div key={currentPage * PER_PAGE + idx} 
+                     className="rounded-xl overflow-hidden shadow-md border border-gray-100 cursor-pointer group"
+                     onClick={() => setSelectedImage(img.src)}
+                >
+                  <div className="overflow-hidden h-32 relative">
+                    <img src={img.src} alt={img.label} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                       <span className="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity">zoom_in</span>
+                    </div>
+                  </div>
                   <p className="text-xs text-gray-600 p-2 text-center font-medium truncate">{img.label}</p>
                 </div>
               ))}
@@ -89,7 +100,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                   {pageItems.map((img, idx) => {
                     const realIdx = currentPage * PER_PAGE + idx + 1;
                     return (
-                      <tr key={realIdx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <tr key={realIdx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedImage(img.src)}>
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
                           <img src={img.src} alt={img.label} className="w-16 h-10 object-cover rounded" />
@@ -116,8 +127,31 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
             </button>
           </div>
         )}
+
+        {/* Lightbox Overlay */}
+        {selectedImage && (
+          <div 
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" 
+            onClick={() => setSelectedImage(null)}
+          >
+            <button 
+              className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors z-[210] cursor-pointer"
+              onClick={() => setSelectedImage(null)}
+              aria-label="Close enlarged image"
+            >
+              <span className="material-symbols-outlined text-4xl">close</span>
+            </button>
+            <img 
+              src={selectedImage} 
+              alt="Enlarged view" 
+              className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
+              onClick={(e) => e.stopPropagation()} 
+            />
+          </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -145,6 +179,17 @@ export const LibrarySectionCarousel: React.FC = () => {
     return () => { document.body.style.backgroundImage = ''; };
   }, []);
 
+  const getPosition = (idx: number): 'active' | 'right' | 'left' | 'far-right' | 'far-left' | 'hidden' => {
+    const len = sectionImages.length;
+    const diff = ((idx - activeIdx) % len + len) % len;
+    if (diff === 0) return 'active';
+    if (diff === 1) return 'right';
+    if (diff === len - 1) return 'left';
+    if (diff === 2) return 'far-right';
+    if (diff === len - 2) return 'far-left';
+    return 'hidden';
+  };
+
   return (
     <section id="library-section" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
@@ -157,31 +202,53 @@ export const LibrarySectionCarousel: React.FC = () => {
           </p>
         </div>
 
-        <div className="rounded-3xl p-6 md:p-10 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.15)', backdropFilter: 'blur(4px)' }}>
-          <div className="relative">
-            {/* Cover slideshow */}
-            <div className="rounded-2xl overflow-hidden shadow-xl h-[300px] md:h-[450px] relative">
-              {sectionImages.map((img, idx) => (
-                <img
-                  key={idx}
-                  src={img.src}
-                  alt={img.label}
-                  className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700"
-                  style={{ opacity: idx === activeIdx ? 1 : 0 }}
-                />
-              ))}
+        <div className="rounded-3xl p-6 md:p-10 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+          <div className="carousel-3d-perspective w-full py-6 relative">
+            <button className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-30" onClick={prev} aria-label="Previous section picture">
+              <span className="material-symbols-outlined">chevron_left</span>
+            </button>
+
+            <div className="carousel-3d-stage relative h-[360px] md:h-[460px]">
+              {sectionImages.map((img, idx) => {
+                const pos = getPosition(idx);
+                return (
+                  <div
+                    key={idx}
+                    className={`carousel-3d-card ${pos}`}
+                    style={{
+                      width: pos === 'active' ? '100%' : pos === 'right' || pos === 'left' ? '85%' : '70%',
+                      maxWidth: pos === 'active' ? '800px' : pos === 'right' || pos === 'left' ? '650px' : '500px',
+                      height: '100%'
+                    }}
+                    onClick={() => {
+                      if (pos === 'active') {
+                        setGalleryOpen(true);
+                      } else {
+                        goTo(idx);
+                      }
+                    }}
+                  >
+                    <img
+                      src={img.src}
+                      alt={img.label}
+                      className="w-full h-full object-cover"
+                    />
+                    {pos === 'active' && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity">
+                        <span className="text-white font-medium flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
+                          <span className="material-symbols-outlined text-sm">fullscreen</span>
+                          Click to expand
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="absolute inset-y-0 left-0 flex items-center">
-              <button className="carousel-nav-btn ml-3" onClick={prev} aria-label="Previous section picture">
-                <span className="material-symbols-outlined">chevron_left</span>
-              </button>
-            </div>
-            <div className="absolute inset-y-0 right-0 flex items-center">
-              <button className="carousel-nav-btn mr-3" onClick={next} aria-label="Next section picture">
-                <span className="material-symbols-outlined">chevron_right</span>
-              </button>
-            </div>
+            <button className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-30" onClick={next} aria-label="Next section picture">
+              <span className="material-symbols-outlined">chevron_right</span>
+            </button>
           </div>
 
           <div className="flex items-center justify-center gap-2 mt-6">

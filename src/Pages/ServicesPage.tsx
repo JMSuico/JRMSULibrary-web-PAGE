@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ServicesSection } from '../components/ServicesSection';
 import { FeedbackSection } from '../components/FeedbackSection';
 import { ExternalServicesSection } from '../components/ExternalServicesSection';
@@ -9,29 +10,39 @@ const tabs = [
   { id: 'external', label: 'External Services' },
 ];
 
-const descriptions = [
-  { number: '1', label: 'Library Services Guide', text: 'Explore our streamlined processes for borrowing, research, and campus-wide clearances.' },
-  { number: '2', label: 'Feedback & Complaints Mechanism', text: 'We value your feedback. Browse through the step-by-step guide below.' },
-  { number: '3', label: 'External Services', text: 'Explore our external library services and partner resources.' },
-];
+const descriptions: Record<string, { label: string; text: string }> = {
+  services: { label: 'Library Services Guide', text: 'Explore our streamlined processes for borrowing, research, and campus-wide clearances.' },
+  feedback: { label: 'Feedback & Complaints Mechanism', text: 'We value your feedback. Browse through the step-by-step guide below.' },
+  external: { label: 'External Services', text: 'Explore our external library services and partner resources.' },
+};
 
 export default function ServicesPage() {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('services');
+
+  useEffect(() => {
+    if (location.hash) {
+      const hash = location.hash.replace('#', '');
+      if (tabs.some(t => t.id === hash)) {
+        setActiveTab(hash);
+      }
+    }
+  }, [location.hash]);
 
   return (
     <div className="pt-24">
-      <div className="max-w-max-width mx-auto px-4 md:px-gutter mb-8">
-        <div className="space-y-3 mb-8 max-w-3xl mx-auto">
-          {descriptions.map((desc) => (
-            <div key={desc.number} className="flex items-start gap-3 p-4 rounded-xl shadow-sm border border-gold-light/10" style={{ background: 'rgba(0,24,81,0.12)', backdropFilter: 'blur(4px)' }}>
-              <span className="w-7 h-7 rounded-full bg-gold-light text-primary flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{desc.number}</span>
-              <div>
-                <span className="font-bold text-sm" style={{ color: '#F0D97A', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>{desc.label}</span>
-                <p className="text-xs mt-0.5" style={{ color: '#001851', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>{desc.text}</p>
-              </div>
-            </div>
-          ))}
+      {/* Title + Description — OUTSIDE the modal card */}
+      <div className="max-w-max-width mx-auto px-4 md:px-gutter mb-6">
+        <div className="text-center mb-6">
+          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+            {descriptions[activeTab].label}
+          </h2>
+          <p className="max-w-2xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+            {descriptions[activeTab].text}
+          </p>
         </div>
+
+        {/* Radio / Tab buttons — below the description, outside the card */}
         <div className="flex flex-wrap justify-center gap-2">
           {tabs.map((tab) => (
             <button
@@ -44,6 +55,8 @@ export default function ServicesPage() {
           ))}
         </div>
       </div>
+
+      {/* Section content — the modal cards render inside each component */}
       {activeTab === 'services' && <ServicesSection />}
       {activeTab === 'feedback' && <FeedbackSection />}
       {activeTab === 'external' && <ExternalServicesSection />}

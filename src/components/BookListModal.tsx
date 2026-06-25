@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 interface BookModalItem {
   title: string;
@@ -17,6 +18,7 @@ const ITEMS_PER_PAGE = 30;
 export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onClose }) => {
   const [page, setPage] = useState(0);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [selectedBook, setSelectedBook] = useState<BookModalItem | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(books.length / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages - 1);
@@ -28,7 +30,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
@@ -70,21 +72,22 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 relative">
           {viewMode === 'card' ? (
             <div className="grid gap-3">
               {pageItems.map((book, idx) => (
                 <div
                   key={currentPage * ITEMS_PER_PAGE + idx}
-                  className="flex items-start gap-3 p-4 rounded-xl bg-gray-50 border border-gray-100"
+                  className="flex items-start gap-3 p-4 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors group"
+                  onClick={() => setSelectedBook(book)}
                 >
                   {book.icon && (
-                    <span className="material-symbols-outlined text-2xl text-primary flex-shrink-0 mt-0.5">
+                    <span className="material-symbols-outlined text-2xl text-primary flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
                       {book.icon}
                     </span>
                   )}
                   <div>
-                    <h3 className="font-headline-md font-bold text-sm text-primary">{book.title}</h3>
+                    <h3 className="font-headline-md font-bold text-sm text-primary group-hover:text-gold-dark transition-colors">{book.title}</h3>
                     <p className="text-xs text-gray-500 mt-0.5">{book.description}</p>
                   </div>
                 </div>
@@ -105,7 +108,11 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                   {pageItems.map((book, idx) => {
                     const realIdx = currentPage * ITEMS_PER_PAGE + idx + 1;
                     return (
-                      <tr key={realIdx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <tr 
+                        key={realIdx} 
+                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                        onClick={() => setSelectedBook(book)}
+                      >
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
                           {book.icon && (
@@ -144,7 +151,34 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
             </button>
           </div>
         )}
+
+        {/* Lightbox Overlay */}
+        {selectedBook && (
+          <div 
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" 
+            onClick={() => setSelectedBook(null)}
+          >
+            <button 
+              className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors z-[210] cursor-pointer"
+              onClick={() => setSelectedBook(null)}
+              aria-label="Close enlarged view"
+            >
+              <span className="material-symbols-outlined text-4xl">close</span>
+            </button>
+            <div 
+              className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center flex flex-col items-center" 
+              onClick={(e) => e.stopPropagation()}
+            >
+              {selectedBook.icon && (
+                <span className="material-symbols-outlined text-[120px] text-primary mb-6">{selectedBook.icon}</span>
+              )}
+              <h3 className="font-headline-lg font-bold text-2xl text-primary mb-4">{selectedBook.title}</h3>
+              <p className="text-gray-600 text-lg">{selectedBook.description}</p>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

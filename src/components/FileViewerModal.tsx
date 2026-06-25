@@ -77,7 +77,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
           <div className="flex-1 bg-gray-100 p-4 flex items-center justify-center overflow-auto min-h-[60vh] relative">
             {isPdf ? (
               <iframe
-                src={file.path}
+                src={`${file.path}#toolbar=0&navpanes=0&scrollbar=0`}
                 className="w-full h-full rounded-lg shadow-inner"
                 style={{ minHeight: '60vh' }}
                 title={file.name}
