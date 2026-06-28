@@ -147,7 +147,7 @@ export const HeroSection: React.FC = () => {
         className={`absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce hero-stagger ${isVisible ? 'visible' : ''}`}
         style={{ transitionDelay: '320ms' }}
       >
-        <span className="material-symbols-outlined text-gold-light text-4xl">
+        <span className="material-symbols-outlined text-[#002B7F] text-4xl">
           keyboard_arrow_down
         </span>
       </div>

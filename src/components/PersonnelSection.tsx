@@ -6,7 +6,7 @@ export const PersonnelSection: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
 
   return (
-    <section id="staff" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <div id="staff" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div id="personnel" className="max-w-max-width mx-auto px-4 md:px-gutter">
 
         <div className="text-center mb-16">
@@ -77,9 +77,11 @@ export const PersonnelSection: React.FC = () => {
               </svg>
             </div>
 
-            {/* Mobile simple connector */}
-            <div className="w-0.5 h-8 bg-gold-light md:hidden"></div>
-            <div className="w-3/4 max-w-3xl h-0.5 bg-gold-light mb-2 md:hidden"></div>
+            {/* Mobile First Down Arrow (from Librarian's Corner to first staff) */}
+            <div className="flex flex-col items-center md:hidden my-2 text-gold-light">
+              <div className="w-0.5 h-6 bg-gold-light"></div>
+              <span className="material-symbols-outlined text-lg leading-none -mt-1">arrow_downward</span>
+            </div>
 
             {/* Staff Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mt-2">
@@ -88,8 +90,15 @@ export const PersonnelSection: React.FC = () => {
                 { initials: 'BP', name: 'Bernie Rey L. Palon', title: 'Staff, Library', delay: '0.4s' },
                 { initials: 'RR', name: 'Reizel C. Rosauro', title: 'Staff, Library', delay: '0.6s' },
               ].map((person, idx) => (
-                <div key={idx} className="fade-up-entrance flex flex-col items-center" style={{ transitionDelay: person.delay }}>
-                  <div className="w-0.5 h-6 bg-gold-light md:hidden"></div>
+                <React.Fragment key={idx}>
+                  {/* Arrow for 2nd and 3rd items on mobile */}
+                  {idx > 0 && (
+                    <div className="flex flex-col items-center md:hidden my-2 text-gold-light">
+                      <div className="w-0.5 h-6 bg-gold-light"></div>
+                      <span className="material-symbols-outlined text-lg leading-none -mt-1">arrow_downward</span>
+                    </div>
+                  )}
+                  <div className="fade-up-entrance flex flex-col items-center" style={{ transitionDelay: person.delay }}>
                   <div
                     className="border-2 border-gold-light/30 rounded-2xl p-6 text-center w-full shadow-md hover-3d-tilt"
                     style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}
@@ -102,13 +111,14 @@ export const PersonnelSection: React.FC = () => {
                     </h3>
                     <p className="font-label-caps font-semibold text-xs" style={{ color: 'rgba(255,255,255,0.8)' }}>{person.title}</p>
                   </div>
-                </div>
+                  </div>
+                </React.Fragment>
               ))}
             </div>
           </div>
         </div>
 
       </div>
-    </section>
+    </div>
   );
 };

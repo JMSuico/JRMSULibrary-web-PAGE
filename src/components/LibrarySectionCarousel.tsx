@@ -191,7 +191,7 @@ export const LibrarySectionCarousel: React.FC = () => {
   };
 
   return (
-    <section id="library-section" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <div id="library-section" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-8">
           <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
@@ -208,7 +208,7 @@ export const LibrarySectionCarousel: React.FC = () => {
               <span className="material-symbols-outlined">chevron_left</span>
             </button>
 
-            <div className="carousel-3d-stage relative h-[360px] md:h-[460px]">
+            <div className="carousel-3d-stage relative h-[280px] sm:h-[360px] md:h-[460px]">
               {sectionImages.map((img, idx) => {
                 const pos = getPosition(idx);
                 return (
@@ -279,6 +279,6 @@ export const LibrarySectionCarousel: React.FC = () => {
         </div>
       </div>
       <GalleryViewModal images={sectionImages} isOpen={galleryOpen} onClose={() => setGalleryOpen(false)} />
-    </section>
+    </div>
   );
 };

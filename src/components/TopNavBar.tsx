@@ -7,9 +7,11 @@ export const TopNavBar: React.FC = () => {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // State for dropdowns
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [servicesOpen, setServicesOpen] = useState(false);
-  const [eresourcesOpen, setEresourcesOpen] = useState(false);
+  const [administrationOpen, setAdministrationOpen] = useState(false);
+  const [collectionOpen, setCollectionOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,39 +24,41 @@ export const TopNavBar: React.FC = () => {
   useEffect(() => {
     setSidebarOpen(false);
     setAboutOpen(false);
-    setServicesOpen(false);
-    setEresourcesOpen(false);
+    setAdministrationOpen(false);
+    setCollectionOpen(false);
   }, [location.pathname]);
 
   const aboutItems = [
-    { label: 'Organizational Structure', path: '/about#org' },
-    { label: 'History of JRMSU', path: '/about#history' },
-    { label: 'Library Quality Objectives', path: '/about#objectives' },
+    { label: 'History of JRMSU Katipunan Campus', path: '/about#history' },
+    { label: 'Quality Objectives', path: '/about#objectives' },
   ];
 
-  const servicesItems = [
-    { label: 'Library Services', path: '/services#services' },
-    { label: 'Feedback & Complaints', path: '/services#feedback' },
-    { label: 'External Services', path: '/services#external' },
+  const administrationItems = [
+    { label: 'Administration', path: '/administration#administration' },
+    { label: 'Manual', path: '/administration#manual' },
   ];
 
-  const eresourcesItems = [
-    { label: 'File Services', path: '/e-resources/files' },
-    { label: 'Online Access', path: '/e-resources/online' },
+  const collectionItems = [
+    { label: 'Newly Acquired Books', path: '/collection/newly-acquired' },
+    { label: 'Local Books', path: '/collection/local-books' },
+    { label: 'Online Access', path: '/collection/online' },
   ];
 
   const navLinks = [
     { label: 'Home', path: '/' },
     { label: 'About', path: '/about', dropdown: aboutItems },
-    { label: 'Services', path: '/services', dropdown: servicesItems },
-    { label: 'E-Resources', path: '/e-resources', dropdown: eresourcesItems },
+    { label: 'Services', path: '/services' },
+    { label: 'Administration', path: '/administration', dropdown: administrationItems },
+    { label: 'Personnel', path: '/personnel' },
+    { label: 'Collection', path: '/collection', dropdown: collectionItems },
+    { label: 'Physical Setup', path: '/physical-setup' },
   ];
 
   const handleNavClick = (path: string) => {
     setSidebarOpen(false);
     setAboutOpen(false);
-    setServicesOpen(false);
-    setEresourcesOpen(false);
+    setAdministrationOpen(false);
+    setCollectionOpen(false);
     navigate(path);
   };
 
@@ -62,8 +66,8 @@ export const TopNavBar: React.FC = () => {
 
   const closeAllDropdowns = () => {
     setAboutOpen(false);
-    setServicesOpen(false);
-    setEresourcesOpen(false);
+    setAdministrationOpen(false);
+    setCollectionOpen(false);
   };
 
   return (
@@ -95,78 +99,83 @@ export const TopNavBar: React.FC = () => {
               src={assets.logos.jrmsu}
             />
             <div className="text-left">
-              <span className="font-headline-md font-bold text-primary block leading-tight text-sm sm:text-base">
-                JRMSU Library
+              <span className="font-headline-md font-bold text-primary block leading-tight text-[13px] sm:text-base">
+                JRMSU Katipunan Campus
               </span>
-              <span className="font-label-caps text-primary/70 tracking-[0.1em] uppercase text-[9px] sm:text-[10px]">
-                Katipunan Campus
+              <span className="font-label-caps text-primary/70 tracking-[0.1em] uppercase text-[10px] sm:text-[11px]">
+                Library
               </span>
             </div>
           </button>
         </div>
 
         {/* Desktop nav */}
-        <div className="hidden lg:flex gap-8 items-center font-ui-nav text-ui-nav uppercase tracking-wider">
+        <div className="hidden lg:flex gap-4 xl:gap-8 items-center font-ui-nav text-[10px] xl:text-xs uppercase tracking-wider">
           {navLinks.map((link) => (
-            <div key={link.path} className="relative">
+            <div 
+              key={link.path} 
+              className="relative"
+              onMouseEnter={() => {
+                if (link.label === 'About') setAboutOpen(true);
+                if (link.label === 'Administration') setAdministrationOpen(true);
+                if (link.label === 'Collection') setCollectionOpen(true);
+              }}
+              onMouseLeave={() => {
+                if (link.label === 'About') setAboutOpen(false);
+                if (link.label === 'Administration') setAdministrationOpen(false);
+                if (link.label === 'Collection') setCollectionOpen(false);
+              }}
+            >
               {link.dropdown ? (
                 <>
                   <button
-                    className={`transition-colors relative nav-underline cursor-pointer ${
+                    className={`transition-colors relative nav-underline cursor-pointer bg-transparent border-none p-0 flex items-center ${
                       isActive(link.path) ? 'text-gold-light' : 'text-white/80 hover:text-gold-light'
                     }`}
                     onClick={() => {
                       closeAllDropdowns();
                       if (link.label === 'About') { setAboutOpen(!aboutOpen); handleNavClick(link.path); }
-                      if (link.label === 'Services') { setServicesOpen(!servicesOpen); handleNavClick(link.path); }
-                      if (link.label === 'E-Resources') { setEresourcesOpen(!eresourcesOpen); handleNavClick(link.path); }
-                    }}
-                    onMouseEnter={() => {
-                      if (link.label === 'About') setAboutOpen(true);
-                      if (link.label === 'Services') setServicesOpen(true);
-                      if (link.label === 'E-Resources') setEresourcesOpen(true);
+                      if (link.label === 'Administration') { setAdministrationOpen(!administrationOpen); handleNavClick(link.path); }
+                      if (link.label === 'Collection') { setCollectionOpen(!collectionOpen); handleNavClick(link.path); }
                     }}
                     aria-expanded={
                       link.label === 'About' ? aboutOpen :
-                      link.label === 'Services' ? servicesOpen :
-                      eresourcesOpen
+                      link.label === 'Administration' ? administrationOpen :
+                      link.label === 'Collection' ? collectionOpen : false
                     }
                   >
                     {link.label}
                     <span className={`material-symbols-outlined text-sm ml-1 align-middle transition-transform ${
                       (link.label === 'About' && aboutOpen) ||
-                      (link.label === 'Services' && servicesOpen) ||
-                      (link.label === 'E-Resources' && eresourcesOpen) ? 'rotate-180' : ''
+                      (link.label === 'Administration' && administrationOpen) ||
+                      (link.label === 'Collection' && collectionOpen) ? 'rotate-180' : ''
                     }`}>
                       expand_more
                     </span>
                   </button>
                   {(link.label === 'About' && aboutOpen) ||
-                   (link.label === 'Services' && servicesOpen) ||
-                   (link.label === 'E-Resources' && eresourcesOpen) ? (
+                   (link.label === 'Administration' && administrationOpen) ||
+                   (link.label === 'Collection' && collectionOpen) ? (
                     <div
-                      className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border border-outline-variant overflow-hidden"
-                      onMouseLeave={() => {
-                        if (link.label === 'About') setAboutOpen(false);
-                        if (link.label === 'Services') setServicesOpen(false);
-                        if (link.label === 'E-Resources') setEresourcesOpen(false);
-                      }}
+                      className="absolute top-full left-0 pt-2 w-64 z-50"
                     >
-                      {link.dropdown.map((item) => (
-                        <button
-                          key={item.label}
-                          className="w-full text-left px-5 py-3 text-sm text-on-surface hover:bg-primary/5 hover:text-primary transition-colors border-b border-outline-variant/50 last:border-b-0 cursor-pointer"
-                          onClick={() => handleNavClick(item.path)}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
+                      <div className="bg-white rounded-xl shadow-2xl border border-outline-variant overflow-hidden">
+                        {link.dropdown.map((item) => (
+                          <button
+                            key={item.label}
+                            className="w-full text-left px-5 py-3 text-sm text-on-surface hover:bg-primary/5 hover:text-primary transition-colors border-b border-outline-variant/50 last:border-b-0 cursor-pointer bg-transparent"
+                            onClick={() => handleNavClick(item.path)}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                 </>
               ) : (
                 <button
-                  className={`transition-colors relative nav-underline cursor-pointer bg-transparent border-none ${
+                  className={`transition-colors relative nav-underline cursor-pointer bg-transparent border-none p-0 flex items-center ${
                     isActive(link.path) ? 'text-gold-light' : 'text-white/80 hover:text-gold-light'
                   }`}
                   onClick={() => handleNavClick(link.path)}
@@ -177,7 +186,6 @@ export const TopNavBar: React.FC = () => {
             </div>
           ))}
         </div>
-
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -202,11 +210,11 @@ export const TopNavBar: React.FC = () => {
               src={assets.logos.jrmsu}
             />
             <div>
-              <span className="font-headline-md text-headline-md font-bold text-gold-light block leading-tight text-sm">
-                JRMSU Library
+              <span className="font-headline-md font-bold text-gold-light block leading-tight text-sm">
+                JRMSU Katipunan Campus
               </span>
-              <span className="font-label-caps text-gold-light/70 tracking-[0.1em] uppercase text-[8px]">
-                Katipunan Campus
+              <span className="font-label-caps text-gold-light/70 tracking-[0.1em] uppercase text-[10px]">
+                Library
               </span>
             </div>
           </div>
@@ -227,29 +235,29 @@ export const TopNavBar: React.FC = () => {
                   <button
                     className="w-full text-left text-on-primary/80 text-sm uppercase tracking-wider font-medium py-3 inline-flex items-center gap-1 border-b border-gold-light/10 cursor-pointer bg-transparent border-none"
                     onClick={() => {
-                      if (link.label === 'About') { setAboutOpen(!aboutOpen); handleNavClick(link.path); }
-                      if (link.label === 'Services') { setServicesOpen(!servicesOpen); handleNavClick(link.path); }
-                      if (link.label === 'E-Resources') { setEresourcesOpen(!eresourcesOpen); handleNavClick(link.path); }
+                      if (link.label === 'About') setAboutOpen(!aboutOpen);
+                      if (link.label === 'Administration') setAdministrationOpen(!administrationOpen);
+                      if (link.label === 'Collection') setCollectionOpen(!collectionOpen);
                     }}
                     aria-expanded={
                       link.label === 'About' ? aboutOpen :
-                      link.label === 'Services' ? servicesOpen :
-                      eresourcesOpen
+                      link.label === 'Administration' ? administrationOpen :
+                      link.label === 'Collection' ? collectionOpen : false
                     }
                   >
                     {link.label}
-                    <span className={`material-symbols-outlined text-sm transition-transform ${
+                    <span className={`material-symbols-outlined text-sm transition-transform ml-auto ${
                       (link.label === 'About' && aboutOpen) ||
-                      (link.label === 'Services' && servicesOpen) ||
-                      (link.label === 'E-Resources' && eresourcesOpen) ? 'rotate-180' : ''
+                      (link.label === 'Administration' && administrationOpen) ||
+                      (link.label === 'Collection' && collectionOpen) ? 'rotate-180' : ''
                     }`}>
                       expand_more
                     </span>
                   </button>
                   <div className={`overflow-hidden transition-max-height duration-300 ${
                     (link.label === 'About' && aboutOpen) ||
-                    (link.label === 'Services' && servicesOpen) ||
-                    (link.label === 'E-Resources' && eresourcesOpen)
+                    (link.label === 'Administration' && administrationOpen) ||
+                    (link.label === 'Collection' && collectionOpen)
                     ? 'max-h-96' : 'max-h-0'
                   }`}>
                     <div className="pl-4 flex flex-col border-b border-gold-light/10">
@@ -277,7 +285,6 @@ export const TopNavBar: React.FC = () => {
               )}
             </div>
           ))}
-
         </div>
       </div>
     </nav>

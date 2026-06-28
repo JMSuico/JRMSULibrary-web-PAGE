@@ -82,10 +82,10 @@ export const RizalAssistant: React.FC = () => {
   );
 
   return (
-    <div className="fixed bottom-6 right-6 z-[60]">
+    <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-[60]">
       {/* Expanded Panel */}
       {isExpanded && (
-        <div className="absolute bottom-20 right-0 w-80 bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-in flex flex-col max-h-[500px]">
+        <div className="absolute bottom-[115%] right-0 w-[calc(100vw-2rem)] sm:w-80 max-w-[360px] bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-in flex flex-col max-h-[80vh] sm:max-h-[500px]">
           {renderHeader()}
 
           {/* OPTIONS VIEW */}
@@ -250,7 +250,7 @@ export const RizalAssistant: React.FC = () => {
       <div className="relative float-bubble">
         <button
           onClick={() => { setIsExpanded(!isExpanded); setViewMode('options'); }}
-          className="w-16 h-16 rounded-full overflow-hidden shadow-xl cursor-pointer border-2 border-blue-400 hover:ring-4 hover:ring-blue-400/40 hover:scale-110 transition-all duration-300"
+          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden shadow-xl cursor-pointer border-2 border-blue-400 hover:ring-4 hover:ring-blue-400/40 hover:scale-110 transition-all duration-300"
           aria-label="Open RIZAL Assistant"
         >
           <video

@@ -1,19 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 
 const tabs = [
-  { id: 'org', label: 'Organizational Structure' },
-  { id: 'history', label: 'History of JRMSU' },
+  { id: 'history', label: 'History of JRMSU Katipunan Campus' },
   { id: 'objectives', label: 'Quality Objectives' },
 ];
 
 export default function AboutPage() {
   const location = useLocation();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
-  const [activeTab, setActiveTab] = useState('org');
-  const [orgImageOpen, setOrgImageOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('history');
 
   useEffect(() => {
     if (location.hash) {
@@ -47,36 +44,9 @@ export default function AboutPage() {
         </div>
 
         <div className="rounded-3xl p-4 sm:p-8 md:p-12 shadow-2xl border border-gold-light/20 w-fit mx-auto max-w-full" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
-          {activeTab === 'org' && (
-            <div>
-              <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-8 text-center">
-                Library Organizational Structure
-              </h3>
-              <div className="flex flex-col items-center">
-                <button
-                  onClick={() => setOrgImageOpen(true)}
-                  className="relative w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl border-2 border-gold-light/30 cursor-pointer hover:opacity-95 transition-opacity group"
-                  aria-label="View organizational structure image"
-                >
-                  <img
-                    src="/assets/organizational structure library.png"
-                    alt="JRMSU Library Organizational Structure Chart"
-                    className="w-full h-auto object-contain"
-                  />
-                  <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors flex items-center justify-center">
-                    <span className="material-symbols-outlined text-white text-5xl opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg">
-                      zoom_in
-                    </span>
-                  </div>
-                </button>
-                <p className="text-sm text-white/60 mt-4">Click image to enlarge</p>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'history' && (
             <div className="max-w-3xl mx-auto">
-              <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-6">History of JRMSU</h3>
+              <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-6">History of JRMSU Katipunan Campus</h3>
               <div className="space-y-4 text-white/80 leading-relaxed">
                 <p>
                   Jose Rizal Memorial State University was established by virtue of RA 9852 with Congresswoman Cecilia G. Jalosjos-Carreon as principal author, Congressman Cesar Jalosjos as co-author. It was approved by President Gloria Macapagal-Arroyo on December 15, 2009. It was formerly the Jose Rizal Memorial State College by virtue of RA 8193 sponsored by Congressman Romeo G. Jalosjos of the 1st District of Zamboanga del Norte which was approved on June 11, 1996 by the President of the Republic, Fidel V. Ramos. It was a consolidation of the Rizal Memorial Vocational School (RMNVS) in Dapitan City, the Zamboanga del Norte School of Arts and Trades (ZNSAT) in Dipolog City, and the Siocon National Vocational School (SNVS) in the Municipality of Siocon. In 2002, two higher education institutions (HEIs) within Zamboanga del Norte, namely the Katipunan National Agricultural School (KNAS) in the municipality of Katipunan and the Zamboanga del Norte Agricultural College (ZNAC) in the Municipality of Tampilisan, were integrated into then JRMSC pursuant to CHED Memorandum Order No. 27 series of 2000 thus comprising the fourth and fifth campuses, respectively of JRMSU.
@@ -118,30 +88,6 @@ export default function AboutPage() {
           )}
         </div>
       </div>
-
-      {orgImageOpen && createPortal(
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOrgImageOpen(false)}
-        >
-          <button
-            className="absolute top-6 right-6 text-white text-3xl hover:text-gold-light transition-colors cursor-pointer z-10"
-            onClick={() => setOrgImageOpen(false)}
-            aria-label="Close image"
-          >
-            <span className="material-symbols-outlined text-4xl">close</span>
-          </button>
-          <img
-            src="/assets/organizational structure library.png"
-            alt="JRMSU Library Organizational Structure Chart"
-            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>,
-        document.body
-      )}
     </section>
   );
 }

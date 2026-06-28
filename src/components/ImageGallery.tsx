@@ -9,12 +9,15 @@ interface GalleryImage {
 interface ImageGalleryProps {
   images: GalleryImage[];
   folder: string;
+  autoSlide?: boolean;
+  autoSlideInterval?: number;
 }
 
-export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, folder }) => {
+export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, folder, autoSlide = false, autoSlideInterval = 3000 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalIndex, setModalIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
@@ -25,6 +28,13 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, folder }) =>
   const prevSlide = () => {
     setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
   };
+
+  // Auto-slide effect
+  React.useEffect(() => {
+    if (!autoSlide || isPaused || images.length <= 1) return;
+    const id = setInterval(nextSlide, autoSlideInterval);
+    return () => clearInterval(id);
+  }, [autoSlide, autoSlideInterval, isPaused, images.length, currentIndex]);
 
   const nextModal = () => {
     setModalIndex((prev) => (prev + 1) % images.length);
@@ -55,6 +65,8 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, folder }) =>
         className="gallery-slider-container rounded-xl"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
       >
         <div
           className="gallery-track"

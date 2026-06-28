@@ -67,7 +67,7 @@ export const LibraryMapSection: React.FC = () => {
             {/* Right Column: Map Container (Satellite View) */}
             <div className="h-[400px] lg:h-full min-h-[400px] rounded-2xl overflow-hidden shadow-2xl border-4 border-gold-light/30">
               <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3935.8299982714214!2d123.286122!3d8.509171!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x32551a95873efafb%3A0x8f827d2b19175617!2sJose%20Rizal%20Memorial%20State%20University%20-%20Katipunan%20Campus!5e1!3m1!1e3!3m2!1sen!2sph"
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1967.9149991357107!2d123.28501!3d8.509171!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x32551a95873efafb%3A0x8f827d2b19175617!2sJose%20Rizal%20Memorial%20State%20University%20-%20Katipunan%20Campus!5e1!3m2!1sen!2sph!4v1&markers=color:red%7Clabel:L%7C8.509171,123.286122"
                 className="w-full h-full border-0"
                 allowFullScreen={true}
                 loading="lazy"

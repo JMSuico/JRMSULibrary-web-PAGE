@@ -33,7 +33,7 @@ export const ServicesSection: React.FC = () => {
   };
 
   return (
-    <div id="services" className={`py-section-py-desktop max-w-max-width mx-auto px-4 md:px-gutter reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <div id="services" className={`pb-section-py-desktop pt-4 max-w-max-width mx-auto px-4 md:px-gutter reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="px-0 sm:p-4 md:p-8 md:p-12 bg-transparent">
         {/* 17 Services List */}
         <div className="mb-12 bg-navy-mid/60 rounded-2xl p-6 md:p-8 border border-gold-light/20">

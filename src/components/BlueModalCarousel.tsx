@@ -106,7 +106,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
           <span className="material-symbols-outlined">chevron_left</span>
         </button>
 
-        <div className="carousel-3d-stage relative h-[360px] md:h-[460px]">
+        <div className="carousel-3d-stage relative h-[320px] sm:h-[360px] md:h-[460px]">
           {items.map((item, idx) => {
             const pos = getPosition(idx);
             return (
@@ -114,7 +114,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                 key={idx}
                 className={`carousel-3d-card ${pos}`}
                 style={{
-                  width: pos === 'active' ? '460px' : pos === 'right' || pos === 'left' ? '360px' : '280px',
+                  width: pos === 'active' ? 'clamp(280px, 85vw, 460px)' : pos === 'right' || pos === 'left' ? 'clamp(220px, 60vw, 360px)' : 'clamp(180px, 40vw, 280px)',
                 }}
                 onClick={() => {
                   if (pos === 'active') {
