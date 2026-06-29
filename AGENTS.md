@@ -46,3 +46,15 @@
 - **Fonts**: Playfair Display (headings), Inter (body), JetBrains Mono (clock)
 - **Accordion**: `max-height` transition, never `display: none`
 - **No generic AI templates** — every decision grounded in project specs
+
+## Strict Frontend Architecture (from SKILL.md Section 4)
+- **Framework & Location**: React 19 + Vite + Tailwind v4 inside the `frontend/` directory.
+- **ABSOLUTE RULE**: The `frontend/src` directory must follow the exact Vertical Slice flow.
+- `src/Pages/`: Route-level composition wrappers ONLY (e.g. `Pages/Home/HomePage.tsx`). No business logic allowed.
+- `src/Features/`: Domain-specific vertical slices (e.g. `Features/Home/components/HeroSection.tsx`). Owns business logic.
+- `src/Components/`: Shared UI primitives ONLY (e.g. `Components/LayoutBars/TopNavBar.tsx`).
+- `src/Hooks/`: Shared global hooks.
+- `src/Libs/Assets/`: Constants, data files, links (`data.ts`, `eBooksTree.json`).
+- `src/LayoutStyles/`: Global CSS tokens (`index.css`).
+- **Imports**: All intra-project imports must use Vite absolute paths: `@/src/...` (e.g., `import HeroSection from '@/src/Features/Home/components/HeroSection'`). No relative paths (`../../`) for cross-layer references.
+- **File Movement**: Never leave components floating in `src/components/`. Always move to `Features/{Domain}/components/` or `Components/{Category}/`.

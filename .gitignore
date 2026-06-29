@@ -9,7 +9,8 @@ coverage/
 
 # Ignored assets and skills
 /SKILLS/
-/assets/eBooks/eBooks/Department/
-/assets/Library pic/
-/assets/PHYSICAL SET-UP 2026/
-/assets/eBooks/
+/frontend/src/Assets/assets/eBooks/eBooks/Department/
+/frontend/src/Assets/assets/Library pic/
+/frontend/src/Assets/assets/PHYSICAL SET-UP 2026/
+/frontend/src/Assets/assets/eBooks/
+/frontend/src/Assets/assets
