@@ -57,10 +57,10 @@ export const NewlyAcquiredBooks: React.FC = () => {
         </div>
         <div className="p-6 md:p-10 bg-transparent">
           <BlueModalCarousel items={books} />
-          <div className="flex justify-center mt-6">
+          <div className="flex justify-center mt-6 relative z-40">
             <button
               onClick={() => setModalOpen(true)}
-              className="bg-gold-light text-primary px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-gold-pale transition-all shadow-lg cursor-pointer border-none"
+              className="bg-gold-light text-primary px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-gold-pale hover:scale-105 transition-all shadow-lg cursor-pointer border-none"
             >
               View All List
             </button>

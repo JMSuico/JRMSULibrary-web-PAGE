@@ -99,14 +99,14 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
     <>
       <div className="carousel-3d-perspective w-full py-6 relative">
         <button
-          className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-30"
+          className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-50"
           onClick={prev}
           aria-label="Previous"
         >
           <span className="material-symbols-outlined">chevron_left</span>
         </button>
 
-        <div className="carousel-3d-stage relative h-full w-full">
+        <div className="carousel-3d-stage relative min-h-[300px] md:min-h-[400px] w-full">
           {items.map((item, idx) => {
             const pos = getPosition(idx);
             return (
@@ -157,7 +157,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
         </div>
 
         <button
-          className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-30"
+          className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-50"
           onClick={next}
           aria-label="Next"
         >

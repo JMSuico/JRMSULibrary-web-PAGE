@@ -203,12 +203,13 @@ export const LibrarySectionCarousel: React.FC = () => {
         </div>
 
         <div className="p-6 md:p-10 bg-transparent">
-          <div className="carousel-3d-perspective w-full py-6 relative">
-            <button className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-30" onClick={prev} aria-label="Previous section picture">
+          <div className="relative w-full max-w-5xl mx-auto flex items-center justify-center">
+            {/* Nav Left */}
+            <button className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-50" onClick={prev} aria-label="Previous section picture">
               <span className="material-symbols-outlined">chevron_left</span>
             </button>
 
-            <div className="carousel-3d-stage relative h-full w-full">
+            <div className="carousel-3d-stage relative min-h-[450px] md:min-h-[550px] w-full">
               {sectionImages.map((img, idx) => {
                 const pos = getPosition(idx);
                 return (
@@ -246,12 +247,12 @@ export const LibrarySectionCarousel: React.FC = () => {
               })}
             </div>
 
-            <button className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-30" onClick={next} aria-label="Next section picture">
+            <button className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-50" onClick={next} aria-label="Next section picture">
               <span className="material-symbols-outlined">chevron_right</span>
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-2 mt-6">
+          <div className="flex items-center justify-center gap-2 mt-8 relative z-40">
             {sectionImages.map((_, idx) => (
               <button
                 key={idx}
@@ -264,14 +265,14 @@ export const LibrarySectionCarousel: React.FC = () => {
             ))}
           </div>
 
-          <p className="text-center text-sm mt-4 font-bold" style={{ color: '#001851' }}>
+          <p className="text-center text-sm mt-4 font-bold relative z-40" style={{ color: '#001851' }}>
             {sectionImages[activeIdx].label}
           </p>
 
-          <div className="flex justify-center mt-6">
+          <div className="flex justify-center mt-6 relative z-40">
             <button
               onClick={() => setGalleryOpen(true)}
-              className="bg-gold-light text-primary px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-gold-pale transition-all shadow-lg cursor-pointer border-none"
+              className="bg-gold-light text-primary px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-gold-pale hover:scale-105 transition-all shadow-lg cursor-pointer border-none"
             >
               View All List
             </button>
