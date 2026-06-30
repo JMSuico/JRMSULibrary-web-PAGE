@@ -16,6 +16,7 @@ from .contact_controller import ContactMessageViewSet
 from .feedback_controller import FeedbackViewSet
 from .personnel_controller import PersonnelViewSet
 from .analytics_controller import SiteVisitViewSet
+from .batch_controller import AcquisitionBatchViewSet
 
 __all__ = [
     'NewlyAcquiredBookViewSet',
@@ -30,4 +31,5 @@ __all__ = [
     'FeedbackViewSet',
     'PersonnelViewSet',
     'SiteVisitViewSet',
+    'AcquisitionBatchViewSet',
 ]

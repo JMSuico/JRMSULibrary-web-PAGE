@@ -3,7 +3,7 @@ from typing import List, Optional, Any
 
 class INewlyAcquiredBookRepository(ABC):
     @abstractmethod
-    def get_all_active(self) -> List[Any]:
+    def get_books_by_batch(self, batch_id: int) -> List[Any]:
         pass
 
     @abstractmethod

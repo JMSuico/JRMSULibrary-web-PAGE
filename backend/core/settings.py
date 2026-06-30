@@ -78,20 +78,75 @@ TEMPLATES = [
 WSGI_APPLICATION = "core.wsgi.application"
 
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv(BASE_DIR / ".env")
+
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "mssql",
-        "NAME": "jrmsu_library",
-        "HOST": "localhost",
-        "OPTIONS": {
-            "driver": "ODBC Driver 17 for SQL Server",
-            "extra_params": "Trusted_Connection=yes;",
-        },
+DB_ENGINE = os.environ.get("DB_ENGINE", "mssql")
+
+if DB_ENGINE == "mssql":
+    _mssql_options = {
+        "driver": os.environ.get("DB_MSSQL_DRIVER", "ODBC Driver 17 for SQL Server"),
     }
-}
+    if os.environ.get("DB_WINDOWS_AUTH", "True") == "True":
+        _mssql_options["extra_params"] = "Trusted_Connection=yes;"
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "mssql",
+            "NAME": os.environ.get("DB_NAME", "JRMSUKatipunanCampusLibrary"),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "1433"),
+            "USER": os.environ.get("DB_USER", ""),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "OPTIONS": _mssql_options,
+        }
+    }
+
+elif DB_ENGINE == "mysql":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": os.environ.get("DB_NAME", "JRMSUKatipunanCampusLibrary"),
+            "USER": os.environ.get("DB_USER", "root"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+            "PORT": os.environ.get("DB_PORT", "3306"),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
+    }
+
+elif DB_ENGINE == "postgresql":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DB_NAME", "JRMSUKatipunanCampusLibrary"),
+            "USER": os.environ.get("DB_USER", "postgres"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
+        }
+    }
+
+else:
+    # Fallback: default MSSQL with Windows Auth
+    DATABASES = {
+        "default": {
+            "ENGINE": "mssql",
+            "NAME": "JRMSUKatipunanCampusLibrary",
+            "HOST": "localhost",
+            "OPTIONS": {
+                "driver": "ODBC Driver 17 for SQL Server",
+                "extra_params": "Trusted_Connection=yes;",
+            },
+        }
+    }
 
 
 # Password validation

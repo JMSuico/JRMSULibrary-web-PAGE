@@ -20,9 +20,16 @@ const PhysicalSetupPage = lazy(() => import('@/src/Pages/PhysicalSetup/PhysicalS
 const AdminLayout = lazy(() => import('@/src/Pages/Admin/AdminLayout'));
 const DashboardPage = lazy(() => import('@/src/Pages/Admin/DashboardPage'));
 const BooksManagerPage = lazy(() => import('@/src/Pages/Admin/BooksManagerPage'));
+const BatchHistoryPage = lazy(() => import('@/src/Pages/Admin/BatchHistoryPage'));
 const SectionsManagerPage = lazy(() => import('@/src/Pages/Admin/SectionsManagerPage'));
 const ContentManagerPage = lazy(() => import('@/src/Pages/Admin/ContentManagerPage'));
 const EResourcesManagerPage = lazy(() => import('@/src/Pages/Admin/EResourcesManagerPage'));
+const EmailMessagePage = lazy(() => import('@/src/Pages/Admin/EmailMessagePage'));
+const UserManagementPage = lazy(() => import('@/src/Pages/Admin/UserManagementPage'));
+const ReportsPage = lazy(() => import('@/src/Pages/Admin/ReportsPage'));
+const AnalyticsPage = lazy(() => import('@/src/Pages/Admin/AnalyticsPage'));
+const SettingsPage = lazy(() => import('@/src/Pages/Admin/SettingsPage'));
+const LoginPage = lazy(() => import('@/src/Pages/Admin/LoginPage'));
 
 function PublicLayout() {
   return (
@@ -45,7 +52,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Admin Routes - Completely isolated from public layout */}
+        {/* Admin Login - Completely isolated full-page layout */}
+        <Route path="/admin/login" element={
+          <Suspense fallback={<PageSkeleton />}>
+            <LoginPage />
+          </Suspense>
+        } />
+
+        {/* Admin Routes - Requires layout with sidebar */}
         <Route path="/admin" element={
           <Suspense fallback={<PageSkeleton />}>
             <AdminLayout />
@@ -53,12 +67,15 @@ export default function App() {
         }>
           <Route index element={<DashboardPage />} />
           <Route path="books" element={<BooksManagerPage />} />
+          <Route path="batch-history" element={<BatchHistoryPage />} />
           <Route path="sections" element={<SectionsManagerPage />} />
           <Route path="content" element={<ContentManagerPage />} />
           <Route path="eresources" element={<EResourcesManagerPage />} />
-          {/* Fallbacks for placeholder routes */}
-          <Route path="analytics" element={<DashboardPage />} />
-          <Route path="settings" element={<DashboardPage />} />
+          <Route path="email" element={<EmailMessagePage />} />
+          <Route path="users" element={<UserManagementPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
         {/* Public Website Routes */}

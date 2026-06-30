@@ -1,0 +1,141 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
+
+export function LoginForm() {
+  const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [captchaNum1, setCaptchaNum1] = useState(0);
+  const [captchaNum2, setCaptchaNum2] = useState(0);
+  const [captchaInput, setCaptchaInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Initialize Captcha
+  useEffect(() => {
+    setCaptchaNum1(Math.floor(Math.random() * 10) + 1);
+    setCaptchaNum2(Math.floor(Math.random() * 10) + 1);
+  }, []);
+
+  const isHuman = captchaInput === (captchaNum1 + captchaNum2).toString();
+
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isHuman) return;
+    
+    setIsLoading(true);
+    
+    // Simulate login API call
+    setTimeout(() => {
+      setIsLoading(false);
+      // For now, any login is considered successful for demo purposes.
+      // Redirect to admin dashboard.
+      navigate('/admin');
+    }, 1200);
+  };
+
+  return (
+    <form onSubmit={handleLogin} className="flex flex-col gap-6 w-full max-w-md mx-auto relative z-10">
+      <div className="flex flex-col text-center mb-4">
+        <h2 className="font-playfair text-3xl font-bold text-gray-900 mb-2">Admin Portal</h2>
+        <p className="text-gray-500 font-inter text-sm">Sign in to manage library content</p>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div className="relative group">
+          <input
+            type="text"
+            id="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#002B7F] focus:border-transparent transition-all peer"
+            placeholder=" "
+            required
+          />
+          <label
+            htmlFor="username"
+            className="absolute left-4 top-4 text-gray-500 text-sm transition-all peer-placeholder-shown:text-base peer-placeholder-shown:top-4 peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-[#002B7F] peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs font-inter cursor-text"
+          >
+            Username
+          </label>
+        </div>
+
+        <div className="relative group">
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#002B7F] focus:border-transparent transition-all peer"
+            placeholder=" "
+            required
+          />
+          <label
+            htmlFor="password"
+            className="absolute left-4 top-4 text-gray-500 text-sm transition-all peer-placeholder-shown:text-base peer-placeholder-shown:top-4 peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-[#002B7F] peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs font-inter cursor-text"
+          >
+            Password
+          </label>
+        </div>
+      </div>
+
+      {/* Math Captcha Verification */}
+      <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col gap-3 shadow-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-700 select-none">
+            Human Verification
+          </span>
+          <div className="flex flex-col items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-[#002B7F]" />
+            <span className="text-[9px] text-[#002B7F] mt-1 uppercase tracking-wider font-semibold">Secure</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-lg font-mono font-bold text-gray-800 tracking-widest select-none">
+            {captchaNum1} + {captchaNum2} =
+          </div>
+          <input
+            type="number"
+            value={captchaInput}
+            onChange={(e) => setCaptchaInput(e.target.value)}
+            className={`w-20 px-3 py-2 border rounded-lg text-lg font-mono text-center focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+              captchaInput === (captchaNum1 + captchaNum2).toString() 
+                ? 'border-green-500 bg-green-50 text-green-700 focus:ring-green-500' 
+                : captchaInput.length > 0 
+                  ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-500'
+                  : 'border-gray-300 bg-white text-gray-900 focus:ring-[#002B7F]'
+            }`}
+            placeholder="?"
+            required
+          />
+          {captchaInput === (captchaNum1 + captchaNum2).toString() && (
+            <CheckCircle className="w-6 h-6 text-green-500 animate-in zoom-in" />
+          )}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={!isHuman || isLoading || !username || !password}
+        className="w-full mt-2 py-3.5 rounded-xl bg-[#002B7F] hover:bg-[#001655] text-white font-inter font-semibold transition-all shadow-md shadow-[#002B7F]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Authenticating...
+          </>
+        ) : (
+          'Sign In to Dashboard'
+        )}
+      </button>
+
+      <div className="mt-4 text-center">
+        <a href="/" className="text-sm text-gray-500 hover:text-[#002B7F] transition-colors font-medium">
+          &larr; Return to public website
+        </a>
+      </div>
+    </form>
+  );
+}

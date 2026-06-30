@@ -28,9 +28,46 @@ class PageImageRepository(IPageImageRepository):
         return list(PageImage.objects.filter(is_active=True))
 
 class ManagedLinkRepository(IManagedLinkRepository):
-    def get_all_active(self) -> List[Any]:
-        return list(ManagedLink.objects.filter(is_active=True))
+    def get_all_active(self):
+        return list(ManagedLink.objects.filter(is_active=True).order_by('order'))
+        
+    def get_all(self):
+        return list(ManagedLink.objects.all().order_by('order'))
+        
+    def get_by_id(self, id: int):
+        return ManagedLink.objects.filter(id=id).first()
+
+    def create(self, data: dict):
+        return ManagedLink.objects.create(**data)
+
+    def update(self, id: int, data: dict):
+        ManagedLink.objects.filter(id=id).update(**data)
+        return self.get_by_id(id)
+
+    def delete(self, id: int) -> bool:
+        obj = self.get_by_id(id)
+        if obj:
+            obj.delete()
+            return True
+        return False
+
 
 class ManagedFileRepository(IManagedFileRepository):
-    def get_all_active(self) -> List[Any]:
-        return list(ManagedFile.objects.filter(is_active=True))
+    def get_all_active(self):
+        return list(ManagedFile.objects.filter(is_active=True).order_by('-created_at'))
+        
+    def get_all(self):
+        return list(ManagedFile.objects.all().order_by('-created_at'))
+        
+    def get_by_id(self, id: int):
+        return ManagedFile.objects.filter(id=id).first()
+
+    def create(self, data: dict):
+        return ManagedFile.objects.create(**data)
+
+    def delete(self, id: int) -> bool:
+        obj = self.get_by_id(id)
+        if obj:
+            obj.delete()
+            return True
+        return False

@@ -16,11 +16,17 @@ class ContactService(ContactServiceInterface):
         sanitized = {
             'name': sanitize_input(data.get('name', '')),
             'email': sanitize_input(data.get('email', '')),
+            'subject': sanitize_input(data.get('subject', '')),
             'message': sanitize_input(data.get('message', '')),
+            'message_type': sanitize_input(data.get('message_type', 'EMAIL')),
         }
         message = self.repository.create(sanitized)
         # TODO: Trigger email notification to library staff
         return message
+
+    def update_message_status(self, message_id: int, status: str):
+        return self.repository.update_status(message_id, status)
+
 
     def get_all_messages(self):
         return self.repository.get_all()

@@ -33,9 +33,37 @@ class ManagedLinkService(IManagedLinkService):
     def get_all_links(self) -> List[Any]:
         return self._repo.get_all_active()
 
+    def get_all(self):
+        return self._repo.get_all()
+        
+    def get_by_id(self, id: int):
+        return self._repo.get_by_id(id)
+
+    def create(self, data: dict):
+        return self._repo.create(data)
+
+    def update(self, id: int, data: dict):
+        return self._repo.update(id, data)
+
+    def delete(self, id: int) -> bool:
+        return self._repo.delete(id)
+
+
 class ManagedFileService(IManagedFileService):
     def __init__(self, repo: IManagedFileRepository):
         self._repo = repo
 
     def get_all_files(self) -> List[Any]:
         return self._repo.get_all_active()
+
+    def get_all(self):
+        return self._repo.get_all()
+        
+    def get_by_id(self, id: int):
+        return self._repo.get_by_id(id)
+
+    def create(self, data: dict):
+        return self._repo.create(data)
+
+    def delete(self, id: int) -> bool:
+        return self._repo.delete(id)

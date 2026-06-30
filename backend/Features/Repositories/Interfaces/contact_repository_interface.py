@@ -26,3 +26,8 @@ class ContactRepositoryInterface(ABC):
     def mark_as_read(self, message_id: int):
         """Mark a contact message as read."""
         pass
+
+    @abstractmethod
+    def update_status(self, message_id: int, status: str):
+        """Update the status of a contact message."""
+        pass

@@ -35,7 +35,7 @@
 
 ## Project-Specific (JRMSU Library)
 - **Tech stack**: React 19 + TypeScript 5.8 + Vite 6 + Tailwind CSS v4
-- **Backend**: Django + DRF + MySQL (NO SQLite ever)
+- **Backend**: Django + DRF + SSMS19 OR LATEST RECOMMENDED (OPTIONAL: XAMPP MariaDB MySQL, PostgreSQL). NO SQLite ever.
 - **Architecture**: feature-based / vertical-slice
 - **Flow**: Pages → Features → Hooks/Types/Lib → Shared Components
 - **Backend layout**: Models → Enums → ORM → Repositories → Services → Helpers → API Controllers → Middleware

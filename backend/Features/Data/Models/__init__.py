@@ -10,6 +10,8 @@ from .page_image_model import PageImage
 from .managed_link_model import ManagedLink
 from .managed_file_model import ManagedFile
 from .site_visit_model import SiteVisit
+from .acquisition_batch_model import AcquisitionBatch
+from .batch_history_model import BatchHistory
 
 __all__ = [
     'Account',
@@ -25,4 +27,6 @@ __all__ = [
     'ManagedLink',
     'ManagedFile',
     'SiteVisit',
+    'AcquisitionBatch',
+    'BatchHistory',
 ]

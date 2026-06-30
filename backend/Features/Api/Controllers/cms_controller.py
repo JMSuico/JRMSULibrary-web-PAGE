@@ -48,30 +48,129 @@ class NewlyAcquiredBookViewSet(viewsets.ViewSet):
 
 
 class LibraryInteriorImageViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    """
+    Full CRUD for library interior images.
+    - GET /api/gallery/ → public list (active only)
+    - All other actions require authentication.
+    """
+    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = LibraryInteriorImageService(LibraryInteriorImageRepository())
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
     def list(self, request):
-        return Response(LibraryInteriorImageSerializer(self.service.get_gallery_images(), many=True).data)
+        if not request.user.is_authenticated:
+            data = self.service.get_gallery_images()
+        else:
+            data = self.service.get_all()
+        return Response(LibraryInteriorImageSerializer(data, many=True).data)
+
+    def create(self, request, *args, **kwargs):
+        ser = LibraryInteriorImageSerializer(data=request.data)
+        if ser.is_valid():
+            item = self.service.create(ser.validated_data)
+            return Response(LibraryInteriorImageSerializer(item).data, status=201)
+        return Response(ser.errors, status=400)
+
+    def partial_update(self, request, pk=None, *args, **kwargs):
+        ser = LibraryInteriorImageSerializer(data=request.data, partial=True)
+        if ser.is_valid():
+            item = self.service.update(pk, ser.validated_data)
+            if item:
+                return Response(LibraryInteriorImageSerializer(item).data)
+            return Response(status=404)
+        return Response(ser.errors, status=400)
+
+    def destroy(self, request, pk=None):
+        if self.service.delete(pk):
+            return Response(status=204)
+        return Response(status=404)
 
 
 class EResourceDepartmentViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = EResourceDepartmentService(EResourceDepartmentRepository())
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
     def list(self, request):
-        return Response(EResourceDepartmentSerializer(self.service.get_departments(), many=True).data)
+        if not request.user.is_authenticated:
+            data = self.service.get_departments()
+        else:
+            data = self.service.get_all()
+        return Response(EResourceDepartmentSerializer(data, many=True).data)
+
+    def create(self, request, *args, **kwargs):
+        ser = EResourceDepartmentSerializer(data=request.data)
+        if ser.is_valid():
+            item = self.service.create(ser.validated_data)
+            return Response(EResourceDepartmentSerializer(item).data, status=201)
+        return Response(ser.errors, status=400)
+
+    def partial_update(self, request, pk=None, *args, **kwargs):
+        ser = EResourceDepartmentSerializer(data=request.data, partial=True)
+        if ser.is_valid():
+            item = self.service.update(pk, ser.validated_data)
+            if item:
+                return Response(EResourceDepartmentSerializer(item).data)
+            return Response(status=404)
+        return Response(ser.errors, status=400)
+
+    def destroy(self, request, pk=None):
+        if self.service.delete(pk):
+            return Response(status=204)
+        return Response(status=404)
 
 
 class EResourceFileViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = EResourceFileService(EResourceFileRepository())
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
     def list(self, request):
-        return Response(EResourceFileSerializer(self.service.get_all_files(), many=True).data)
+        if not request.user.is_authenticated:
+            data = self.service.get_all_files()
+        else:
+            data = self.service.get_all()
+        return Response(EResourceFileSerializer(data, many=True).data)
+
+    def create(self, request, *args, **kwargs):
+        ser = EResourceFileSerializer(data=request.data)
+        if ser.is_valid():
+            item = self.service.create(ser.validated_data)
+            return Response(EResourceFileSerializer(item).data, status=201)
+        return Response(ser.errors, status=400)
+
+    def partial_update(self, request, pk=None, *args, **kwargs):
+        ser = EResourceFileSerializer(data=request.data, partial=True)
+        if ser.is_valid():
+            item = self.service.update(pk, ser.validated_data)
+            if item:
+                return Response(EResourceFileSerializer(item).data)
+            return Response(status=404)
+        return Response(ser.errors, status=400)
+
+    def destroy(self, request, pk=None):
+        if self.service.delete(pk):
+            return Response(status=204)
+        return Response(status=404)
 
 
 class PageContentViewSet(viewsets.ViewSet):
@@ -102,18 +201,71 @@ class PageImageViewSet(viewsets.ViewSet):
 
 
 class ManagedLinkViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = ManagedLinkService(ManagedLinkRepository())
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
     def list(self, request):
-        return Response(ManagedLinkSerializer(self.service.get_all_links(), many=True).data)
+        if not request.user.is_authenticated:
+            data = self.service.get_all_links()
+        else:
+            data = self.service.get_all()
+        return Response(ManagedLinkSerializer(data, many=True).data)
+
+    def create(self, request, *args, **kwargs):
+        ser = ManagedLinkSerializer(data=request.data)
+        if ser.is_valid():
+            item = self.service.create(ser.validated_data)
+            return Response(ManagedLinkSerializer(item).data, status=201)
+        return Response(ser.errors, status=400)
+
+    def partial_update(self, request, pk=None, *args, **kwargs):
+        ser = ManagedLinkSerializer(data=request.data, partial=True)
+        if ser.is_valid():
+            item = self.service.update(pk, ser.validated_data)
+            if item:
+                return Response(ManagedLinkSerializer(item).data)
+            return Response(status=404)
+        return Response(ser.errors, status=400)
+
+    def destroy(self, request, pk=None):
+        if self.service.delete(pk):
+            return Response(status=204)
+        return Response(status=404)
 
 
 class ManagedFileViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = ManagedFileService(ManagedFileRepository())
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
     def list(self, request):
-        return Response(ManagedFileSerializer(self.service.get_all_files(), many=True).data)
+        if not request.user.is_authenticated:
+            data = self.service.get_all_files()
+        else:
+            data = self.service.get_all()
+        return Response(ManagedFileSerializer(data, many=True).data)
+
+    def create(self, request, *args, **kwargs):
+        ser = ManagedFileSerializer(data=request.data)
+        if ser.is_valid():
+            item = self.service.create(ser.validated_data)
+            return Response(ManagedFileSerializer(item).data, status=201)
+        return Response(ser.errors, status=400)
+
+    def destroy(self, request, pk=None):
+        if self.service.delete(pk):
+            return Response(status=204)
+        return Response(status=404)

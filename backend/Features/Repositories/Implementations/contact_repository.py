@@ -20,5 +20,17 @@ class ContactRepository(ContactRepositoryInterface):
     def mark_as_read(self, message_id: int):
         message = self.get_by_id(message_id)
         message.is_read = True
+        if message.status == 'UNREAD':
+            message.status = 'READ'
         message.save()
         return message
+
+    def update_status(self, message_id: int, status: str):
+        message = self.get_by_id(message_id)
+        if status in ['UNREAD', 'READ', 'REPLIED']:
+            message.status = status
+            if status in ['READ', 'REPLIED']:
+                message.is_read = True
+            message.save()
+        return message
+

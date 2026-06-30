@@ -3,17 +3,22 @@ from Features.Data.Models import NewlyAcquiredBook
 from Features.Repositories.Interfaces import INewlyAcquiredBookRepository
 
 class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
-    def get_all_active(self) -> List[Any]:
-        return list(NewlyAcquiredBook.objects.filter(is_active=True))
+    def get_books_by_batch(self, batch_id: int) -> List[Any]:
+        return list(NewlyAcquiredBook.objects.filter(batch_id=batch_id))
 
     def get_by_id(self, book_id: int) -> Optional[Any]:
         try:
-            return NewlyAcquiredBook.objects.get(id=book_id, is_active=True)
+            return NewlyAcquiredBook.objects.get(id=book_id)
         except NewlyAcquiredBook.DoesNotExist:
             return None
 
-    def create(self, data: dict) -> Any:
-        return NewlyAcquiredBook.objects.create(**data)
+    def create(self, data: dict, files: dict = None) -> Any:
+        book = NewlyAcquiredBook(**data)
+        if files and 'cover_image' in files:
+            book.cover_image = files['cover_image']
+        book.save()
+        return book
+
 
     def update(self, book_id: int, data: dict) -> Optional[Any]:
         book = self.get_by_id(book_id)
@@ -27,7 +32,6 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
     def delete(self, book_id: int) -> bool:
         book = self.get_by_id(book_id)
         if book:
-            book.is_active = False
-            book.save()
+            book.delete()
             return True
         return False

@@ -9,5 +9,6 @@ from Features.Data.Models import ContactMessage
 class ContactMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContactMessage
-        fields = ['id', 'name', 'email', 'message', 'created_at', 'is_read']
-        read_only_fields = ['created_at', 'is_read']
+        fields = ['id', 'name', 'email', 'subject', 'message', 'message_type', 'status', 'created_at', 'is_read']
+        read_only_fields = ['created_at', 'is_read', 'status']
+

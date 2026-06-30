@@ -21,10 +21,42 @@ class IPageImageRepository(ABC):
 
 class IManagedLinkRepository(ABC):
     @abstractmethod
-    def get_all_active(self) -> List[Any]:
+    def get_all(self) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def get_by_id(self, id: int) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    def create(self, data: dict) -> Any:
+        pass
+
+    @abstractmethod
+    def update(self, id: int, data: dict) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    def delete(self, id: int) -> bool:
         pass
 
 class IManagedFileRepository(ABC):
+    @abstractmethod
+    def get_all(self) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def get_by_id(self, id: int) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    def create(self, data: dict) -> Any:
+        pass
+
+    @abstractmethod
+    def delete(self, id: int) -> bool:
+        pass
+
     @abstractmethod
     def get_all_active(self) -> List[Any]:
         pass

@@ -76,8 +76,8 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                      className="rounded-xl overflow-hidden shadow-md border border-gray-100 cursor-pointer group"
                      onClick={() => setSelectedImage(img.src)}
                 >
-                  <div className="overflow-hidden h-32 relative">
-                    <img src={img.src} alt={img.label} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                  <div className="overflow-hidden relative" style={{ aspectRatio: '4 / 3' }}>
+                    <img src={img.src} alt={img.label} className="w-full h-full object-cover block transition-transform duration-500 group-hover:scale-110" loading="lazy" draggable={false} />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                        <span className="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity">zoom_in</span>
                     </div>
@@ -219,7 +219,6 @@ export const LibrarySectionCarousel: React.FC = () => {
                     style={{
                       width: pos === 'active' ? '100%' : pos === 'right' || pos === 'left' ? '85%' : '70%',
                       maxWidth: pos === 'active' ? '800px' : pos === 'right' || pos === 'left' ? '650px' : '500px',
-                      height: '100%'
                     }}
                     onClick={() => {
                       if (pos === 'active') {
@@ -229,11 +228,15 @@ export const LibrarySectionCarousel: React.FC = () => {
                       }
                     }}
                   >
-                    <img
-                      src={img.src}
-                      alt={img.label}
-                      className="w-full h-full object-cover"
-                    />
+                    <div className="w-full" style={{ aspectRatio: '16 / 10' }}>
+                      <img
+                        src={img.src}
+                        alt={img.label}
+                        className="w-full h-full object-cover block"
+                        loading="lazy"
+                        draggable={false}
+                      />
+                    </div>
                     {pos === 'active' && (
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity">
                         <span className="text-white font-medium flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">

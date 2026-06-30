@@ -277,15 +277,20 @@ section::before {
   .gallery-slider-container {
     overflow: hidden;
     position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 600px; /* Cap maximum height */
   }
 
   .gallery-track {
     display: flex;
+    height: 100%;
     transition: transform 0.5s cubic-bezier(0.65, 0, 0.35, 1);
   }
 
   .gallery-slide {
     min-width: 100%;
+    height: 100%;
     flex-shrink: 0;
     display: flex;
     justify-content: center;
@@ -294,9 +299,8 @@ section::before {
   }
 
   .gallery-slide img {
-    max-height: 70vh;
-    width: auto;
-    max-width: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
@@ -449,7 +453,6 @@ section::before {
     filter: blur(0);
     z-index: 10;
     box-shadow: 0 30px 60px -12px rgba(0, 24, 81, 0.4), 0 18px 36px -18px rgba(0, 24, 81, 0.3);
-    position: relative;
   }
 
   .carousel-3d-card.left {

@@ -1,46 +1,137 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
 import {
   Image as ImageIcon,
   Plus,
   Search,
   LayoutGrid,
   List,
-  Eye,
   Pencil,
   Trash2,
+  X,
+  Upload,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 
-type ViewMode = 'table' | 'grid';
+import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
 
-const MOCK_SECTIONS = [
-  { id: 1, name: 'Circulation Section', description: 'Where books are borrowed and returned', imageCount: 4, status: 'Published' },
-  { id: 2, name: 'Reference Section', description: 'Reference materials and encyclopedias', imageCount: 3, status: 'Published' },
-  { id: 3, name: 'Periodical Section', description: 'Newspapers, magazines, and journals', imageCount: 2, status: 'Published' },
-  { id: 4, name: 'E-Library Section', description: 'Digital resources and computer terminals', imageCount: 5, status: 'Published' },
-  { id: 5, name: 'Audio-Visual Section', description: 'Multimedia resources', imageCount: 1, status: 'Draft' },
-  { id: 6, name: 'Filipino Section', description: 'Filipino language books and materials', imageCount: 3, status: 'Published' },
-];
+type ViewMode = 'table' | 'grid';
 
 export default function SectionsManagerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [images, setImages] = useState<GalleryImage[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = MOCK_SECTIONS.filter((s) =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingImage, setEditingImage] = useState<GalleryImage | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const fetchImages = async () => {
+    try {
+      setLoading(true);
+      const data = await galleryApi.getAllImages();
+      setImages(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchImages();
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this image from the library sections?')) return;
+    try {
+      await galleryApi.deleteImage(id);
+      fetchImages();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSaving(true);
+
+    const fd = new FormData();
+    const form = e.currentTarget;
+    fd.append('title', (form.querySelector('[name=title]') as HTMLInputElement).value);
+    fd.append('section_label', (form.querySelector('[name=section_label]') as HTMLInputElement).value);
+    fd.append('is_active', (form.querySelector('[name=is_active_check]') as HTMLInputElement).checked ? 'true' : 'false');
+    if (selectedFile) {
+      fd.append('image', selectedFile);
+    }
+
+    try {
+      if (editingImage) {
+        await galleryApi.updateImage(editingImage.id, fd);
+      } else {
+        await galleryApi.createImage(fd);
+      }
+      setIsModalOpen(false);
+      fetchImages();
+    } catch (err: any) {
+      console.error(err);
+      alert('An error occurred: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingImage(null);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (img: GalleryImage) => {
+    setEditingImage(img);
+    setSelectedFile(null);
+    setPreviewUrl(img.image.startsWith('http') ? img.image : `/media/${img.image}`);
+    setIsModalOpen(true);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const filtered = images.filter(
+    (img) =>
+      img.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      img.section_label.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const activeCount = images.filter((i) => i.is_active).length;
 
   return (
     <>
       <div className="admin-content__header">
         <h1>Library Section Pictures</h1>
-        <p>Manage section images. Adding a section here syncs to the public website.</p>
+        <p>Manage section images. Changes sync directly to the public website gallery.</p>
       </div>
 
       <div className="admin-metrics">
         <MetricCard
-          label="Total Sections"
-          value={MOCK_SECTIONS.length}
+          label="Total Images"
+          value={images.length}
+          icon={<ImageIcon size={22} />}
+          variant="blue"
+        />
+        <MetricCard
+          label="Active / Visible"
+          value={activeCount}
           icon={<ImageIcon size={22} />}
           variant="green"
         />
@@ -75,82 +166,218 @@ export default function SectionsManagerPage() {
             >
               <List size={16} />
             </button>
-            <button className="admin-btn admin-btn--primary" aria-label="Add section">
+            <button className="admin-btn admin-btn--primary cursor-pointer" onClick={openAddModal} aria-label="Add section image">
               <Plus size={16} />
-              Add Section
+              Add Image
             </button>
           </div>
         </div>
 
-        {viewMode === 'table' && (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Section Name</th>
-                <th>Description</th>
-                <th>Images</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((section) => (
-                <tr key={section.id}>
-                  <td style={{ fontWeight: 500, color: '#111827' }}>{section.name}</td>
-                  <td>{section.description}</td>
-                  <td>{section.imageCount}</td>
-                  <td>
-                    <span className={`admin-badge ${section.status === 'Published' ? 'admin-badge--success' : 'admin-badge--warning'}`}>
-                      {section.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="admin-table__actions">
-                      <button className="admin-btn admin-btn--icon" aria-label={`View ${section.name}`}><Eye size={15} /></button>
-                      <button className="admin-btn admin-btn--icon" aria-label={`Edit ${section.name}`}><Pencil size={15} /></button>
-                      <button className="admin-btn admin-btn--icon" aria-label={`Delete ${section.name}`} style={{ color: '#dc2626' }}><Trash2 size={15} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {loading ? (
+          <div className="p-8 text-center text-gray-500">Loading sections...</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">No images found. Add your first one!</div>
+        ) : (
+          <>
+            {viewMode === 'table' && (
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Image</th>
+                    <th>Title</th>
+                    <th>Section Label</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((img) => (
+                    <tr key={img.id}>
+                      <td>
+                        <img
+                          src={img.image.startsWith('http') ? img.image : `/media/${img.image}`}
+                          alt={img.title}
+                          className="rounded-md object-cover"
+                          style={{ width: 64, height: 48 }}
+                        />
+                      </td>
+                      <td style={{ fontWeight: 500, color: '#111827' }}>{img.title || '—'}</td>
+                      <td>{img.section_label || '—'}</td>
+                      <td>
+                        <span className={`admin-badge ${img.is_active ? 'admin-badge--success' : 'admin-badge--warning'}`}>
+                          {img.is_active ? 'Visible' : 'Hidden'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="admin-table__actions">
+                          <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            className="admin-btn admin-btn--icon"
+                            aria-label={`Delete ${img.title}`}
+                            style={{ color: '#dc2626' }}
+                            onClick={() => handleDelete(img.id)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
-        {viewMode === 'grid' && (
-          <div className="admin-card-grid" style={{ padding: 20 }}>
-            {filtered.map((section) => (
-              <div className="admin-grid-card" key={section.id}>
-                <div style={{
-                  height: 140,
-                  background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ffffff',
-                }}>
-                  <ImageIcon size={40} />
-                </div>
-                <div className="admin-grid-card__body">
-                  <div className="admin-grid-card__title">{section.name}</div>
-                  <div className="admin-grid-card__meta">{section.description}</div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span className="admin-badge admin-badge--info">{section.imageCount} images</span>
-                    <span className={`admin-badge ${section.status === 'Published' ? 'admin-badge--success' : 'admin-badge--warning'}`}>
-                      {section.status}
-                    </span>
+            {viewMode === 'grid' && (
+              <div className="admin-card-grid" style={{ padding: 20 }}>
+                {filtered.map((img) => (
+                  <div className="admin-grid-card" key={img.id}>
+                    <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: '#f3f4f6' }}>
+                      <img
+                        src={img.image.startsWith('http') ? img.image : `/media/${img.image}`}
+                        alt={img.title}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      {!img.is_active && (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: 'rgba(0,0,0,0.5)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <span className="text-white text-xs font-bold uppercase tracking-wide">Hidden</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="admin-grid-card__body">
+                      <div className="admin-grid-card__title">{img.title || '(Untitled)'}</div>
+                      <div className="admin-grid-card__meta">{img.section_label || 'No Section Label'}</div>
+                      <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span className={`admin-badge ${img.is_active ? 'admin-badge--success' : 'admin-badge--warning'}`}>
+                          {img.is_active ? 'Visible' : 'Hidden'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="admin-grid-card__actions">
+                      <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="admin-btn admin-btn--icon"
+                        aria-label={`Delete ${img.title}`}
+                        style={{ color: '#dc2626' }}
+                        onClick={() => handleDelete(img.id)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="admin-grid-card__actions">
-                  <button className="admin-btn admin-btn--icon" aria-label={`View ${section.name}`}><Eye size={15} /></button>
-                  <button className="admin-btn admin-btn--icon" aria-label={`Edit ${section.name}`}><Pencil size={15} /></button>
-                  <button className="admin-btn admin-btn--icon" aria-label={`Delete ${section.name}`} style={{ color: '#dc2626' }}><Trash2 size={15} /></button>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
+
+      {/* Add/Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h2 className="font-bold text-gray-900">
+                {editingImage ? 'Edit Image' : 'Upload New Image'}
+              </h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer transition">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              <form id="section-image-form" onSubmit={handleSave} className="space-y-4">
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-2">
+                    Image {editingImage ? '(Leave blank to keep current)' : '*'}
+                  </label>
+                  <div
+                    className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden cursor-pointer hover:border-[#002B7F] transition-colors"
+                    style={{ minHeight: 150 }}
+                    onClick={() => document.getElementById('image-file-input')?.click()}
+                  >
+                    {previewUrl ? (
+                      <img src={previewUrl} alt="Preview" style={{ width: '100%', height: 160, objectFit: 'cover' }} />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-36 gap-2 text-gray-400">
+                        <Upload size={28} />
+                        <span className="text-sm">Click to upload image</span>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    id="image-file-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                    required={!editingImage}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Title</label>
+                  <input
+                    name="title"
+                    type="text"
+                    defaultValue={editingImage?.title}
+                    placeholder="e.g., Circulation Section"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Section Label</label>
+                  <input
+                    name="section_label"
+                    type="text"
+                    defaultValue={editingImage?.section_label}
+                    placeholder="e.g., Filipiniana"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]"
+                  />
+                </div>
+
+                <div className="pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="is_active_check"
+                      defaultChecked={editingImage ? editingImage.is_active : true}
+                      className="w-4 h-4 text-[#002B7F] rounded focus:ring-[#002B7F]"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Visible on public website</span>
+                  </label>
+                </div>
+              </form>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50/50 mt-auto">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="section-image-form"
+                disabled={isSaving}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#002B7F] hover:bg-[#001655] rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : editingImage ? 'Update Image' : 'Upload Image'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

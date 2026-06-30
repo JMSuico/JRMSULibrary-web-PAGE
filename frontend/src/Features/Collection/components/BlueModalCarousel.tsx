@@ -28,11 +28,15 @@ const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = (
       onClick={(e) => e.stopPropagation()}
     >
       {item.image && (
-        <img
-          src={item.image}
-          alt={item.title}
-          className="w-24 h-24 md:w-28 md:h-28 object-contain rounded-2xl mx-auto mb-5"
-        />
+        <div className="w-28 h-28 md:w-32 md:h-32 mx-auto mb-5 rounded-2xl overflow-hidden flex-shrink-0">
+          <img
+            src={item.image}
+            alt={item.title}
+            className="w-full h-full object-cover block"
+            loading="lazy"
+            draggable={false}
+          />
+        </div>
       )}
       {item.icon && !item.image && (
         <div className="flex justify-center mb-5">
@@ -133,11 +137,15 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                   style={pos === 'active' ? { boxShadow: '0 0 60px rgba(37, 99, 235, 0.35)' } : undefined}
                 >
                   {item.image && (
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-24 h-24 md:w-32 md:h-32 object-contain rounded-xl mb-4"
-                    />
+                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-xl overflow-hidden flex-shrink-0 mx-auto mb-4">
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="w-full h-full object-cover block"
+                        loading="lazy"
+                        draggable={false}
+                      />
+                    </div>
                   )}
                   {item.icon && !item.image && (
                     <span className="material-symbols-outlined text-5xl md:text-6xl mb-4 text-gold-light">

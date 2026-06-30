@@ -23,8 +23,35 @@ class IManagedLinkService(ABC):
     @abstractmethod
     def get_all_links(self) -> List[Any]:
         pass
+    @abstractmethod
+    def get_all(self) -> List[Any]:
+        pass
+    @abstractmethod
+    def get_by_id(self, id: int) -> Optional[Any]:
+        pass
+    @abstractmethod
+    def create(self, data: dict) -> Any:
+        pass
+    @abstractmethod
+    def update(self, id: int, data: dict) -> Optional[Any]:
+        pass
+    @abstractmethod
+    def delete(self, id: int) -> bool:
+        pass
 
 class IManagedFileService(ABC):
     @abstractmethod
     def get_all_files(self) -> List[Any]:
+        pass
+    @abstractmethod
+    def get_all(self) -> List[Any]:
+        pass
+    @abstractmethod
+    def get_by_id(self, id: int) -> Optional[Any]:
+        pass
+    @abstractmethod
+    def create(self, data: dict) -> Any:
+        pass
+    @abstractmethod
+    def delete(self, id: int) -> bool:
         pass

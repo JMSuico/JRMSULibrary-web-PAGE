@@ -5,6 +5,7 @@ interface BookModalItem {
   title: string;
   description: string;
   icon?: string;
+  image?: string;
 }
 
 interface BookListModalProps {
@@ -81,11 +82,15 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                   className="flex items-start gap-3 p-4 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors group"
                   onClick={() => setSelectedBook(book)}
                 >
-                  {book.icon && (
+                  {book.image ? (
+                    <div className="w-12 h-12 flex-shrink-0 mt-0.5 rounded-lg overflow-hidden">
+                      <img src={book.image} alt={book.title} className="w-full h-full object-cover" />
+                    </div>
+                  ) : book.icon ? (
                     <span className="material-symbols-outlined text-2xl text-primary flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
                       {book.icon}
                     </span>
-                  )}
+                  ) : null}
                   <div>
                     <h3 className="font-headline-md font-bold text-sm text-primary group-hover:text-gold-dark transition-colors">{book.title}</h3>
                     <p className="text-xs text-gray-500 mt-0.5">{book.description}</p>
@@ -99,7 +104,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider w-10">#</th>
-                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider w-14">Icon</th>
+                    <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider w-14">Image</th>
                     <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider">Title</th>
                     <th className="text-left py-2 px-3 text-gray-500 font-semibold text-xs uppercase tracking-wider hidden md:table-cell">Description</th>
                   </tr>
@@ -115,9 +120,11 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                       >
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
-                          {book.icon && (
+                          {book.image ? (
+                            <img src={book.image} alt={book.title} className="w-8 h-8 object-cover rounded" />
+                          ) : book.icon ? (
                             <span className="material-symbols-outlined text-lg text-primary">{book.icon}</span>
-                          )}
+                          ) : null}
                         </td>
                         <td className="py-3 px-3 font-medium text-primary">{book.title}</td>
                         <td className="py-3 px-3 text-gray-500 text-xs hidden md:table-cell">{book.description}</td>
@@ -169,9 +176,13 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
               className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center flex flex-col items-center" 
               onClick={(e) => e.stopPropagation()}
             >
-              {selectedBook.icon && (
+              {selectedBook.image ? (
+                <div className="w-48 h-64 mb-6 rounded-lg overflow-hidden shadow-lg mx-auto">
+                  <img src={selectedBook.image} alt={selectedBook.title} className="w-full h-full object-cover" />
+                </div>
+              ) : selectedBook.icon ? (
                 <span className="material-symbols-outlined text-[120px] text-primary mb-6">{selectedBook.icon}</span>
-              )}
+              ) : null}
               <h3 className="font-headline-lg font-bold text-2xl text-primary mb-4">{selectedBook.title}</h3>
               <p className="text-gray-600 text-lg">{selectedBook.description}</p>
             </div>

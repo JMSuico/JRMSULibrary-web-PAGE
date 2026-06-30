@@ -26,13 +26,13 @@ export const PersonnelSection: React.FC = () => {
                 <div className="flex flex-col md:flex-row gap-8 items-center md:items-center">
                   <div className="flex-1 text-left">
                     <h3 className="text-3xl font-bold font-headline-lg mb-4 text-primary drop-shadow-sm">Librarian's Corner</h3>
-                    <p className="italic mb-4 text-primary/90">
+                    <p className="italic mb-4 text-white">
                       From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence.
                     </p>
-                    <p className="text-sm leading-relaxed mb-4 text-primary/85">
+                    <p className="text-sm leading-relaxed mb-4 text-white">
                       The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University's Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users.
                     </p>
-                    <p className="text-sm text-secondary italic drop-shadow-sm font-medium">
+                    <p className="text-sm text-gold-light italic drop-shadow-sm font-medium">
                       Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!
                     </p>
                   </div>

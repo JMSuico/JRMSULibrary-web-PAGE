@@ -11,6 +11,8 @@ import {
   Settings,
   LogOut,
   Library,
+  Users,
+  Mail,
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -30,6 +32,7 @@ const NAV_SECTIONS = [
     label: 'Management',
     items: [
       { to: '/admin/books', icon: BookOpen, text: 'Newly Acquired Books' },
+      { to: '/admin/batch-history', icon: FileText, text: 'Batch History' },
       { to: '/admin/sections', icon: Image, text: 'Library Sections' },
       { to: '/admin/content', icon: FileText, text: 'Content Manager' },
       { to: '/admin/eresources', icon: FolderTree, text: 'E-Resources' },
@@ -38,10 +41,14 @@ const NAV_SECTIONS = [
   {
     label: 'System',
     items: [
+      { to: '/admin/email', icon: Mail, text: 'Email & Reservations' },
+      { to: '/admin/users', icon: Users, text: 'User Management' },
       { to: '/admin/analytics', icon: BarChart3, text: 'Analytics' },
+      { to: '/admin/reports', icon: FileText, text: 'Reports Generator' },
       { to: '/admin/settings', icon: Settings, text: 'Settings' },
     ],
   },
+
 ] as const;
 
 export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSidebarProps) {
@@ -108,19 +115,18 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
           ))}
         </nav>
 
-        {/* Logout */}
         <div style={{ padding: '8px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
           <button
             className="admin-sidebar__link"
             style={{ width: '100%' }}
             onClick={() => {
-              // TODO: Implement logout
-              window.location.href = '/';
+              // Redirect to login page
+              window.location.href = '/admin/login';
             }}
-            aria-label="Return to website"
+            aria-label="Logout"
           >
             <LogOut className="admin-sidebar__link-icon" size={20} />
-            {!collapsed && <span className="admin-sidebar__link-text">Back to Website</span>}
+            {!collapsed && <span className="admin-sidebar__link-text">Logout</span>}
           </button>
         </div>
       </aside>

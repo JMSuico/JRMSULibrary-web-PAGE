@@ -39,9 +39,14 @@ class ContactMessageViewSet(viewsets.ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
     def partial_update(self, request, pk=None):
-        """Mark a message as read."""
+        """Mark a message as read (legacy support) or update status."""
         try:
-            message = self.service.mark_message_read(pk)
+            status_val = request.data.get('status')
+            if status_val:
+                message = self.service.update_message_status(pk, status_val)
+            else:
+                message = self.service.mark_message_read(pk)
             return Response(ContactMessageSerializer(message).data)
         except Exception:
             return Response(status=status.HTTP_404_NOT_FOUND)
+

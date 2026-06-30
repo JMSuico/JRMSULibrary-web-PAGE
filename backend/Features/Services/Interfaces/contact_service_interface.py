@@ -21,3 +21,8 @@ class ContactServiceInterface(ABC):
     def mark_message_read(self, message_id: int):
         """Mark a contact message as read."""
         pass
+
+    @abstractmethod
+    def update_message_status(self, message_id: int, status: str):
+        """Update the status of a contact message."""
+        pass

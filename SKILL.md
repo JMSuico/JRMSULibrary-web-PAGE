@@ -35,7 +35,7 @@ Never create spaghetti code. Never mix responsibilities. Never skip layers. Neve
 | Web Frontend | React + Vite + TypeScript | Feature-based Vertical Slice |
 | Mobile Frontend | React Native + TypeScript | Feature-based Vertical Slice |
 | Backend | Django + DRF + Python | Layered Model-First |
-| Database | MySQL / PostgreSQL / SQL Server | Strict Relational |
+| Database | SQL Server (SSMS19 Recommended) / MySQL / PostgreSQL | Strict Relational |
 | Cache | Redis | Infrastructure Layer |
 | Auth | JWT + HMAC-SHA256 QR | Backend-enforced |
 
@@ -503,7 +503,7 @@ Service Layer    (validation + business rules)
   ↓
 Repository Layer (ORM queries)
   ↓
-Database         (MySQL / PostgreSQL / SQL Server)
+Database         (SQL Server / MySQL / PostgreSQL)
   ↓
 SSMS / DB Client (management and reporting)
 ```

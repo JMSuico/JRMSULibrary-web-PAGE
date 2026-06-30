@@ -5,17 +5,22 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from Features.Api.Controllers import (
-    NewlyAcquiredBookViewSet, LibraryInteriorImageViewSet,
+    LibraryInteriorImageViewSet,
     EResourceDepartmentViewSet, EResourceFileViewSet,
     PersonnelViewSet, ContactMessageViewSet, FeedbackViewSet,
     PageContentViewSet, PageImageViewSet, ManagedLinkViewSet,
-    ManagedFileViewSet, SiteVisitViewSet
+    ManagedFileViewSet, SiteVisitViewSet, AcquisitionBatchViewSet
 )
+from Features.Api.Controllers.user_controller import UserViewSet
+from Features.Api.Controllers.report_controller import ReportViewSet
+from Features.Api.Controllers.settings_controller import SettingsViewSet
+
+
 
 router = DefaultRouter()
 
 # CMS endpoints
-router.register(r'books', NewlyAcquiredBookViewSet, basename='book')
+router.register(r'batches', AcquisitionBatchViewSet, basename='batch')
 router.register(r'gallery', LibraryInteriorImageViewSet, basename='gallery')
 router.register(r'departments', EResourceDepartmentViewSet, basename='department')
 router.register(r'files', EResourceFileViewSet, basename='file')
@@ -23,6 +28,9 @@ router.register(r'page-content', PageContentViewSet, basename='page-content')
 router.register(r'page-images', PageImageViewSet, basename='page-image')
 router.register(r'managed-links', ManagedLinkViewSet, basename='managed-link')
 router.register(r'managed-files', ManagedFileViewSet, basename='managed-file')
+router.register(r'users', UserViewSet, basename='user')
+router.register(r'reports', ReportViewSet, basename='report')
+router.register(r'settings', SettingsViewSet, basename='settings')
 
 # Domain endpoints
 router.register(r'personnel', PersonnelViewSet, basename='personnel')

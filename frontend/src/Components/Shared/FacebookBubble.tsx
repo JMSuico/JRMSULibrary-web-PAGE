@@ -8,7 +8,7 @@ export const FacebookBubble: React.FC = () => {
       {/* Floating Bubble */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-24 sm:bottom-28 right-4 sm:right-6 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#1877F2] shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 hover:shadow-xl transition-all duration-300 float-bubble"
+        className="fixed bottom-24 right-4 sm:right-6 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#1877F2] shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 hover:shadow-xl transition-all duration-300 float-bubble"
         aria-label="Open Facebook Page"
       >
         <svg
