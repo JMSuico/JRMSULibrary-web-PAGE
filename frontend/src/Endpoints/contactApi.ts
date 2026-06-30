@@ -7,8 +7,15 @@ export interface ContactMessage {
   email: string;
   subject: string;
   message: string;
-  status: 'UNREAD' | 'READ' | 'REPLIED';
+  status: 'UNREAD' | 'READ' | 'REPLIED' | 'ARCHIVED' | 'APPROVED' | 'DECLINED';
+  is_read: boolean;
   created_at: string;
+}
+
+export interface EmailValidation {
+  email: string;
+  is_disposable: boolean;
+  is_domain_valid: boolean;
 }
 
 export const contactApi = {
@@ -16,11 +23,19 @@ export const contactApi = {
     return apiClient(`/contact/`);
   },
 
-  updateMessageStatus: async (id: number, status: 'UNREAD' | 'READ' | 'REPLIED'): Promise<ContactMessage> => {
+  getMessage: async (id: number): Promise<ContactMessage> => {
+    return apiClient(`/contact/${id}/`);
+  },
+
+  updateMessageStatus: async (id: number, status: ContactMessage['status']): Promise<ContactMessage> => {
     return apiClient(`/contact/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     });
+  },
+
+  deleteMessage: async (id: number): Promise<void> => {
+    return apiClient(`/contact/${id}/`, { method: 'DELETE' });
   },
 
   submitContactMessage: async (data: Partial<ContactMessage>): Promise<ContactMessage> => {
@@ -28,5 +43,24 @@ export const contactApi = {
       method: 'POST',
       body: JSON.stringify(data),
     });
-  }
+  },
+
+  /** 
+   * Sends a real SMTP reply email from the library Gmail account to the sender.
+   * Marks message as REPLIED on success.
+   */
+  replyToMessage: async (id: number, reply_body: string): Promise<{ success: boolean; detail: string }> => {
+    return apiClient(`/contact/${id}/reply/`, {
+      method: 'POST',
+      body: JSON.stringify({ reply_body }),
+    });
+  },
+
+  /**
+   * Validates an email address against the disposable/temporary email blacklist.
+   * Returns { is_disposable, is_domain_valid }.
+   */
+  validateEmail: async (email: string): Promise<EmailValidation> => {
+    return apiClient(`/contact/validate-email/?email=${encodeURIComponent(email)}`);
+  },
 };

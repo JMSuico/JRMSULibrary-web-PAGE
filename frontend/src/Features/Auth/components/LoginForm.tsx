@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
+import { userApi } from '@/src/Endpoints/userApi';
+import { useToast } from '@/src/Hooks/useToast';
 
 export function LoginForm() {
   const navigate = useNavigate();
@@ -10,6 +12,7 @@ export function LoginForm() {
   const [captchaNum2, setCaptchaNum2] = useState(0);
   const [captchaInput, setCaptchaInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { showToast } = useToast();
 
   // Initialize Captcha
   useEffect(() => {
@@ -19,20 +22,22 @@ export function LoginForm() {
 
   const isHuman = captchaInput === (captchaNum1 + captchaNum2).toString();
 
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isHuman) return;
     
     setIsLoading(true);
     
-    // Simulate login API call
-    setTimeout(() => {
-      setIsLoading(false);
-      // For now, any login is considered successful for demo purposes.
-      // Redirect to admin dashboard.
+    try {
+      await userApi.login({ username, password });
+      showToast('Login successful', 'success');
+      // Redirect to admin dashboard
       navigate('/admin');
-    }, 1200);
+    } catch (err: any) {
+      showToast(err.message || 'Invalid credentials', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

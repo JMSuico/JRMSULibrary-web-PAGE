@@ -14,7 +14,7 @@
 /* ---------- Admin Sidebar ---------- */
 .admin-sidebar {
   width: 260px;
-  min-height: 100vh;
+  height: 100vh;
   background: linear-gradient(180deg, #001655 0%, #002B7F 100%);
   color: #ffffff;
   display: flex;
@@ -24,8 +24,8 @@
   left: 0;
   z-index: 50;
   transition: transform 300ms ease, width 300ms ease;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* Ensure children cannot escape the sidebar bounds */
+  overflow: hidden;
 }
 
 .admin-sidebar.collapsed {
@@ -36,8 +36,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px 16px;
+  padding: 0 16px;
+  height: 80px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 40px;
+  position: relative;
+  box-sizing: border-box;
 }
 
 .admin-sidebar__brand-logo {
@@ -77,10 +81,41 @@
 
 .admin-sidebar__nav {
   flex: 1;
-  padding: 16px 8px;
+  padding: 0 16px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* Slim scrollbar for sidebar nav */
+.admin-sidebar__nav::-webkit-scrollbar {
+  width: 4px;
+}
+.admin-sidebar__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.admin-sidebar__nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.admin-sidebar__footer {
+  /* Pinned footer — never grows, never shrinks, always visible at bottom */
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  padding: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  /* Ensure it stays at the bottom even when nav overflows */
+  position: relative;
+  z-index: 1;
+  background: #002B7F;
+  margin-top: auto;
+}
+
+.admin-sidebar__footer .admin-sidebar__link {
+  width: 100%;
 }
 
 .admin-sidebar__section-label {
@@ -351,7 +386,7 @@
   background: #ffffff;
   border-radius: 12px;
   border: 1px solid #e5e7eb;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .admin-table-toolbar {
@@ -597,6 +632,7 @@
 @media (max-width: 768px) {
   .admin-sidebar {
     transform: translateX(-100%);
+    width: 260px !important;
   }
 
   .admin-sidebar.open {
@@ -606,6 +642,18 @@
   .admin-main,
   .admin-main.sidebar-collapsed {
     margin-left: 0;
+  }
+
+  .admin-topbar {
+    padding: 0 16px;
+  }
+
+  .admin-topbar__title {
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
   }
 
   .admin-table-toolbar {

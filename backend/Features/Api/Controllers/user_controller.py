@@ -1,6 +1,7 @@
 # [Layer: Api/Controllers] — user_controller.py
 
 from rest_framework import viewsets, permissions
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from Features.Api.Serializers.user_serializer import UserSerializer, UserCreateUpdateSerializer
 from Features.Services.Implementations.user_service import UserService
@@ -29,6 +30,29 @@ class UserViewSet(viewsets.ViewSet):
         item = self.service.get_by_id(pk)
         return Response(UserSerializer(item).data) if item else Response(status=404)
 
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        if not request.user.is_authenticated:
+            return Response({"error": "Not authenticated"}, status=401)
+        return Response(UserSerializer(request.user).data)
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def login(self, request):
+        from django.contrib.auth import authenticate, login
+        username = request.data.get("username")
+        password = request.data.get("password")
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return Response(UserSerializer(user).data)
+        return Response({"error": "Invalid credentials"}, status=400)
+
+    @action(detail=False, methods=['post'])
+    def logout(self, request):
+        from django.contrib.auth import logout
+        logout(request)
+        return Response({"message": "Successfully logged out."})
+
     def create(self, request):
         ser = UserCreateUpdateSerializer(data=request.data)
         if ser.is_valid():
@@ -48,3 +72,25 @@ class UserViewSet(viewsets.ViewSet):
 
     def destroy(self, request, pk=None):
         return Response(status=204) if self.service.delete(pk) else Response(status=404)
+
+    @action(detail=False, methods=['post'])
+    def change_password(self, request):
+        if not request.user.is_authenticated:
+            return Response({"error": "Not authenticated"}, status=401)
+            
+        old_password = request.data.get("old_password")
+        new_password = request.data.get("new_password")
+        
+        if not old_password or not new_password:
+            return Response({"error": "Both old and new passwords are required"}, status=400)
+            
+        if not request.user.check_password(old_password):
+            return Response({"error": "Incorrect old password"}, status=400)
+            
+        request.user.set_password(new_password)
+        request.user.save()
+        
+        from django.contrib.auth import update_session_auth_hash
+        update_session_auth_hash(request, request.user)
+        
+        return Response({"message": "Password changed successfully"})

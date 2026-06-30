@@ -11,13 +11,15 @@ from Features.Repositories.Implementations.analytics_repository import SiteVisit
 from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
 from Features.Repositories.Implementations.contact_repository import ContactRepository
 
+from Features.Services.Implementations.book_service import NewlyAcquiredBookService
+
 class ReportViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.visit_service = SiteVisitService(SiteVisitRepository())
-        self.book_service = BatchService()
+        self.book_service = NewlyAcquiredBookService(NewlyAcquiredBookRepository())
         self.contact_service = ContactService()
         self.feedback_service = FeedbackService()
 
@@ -46,9 +48,8 @@ class ReportViewSet(viewsets.ViewSet):
             count = len([v for v in all_visits if v.visited_at.date() == d])
             visitors_data.append({"name": day_name, "visitors": count})
             
-        # Basic book trend (mocking monthly for now based on recent books, as it's hard to group by month dynamically without more data)
-        # We will just return the most recent 5 books instead for the table.
-        recent_books = sorted(all_books, key=lambda x: x.created_at, reverse=True)[:5]
+        # Basic book trend — return the most recent 5 books for the table.
+        recent_books = sorted(all_books, key=lambda x: x.date_encoded if x.date_encoded else timezone.now(), reverse=True)[:5]
 
         return Response({
             'total_visits': total_visits,
@@ -61,8 +62,8 @@ class ReportViewSet(viewsets.ViewSet):
                     'id': b.id,
                     'title': b.title,
                     'author': b.author,
-                    'category': b.category.name if b.category else 'Uncategorized',
-                    'dateAdded': b.created_at.strftime('%Y-%m-%d')
+                    'category': b.category or 'Uncategorized',
+                    'dateAdded': b.date_encoded.strftime('%Y-%m-%d') if b.date_encoded else 'N/A'
                 } for b in recent_books
             ],
             'recent_activity': [

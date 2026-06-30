@@ -1,5 +1,5 @@
 import React from 'react';
-import { PackageOpen, Clock, Calendar, ShieldCheck, FileArchive, CheckCircle2 } from 'lucide-react';
+import { PackageOpen, Clock, Calendar, ShieldCheck, FileArchive, CheckCircle2, ClipboardList, Eye } from 'lucide-react';
 import { AcquisitionBatch } from '@/src/Endpoints/batchApi';
 
 interface BatchCardProps {
@@ -11,11 +11,14 @@ interface BatchCardProps {
   onReopen: (id: number) => void;
   onActivate: (id: number) => void;
   onViewBooks: (id: number) => void;
+  onViewAudit: (batch: AcquisitionBatch) => void;
 }
 
-export function BatchCard({ batch, onContinue, onClose, onArchive, onReopen, onActivate, onViewBooks }: BatchCardProps) {
+export function BatchCard({ batch, onContinue, onClose, onArchive, onReopen, onActivate, onViewBooks, onViewAudit }: BatchCardProps) {
+  const statusColor = batch.status === 'open' ? '#3b82f6' : batch.status === 'closed' ? '#10b981' : '#6b7280';
+
   return (
-    <div className="admin-grid-card" style={{ padding: '20px', borderTop: `4px solid ${batch.status === 'open' ? '#3b82f6' : batch.status === 'closed' ? '#10b981' : '#6b7280'}` }}>
+    <div className="admin-grid-card" style={{ padding: '20px', borderTop: `4px solid ${statusColor}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
         <div>
           <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -51,9 +54,19 @@ export function BatchCard({ batch, onContinue, onClose, onArchive, onReopen, onA
 
       <div className="admin-grid-card__actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
         <button className="admin-btn admin-btn--secondary" onClick={() => onViewBooks(batch.id)}>
-          View Books
+          <Eye size={16} /> View Books
         </button>
-        
+
+        {/* View Audit — always available */}
+        <button
+          className="admin-btn admin-btn--secondary"
+          title="View Audit Trail"
+          style={{ color: '#6366f1' }}
+          onClick={() => onViewAudit(batch)}
+        >
+          <ClipboardList size={16} /> View Audit
+        </button>
+
         {batch.status === 'open' && (
           <>
             <button className="admin-btn admin-btn--primary" onClick={() => onContinue(batch.id)}>

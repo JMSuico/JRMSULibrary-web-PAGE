@@ -3,6 +3,9 @@ from Features.Data.Models import NewlyAcquiredBook
 from Features.Repositories.Interfaces import INewlyAcquiredBookRepository
 
 class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
+    def get_all_active(self) -> List[Any]:
+        return list(NewlyAcquiredBook.objects.all())
+
     def get_books_by_batch(self, batch_id: int) -> List[Any]:
         return list(NewlyAcquiredBook.objects.filter(batch_id=batch_id))
 
@@ -20,11 +23,13 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
         return book
 
 
-    def update(self, book_id: int, data: dict) -> Optional[Any]:
+    def update(self, book_id: int, data: dict, files: dict = None) -> Optional[Any]:
         book = self.get_by_id(book_id)
         if book:
             for key, value in data.items():
                 setattr(book, key, value)
+            if files and 'cover_image' in files:
+                book.cover_image = files['cover_image']
             book.save()
             return book
         return None
@@ -35,3 +40,4 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
             book.delete()
             return True
         return False
+

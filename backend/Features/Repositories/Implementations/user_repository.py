@@ -1,4 +1,6 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 from Features.Repositories.Interfaces.i_user_repository import IUserRepository
 
 class UserRepository(IUserRepository):
@@ -10,6 +12,7 @@ class UserRepository(IUserRepository):
 
     def create(self, data: dict):
         password = data.pop('password', None)
+        data['is_staff'] = True  # All users created here are admins
         user = User(**data)
         if password:
             user.set_password(password)

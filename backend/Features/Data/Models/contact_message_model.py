@@ -5,6 +5,9 @@ class ContactMessage(models.Model):
         ('UNREAD', 'Unread'),
         ('READ', 'Read'),
         ('REPLIED', 'Replied'),
+        ('ARCHIVED', 'Archived'),
+        ('APPROVED', 'Approved'),
+        ('DECLINED', 'Declined'),
     ]
     
     TYPE_CHOICES = [

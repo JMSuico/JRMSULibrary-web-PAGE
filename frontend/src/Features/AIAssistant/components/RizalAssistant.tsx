@@ -107,7 +107,9 @@ export const RizalAssistant: React.FC = () => {
       resetFormFields();
     } catch (err: any) {
       console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: err.message || 'Sorry, there was an error sending your email. Please try again.' }]);
+      const isRateLimit = err.message?.toLowerCase().includes('throttle') || err.message?.toLowerCase().includes('too many');
+      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (err.message || 'Sorry, there was an error sending your email. Please try again.');
+      setChatMessages(prev => [...prev, { sender: 'rizal', text: errorMessage }]);
       setChatFlowState('suggestions');
     } finally {
       setIsSubmitting(false);
@@ -133,7 +135,9 @@ export const RizalAssistant: React.FC = () => {
       resetFormFields();
     } catch (err: any) {
       console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: err.message || 'Sorry, there was an error submitting your reservation. Please try again.' }]);
+      const isRateLimit = err.message?.toLowerCase().includes('throttle') || err.message?.toLowerCase().includes('too many');
+      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (err.message || 'Sorry, there was an error submitting your reservation. Please try again.');
+      setChatMessages(prev => [...prev, { sender: 'rizal', text: errorMessage }]);
       setChatFlowState('suggestions');
     } finally {
       setIsSubmitting(false);
@@ -163,7 +167,9 @@ export const RizalAssistant: React.FC = () => {
       resetFormFields();
     } catch (err: any) {
       console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: err.message || 'Sorry, there was an error submitting your rating. Please try again.' }]);
+      const isRateLimit = err.message?.toLowerCase().includes('throttle') || err.message?.toLowerCase().includes('too many');
+      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (err.message || 'Sorry, there was an error submitting your rating. Please try again.');
+      setChatMessages(prev => [...prev, { sender: 'rizal', text: errorMessage }]);
       setChatFlowState('suggestions');
     } finally {
       setIsSubmitting(false);

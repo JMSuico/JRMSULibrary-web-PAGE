@@ -53,7 +53,7 @@ class LibraryInteriorImageViewSet(viewsets.ViewSet):
     - GET /api/gallery/ → public list (active only)
     - All other actions require authentication.
     """
-    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
+    # Removed incorrect parser_classes
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -94,7 +94,7 @@ class LibraryInteriorImageViewSet(viewsets.ViewSet):
 
 
 class EResourceDepartmentViewSet(viewsets.ViewSet):
-    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
+    # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = EResourceDepartmentService(EResourceDepartmentRepository())
@@ -134,7 +134,7 @@ class EResourceDepartmentViewSet(viewsets.ViewSet):
 
 
 class EResourceFileViewSet(viewsets.ViewSet):
-    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
+    # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = EResourceFileService(EResourceFileRepository())
@@ -201,7 +201,7 @@ class PageImageViewSet(viewsets.ViewSet):
 
 
 class ManagedLinkViewSet(viewsets.ViewSet):
-    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
+    # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = ManagedLinkService(ManagedLinkRepository())
@@ -241,7 +241,7 @@ class ManagedLinkViewSet(viewsets.ViewSet):
 
 
 class ManagedFileViewSet(viewsets.ViewSet):
-    parser_classes = [permissions.IsAuthenticatedOrReadOnly]
+    # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = ManagedFileService(ManagedFileRepository())

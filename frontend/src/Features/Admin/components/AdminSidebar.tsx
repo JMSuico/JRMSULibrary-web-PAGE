@@ -1,11 +1,11 @@
-import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import {
   LayoutDashboard,
   BookOpen,
   Image,
   FileText,
-  Link2,
   FolderTree,
   BarChart3,
   Settings,
@@ -14,6 +14,7 @@ import {
   Users,
   Mail,
 } from 'lucide-react';
+import { userApi } from '@/src/Endpoints/userApi';
 
 interface AdminSidebarProps {
   collapsed: boolean;
@@ -48,11 +49,11 @@ const NAV_SECTIONS = [
       { to: '/admin/settings', icon: Settings, text: 'Settings' },
     ],
   },
-
 ] as const;
 
 export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSidebarProps) {
-  const location = useLocation();
+  const navigate = useNavigate();
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
   const sidebarClasses = [
     'admin-sidebar',
@@ -61,6 +62,15 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
   ]
     .filter(Boolean)
     .join(' ');
+
+  const handleLogout = async () => {
+    try {
+      await userApi.logout();
+    } catch {
+      // Even if the API call fails, redirect to login
+    }
+    navigate('/admin/login');
+  };
 
   return (
     <>
@@ -87,7 +97,7 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
           )}
         </div>
 
-        {/* Navigation */}
+        {/* Navigation — scrollable middle section */}
         <nav className="admin-sidebar__nav">
           {NAV_SECTIONS.map((section) => (
             <React.Fragment key={section.label}>
@@ -115,14 +125,11 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
           ))}
         </nav>
 
-        <div style={{ padding: '8px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+        {/* Logout — pinned footer, uses CSS class instead of inline styles */}
+        <div className="admin-sidebar__footer">
           <button
             className="admin-sidebar__link"
-            style={{ width: '100%' }}
-            onClick={() => {
-              // Redirect to login page
-              window.location.href = '/admin/login';
-            }}
+            onClick={() => setLogoutModalOpen(true)}
             aria-label="Logout"
           >
             <LogOut className="admin-sidebar__link-icon" size={20} />
@@ -130,6 +137,14 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
           </button>
         </div>
       </aside>
+
+      <ConfirmModal
+        isOpen={logoutModalOpen}
+        title="Confirm Logout"
+        message="Do you want to Logout?"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutModalOpen(false)}
+      />
     </>
   );
 }

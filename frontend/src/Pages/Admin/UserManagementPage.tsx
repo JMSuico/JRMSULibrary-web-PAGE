@@ -12,6 +12,7 @@ import {
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -22,6 +23,7 @@ export default function UserManagementPage() {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
   const { showToast } = useToast();
 
   const fetchUsers = async () => {
@@ -40,15 +42,21 @@ export default function UserManagementPage() {
     fetchUsers();
   }, []);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to remove this admin user?')) return;
-    try {
-      await userApi.deleteUser(id);
-      showToast('User deleted successfully', 'success');
-      fetchUsers();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete user', 'error');
-    }
+  const handleDelete = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Admin User',
+      message: 'Are you sure you want to remove this admin user? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await userApi.deleteUser(id);
+          showToast('User deleted successfully', 'success');
+          fetchUsers();
+        } catch (err: any) {
+          showToast(err.message || 'Failed to delete user', 'error');
+        }
+      }
+    });
   };
 
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -175,7 +183,31 @@ export default function UserManagementPage() {
                       <div className="admin-table__actions">
                         <button 
                           className="admin-btn admin-btn--icon" 
+                          aria-label={user.is_active ? "Suspend User" : "Activate User"}
+                          title={user.is_active ? "Suspend User" : "Activate User"}
+                          onClick={() => {
+                            setConfirmModal({
+                              isOpen: true,
+                              title: user.is_active ? 'Suspend User' : 'Activate User',
+                              message: `Are you sure you want to ${user.is_active ? 'suspend' : 'activate'} this user?`,
+                              onConfirm: async () => {
+                                try {
+                                  await userApi.updateUser(user.id, { is_active: !user.is_active });
+                                  showToast(`User ${user.is_active ? 'suspended' : 'activated'} successfully`, 'success');
+                                  fetchUsers();
+                                } catch (e: any) {
+                                  showToast(e.message || 'Error updating user status', 'error');
+                                }
+                              }
+                            });
+                          }}
+                        >
+                          <ShieldAlert size={15} className={user.is_active ? 'text-orange-500' : 'text-green-500'} />
+                        </button>
+                        <button 
+                          className="admin-btn admin-btn--icon" 
                           aria-label="Edit"
+                          title="Edit User"
                           onClick={() => { setEditingUser(user); setIsModalOpen(true); }}
                         >
                           <Pencil size={15} />
@@ -183,6 +215,7 @@ export default function UserManagementPage() {
                         <button 
                           className="admin-btn admin-btn--icon" 
                           aria-label="Delete" 
+                          title="Delete User"
                           style={{ color: '#dc2626' }}
                           onClick={() => handleDelete(user.id)}
                         >
@@ -279,6 +312,14 @@ export default function UserManagementPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal 
+        isOpen={!!confirmModal} 
+        title={confirmModal?.title || ''} 
+        message={confirmModal?.message || ''} 
+        onConfirm={() => confirmModal?.onConfirm()} 
+        onCancel={() => setConfirmModal(null)} 
+      />
     </>
   );
 }

@@ -6,6 +6,7 @@ import { FeedbackStickyCard } from '@/src/Features/Feedback/components/FeedbackS
 import { RizalAssistant } from '@/src/Features/AIAssistant/components/RizalAssistant';
 import { Footer } from '@/src/Components/LayoutBars/Footer';
 import { PageSkeleton } from '@/src/Components/Shared/SkeletonLoader';
+import { ToastProvider } from '@/src/Hooks/useToast';
 
 // Public Pages
 const HomePage = lazy(() => import('@/src/Pages/Home/HomePage'));
@@ -54,9 +55,11 @@ export default function App() {
       <Routes>
         {/* Admin Login - Completely isolated full-page layout */}
         <Route path="/admin/login" element={
-          <Suspense fallback={<PageSkeleton />}>
-            <LoginPage />
-          </Suspense>
+          <ToastProvider>
+            <Suspense fallback={<PageSkeleton />}>
+              <LoginPage />
+            </Suspense>
+          </ToastProvider>
         } />
 
         {/* Admin Routes - Requires layout with sidebar */}

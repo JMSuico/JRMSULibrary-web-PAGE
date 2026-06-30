@@ -11,6 +11,21 @@ export interface User {
 }
 
 export const userApi = {
+  login: async (credentials: Record<string, string>): Promise<User> => {
+    return apiClient(`/users/login/`, {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+  },
+
+  logout: async (): Promise<void> => {
+    return apiClient(`/users/logout/`, { method: 'POST' });
+  },
+
+  me: async (): Promise<User> => {
+    return apiClient(`/users/me/`);
+  },
+
   getAllUsers: async (): Promise<User[]> => {
     return apiClient(`/users/`);
   },
@@ -31,5 +46,12 @@ export const userApi = {
 
   deleteUser: async (id: number): Promise<void> => {
     return apiClient(`/users/${id}/`, { method: 'DELETE' });
+  },
+
+  changePassword: async (data: { old_password: string; new_password: string }): Promise<{ message: string }> => {
+    return apiClient(`/users/change_password/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 };

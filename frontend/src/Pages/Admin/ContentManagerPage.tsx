@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { Save, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
+import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 
 export default function ContentManagerPage() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files'>('content');
@@ -19,6 +20,8 @@ export default function ContentManagerPage() {
   // File State
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
 
   useEffect(() => {
     loadData();
@@ -79,15 +82,21 @@ export default function ContentManagerPage() {
     }
   };
 
-  const handleDeleteLink = async (id: number) => {
-    if (!confirm('Delete this link?')) return;
-    try {
-      await cmsApi.deleteLink(id);
-      showToast('Link deleted successfully', 'success');
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete link', 'error');
-    }
+  const handleDeleteLink = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Link',
+      message: 'Are you sure you want to delete this link? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await cmsApi.deleteLink(id);
+          showToast('Link deleted successfully', 'success');
+          loadData();
+        } catch (err: any) {
+          showToast(err.message || 'Failed to delete link', 'error');
+        }
+      }
+    });
   };
 
   // --- File Handlers ---
@@ -104,15 +113,21 @@ export default function ContentManagerPage() {
     }
   };
 
-  const handleDeleteFile = async (id: number) => {
-    if (!confirm('Delete this file?')) return;
-    try {
-      await cmsApi.deleteFile(id);
-      showToast('File deleted successfully', 'success');
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete file', 'error');
-    }
+  const handleDeleteFile = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete File',
+      message: 'Are you sure you want to delete this file? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await cmsApi.deleteFile(id);
+          showToast('File deleted successfully', 'success');
+          loadData();
+        } catch (err: any) {
+          showToast(err.message || 'Failed to delete file', 'error');
+        }
+      }
+    });
   };
 
   if (loading && contents.length === 0) {
@@ -333,6 +348,14 @@ export default function ContentManagerPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal 
+        isOpen={!!confirmModal} 
+        title={confirmModal?.title || ''} 
+        message={confirmModal?.message || ''} 
+        onConfirm={() => confirmModal?.onConfirm()} 
+        onCancel={() => setConfirmModal(null)} 
+      />
     </>
   );
 }

@@ -114,16 +114,28 @@ class AcquisitionBatchViewSet(viewsets.ViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['delete'], url_path='books/(?P<book_id>[^/.]+)')
+    @action(detail=True, methods=['delete', 'patch'], url_path='books/(?P<book_id>[^/.]+)')
     def book_detail(self, request, pk=None, book_id=None):
-        """Remove a book from a batch."""
-        try:
-            deleted = self.service.remove_book_from_batch(pk, book_id, request.user.id)
-            if not deleted:
-                return Response({"error": "Book not found in this batch"}, status=status.HTTP_404_NOT_FOUND)
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        """Update or remove a book from a batch."""
+        if request.method == 'DELETE':
+            try:
+                deleted = self.service.remove_book_from_batch(pk, book_id, request.user.id)
+                if not deleted:
+                    return Response({"error": "Book not found in this batch"}, status=status.HTTP_404_NOT_FOUND)
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            except Exception as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        elif request.method == 'PATCH':
+            try:
+                data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
+                files = request.FILES
+                book = self.service.update_book_in_batch(pk, book_id, data, files, request.user.id)
+                if not book:
+                    return Response({"error": "Book not found in this batch"}, status=status.HTTP_404_NOT_FOUND)
+                serializer = BatchBookSerializer(book, context={'request': request})
+                return Response(serializer.data)
+            except Exception as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):

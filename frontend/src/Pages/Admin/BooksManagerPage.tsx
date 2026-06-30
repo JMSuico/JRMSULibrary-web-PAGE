@@ -5,6 +5,7 @@ import { batchApi, AcquisitionBatch, BatchBook } from '@/src/Endpoints/batchApi'
 import { BatchCard } from '@/src/Features/Admin/components/BatchCard';
 import { CreateBatchModal } from '@/src/Features/Admin/components/CreateBatchModal';
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
+import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useToast } from '@/src/Hooks/useToast';
 
 type ViewMode = 'table' | 'grid';
@@ -18,6 +19,8 @@ export default function BooksManagerPage() {
   const [isCreateBatchOpen, setIsCreateBatchOpen] = useState(false);
   const [isBookFormOpen, setIsBookFormOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<BatchBook | undefined>(undefined);
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
+  const [auditBatch, setAuditBatch] = useState<AcquisitionBatch | null>(null);
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -97,7 +100,8 @@ export default function BooksManagerPage() {
     if (!currentBatch) return;
     try {
       if (editingBook) {
-        showToast('Update not fully implemented in API yet', 'warning');
+        await batchApi.updateBook(currentBatch.id, editingBook.id, data);
+        showToast('Book updated successfully', 'success');
       } else {
         await batchApi.addBookToBatch(currentBatch.id, data);
         showToast('Book added successfully', 'success');
@@ -110,17 +114,22 @@ export default function BooksManagerPage() {
     }
   };
 
-  const handleDeleteBook = async (bookId: number) => {
+  const handleDeleteBook = (bookId: number) => {
     if (!currentBatch) return;
-    if (confirm('Are you sure you want to remove this book from the batch?')) {
-      try {
-        await batchApi.deleteBook(currentBatch.id, bookId);
-        showToast('Book deleted successfully', 'success');
-        handleViewBatchBooks(currentBatch.id);
-      } catch (error: any) {
-        showToast(error.message || 'Failed to delete book', 'error');
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Book',
+      message: 'Are you sure you want to remove this book from the batch?',
+      onConfirm: async () => {
+        try {
+          await batchApi.deleteBook(currentBatch.id, bookId);
+          showToast('Book deleted successfully', 'success');
+          handleViewBatchBooks(currentBatch.id);
+        } catch (error: any) {
+          showToast(error.message || 'Failed to delete book', 'error');
+        }
       }
-    }
+    });
   };
 
   // Derived state for filtering
@@ -181,6 +190,7 @@ export default function BooksManagerPage() {
               onReopen={(id) => handleBatchAction('reopen', id)}
               onActivate={(id) => handleBatchAction('activate', id)}
               onViewBooks={handleViewBatchBooks}
+              onViewAudit={(b) => setAuditBatch(b)}
             />
           ))}
           {batches.length === 0 && (
@@ -303,6 +313,90 @@ export default function BooksManagerPage() {
         onSubmit={handleAddOrUpdateBook}
         initialData={editingBook}
       />
+
+      <ConfirmModal
+        isOpen={!!confirmModal}
+        title={confirmModal?.title || ''}
+        message={confirmModal?.message || ''}
+        onConfirm={() => confirmModal?.onConfirm()}
+        onCancel={() => setConfirmModal(null)}
+      />
+
+      {/* Audit Modal */}
+      {auditBatch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAuditBatch(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-5 flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  Audit Trail — {auditBatch.name}
+                </h2>
+                <p className="text-indigo-200 text-sm mt-1">Full lifecycle history of this batch</p>
+              </div>
+              <button onClick={() => setAuditBatch(null)} className="text-indigo-200 hover:text-white transition-colors text-2xl leading-none">&times;</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Batch Created / Opened</p>
+                    <p className="text-xs text-gray-500">{new Date(auditBatch.opened_at).toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'short' })}</p>
+                  </div>
+                </div>
+                {auditBatch.closed_at && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0"></div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Batch Closed</p>
+                      <p className="text-xs text-gray-500">{new Date(auditBatch.closed_at).toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'short' })}</p>
+                    </div>
+                  </div>
+                )}
+                {auditBatch.status === 'archived' && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="w-2.5 h-2.5 rounded-full bg-gray-400 shrink-0"></div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Batch Archived</p>
+                      <p className="text-xs text-gray-500">Archived from closed state</p>
+                    </div>
+                  </div>
+                )}
+                {auditBatch.is_display_batch && (
+                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Set as Active Display Batch</p>
+                      <p className="text-xs text-gray-500">Currently displayed to the public</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-700">{auditBatch.book_count || 0}</p>
+                  <p className="text-xs text-blue-600 font-medium">Total Books</p>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-3 text-center">
+                  <p className="text-lg font-bold text-indigo-700 capitalize">{auditBatch.status}</p>
+                  <p className="text-xs text-indigo-600 font-medium">Current Status</p>
+                </div>
+              </div>
+
+              {auditBatch.description && (
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Description</p>
+                  <p className="text-sm text-gray-700">{auditBatch.description}</p>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setAuditBatch(null)} className="admin-btn admin-btn--secondary">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

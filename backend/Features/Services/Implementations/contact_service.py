@@ -4,7 +4,17 @@
 
 from Features.Repositories.Implementations.contact_repository import ContactRepository
 from Features.Helpers.input_sanitizer import sanitize_input
+from Features.Helpers.email_helper import (
+    is_disposable_email,
+    is_email_domain_valid,
+    send_reply_email,
+    send_notification_to_library,
+)
 from Features.Services.Interfaces.contact_service_interface import ContactServiceInterface
+import threading
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ContactService(ContactServiceInterface):
@@ -21,9 +31,18 @@ class ContactService(ContactServiceInterface):
             'message_type': sanitize_input(data.get('message_type', 'EMAIL')),
         }
 
+        email = sanitized['email']
+
+        # --- Disposable / Temporary Email Detection ---
+        if is_disposable_email(email):
+            raise ValueError(f"Temporary or disposable email addresses are not accepted: {email}")
+
+        if not is_email_domain_valid(email):
+            raise ValueError(f"The email domain appears to be invalid or unreachable: {email}")
+
         # Batching logic: check if same email sent same type of message within last hour
         recent_message = self.repository.get_recent_by_email_and_type(
-            email=sanitized['email'],
+            email=email,
             message_type=sanitized['message_type'],
             hours=1
         )
@@ -36,15 +55,43 @@ class ContactService(ContactServiceInterface):
             recent_message.status = 'UNREAD'
             recent_message.is_read = False
             recent_message.save()
-            return recent_message
+            message = recent_message
         else:
             message = self.repository.create(sanitized)
-            # TODO: Trigger email notification to library staff
-            return message
+
+        # Fire-and-forget: notify library staff via email (non-blocking)
+        threading.Thread(
+            target=send_notification_to_library,
+            args=(sanitized['name'], email, sanitized['subject'], sanitized['message']),
+            daemon=True
+        ).start()
+
+        return message
+
+    def reply_to_message(self, message_id: int, reply_body: str) -> dict:
+        """
+        Sends an email reply to the user and marks the message as REPLIED.
+        Returns a dict with success status and message.
+        """
+        message = self.repository.get_by_id(message_id)
+        if not message:
+            raise ValueError(f"Message with id={message_id} not found.")
+
+        success = send_reply_email(
+            to_email=message.email,
+            to_name=message.name,
+            subject=message.subject or "Your inquiry",
+            reply_body=reply_body,
+        )
+
+        if success:
+            self.repository.update_status(message_id, 'REPLIED')
+            return {'success': True, 'detail': f'Reply sent to {message.email}'}
+        else:
+            return {'success': False, 'detail': 'Failed to send email. Check SMTP configuration.'}
 
     def update_message_status(self, message_id: int, status: str):
         return self.repository.update_status(message_id, status)
-
 
     def get_all_messages(self):
         return self.repository.get_all()

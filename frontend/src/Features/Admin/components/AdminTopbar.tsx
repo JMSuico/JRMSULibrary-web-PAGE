@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Bell, Menu, Search, X } from 'lucide-react';
+import { Bell, Menu, Search, X, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { userApi } from '@/src/Endpoints/userApi';
+import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 
 interface AdminTopbarProps {
   pageTitle: string;
@@ -8,6 +11,17 @@ interface AdminTopbarProps {
 
 export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await userApi.logout();
+      navigate('/admin/login');
+    } catch (err) {
+      console.error('Logout failed', err);
+    }
+  };
 
   return (
     <header className="admin-topbar relative" role="banner">
@@ -77,7 +91,23 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
         <div className="admin-topbar__avatar" aria-label="Admin user">
           A
         </div>
+
+        <button
+          onClick={() => setLogoutModalOpen(true)}
+          className="admin-btn admin-btn--icon text-red-600 hover:bg-red-50 hover:border-red-200 ml-2"
+          title="Sign Out"
+        >
+          <LogOut size={18} />
+        </button>
       </div>
+
+      <ConfirmModal
+        isOpen={logoutModalOpen}
+        title="Confirm Logout"
+        message="Do you want to Logout?"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutModalOpen(false)}
+      />
     </header>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Lock, Library, Save, CheckCircle } from 'lucide-react';
 import { settingsApi, SiteSettings } from '@/src/Endpoints/settingsApi';
+import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
 
 export default function SettingsPage() {
@@ -67,18 +68,23 @@ export default function SettingsPage() {
         showToast(err.message || 'Failed to save settings', 'error');
       }
     } else {
-      // Mock security save
       if (passwords.newPass !== passwords.confirm) {
         showToast("New passwords don't match", 'error');
         setSaving(false);
         return;
       }
-      setTimeout(() => {
+      try {
+        await userApi.changePassword({
+          old_password: passwords.current,
+          new_password: passwords.newPass
+        });
         setPasswords({ current: '', newPass: '', confirm: '' });
         setSavedStatus(true);
         showToast('Password updated successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
-      }, 1000);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to update password', 'error');
+      }
     }
     
     setSaving(false);

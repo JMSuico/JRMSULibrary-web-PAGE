@@ -14,6 +14,7 @@ import {
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { useToast } from '@/src/Hooks/useToast';
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
+import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 
 type ViewMode = 'table' | 'grid';
 
@@ -30,6 +31,7 @@ export default function SectionsManagerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
 
   const fetchImages = async () => {
     try {
@@ -47,15 +49,21 @@ export default function SectionsManagerPage() {
     fetchImages();
   }, []);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Delete this image from the library sections?')) return;
-    try {
-      await galleryApi.deleteImage(id);
-      showToast('Image deleted successfully', 'success');
-      fetchImages();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete image', 'error');
-    }
+  const handleDelete = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Image',
+      message: 'Are you sure you want to delete this image from the library sections? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await galleryApi.deleteImage(id);
+          showToast('Image deleted successfully', 'success');
+          fetchImages();
+        } catch (err: any) {
+          showToast(err.message || 'Failed to delete image', 'error');
+        }
+      }
+    });
   };
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -382,6 +390,14 @@ export default function SectionsManagerPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal 
+        isOpen={!!confirmModal} 
+        title={confirmModal?.title || ''} 
+        message={confirmModal?.message || ''} 
+        onConfirm={() => confirmModal?.onConfirm()} 
+        onCancel={() => setConfirmModal(null)} 
+      />
     </>
   );
 }

@@ -1,9 +1,11 @@
-import { useState, useCallback } from 'react';
-import { Outlet, useLocation, Navigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { AdminSidebar } from '@/src/Features/Admin/components/AdminSidebar';
 import { AdminTopbar } from '@/src/Features/Admin/components/AdminTopbar';
 import '@/src/LayoutStyles/admin.css';
 import { ToastProvider } from '@/src/Hooks/useToast';
+import { userApi, User } from '@/src/Endpoints/userApi';
+import { Loader2 } from 'lucide-react';
 
 /** Map route paths to human-readable page titles */
 const PAGE_TITLES: Record<string, string> = {
@@ -17,25 +19,34 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/settings': 'Settings',
 };
 
-// TODO: Replace with real Auth Context hook
 const useAuth = () => {
-  // Simulating authentication state. Set to true so we can view the dashboard for demo purposes.
-  // In production, this reads from Context or Redux.
-  return { isAuthenticated: true }; 
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const currentUser = await userApi.me();
+        setUser(currentUser);
+        setIsAuthenticated(true);
+      } catch (err) {
+        setIsAuthenticated(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  return { isAuthenticated, user }; 
 };
 
 export default function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'Admin Panel';
-
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace />;
-  }
 
   const handleToggleSidebar = useCallback(() => {
     // On mobile, toggle the mobile overlay; on desktop, collapse/expand
@@ -49,6 +60,21 @@ export default function AdminLayout() {
   const handleCloseMobile = useCallback(() => {
     setMobileOpen(false);
   }, []);
+
+  // Wait for auth check
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <Loader2 className="w-10 h-10 animate-spin text-[#002B7F] mb-4" />
+        <p className="text-gray-500 font-inter">Verifying session...</p>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (isAuthenticated === false) {
+    return <Navigate to="/admin/login" replace state={{ from: location }} />;
+  }
 
   return (
     <ToastProvider>

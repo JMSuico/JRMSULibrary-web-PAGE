@@ -12,6 +12,7 @@ from .managed_file_model import ManagedFile
 from .site_visit_model import SiteVisit
 from .acquisition_batch_model import AcquisitionBatch
 from .batch_history_model import BatchHistory
+from .site_settings_model import SiteSettings
 
 __all__ = [
     'Account',
@@ -29,4 +30,5 @@ __all__ = [
     'SiteVisit',
     'AcquisitionBatch',
     'BatchHistory',
+    'SiteSettings',
 ]

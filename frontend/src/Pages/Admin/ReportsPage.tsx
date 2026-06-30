@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FileText, Printer, Calendar as CalendarIcon, Download } from 'lucide-react';
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState('summary');
@@ -70,6 +71,20 @@ export default function ReportsPage() {
     showToast('CSV exported successfully', 'success');
   };
 
+  const ratingData = reportData ? [
+    { name: '1 Star', count: reportData.ratings_summary.count_1 },
+    { name: '2 Stars', count: reportData.ratings_summary.count_2 },
+    { name: '3 Stars', count: reportData.ratings_summary.count_3 },
+    { name: '4 Stars', count: reportData.ratings_summary.count_4 },
+    { name: '5 Stars', count: reportData.ratings_summary.count_5 },
+  ] : [];
+
+  const interactionData = reportData ? [
+    { name: 'Emails', value: reportData.total_emails },
+    { name: 'Reservations', value: reportData.total_reservations }
+  ] : [];
+  const COLORS = ['#0088FE', '#00C49F'];
+
   return (
     <>
       <div className="admin-content__header flex justify-between items-end print:hidden">
@@ -128,11 +143,8 @@ export default function ReportsPage() {
               <button onClick={handleExportCSV} className="admin-btn admin-btn--outline flex items-center gap-2">
                 <Download size={16} /> Export CSV
               </button>
-              <button onClick={handlePrint} className="admin-btn admin-btn--outline flex items-center gap-2">
-                <Printer size={16} /> Print
-              </button>
               <button onClick={handlePrint} className="admin-btn admin-btn--primary flex items-center gap-2">
-                <Download size={16} /> Save PDF
+                <Printer size={16} /> Print / Save PDF
               </button>
             </div>
           </div>
@@ -142,33 +154,75 @@ export default function ReportsPage() {
             <div className="text-center mb-8 border-b-2 border-black pb-4">
               <h1 className="text-2xl font-bold uppercase">Jose Rizal Memorial State University</h1>
               <h2 className="text-xl">Katipunan Campus Library</h2>
-              <p className="mt-2 text-sm">Official System Report: {reportType === 'summary' ? 'Comprehensive Summary' : reportType}</p>
-              <p className="text-sm">Period: {dateRange.replace('-', ' ').toUpperCase()}</p>
+              <p className="mt-2 text-sm font-sans">Official System Report: {reportType === 'summary' ? 'Comprehensive Summary' : reportType}</p>
+              <p className="text-sm font-sans">Period: {dateRange.replace('-', ' ').toUpperCase()}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-8 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <div className="border border-gray-300 p-4">
-                <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Total Visits</p>
-                <p className="text-3xl font-bold">{reportData.total_visits}</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Total Visits</p>
+                <p className="text-2xl font-bold font-sans">{reportData.total_visits}</p>
               </div>
               <div className="border border-gray-300 p-4">
-                <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Books Acquired</p>
-                <p className="text-3xl font-bold">{reportData.total_books}</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Books Acquired</p>
+                <p className="text-2xl font-bold font-sans">{reportData.total_books}</p>
               </div>
               <div className="border border-gray-300 p-4">
-                <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Emails Processed</p>
-                <p className="text-3xl font-bold">{reportData.total_emails}</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Emails Processed</p>
+                <p className="text-2xl font-bold font-sans">{reportData.total_emails}</p>
               </div>
               <div className="border border-gray-300 p-4">
-                <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Avg Rating</p>
-                <p className="text-3xl font-bold">{reportData.ratings_summary.average_rating} / 5</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Avg Rating</p>
+                <p className="text-2xl font-bold font-sans">{reportData.ratings_summary.average_rating} / 5</p>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 break-inside-avoid">
+               <div className="border border-gray-300 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Feedback Ratings Breakdown</h4>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis allowDecimals={false} fontSize={12} />
+                        <RechartsTooltip />
+                        <Bar dataKey="count" fill="#C9A84C" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+               </div>
+               <div className="border border-gray-300 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Interactions Overview</h4>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={interactionData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {interactionData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+               </div>
             </div>
 
             {(reportType === 'summary' || reportType === 'books') && (
               <div className="mb-8 break-inside-avoid">
-                <h4 className="text-lg font-bold border-b border-gray-300 mb-2">Recent Book Acquisitions</h4>
-                <table className="w-full text-left text-sm border-collapse">
+                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">Recent Book Acquisitions</h4>
+                <table className="w-full text-left text-sm border-collapse font-sans">
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="border border-gray-300 p-2">Title</th>
@@ -194,8 +248,8 @@ export default function ReportsPage() {
 
             {(reportType === 'summary' || reportType === 'interactions') && (
               <div className="mb-8 break-inside-avoid">
-                <h4 className="text-lg font-bold border-b border-gray-300 mb-2">Recent User Interactions</h4>
-                <table className="w-full text-left text-sm border-collapse">
+                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">Recent User Interactions</h4>
+                <table className="w-full text-left text-sm border-collapse font-sans">
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="border border-gray-300 p-2">Type</th>
@@ -219,7 +273,7 @@ export default function ReportsPage() {
               </div>
             )}
 
-            <div className="mt-16 text-center text-sm text-gray-500">
+            <div className="mt-16 text-center text-sm text-gray-500 font-sans">
               <p>Generated by JRMSU Library Admin System</p>
               <p>Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
             </div>

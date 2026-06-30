@@ -84,7 +84,7 @@ You should see `(venv)` in the prompt.
 ### 3b. Install Python dependencies
 
 ```
-pip install django djangorestframework django-cors-headers mssql-django django-filter pyodbc python-dotenv
+pip install -r requirements.txt
 ```
 
 ### 3c. Run database migrations

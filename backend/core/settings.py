@@ -196,6 +196,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:3000",
 ]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -211,9 +216,9 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle"
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "10/day",
-        "user": "100/day",
-        "contact": "10/day"
+        "anon": "120/hour",
+        "user": "2000/hour",
+        "contact": "10/hour"
     }
 }
 
@@ -223,3 +228,25 @@ TIME_ZONE = "Asia/Manila"
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# ============================================================
+# Email (SMTP via Gmail — JRMSU Library Account)
+# ============================================================
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'katipunan.library@jrmsu.edu.ph')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'mmuh zbjb nyzg ovir')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>')
+EMAIL_TIMEOUT = 10
+
+# ============================================================
+# Throttle Cache — use file-based to survive restarts
+# ============================================================
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'jrmsu-library-cache',
+    }
+}

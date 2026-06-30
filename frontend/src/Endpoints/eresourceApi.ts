@@ -10,7 +10,7 @@ export interface EResourceDepartment {
 
 export interface EResourceFile {
   id: number;
-  title: string;
+  name: string;
   file: string;
   department: number;
   is_active: boolean;

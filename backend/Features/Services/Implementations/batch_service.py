@@ -16,6 +16,7 @@ class BatchService(IBatchService):
 
     @transaction.atomic
     def create_batch(self, data: dict, user_id: int) -> Any:
+        data_copy = dict(data)
         # 1. Archive the previous display batch
         current = self.batch_repo.get_current_display_batch()
         if current:
@@ -23,10 +24,10 @@ class BatchService(IBatchService):
             self.batch_repo.record_history(current.id, "Archived Automatically", "Replaced by new batch", user_id)
 
         # 2. Create the new batch and set it as display batch
-        data['status'] = BatchStatus.OPEN
-        data['is_display_batch'] = True
-        data['created_by_id'] = user_id
-        new_batch = self.batch_repo.create_batch(data)
+        data_copy['status'] = BatchStatus.OPEN
+        data_copy['is_display_batch'] = True
+        data_copy['created_by_id'] = user_id
+        new_batch = self.batch_repo.create_batch(data_copy)
         self.batch_repo.record_history(new_batch.id, "Created", "New batch created and set as active display", user_id)
         
         return new_batch
@@ -39,10 +40,27 @@ class BatchService(IBatchService):
         if batch.status != BatchStatus.OPEN:
             raise ValueError("Cannot add books to a closed or archived batch")
             
-        data['batch_id'] = batch_id
-        book = self.book_repo.create(data, files)
+        data_copy = dict(data)
+        data_copy['batch_id'] = batch_id
+        book = self.book_repo.create(data_copy, files)
         self.batch_repo.record_history(batch_id, "Book Added", f"Added book: {book.title}", user_id)
         return book
+
+    @transaction.atomic
+    def update_book_in_batch(self, batch_id: int, book_id: int, data: dict, files: dict, user_id: int) -> Optional[Any]:
+        batch = self.batch_repo.get_batch_by_id(batch_id)
+        if not batch:
+            raise ValueError("Batch not found")
+        if batch.status != BatchStatus.OPEN:
+            raise ValueError("Cannot edit books in a closed or archived batch")
+            
+        book = self.book_repo.get_by_id(book_id)
+        if not book or str(book.batch_id) != str(batch_id):
+            return None
+            
+        updated_book = self.book_repo.update(book_id, data, files)
+        self.batch_repo.record_history(batch_id, "Book Updated", f"Updated book: {updated_book.title}", user_id)
+        return updated_book
 
     @transaction.atomic
     def remove_book_from_batch(self, batch_id: int, book_id: int, user_id: int) -> bool:

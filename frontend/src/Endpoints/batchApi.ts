@@ -82,6 +82,13 @@ export const batchApi = {
     });
   },
 
+  updateBook: async (batchId: number, bookId: number, data: FormData): Promise<BatchBook> => {
+    return apiClient(`/batches/${batchId}/books/${bookId}/`, {
+      method: 'PATCH',
+      body: data,
+    });
+  },
+
   deleteBook: async (batchId: number, bookId: number): Promise<void> => {
     return apiClient(`/batches/${batchId}/books/${bookId}/`, {
       method: 'DELETE',

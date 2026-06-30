@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoints/eresourceApi';
 import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
+import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 
 export default function EResourcesManagerPage() {
   const [departments, setDepartments] = useState<EResourceDepartment[]>([]);
@@ -14,6 +15,7 @@ export default function EResourcesManagerPage() {
   const [editingDept, setEditingDept] = useState<EResourceDepartment | null>(null);
   
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -62,16 +64,22 @@ export default function EResourcesManagerPage() {
     }
   };
 
-  const handleDeleteDept = async (id: number) => {
-    if (!confirm('Delete this department and all its contents?')) return;
-    try {
-      await eresourceApi.deleteDepartment(id);
-      showToast('Department deleted successfully', 'success');
-      if (selectedDeptId === id) setSelectedDeptId(null);
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete department', 'error');
-    }
+  const handleDeleteDept = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Department',
+      message: 'Are you sure you want to delete this department and all its contents? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await eresourceApi.deleteDepartment(id);
+          showToast('Department deleted successfully', 'success');
+          if (selectedDeptId === id) setSelectedDeptId(null);
+          loadData();
+        } catch (err: any) {
+          showToast(err.message || 'Failed to delete department', 'error');
+        }
+      }
+    });
   };
 
   const handleUploadFile = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -91,15 +99,21 @@ export default function EResourcesManagerPage() {
     }
   };
 
-  const handleDeleteFile = async (id: number) => {
-    if (!confirm('Delete this file?')) return;
-    try {
-      await eresourceApi.deleteFile(id);
-      showToast('File deleted successfully', 'success');
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete file', 'error');
-    }
+  const handleDeleteFile = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete File',
+      message: 'Are you sure you want to delete this file? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await eresourceApi.deleteFile(id);
+          showToast('File deleted successfully', 'success');
+          loadData();
+        } catch (err: any) {
+          showToast(err.message || 'Failed to delete file', 'error');
+        }
+      }
+    });
   };
 
   const renderTree = (depts: EResourceDepartment[], level = 0) => {
@@ -212,7 +226,7 @@ export default function EResourcesManagerPage() {
                       <div key={file.id} className="border border-gray-200 p-4 rounded-xl flex items-start gap-3 hover:border-blue-300 transition-colors group">
                         <FileText size={24} className="text-blue-500 shrink-0 mt-1" />
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-900 text-sm truncate" title={file.title}>{file.title}</h4>
+                          <h4 className="font-semibold text-gray-900 text-sm truncate" title={file.name}>{file.name}</h4>
                           <p className="text-xs text-gray-500 mt-1 mb-3">{new Date(file.created_at).toLocaleDateString()}</p>
                           <div className="flex items-center gap-2">
                             <a href={file.file} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100">Download</a>
@@ -278,8 +292,8 @@ export default function EResourcesManagerPage() {
             </div>
             <form onSubmit={handleUploadFile} className="p-4 flex flex-col gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Title</label>
-                <input required type="text" name="title" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Name</label>
+                <input required type="text" name="name" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">File</label>
@@ -297,6 +311,13 @@ export default function EResourcesManagerPage() {
           </div>
         </div>
       )}
+      <ConfirmModal 
+        isOpen={!!confirmModal} 
+        title={confirmModal?.title || ''} 
+        message={confirmModal?.message || ''} 
+        onConfirm={() => confirmModal?.onConfirm()} 
+        onCancel={() => setConfirmModal(null)} 
+      />
     </>
   );
 }

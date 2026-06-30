@@ -20,4 +20,4 @@ class SiteSettings(models.Model):
 
     class Meta:
         db_table = 'site_settings'
-        app_label = 'Api'
+        app_label = 'Features'
