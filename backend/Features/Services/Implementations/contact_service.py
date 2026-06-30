@@ -20,9 +20,27 @@ class ContactService(ContactServiceInterface):
             'message': sanitize_input(data.get('message', '')),
             'message_type': sanitize_input(data.get('message_type', 'EMAIL')),
         }
-        message = self.repository.create(sanitized)
-        # TODO: Trigger email notification to library staff
-        return message
+
+        # Batching logic: check if same email sent same type of message within last hour
+        recent_message = self.repository.get_recent_by_email_and_type(
+            email=sanitized['email'],
+            message_type=sanitized['message_type'],
+            hours=1
+        )
+
+        if recent_message:
+            # Append new message to the existing one
+            new_text = f"\n\n--- Added later ---\nSubject: {sanitized['subject']}\nMessage: {sanitized['message']}"
+            recent_message.message += new_text
+            # If it was read or replied, mark it as unread again since there's new content
+            recent_message.status = 'UNREAD'
+            recent_message.is_read = False
+            recent_message.save()
+            return recent_message
+        else:
+            message = self.repository.create(sanitized)
+            # TODO: Trigger email notification to library staff
+            return message
 
     def update_message_status(self, message_id: int, status: str):
         return self.repository.update_status(message_id, status)

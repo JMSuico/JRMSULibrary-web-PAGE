@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Archive, Search, Filter, History } from 'lucide-react';
 import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function BatchHistoryPage() {
   const [batches, setBatches] = useState<AcquisitionBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState('All');
+  const { showToast } = useToast();
 
   useEffect(() => {
     const loadBatches = async () => {
       try {
         const data = await batchApi.getAllBatches();
         setBatches(data);
-      } catch (error) {
-        console.error('Failed to load batch history', error);
+      } catch (error: any) {
+        showToast(error.message || 'Failed to load batch history', 'error');
       } finally {
         setLoading(false);
       }
@@ -60,48 +62,50 @@ export default function BatchHistoryPage() {
           </div>
         </div>
 
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>Batch Name</th>
-              <th>Status</th>
-              <th>Date Opened</th>
-              <th>Date Closed</th>
-              <th>Total Books</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
-            ) : filteredBatches.length > 0 ? (
-              filteredBatches.map((batch) => (
-                <tr key={batch.id}>
-                  <td style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Archive size={16} color="#6b7280" /> {batch.name}
-                  </td>
-                  <td>
-                    <span className={`admin-badge admin-badge--${batch.status === 'open' ? 'info' : batch.status === 'closed' ? 'success' : 'warning'}`}>
-                      {batch.status.toUpperCase()}
-                    </span>
-                  </td>
-                  <td style={{ color: '#6b7280' }}>{new Date(batch.opened_at).toLocaleDateString()}</td>
-                  <td style={{ color: '#6b7280' }}>{batch.closed_at ? new Date(batch.closed_at).toLocaleDateString() : '-'}</td>
-                  <td>{batch.book_count || 0}</td>
-                  <td>
-                    <div className="admin-table__actions">
-                      <button className="admin-btn admin-btn--secondary" onClick={() => window.location.href = `/admin/books?batch=${batch.id}`}>
-                        <History size={14} /> View Audit
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>No historical batches found.</td></tr>
-            )}
-          </tbody>
-        </table>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Batch Name</th>
+                <th>Status</th>
+                <th>Date Opened</th>
+                <th>Date Closed</th>
+                <th>Total Books</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
+              ) : filteredBatches.length > 0 ? (
+                filteredBatches.map((batch) => (
+                  <tr key={batch.id}>
+                    <td style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Archive size={16} color="#6b7280" /> {batch.name}
+                    </td>
+                    <td>
+                      <span className={`admin-badge admin-badge--${batch.status === 'open' ? 'info' : batch.status === 'closed' ? 'success' : 'warning'}`}>
+                        {batch.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td style={{ color: '#6b7280' }}>{new Date(batch.opened_at).toLocaleDateString()}</td>
+                    <td style={{ color: '#6b7280' }}>{batch.closed_at ? new Date(batch.closed_at).toLocaleDateString() : '-'}</td>
+                    <td>{batch.book_count || 0}</td>
+                    <td>
+                      <div className="admin-table__actions">
+                        <button className="admin-btn admin-btn--secondary" onClick={() => window.location.href = `/admin/books?batch=${batch.id}`}>
+                          <History size={14} /> View Audit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>No historical batches found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );

@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface GalleryImage {
   id: number;
@@ -11,31 +11,24 @@ export interface GalleryImage {
 
 export const galleryApi = {
   getAllImages: async (): Promise<GalleryImage[]> => {
-    const res = await fetch(`${API_BASE}/gallery/`);
-    if (!res.ok) throw new Error('Failed to fetch images');
-    return res.json();
+    return apiClient(`/gallery/`);
   },
 
   createImage: async (data: FormData): Promise<GalleryImage> => {
-    const res = await fetch(`${API_BASE}/gallery/`, {
+    return apiClient(`/gallery/`, {
       method: 'POST',
       body: data,
     });
-    if (!res.ok) throw new Error('Failed to create image');
-    return res.json();
   },
 
   updateImage: async (id: number, data: FormData): Promise<GalleryImage> => {
-    const res = await fetch(`${API_BASE}/gallery/${id}/`, {
+    return apiClient(`/gallery/${id}/`, {
       method: 'PATCH',
       body: data,
     });
-    if (!res.ok) throw new Error('Failed to update image');
-    return res.json();
   },
 
   deleteImage: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/gallery/${id}/`, { method: 'DELETE' });
-    if (!res.ok && res.status !== 204) throw new Error('Failed to delete image');
+    return apiClient(`/gallery/${id}/`, { method: 'DELETE' });
   },
 };

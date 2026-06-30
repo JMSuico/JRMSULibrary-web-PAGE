@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface FeedbackData {
   name: string;
@@ -10,14 +10,10 @@ export interface FeedbackData {
 
 export const feedbackApi = {
   submitFeedback: async (data: FeedbackData) => {
-    const res = await fetch(`${API_BASE}/feedback/`, {
+    return apiClient(`/feedback/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to submit feedback');
-    return res.json();
   },
 };
+

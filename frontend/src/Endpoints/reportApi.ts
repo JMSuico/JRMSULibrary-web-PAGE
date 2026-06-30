@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface RatingsSummary {
   total_ratings: number;
@@ -41,8 +41,7 @@ export interface ReportSummary {
 
 export const reportApi = {
   getSummary: async (): Promise<ReportSummary> => {
-    const res = await fetch(`${API_BASE}/reports/summary/`);
-    if (!res.ok) throw new Error('Failed to fetch report summary');
-    return res.json();
+    return apiClient(`/reports/summary/`);
   }
 };
+

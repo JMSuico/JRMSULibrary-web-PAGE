@@ -12,7 +12,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
-
+import { useToast } from '@/src/Hooks/useToast';
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
 
 type ViewMode = 'table' | 'grid';
@@ -22,6 +22,7 @@ export default function SectionsManagerPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,8 +36,8 @@ export default function SectionsManagerPage() {
       setLoading(true);
       const data = await galleryApi.getAllImages();
       setImages(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to fetch images', 'error');
     } finally {
       setLoading(false);
     }
@@ -50,9 +51,10 @@ export default function SectionsManagerPage() {
     if (!confirm('Delete this image from the library sections?')) return;
     try {
       await galleryApi.deleteImage(id);
+      showToast('Image deleted successfully', 'success');
       fetchImages();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete image', 'error');
     }
   };
 
@@ -75,11 +77,11 @@ export default function SectionsManagerPage() {
       } else {
         await galleryApi.createImage(fd);
       }
+      showToast(`Image ${editingImage ? 'updated' : 'uploaded'} successfully`, 'success');
       setIsModalOpen(false);
       fetchImages();
     } catch (err: any) {
-      console.error(err);
-      alert('An error occurred: ' + err.message);
+      showToast(err.message || 'An error occurred while saving image', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -180,53 +182,55 @@ export default function SectionsManagerPage() {
         ) : (
           <>
             {viewMode === 'table' && (
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Image</th>
-                    <th>Title</th>
-                    <th>Section Label</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((img) => (
-                    <tr key={img.id}>
-                      <td>
-                        <img
-                          src={img.image.startsWith('http') ? img.image : `/media/${img.image}`}
-                          alt={img.title}
-                          className="rounded-md object-cover"
-                          style={{ width: 64, height: 48 }}
-                        />
-                      </td>
-                      <td style={{ fontWeight: 500, color: '#111827' }}>{img.title || '—'}</td>
-                      <td>{img.section_label || '—'}</td>
-                      <td>
-                        <span className={`admin-badge ${img.is_active ? 'admin-badge--success' : 'admin-badge--warning'}`}>
-                          {img.is_active ? 'Visible' : 'Hidden'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="admin-table__actions">
-                          <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            className="admin-btn admin-btn--icon"
-                            aria-label={`Delete ${img.title}`}
-                            style={{ color: '#dc2626' }}
-                            onClick={() => handleDelete(img.id)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
+              <div className="admin-table-scroll">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th>Title</th>
+                      <th>Section Label</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filtered.map((img) => (
+                      <tr key={img.id}>
+                        <td>
+                          <img
+                            src={img.image.startsWith('http') ? img.image : `/media/${img.image}`}
+                            alt={img.title}
+                            className="rounded-md object-cover"
+                            style={{ width: 64, height: 48 }}
+                          />
+                        </td>
+                        <td style={{ fontWeight: 500, color: '#111827' }}>{img.title || '—'}</td>
+                        <td>{img.section_label || '—'}</td>
+                        <td>
+                          <span className={`admin-badge ${img.is_active ? 'admin-badge--success' : 'admin-badge--warning'}`}>
+                            {img.is_active ? 'Visible' : 'Hidden'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="admin-table__actions">
+                            <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              className="admin-btn admin-btn--icon"
+                              aria-label={`Delete ${img.title}`}
+                              style={{ color: '#dc2626' }}
+                              onClick={() => handleDelete(img.id)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             {viewMode === 'grid' && (

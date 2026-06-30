@@ -150,7 +150,7 @@
   transition: margin-left 300ms ease;
 }
 
-.admin-sidebar.collapsed ~ .admin-main {
+.admin-main.sidebar-collapsed {
   margin-left: 72px;
 }
 
@@ -472,6 +472,11 @@
   color: #111827;
 }
 
+.admin-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .admin-table {
   width: 100%;
   border-collapse: collapse;
@@ -598,7 +603,8 @@
     transform: translateX(0);
   }
 
-  .admin-main {
+  .admin-main,
+  .admin-main.sidebar-collapsed {
     margin-left: 0;
   }
 

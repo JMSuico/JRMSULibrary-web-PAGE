@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface EResourceDepartment {
   id: number;
@@ -20,58 +20,41 @@ export interface EResourceFile {
 export const eresourceApi = {
   // Departments
   getAllDepartments: async (): Promise<EResourceDepartment[]> => {
-    const res = await fetch(`${API_BASE}/eresource-departments/`);
-    if (!res.ok) throw new Error('Failed to fetch departments');
-    return res.json();
+    return apiClient(`/eresource-departments/`);
   },
   createDepartment: async (data: Partial<EResourceDepartment>): Promise<EResourceDepartment> => {
-    const res = await fetch(`${API_BASE}/eresource-departments/`, {
+    return apiClient(`/eresource-departments/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to create department');
-    return res.json();
   },
   updateDepartment: async (id: number, data: Partial<EResourceDepartment>): Promise<EResourceDepartment> => {
-    const res = await fetch(`${API_BASE}/eresource-departments/${id}/`, {
+    return apiClient(`/eresource-departments/${id}/`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to update department');
-    return res.json();
   },
   deleteDepartment: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/eresource-departments/${id}/`, { method: 'DELETE' });
-    if (!res.ok && res.status !== 204) throw new Error('Failed to delete department');
+    return apiClient(`/eresource-departments/${id}/`, { method: 'DELETE' });
   },
 
   // Files
   getAllFiles: async (): Promise<EResourceFile[]> => {
-    const res = await fetch(`${API_BASE}/eresource-files/`);
-    if (!res.ok) throw new Error('Failed to fetch files');
-    return res.json();
+    return apiClient(`/eresource-files/`);
   },
   createFile: async (data: FormData): Promise<EResourceFile> => {
-    const res = await fetch(`${API_BASE}/eresource-files/`, {
+    return apiClient(`/eresource-files/`, {
       method: 'POST',
       body: data,
     });
-    if (!res.ok) throw new Error('Failed to create file');
-    return res.json();
   },
   updateFile: async (id: number, data: Partial<EResourceFile>): Promise<EResourceFile> => {
-    const res = await fetch(`${API_BASE}/eresource-files/${id}/`, {
+    return apiClient(`/eresource-files/${id}/`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to update file');
-    return res.json();
   },
   deleteFile: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/eresource-files/${id}/`, { method: 'DELETE' });
-    if (!res.ok && res.status !== 204) throw new Error('Failed to delete file');
+    return apiClient(`/eresource-files/${id}/`, { method: 'DELETE' });
   },
 };

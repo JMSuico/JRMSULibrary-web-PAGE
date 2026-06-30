@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { userApi, User } from '@/src/Endpoints/userApi';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -21,14 +22,15 @@ export default function UserManagementPage() {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const { showToast } = useToast();
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const data = await userApi.getAllUsers();
       setUsers(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load users', 'error');
     } finally {
       setLoading(false);
     }
@@ -42,9 +44,10 @@ export default function UserManagementPage() {
     if (!confirm('Are you sure you want to remove this admin user?')) return;
     try {
       await userApi.deleteUser(id);
+      showToast('User deleted successfully', 'success');
       fetchUsers();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete user', 'error');
     }
   };
 
@@ -70,11 +73,11 @@ export default function UserManagementPage() {
       } else {
         await userApi.createUser(data);
       }
+      showToast(`User ${editingUser ? 'updated' : 'created'} successfully`, 'success');
       setIsModalOpen(false);
       fetchUsers();
     } catch (err: any) {
-      console.error(err);
-      alert('An error occurred: ' + (err.message || 'Unknown error'));
+      showToast(err.message || 'An error occurred while saving user', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -137,59 +140,61 @@ export default function UserManagementPage() {
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No users found.</div>
         ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((user) => (
-                <tr key={user.id}>
-                  <td style={{ fontWeight: 500, color: '#111827' }}>
-                    {user.first_name} {user.last_name}
-                  </td>
-                  <td>@{user.username}</td>
-                  <td>{user.email}</td>
-                  <td>
-                    <div className="flex items-center gap-1">
-                      <ShieldAlert size={14} className="text-blue-600" />
-                      <span className="text-blue-700 font-medium text-xs">Admin</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`admin-badge ${user.is_active ? 'admin-badge--success' : 'admin-badge--danger'}`}>
-                      {user.is_active ? 'Active' : 'Disabled'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="admin-table__actions">
-                      <button 
-                        className="admin-btn admin-btn--icon" 
-                        aria-label="Edit"
-                        onClick={() => { setEditingUser(user); setIsModalOpen(true); }}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button 
-                        className="admin-btn admin-btn--icon" 
-                        aria-label="Delete" 
-                        style={{ color: '#dc2626' }}
-                        onClick={() => handleDelete(user.id)}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
+          <div className="admin-table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((user) => (
+                  <tr key={user.id}>
+                    <td style={{ fontWeight: 500, color: '#111827' }}>
+                      {user.first_name} {user.last_name}
+                    </td>
+                    <td>@{user.username}</td>
+                    <td>{user.email}</td>
+                    <td>
+                      <div className="flex items-center gap-1">
+                        <ShieldAlert size={14} className="text-blue-600" />
+                        <span className="text-blue-700 font-medium text-xs">Admin</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`admin-badge ${user.is_active ? 'admin-badge--success' : 'admin-badge--danger'}`}>
+                        {user.is_active ? 'Active' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="admin-table__actions">
+                        <button 
+                          className="admin-btn admin-btn--icon" 
+                          aria-label="Edit"
+                          onClick={() => { setEditingUser(user); setIsModalOpen(true); }}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button 
+                          className="admin-btn admin-btn--icon" 
+                          aria-label="Delete" 
+                          style={{ color: '#dc2626' }}
+                          onClick={() => handleDelete(user.id)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

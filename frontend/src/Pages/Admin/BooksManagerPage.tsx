@@ -5,6 +5,7 @@ import { batchApi, AcquisitionBatch, BatchBook } from '@/src/Endpoints/batchApi'
 import { BatchCard } from '@/src/Features/Admin/components/BatchCard';
 import { CreateBatchModal } from '@/src/Features/Admin/components/CreateBatchModal';
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
+import { useToast } from '@/src/Hooks/useToast';
 
 type ViewMode = 'table' | 'grid';
 
@@ -22,6 +23,8 @@ export default function BooksManagerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  
+  const { showToast } = useToast();
 
   const loadData = async () => {
     setLoading(true);
@@ -54,12 +57,12 @@ export default function BooksManagerPage() {
 
   const handleCreateBatch = async (data: Partial<AcquisitionBatch>) => {
     try {
-      const newBatch = await batchApi.createBatch(data);
+      await batchApi.createBatch(data);
       setIsCreateBatchOpen(false);
-      // reload to get fresh data
+      showToast('Batch created successfully', 'success');
       loadData();
-    } catch (error) {
-      alert('Failed to create batch');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to create batch', 'error');
     }
   };
 
@@ -71,9 +74,10 @@ export default function BooksManagerPage() {
         case 'activate': await batchApi.activateBatch(id); break;
         case 'reopen': await batchApi.reopenBatch(id); break;
       }
+      showToast(`Batch ${action}d successfully`, 'success');
       loadData();
-    } catch (error) {
-      alert(`Failed to ${action} batch`);
+    } catch (error: any) {
+      showToast(error.message || `Failed to ${action} batch`, 'error');
     }
   };
 
@@ -93,16 +97,16 @@ export default function BooksManagerPage() {
     if (!currentBatch) return;
     try {
       if (editingBook) {
-        // TODO: implement update API
-        alert('Update not fully implemented in API yet, skipping...');
+        showToast('Update not fully implemented in API yet', 'warning');
       } else {
         await batchApi.addBookToBatch(currentBatch.id, data);
+        showToast('Book added successfully', 'success');
       }
       setIsBookFormOpen(false);
       setEditingBook(undefined);
-      handleViewBatchBooks(currentBatch.id); // reload current batch books
-    } catch (error) {
-      alert('Failed to save book');
+      handleViewBatchBooks(currentBatch.id); 
+    } catch (error: any) {
+      showToast(error.message || 'Failed to save book', 'error');
     }
   };
 
@@ -111,9 +115,10 @@ export default function BooksManagerPage() {
     if (confirm('Are you sure you want to remove this book from the batch?')) {
       try {
         await batchApi.deleteBook(currentBatch.id, bookId);
+        showToast('Book deleted successfully', 'success');
         handleViewBatchBooks(currentBatch.id);
-      } catch (error) {
-        alert('Failed to delete book');
+      } catch (error: any) {
+        showToast(error.message || 'Failed to delete book', 'error');
       }
     }
   };
@@ -226,38 +231,40 @@ export default function BooksManagerPage() {
           </div>
 
           {viewMode === 'table' && (
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Author</th>
-                  <th>Accession No.</th>
-                  <th>Category</th>
-                  <th>Date Encoded</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBooks.map((book) => (
-                  <tr key={book.id}>
-                    <td style={{ fontWeight: 500 }}>{book.title}</td>
-                    <td>{book.author}</td>
-                    <td style={{ fontFamily: 'monospace' }}>{book.accession_number || 'N/A'}</td>
-                    <td><span className="admin-badge admin-badge--info">{book.category}</span></td>
-                    <td style={{ color: '#6b7280' }}>{new Date(book.date_encoded).toLocaleDateString()}</td>
-                    <td>
-                      <div className="admin-table__actions">
-                        <button className="admin-btn admin-btn--icon" onClick={() => { setEditingBook(book); setIsBookFormOpen(true); }}><Pencil size={15} /></button>
-                        <button className="admin-btn admin-btn--icon" style={{ color: '#dc2626' }} onClick={() => handleDeleteBook(book.id)}><Trash2 size={15} /></button>
-                      </div>
-                    </td>
+            <div className="admin-table-scroll">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Accession No.</th>
+                    <th>Category</th>
+                    <th>Date Encoded</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-                {filteredBooks.length === 0 && (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>No books in this batch match the filter.</td></tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredBooks.map((book) => (
+                    <tr key={book.id}>
+                      <td style={{ fontWeight: 500 }}>{book.title}</td>
+                      <td>{book.author}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{book.accession_number || 'N/A'}</td>
+                      <td><span className="admin-badge admin-badge--info">{book.category}</span></td>
+                      <td style={{ color: '#6b7280' }}>{new Date(book.date_encoded).toLocaleDateString()}</td>
+                      <td>
+                        <div className="admin-table__actions">
+                          <button className="admin-btn admin-btn--icon" onClick={() => { setEditingBook(book); setIsBookFormOpen(true); }}><Pencil size={15} /></button>
+                          <button className="admin-btn admin-btn--icon" style={{ color: '#dc2626' }} onClick={() => handleDeleteBook(book.id)}><Trash2 size={15} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredBooks.length === 0 && (
+                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>No books in this batch match the filter.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {viewMode === 'grid' && (

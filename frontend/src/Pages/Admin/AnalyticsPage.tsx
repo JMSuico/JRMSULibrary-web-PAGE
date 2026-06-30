@@ -9,18 +9,20 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const fetchReport = async () => {
       try {
         const summary = await reportApi.getSummary();
         setData(summary);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to load analytics', 'error');
       } finally {
         setLoading(false);
       }

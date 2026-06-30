@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { Save, Plus, Trash2, Edit2 } from 'lucide-react';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function ContentManagerPage() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files'>('content');
   const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
 
   // Content State
   const [contents, setContents] = useState<PageContent[]>([]);
@@ -33,8 +35,8 @@ export default function ContentManagerPage() {
       setContents(c);
       setLinks(l);
       setFiles(f);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load content', 'error');
     } finally {
       setLoading(false);
     }
@@ -44,11 +46,10 @@ export default function ContentManagerPage() {
   const handleSaveContent = async (slug: string, content: string) => {
     try {
       await cmsApi.updateContent(slug, { content });
-      alert('Content saved!');
+      showToast('Content saved successfully', 'success');
       loadData();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to save content.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save content', 'error');
     }
   };
 
@@ -70,11 +71,11 @@ export default function ContentManagerPage() {
       } else {
         await cmsApi.createLink(payload);
       }
+      showToast(`Link ${editingLink ? 'updated' : 'created'} successfully`, 'success');
       setIsLinkModalOpen(false);
       loadData();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to save link.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save link', 'error');
     }
   };
 
@@ -82,9 +83,10 @@ export default function ContentManagerPage() {
     if (!confirm('Delete this link?')) return;
     try {
       await cmsApi.deleteLink(id);
+      showToast('Link deleted successfully', 'success');
       loadData();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete link', 'error');
     }
   };
 
@@ -94,11 +96,11 @@ export default function ContentManagerPage() {
     const fd = new FormData(e.currentTarget);
     try {
       await cmsApi.createFile(fd);
+      showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       loadData();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to upload file.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to upload file', 'error');
     }
   };
 
@@ -106,9 +108,10 @@ export default function ContentManagerPage() {
     if (!confirm('Delete this file?')) return;
     try {
       await cmsApi.deleteFile(id);
+      showToast('File deleted successfully', 'success');
       loadData();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete file', 'error');
     }
   };
 
@@ -184,37 +187,39 @@ export default function ContentManagerPage() {
                   <Plus size={16} /> Add Link
                 </button>
               </div>
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Label</th>
-                    <th>URL</th>
-                    <th>Group</th>
-                    <th>Order</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {links.map((link) => (
-                    <tr key={link.id}>
-                      <td style={{ fontWeight: 500 }}>{link.label}</td>
-                      <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: '#002B7F' }}>{link.url}</a></td>
-                      <td><span className="admin-badge admin-badge--info">{link.group}</span></td>
-                      <td>{link.order}</td>
-                      <td>
-                        <span className={`admin-badge ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                          {link.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} style={{ padding: '6px', backgroundColor: '#eff6ff', color: '#1d4ed8', borderRadius: '4px' }}><Edit2 size={16}/></button>
-                        <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '4px' }}><Trash2 size={16}/></button>
-                      </td>
+              <div className="admin-table-scroll">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Label</th>
+                      <th>URL</th>
+                      <th>Group</th>
+                      <th>Order</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {links.map((link) => (
+                      <tr key={link.id}>
+                        <td style={{ fontWeight: 500 }}>{link.label}</td>
+                        <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: '#002B7F' }}>{link.url}</a></td>
+                        <td><span className="admin-badge admin-badge--info">{link.group}</span></td>
+                        <td>{link.order}</td>
+                        <td>
+                          <span className={`admin-badge ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                            {link.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} style={{ padding: '6px', backgroundColor: '#eff6ff', color: '#1d4ed8', borderRadius: '4px' }}><Edit2 size={16}/></button>
+                          <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -228,32 +233,34 @@ export default function ContentManagerPage() {
                   <Plus size={16} /> Upload File
                 </button>
               </div>
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>File URL</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {files.map((file) => (
-                    <tr key={file.id}>
-                      <td style={{ fontWeight: 500 }}>{file.title}</td>
-                      <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: '#002B7F' }}>Download</a></td>
-                      <td>
-                        <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                          {file.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td>
-                        <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '4px' }}><Trash2 size={16}/></button>
-                      </td>
+              <div className="admin-table-scroll">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Title</th>
+                      <th>File URL</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {files.map((file) => (
+                      <tr key={file.id}>
+                        <td style={{ fontWeight: 500 }}>{file.title}</td>
+                        <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: '#002B7F' }}>Download</a></td>
+                        <td>
+                          <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                            {file.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

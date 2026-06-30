@@ -11,20 +11,22 @@ import {
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 
 import { contactApi, ContactMessage } from '@/src/Endpoints/contactApi';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function EmailMessagePage() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'EMAIL' | 'RESERVATION'>('ALL');
+  const { showToast } = useToast();
 
   const fetchMessages = async () => {
     try {
       setLoading(true);
       const data = await contactApi.getAllMessages();
       setMessages(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load messages', 'error');
     } finally {
       setLoading(false);
     }
@@ -37,9 +39,10 @@ export default function EmailMessagePage() {
   const updateStatus = async (id: number, newStatus: 'READ' | 'REPLIED') => {
     try {
       await contactApi.updateMessageStatus(id, newStatus);
+      showToast(`Message marked as ${newStatus}`, 'success');
       fetchMessages();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update message status', 'error');
     }
   };
 

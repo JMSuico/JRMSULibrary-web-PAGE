@@ -105,9 +105,9 @@ export const RizalAssistant: React.FC = () => {
       }]);
       setChatFlowState('suggestions');
       resetFormFields();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: 'Sorry, there was an error sending your email. Please try again.' }]);
+      setChatMessages(prev => [...prev, { sender: 'rizal', text: err.message || 'Sorry, there was an error sending your email. Please try again.' }]);
       setChatFlowState('suggestions');
     } finally {
       setIsSubmitting(false);
@@ -131,9 +131,9 @@ export const RizalAssistant: React.FC = () => {
       }]);
       setChatFlowState('suggestions');
       resetFormFields();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: 'Sorry, there was an error submitting your reservation. Please try again.' }]);
+      setChatMessages(prev => [...prev, { sender: 'rizal', text: err.message || 'Sorry, there was an error submitting your reservation. Please try again.' }]);
       setChatFlowState('suggestions');
     } finally {
       setIsSubmitting(false);
@@ -161,9 +161,9 @@ export const RizalAssistant: React.FC = () => {
       }]);
       setChatFlowState('suggestions');
       resetFormFields();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: 'Sorry, there was an error submitting your rating. Please try again.' }]);
+      setChatMessages(prev => [...prev, { sender: 'rizal', text: err.message || 'Sorry, there was an error submitting your rating. Please try again.' }]);
       setChatFlowState('suggestions');
     } finally {
       setIsSubmitting(false);

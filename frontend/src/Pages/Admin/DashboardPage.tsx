@@ -8,8 +8,6 @@ import {
   Eye,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   XAxis,
@@ -20,27 +18,20 @@ import {
 } from 'recharts';
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
 import { useEffect, useState } from 'react';
-
-const BOOKS_TREND_DATA = [
-  { name: 'Jan', books: 12 },
-  { name: 'Feb', books: 19 },
-  { name: 'Mar', books: 15 },
-  { name: 'Apr', books: 22 },
-  { name: 'May', books: 30 },
-  { name: 'Jun', books: 44 },
-];
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function DashboardPage() {
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const summary = await reportApi.getSummary();
         setData(summary);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to load dashboard data', 'error');
       } finally {
         setLoading(false);
       }
@@ -85,27 +76,34 @@ export default function DashboardPage() {
         <div className="admin-table-wrapper" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <TrendingUp size={18} style={{ color: '#002B7F' }} />
-            <span style={{ fontWeight: 600, fontSize: 15, color: '#111827' }}>Books Added Over Time</span>
+            <span style={{ fontWeight: 600, fontSize: 15, color: '#111827' }}>Recently Added Books (by Date)</span>
           </div>
           <div style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={BOOKS_TREND_DATA} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <BarChart data={(() => {
+                // Group recent_books by dateAdded for the chart
+                const counts: Record<string, number> = {};
+                data.recent_books.forEach(b => {
+                  counts[b.dateAdded] = (counts[b.dateAdded] || 0) + 1;
+                });
+                return Object.entries(counts)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([date, count]) => ({ name: date, books: count }));
+              })()} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} allowDecimals={false} />
                 <Tooltip 
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  cursor={{ stroke: '#002B7F', strokeWidth: 1, strokeDasharray: '3 3' }}
+                  cursor={{ fill: '#f3f4f6' }}
                 />
-                <Line 
-                  type="monotone" 
+                <Bar 
                   dataKey="books" 
-                  stroke="#002B7F" 
-                  strokeWidth={3}
-                  dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
-                  activeDot={{ r: 6, fill: '#002B7F', stroke: '#fff', strokeWidth: 2 }}
+                  fill="#002B7F" 
+                  radius={[4, 4, 0, 0]} 
+                  barSize={40}
                 />
-              </LineChart>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -150,6 +148,7 @@ export default function DashboardPage() {
             View All
           </a>
         </div>
+        <div className="admin-table-scroll">
         <table className="admin-table">
           <thead>
             <tr>
@@ -180,6 +179,7 @@ export default function DashboardPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </>
   );

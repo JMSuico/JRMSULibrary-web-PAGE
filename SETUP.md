@@ -46,34 +46,21 @@ cd backend
 python setup_db.py
 ```
 
-This script will:
+This single script handles **everything**:
 1. Let you choose your database engine (**SSMS 19 is recommended**; MySQL/PostgreSQL are optional).
-2. Prompt you for connection details (host, port, credentials).
+2. Prompt you for connection details (host, port, credentials, auth mode).
 3. Generate a `.env` file that `settings.py` reads automatically.
-4. Auto-create the database if the driver is installed.
+4. **For SQL Server with SQL Auth**: Automatically connects via Windows Auth (sysadmin) to create the SQL Login, Database, Database User, and grant `db_owner` permissions.
+5. **For SQL Server with Windows Auth**: Creates the database directly.
+6. **For MySQL / PostgreSQL**: Creates the database if the driver is installed.
 
 > **Where is the `.env` file?**
 > The `setup_db.py` script will create a file named `.env` located inside the `backend/` directory (`backend/.env`). You can open this file in your code editor anytime to manually update your database connection credentials.
 
-### Alternative: Manual Database Creation
-
-#### Option A: Via SSMS GUI
-
-1. Open **SQL Server Management Studio 19**.
-2. Connect to your server instance (`localhost` or `.\SQLEXPRESS`).
-3. Right-click **Databases** in Object Explorer.
-4. Click **New Database...**
-5. Database name: `JRMSUKatipunanCampusLibrary`
-6. Click **OK**.
-
-#### Option B: Via the legacy helper script
-
-```
-cd backend
-python create_db.py
-```
-
-This runs a `pyodbc` script that creates the database if it doesn't already exist.
+> **Important (SQL Server):** Your SQL Server must have **SQL Server and Windows Authentication mode** enabled (Mixed Mode) if using SQL Auth. To check:
+> 1. In SSMS, right-click your server (`localhost`) → **Properties** → **Security**.
+> 2. Select **SQL Server and Windows Authentication mode**.
+> 3. Click OK and **restart SQL Server service**.
 
 ---
 
@@ -102,35 +89,37 @@ pip install django djangorestframework django-cors-headers mssql-django django-f
 
 ### 3c. Run database migrations
 
-Django uses a migration system to create and update database tables. You must run migrations whenever models change.
+Django uses a migration system to create and update database tables. You must run migrations whenever models change. 
+**Per our architecture rules**, you should use the custom wrapper commands rather than raw Django commands.
 
-**Generate migration files** (detects model changes and creates migration scripts):
-```
-python manage.py makemigrations Api
-```
-
-**Apply migrations to the database** (creates actual tables in SQL Server):
-```
-python manage.py migrate Api
-python manage.py migrate
-```
-
-Or use the architecture wrapper commands:
+**1. Generate migration files** 
+**Purpose:** Detects changes in the models and generates migration scripts.
+**Target:** The `Features` app domain models.
 ```
 python manage.py add_migration
+```
+
+**2. Apply migrations to the database**
+**Purpose:** Executes the generated migration scripts to physically create or update the tables in the database.
+**Target:** The connected SQL Server database (`JRMSUKatipunanCampusLibrary`).
+```
 python manage.py update_database
 ```
 
 ### 3d. Seed CMS data from asset files
 
+**Purpose:** Crawls the `public/assets/` directory to discover images, PDFs, and metadata, and automatically inserts/updates records in the database (e.g., E-Resources, Gallery, Books) so that the UI has content.
+**Target:** The `Features` app models (e.g. `EResourceDepartment`, `LibraryInteriorImage`) and the SQL Server database.
 ```
 python manage.py seed_assets
 ```
 
 ### 3e. Create an admin superuser (optional)
 
+**Purpose:** Creates a specialized Library Administrator account (bypassing the standard Django user model) that aligns with our custom role-based access control (RBAC).
+**Target:** The User identity tables in the database (creating a root user).
 ```
-python manage.py createsuperuser
+python manage.py createsuperuser_custom
 ```
 
 ### 3f. Run the backend server (port 8000)
@@ -331,7 +320,7 @@ JRMSU LIBRARY LANDING PAGE/          <- root
 │   │   ├── Middleware/              <- Custom middleware (rate limit, etc.)
 │   │   └── management/commands/     <- Custom management commands
 │   ├── manage.py
-│   ├── create_db.py                 <- DB creation helper
+│   ├── setup_db.py                  <- Interactive DB setup (login + database + .env)
 │   └── venv/                        <- Python virtual env
 ├── SETUP.md                         <- this file
 ├── SKILL.md                         <- architecture rules

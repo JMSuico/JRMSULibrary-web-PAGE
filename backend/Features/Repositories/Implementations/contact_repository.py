@@ -34,3 +34,13 @@ class ContactRepository(ContactRepositoryInterface):
             message.save()
         return message
 
+    def get_recent_by_email_and_type(self, email: str, message_type: str, hours: int = 1):
+        from django.utils import timezone
+        import datetime
+        time_threshold = timezone.now() - datetime.timedelta(hours=hours)
+        return ContactMessage.objects.filter(
+            email=email,
+            message_type=message_type,
+            created_at__gte=time_threshold
+        ).order_by('-created_at').first()
+

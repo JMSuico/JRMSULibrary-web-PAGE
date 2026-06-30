@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoints/eresourceApi';
 import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function EResourcesManagerPage() {
   const [departments, setDepartments] = useState<EResourceDepartment[]>([]);
@@ -13,6 +14,7 @@ export default function EResourcesManagerPage() {
   const [editingDept, setEditingDept] = useState<EResourceDepartment | null>(null);
   
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadData();
@@ -23,8 +25,8 @@ export default function EResourcesManagerPage() {
     try {
       const data = await eresourceApi.getAllDepartments();
       setDepartments(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load departments', 'error');
     } finally {
       setLoading(false);
     }
@@ -52,11 +54,11 @@ export default function EResourcesManagerPage() {
       } else {
         await eresourceApi.createDepartment(payload);
       }
+      showToast(`Department ${editingDept ? 'updated' : 'created'} successfully`, 'success');
       setIsDeptModalOpen(false);
       loadData();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to save department.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save department', 'error');
     }
   };
 
@@ -64,10 +66,11 @@ export default function EResourcesManagerPage() {
     if (!confirm('Delete this department and all its contents?')) return;
     try {
       await eresourceApi.deleteDepartment(id);
+      showToast('Department deleted successfully', 'success');
       if (selectedDeptId === id) setSelectedDeptId(null);
       loadData();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete department', 'error');
     }
   };
 
@@ -80,11 +83,11 @@ export default function EResourcesManagerPage() {
 
     try {
       await eresourceApi.createFile(fd);
+      showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       loadData();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to upload file.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to upload file', 'error');
     }
   };
 
@@ -92,9 +95,10 @@ export default function EResourcesManagerPage() {
     if (!confirm('Delete this file?')) return;
     try {
       await eresourceApi.deleteFile(id);
+      showToast('File deleted successfully', 'success');
       loadData();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete file', 'error');
     }
   };
 

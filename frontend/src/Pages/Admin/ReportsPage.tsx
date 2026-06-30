@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
 import { FileText, Printer, Calendar as CalendarIcon, Download } from 'lucide-react';
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState('summary');
   const [dateRange, setDateRange] = useState('this-month');
   const [isGenerating, setIsGenerating] = useState(false);
   const [reportData, setReportData] = useState<ReportSummary | null>(null);
+  const { showToast } = useToast();
 
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      // In a real app, we would pass dateRange and reportType as query params.
-      // For now, we reuse the summary endpoint to get the data to print.
       const data = await reportApi.getSummary();
       setReportData(data);
-    } catch (err) {
-      console.error(err);
-      alert('Failed to generate report.');
+      showToast('Report generated successfully', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to generate report', 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -25,6 +25,49 @@ export default function ReportsPage() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportCSV = () => {
+    if (!reportData) return;
+
+    const rows: string[][] = [];
+    rows.push(['JRMSU Katipunan Campus Library - Report']);
+    rows.push([`Report Type: ${reportType}`, `Period: ${dateRange.replace('-', ' ').toUpperCase()}`]);
+    rows.push([]);
+    rows.push(['Metric', 'Value']);
+    rows.push(['Total Visits', String(reportData.total_visits)]);
+    rows.push(['Total Books', String(reportData.total_books)]);
+    rows.push(['Total Emails', String(reportData.total_emails)]);
+    rows.push(['Total Reservations', String(reportData.total_reservations)]);
+    rows.push(['Average Rating', `${reportData.ratings_summary.average_rating} / 5`]);
+    rows.push([]);
+
+    if (reportData.recent_books.length > 0) {
+      rows.push(['Recent Books']);
+      rows.push(['Title', 'Author', 'Category', 'Date Added']);
+      reportData.recent_books.forEach(b => {
+        rows.push([b.title, b.author, b.category, b.dateAdded]);
+      });
+      rows.push([]);
+    }
+
+    if (reportData.recent_activity.length > 0) {
+      rows.push(['Recent Activity']);
+      rows.push(['Type', 'Name', 'Date']);
+      reportData.recent_activity.forEach(a => {
+        rows.push([a.type, a.name, new Date(a.date).toLocaleDateString()]);
+      });
+    }
+
+    const csvContent = rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `jrmsu-library-report-${dateRange}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV exported successfully', 'success');
   };
 
   return (
@@ -82,6 +125,9 @@ export default function ReportsPage() {
           <div className="flex justify-between items-start mb-8 print:hidden">
             <h3 className="text-xl font-bold text-gray-800">Preview</h3>
             <div className="flex gap-2">
+              <button onClick={handleExportCSV} className="admin-btn admin-btn--outline flex items-center gap-2">
+                <Download size={16} /> Export CSV
+              </button>
               <button onClick={handlePrint} className="admin-btn admin-btn--outline flex items-center gap-2">
                 <Printer size={16} /> Print
               </button>

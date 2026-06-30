@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Lock, Library, Save, CheckCircle } from 'lucide-react';
 import { settingsApi, SiteSettings } from '@/src/Endpoints/settingsApi';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'general' | 'security'>('general');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedStatus, setSavedStatus] = useState(false);
+  const { showToast } = useToast();
   
   const [formData, setFormData] = useState<SiteSettings>({
     library_name: '',
@@ -30,8 +32,8 @@ export default function SettingsPage() {
       try {
         const data = await settingsApi.getSettings();
         setFormData(data);
-      } catch (err) {
-        console.error('Failed to load settings', err);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to load settings', 'error');
       } finally {
         setLoading(false);
       }
@@ -59,21 +61,22 @@ export default function SettingsPage() {
         const updated = await settingsApi.updateSettings(formData);
         setFormData(updated);
         setSavedStatus(true);
+        showToast('Settings saved successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
-      } catch (err) {
-        console.error('Failed to save settings', err);
-        alert('Failed to save settings. Please try again.');
+      } catch (err: any) {
+        showToast(err.message || 'Failed to save settings', 'error');
       }
     } else {
       // Mock security save
       if (passwords.newPass !== passwords.confirm) {
-        alert("New passwords don't match");
+        showToast("New passwords don't match", 'error');
         setSaving(false);
         return;
       }
       setTimeout(() => {
         setPasswords({ current: '', newPass: '', confirm: '' });
         setSavedStatus(true);
+        showToast('Password updated successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
       }, 1000);
     }

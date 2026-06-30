@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface ContactMessage {
   id: number;
@@ -13,28 +13,20 @@ export interface ContactMessage {
 
 export const contactApi = {
   getAllMessages: async (): Promise<ContactMessage[]> => {
-    const res = await fetch(`${API_BASE}/contact/`);
-    if (!res.ok) throw new Error('Failed to fetch messages');
-    return res.json();
+    return apiClient(`/contact/`);
   },
 
   updateMessageStatus: async (id: number, status: 'UNREAD' | 'READ' | 'REPLIED'): Promise<ContactMessage> => {
-    const res = await fetch(`${API_BASE}/contact/${id}/`, {
+    return apiClient(`/contact/${id}/`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
-    if (!res.ok) throw new Error('Failed to update message status');
-    return res.json();
   },
 
   submitContactMessage: async (data: Partial<ContactMessage>): Promise<ContactMessage> => {
-    const res = await fetch(`${API_BASE}/contact/`, {
+    return apiClient(`/contact/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to submit contact message');
-    return res.json();
   }
 };

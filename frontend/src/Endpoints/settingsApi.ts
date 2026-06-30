@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface SiteSettings {
   library_name: string;
@@ -13,20 +13,13 @@ export interface SiteSettings {
 
 export const settingsApi = {
   getSettings: async (): Promise<SiteSettings> => {
-    const res = await fetch(`${API_BASE}/settings/`);
-    if (!res.ok) throw new Error('Failed to fetch settings');
-    return res.json();
+    return apiClient(`/settings/`);
   },
   
   updateSettings: async (data: Partial<SiteSettings>): Promise<SiteSettings> => {
-    const res = await fetch(`${API_BASE}/settings/`, {
+    return apiClient(`/settings/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to update settings');
-    return res.json();
   }
 };

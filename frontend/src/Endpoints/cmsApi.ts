@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface PageContent {
   id: number;
@@ -30,65 +30,46 @@ export interface ManagedFile {
 export const cmsApi = {
   // Page Content
   getAllContent: async (): Promise<PageContent[]> => {
-    const res = await fetch(`${API_BASE}/content/`);
-    if (!res.ok) throw new Error('Failed to fetch content');
-    return res.json();
+    return apiClient(`/content/`);
   },
   updateContent: async (slug: string, data: Partial<PageContent>): Promise<PageContent> => {
-    const res = await fetch(`${API_BASE}/content/${slug}/`, {
+    return apiClient(`/content/${slug}/`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to update content');
-    return res.json();
   },
 
   // Managed Links
   getAllLinks: async (): Promise<ManagedLink[]> => {
-    const res = await fetch(`${API_BASE}/links/`);
-    if (!res.ok) throw new Error('Failed to fetch links');
-    return res.json();
+    return apiClient(`/links/`);
   },
   createLink: async (data: Partial<ManagedLink>): Promise<ManagedLink> => {
-    const res = await fetch(`${API_BASE}/links/`, {
+    return apiClient(`/links/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to create link');
-    return res.json();
   },
   updateLink: async (id: number, data: Partial<ManagedLink>): Promise<ManagedLink> => {
-    const res = await fetch(`${API_BASE}/links/${id}/`, {
+    return apiClient(`/links/${id}/`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to update link');
-    return res.json();
   },
   deleteLink: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/links/${id}/`, { method: 'DELETE' });
-    if (!res.ok && res.status !== 204) throw new Error('Failed to delete link');
+    return apiClient(`/links/${id}/`, { method: 'DELETE' });
   },
 
   // Managed Files
   getAllFiles: async (): Promise<ManagedFile[]> => {
-    const res = await fetch(`${API_BASE}/files/`);
-    if (!res.ok) throw new Error('Failed to fetch files');
-    return res.json();
+    return apiClient(`/files/`);
   },
   createFile: async (data: FormData): Promise<ManagedFile> => {
-    const res = await fetch(`${API_BASE}/files/`, {
+    return apiClient(`/files/`, {
       method: 'POST',
       body: data,
     });
-    if (!res.ok) throw new Error('Failed to create file');
-    return res.json();
   },
   deleteFile: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/files/${id}/`, { method: 'DELETE' });
-    if (!res.ok && res.status !== 204) throw new Error('Failed to delete file');
+    return apiClient(`/files/${id}/`, { method: 'DELETE' });
   },
 };

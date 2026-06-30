@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { apiClient } from '@/src/Libs/apiClient';
 
 export interface BatchBook {
   id: number;
@@ -27,80 +27,64 @@ export interface AcquisitionBatch {
 
 export const batchApi = {
   getAllBatches: async (): Promise<AcquisitionBatch[]> => {
-    const res = await fetch(`${API_BASE}/batches/`);
-    if (!res.ok) throw new Error('Failed to fetch batches');
-    return res.json();
+    return apiClient(`/batches/`);
   },
 
   getBatchById: async (id: number): Promise<AcquisitionBatch> => {
-    const res = await fetch(`${API_BASE}/batches/${id}/`);
-    if (!res.ok) throw new Error('Failed to fetch batch details');
-    return res.json();
+    return apiClient(`/batches/${id}/`);
   },
 
   getCurrentDisplayBatch: async (): Promise<AcquisitionBatch | null> => {
-    const res = await fetch(`${API_BASE}/batches/current/`);
-    if (res.status === 404) return null; // Expected if no active batch
-    if (!res.ok) throw new Error('Failed to fetch current display batch');
-    const data = await res.json();
-    if (data.message) return null; // Edge case matching our controller fallback
-    return data;
+    try {
+      const data = await apiClient(`/batches/current/`);
+      if (data?.message) return null;
+      return data;
+    } catch (err: any) {
+      if (err.message.includes('404')) return null;
+      throw err;
+    }
   },
 
   createBatch: async (data: Partial<AcquisitionBatch>): Promise<AcquisitionBatch> => {
-    const res = await fetch(`${API_BASE}/batches/`, {
+    return apiClient(`/batches/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to create batch');
-    return res.json();
   },
 
   updateBatch: async (id: number, data: Partial<AcquisitionBatch>): Promise<AcquisitionBatch> => {
-    const res = await fetch(`${API_BASE}/batches/${id}/`, {
+    return apiClient(`/batches/${id}/`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to update batch');
-    return res.json();
   },
 
   closeBatch: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/batches/${id}/close/`, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to close batch');
+    return apiClient(`/batches/${id}/close/`, { method: 'POST' });
   },
 
   archiveBatch: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/batches/${id}/archive/`, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to archive batch');
+    return apiClient(`/batches/${id}/archive/`, { method: 'POST' });
   },
 
   activateBatch: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/batches/${id}/activate/`, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to activate batch');
+    return apiClient(`/batches/${id}/activate/`, { method: 'POST' });
   },
 
   reopenBatch: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/batches/${id}/reopen/`, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to reopen batch');
+    return apiClient(`/batches/${id}/reopen/`, { method: 'POST' });
   },
 
   addBookToBatch: async (batchId: number, data: FormData): Promise<BatchBook> => {
-    // Using FormData to support image uploads
-    const res = await fetch(`${API_BASE}/batches/${batchId}/books/`, {
+    return apiClient(`/batches/${batchId}/books/`, {
       method: 'POST',
       body: data,
     });
-    if (!res.ok) throw new Error('Failed to add book');
-    return res.json();
   },
 
   deleteBook: async (batchId: number, bookId: number): Promise<void> => {
-    const res = await fetch(`${API_BASE}/batches/${batchId}/books/${bookId}/`, {
+    return apiClient(`/batches/${batchId}/books/${bookId}/`, {
       method: 'DELETE',
     });
-    if (!res.ok && res.status !== 204) throw new Error('Failed to delete book');
   }
 };

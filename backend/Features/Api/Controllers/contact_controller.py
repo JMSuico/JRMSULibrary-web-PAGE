@@ -9,8 +9,12 @@ from Features.Repositories.Implementations.contact_repository import ContactRepo
 from Features.Services.Implementations.contact_service import ContactService
 
 
+from rest_framework.throttling import ScopedRateThrottle
+
 class ContactMessageViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'contact'
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
