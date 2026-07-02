@@ -7,20 +7,44 @@ coverage/
 .env*
 !.env.example
 
-# Python virtual environment
+# Python virtual environment & cache
 backend/venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/**/*.pyc
-backend/**/*.pyo
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.pyc
+*.pyo
 
-# Django media files (user uploads, PDFs - do not commit)
+# Django media files (user uploads - never commit)
 backend/media/
 
-# Frontend assets (large binary files)
-/SKILLS/
+# ---- LARGE BINARY / MEDIA FILES (ignore everywhere) ----
+# Videos
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.wmv
+*.flv
+
+# Images (large asset folders only; keep small icon/logo PNGs in code)
+*.jfif
+frontend/public/assets/
+frontend/src/Assets/assets/Library pic converted/
+frontend/src/Assets/assets/Library pic/
+frontend/src/Assets/assets/PHYSICAL SET-UP 2026/
+frontend/src/Assets/assets/Feedback and complains mechanism/
+frontend/src/Assets/assets/Library External Services/
+frontend/src/Assets/assets/eBooks/
+frontend/src/Assets/assets/organizational structure library.png
+
+# PDFs
+*.pdf
+
+# Raw photo/book scan folders
 /NEWLY ARRIVED BOOKS/
-/frontend/src/Assets/assets/eBooks/
-/frontend/src/Assets/assets/Library pic/
-/frontend/src/Assets/assets/PHYSICAL SET-UP 2026/
-/frontend/src/Assets/assets/eBooks/eBooks/Department/
+/SKILLS/
+
+# Temp & scratch
+objects.txt
