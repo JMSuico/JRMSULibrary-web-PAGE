@@ -40,7 +40,7 @@ class NotificationService(INotificationService):
                 'body': f'Your site has now received {total_visits:,} total visits.',
                 'time': None,
                 'time_ago': '',
-                'read': False,
+                'read': True,
             })
             nid += 1
 
@@ -59,7 +59,7 @@ class NotificationService(INotificationService):
                 'body': f'{remaining:,} more visits needed to reach the next milestone.',
                 'time': None,
                 'time_ago': '',
-                'read': False,
+                'read': True,
             })
             nid += 1
 
@@ -121,3 +121,6 @@ class NotificationService(INotificationService):
             'unread_count': unread_count,
             'total_visits': total_visits,
         }
+
+    def mark_all_read(self) -> None:
+        self._repo.mark_all_unread_as_read()

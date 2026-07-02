@@ -23,6 +23,7 @@ export interface AcquisitionBatch {
   remarks: string;
   book_count: number;
   books?: BatchBook[]; // Present in detail view
+  history?: any[]; // Audit history
 }
 
 export const batchApi = {
@@ -93,5 +94,20 @@ export const batchApi = {
     return apiClient(`/batches/${batchId}/books/${bookId}/`, {
       method: 'DELETE',
     });
-  }
+  },
+
+  deleteBatch: async (id: number): Promise<void> => {
+    return apiClient(`/batches/${id}/`, {
+      method: 'DELETE',
+    });
+  },
+
+  getBatchHistory: async (id: number): Promise<any[]> => {
+    try {
+      const data = await apiClient(`/batches/${id}/history/`);
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  },
 };

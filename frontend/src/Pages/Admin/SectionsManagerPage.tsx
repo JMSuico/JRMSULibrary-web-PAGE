@@ -10,13 +10,13 @@ import {
   Trash2,
   X,
   Upload,
+  Eye,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { useToast } from '@/src/Hooks/useToast';
 
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
-import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
@@ -29,15 +29,15 @@ export default function SectionsManagerPage() {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
-  const { undoState, triggerDelete, cancelDelete } = useUndoDelete();
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingImage, setEditingImage] = useState<GalleryImage | null>(null);
+  const [viewingImage, setViewingImage] = useState<GalleryImage | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
 
   const fetchImages = async () => {
     try {
@@ -61,36 +61,27 @@ export default function SectionsManagerPage() {
     const imgToDelete = images.find(img => img.id === id);
     if (!imgToDelete) return;
 
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Image',
-      message: 'Are you sure you want to delete this image from the library sections?',
-      onConfirm: () => {
-        triggerDelete(
-          imgToDelete.title,
-          async () => {
-            // Actual delete action
-            try {
-              await galleryApi.deleteImage(id);
-              showToast('Image permanently deleted', 'success');
-            } catch (err: any) {
-              // Revert optimistic delete
-              setImages(prev => [...prev, imgToDelete]);
-              showToast(err.message || 'Failed to delete image', 'error');
-            }
-          },
-          () => {
-            // Undo logic
-            setImages(prev => [...prev, imgToDelete]);
-            showToast('Deletion undone', 'success');
-          }
-        );
-
-        // Optimistic delete
-        setImages(prev => prev.filter(img => img.id !== id));
-        setConfirmModal(null);
+    triggerDelete(
+      imgToDelete.title || 'Image',
+      async () => {
+        try {
+          await galleryApi.deleteImage(id);
+          showToast('Image permanently deleted', 'success');
+        } catch (err: any) {
+          // Revert optimistic delete
+          setImages(prev => [...prev, imgToDelete]);
+          showToast(err.message || 'Failed to delete image', 'error');
+        }
+      },
+      () => {
+        // Undo logic
+        setImages(prev => [...prev, imgToDelete]);
+        showToast('Deletion undone', 'success');
       }
-    });
+    );
+
+    // Optimistic delete
+    setImages(prev => prev.filter(img => img.id !== id));
   };
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -142,6 +133,13 @@ export default function SectionsManagerPage() {
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
     }
+  };
+
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return '';
+    if (imagePath.startsWith('http')) return imagePath;
+    if (imagePath.startsWith('/media/')) return imagePath;
+    return `/media/${imagePath}`;
   };
 
   const debouncedSearch = useDebounce(searchQuery, 400);
@@ -235,7 +233,7 @@ export default function SectionsManagerPage() {
                       <tr key={img.id}>
                         <td>
                           <img
-                            src={img.image.startsWith('http') ? img.image : `/media/${img.image}`}
+                            src={getImageUrl(img.image)}
                             alt={img.title}
                             className="rounded-md object-cover"
                             style={{ width: 64, height: 48 }}
@@ -250,6 +248,9 @@ export default function SectionsManagerPage() {
                         </td>
                         <td>
                           <div className="admin-table__actions">
+                            <button className="admin-btn admin-btn--icon" aria-label={`View ${img.title}`} onClick={() => setViewingImage(img)}>
+                              <Eye size={15} />
+                            </button>
                             <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>
                               <Pencil size={15} />
                             </button>
@@ -276,7 +277,7 @@ export default function SectionsManagerPage() {
                   <div className="admin-grid-card" key={img.id}>
                     <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: '#f3f4f6' }}>
                       <img
-                        src={img.image.startsWith('http') ? img.image : `/media/${img.image}`}
+                        src={getImageUrl(img.image)}
                         alt={img.title}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
@@ -300,6 +301,9 @@ export default function SectionsManagerPage() {
                       </div>
                     </div>
                     <div className="admin-grid-card__actions">
+                      <button className="admin-btn admin-btn--icon" aria-label={`View ${img.title}`} onClick={() => setViewingImage(img)}>
+                        <Eye size={15} />
+                      </button>
                       <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>
                         <Pencil size={15} />
                       </button>
@@ -421,37 +425,90 @@ export default function SectionsManagerPage() {
         </div>
       )}
 
-      {/* Undo Delete Toast */}
-      {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
+      {/* View Full Details Modal */}
+      {viewingImage && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setViewingImage(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <ImageIcon size={22} className="text-[#002B7F]" /> Section Details
+              </h2>
+              <button onClick={() => setViewingImage(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X size={22} />
+              </button>
             </div>
-            <button
-              onClick={cancelDelete}
-              className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors"
-            >
-              Undo
-            </button>
-          </div>
-          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className="bg-gray-400 h-full transition-all ease-linear"
-              style={{ width: `${(undoState.countdown / 15) * 100}%`, transitionDuration: '1s' }}
-            />
+            
+            <div className="p-6 overflow-y-auto">
+              <div className="bg-gray-100 rounded-xl overflow-hidden mb-6 flex items-center justify-center" style={{ minHeight: '300px' }}>
+                <img 
+                  src={getImageUrl(viewingImage.image)} 
+                  alt={viewingImage.title} 
+                  className="max-w-full max-h-[50vh] object-contain"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Title</p>
+                  <p className="text-lg font-semibold text-gray-900">{viewingImage.title || '(Untitled)'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Section Label</p>
+                  <p className="text-lg font-semibold text-gray-900">{viewingImage.section_label || '(None)'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Visibility Status</p>
+                  <span className={`admin-badge ${viewingImage.is_active ? 'admin-badge--success' : 'admin-badge--warning'}`}>
+                    {viewingImage.is_active ? 'Visible on Website' : 'Hidden from Website'}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Added On</p>
+                  <p className="text-base text-gray-800">{new Date(viewingImage.created_at).toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-5 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setViewingImage(null)}
+                className="px-6 py-2.5 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition-colors cursor-pointer"
+              >
+                Exit
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <ConfirmModal 
-        isOpen={!!confirmModal} 
-        title={confirmModal?.title || ''} 
-        message={confirmModal?.message || ''} 
-        onConfirm={() => confirmModal?.onConfirm()} 
-        onCancel={() => setConfirmModal(null)} 
-      />
+      {/* Undo Delete Toast */}
+      {undoState && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={cancelDelete}
+                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
+              >
+                Undo
+              </button>
+              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className="bg-gray-400 h-full transition-all ease-linear"
+              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

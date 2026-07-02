@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { cmsApi, ManagedFile } from '@/src/Endpoints/cmsApi';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
 const tabs = [
@@ -17,6 +17,8 @@ export default function AdministrationPage() {
   const [orgImageOpen, setOrgImageOpen] = useState(false);
   const [orgChartUrl, setOrgChartUrl] = useState<string | null>(null);
   const [manualUrl, setManualUrl] = useState<string | null>(null);
+  const [allFiles, setAllFiles] = useState<ManagedFile[]>([]);
+  const [expandedFileId, setExpandedFileId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,6 +40,7 @@ export default function AdministrationPage() {
 
         if (orgChart) setOrgChartUrl(orgChart.file.startsWith('http') ? orgChart.file : `http://127.0.0.1:8000/media/${orgChart.file}`);
         if (manual) setManualUrl(manual.file.startsWith('http') ? manual.file : `http://127.0.0.1:8000/media/${manual.file}`);
+        setAllFiles(files.filter(f => f.is_active));
       } catch (e) {
         console.error('Failed to load administration assets from CMS', e);
       } finally {
@@ -101,15 +104,61 @@ export default function AdministrationPage() {
             </div>
           ) : (
             <div className="max-w-3xl mx-auto">
-              <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-6 text-center">Manual</h3>
-              <p className="text-white/80 mb-6 text-center">Library Policies Manual</p>
-              <div className="bg-white rounded-2xl overflow-hidden shadow-lg" style={{ minHeight: '70vh' }}>
-                <iframe
-                  src={manualUrl ? `${manualUrl}#toolbar=1&navpanes=0` : "/assets/library-policies-manual.pdf#toolbar=1&navpanes=0"}
-                  className="w-full h-full"
-                  style={{ minHeight: '70vh' }}
-                  title="Library Policies Manual"
-                />
+              <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-6 text-center">Manual & Policies</h3>
+              <p className="text-white/80 mb-6 text-center">Library Resources and Policies</p>
+              
+              <div className="flex flex-col gap-4">
+                {allFiles.length === 0 ? (
+                  <div className="bg-white/10 rounded-2xl p-8 text-center text-white/70">
+                    No files available at this time.
+                  </div>
+                ) : (
+                  allFiles.map(file => {
+                    const fileUrl = file.file.startsWith('http') ? file.file : `http://127.0.0.1:8000/media/${file.file}`;
+                    const isExpanded = expandedFileId === file.id;
+                    const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
+                    const isImage = fileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/);
+                    
+                    return (
+                      <div key={file.id} className="bg-white rounded-xl overflow-hidden shadow-lg transition-all duration-300">
+                        <button
+                          onClick={() => setExpandedFileId(isExpanded ? null : file.id)}
+                          className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileText className="text-primary w-5 h-5" />
+                            <span className="font-semibold text-gray-900">{file.title}</span>
+                          </div>
+                          {isExpanded ? <ChevronDown className="text-gray-500 w-5 h-5" /> : <ChevronRight className="text-gray-500 w-5 h-5" />}
+                        </button>
+                        
+                        {/* Expanded Content View (Read-Only) */}
+                        {isExpanded && (
+                          <div className="border-t border-gray-200">
+                            {isPdf ? (
+                              <iframe
+                                src={`${fileUrl}#toolbar=0&navpanes=0`}
+                                className="w-full"
+                                style={{ height: '70vh' }}
+                                title={file.title}
+                              />
+                            ) : isImage ? (
+                              <div className="p-4 bg-gray-100 flex justify-center">
+                                <img src={fileUrl} alt={file.title} className="max-w-full h-auto max-h-[70vh] object-contain rounded shadow" />
+                              </div>
+                            ) : (
+                              <div className="p-8 text-center bg-gray-50">
+                                <FileText className="mx-auto w-12 h-12 text-gray-400 mb-3" />
+                                <p className="text-gray-600 mb-2">This file type ({fileUrl.split('.').pop()}) cannot be previewed inline.</p>
+                                <a href={fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline text-sm">Open in new tab (Read Only)</a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}

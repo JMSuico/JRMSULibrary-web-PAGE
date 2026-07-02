@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
+import { ClassicHorizontalCarousel } from '@/src/Components/Shared/ClassicHorizontalCarousel';
+import { useCarouselStyle } from '@/src/Hooks/useCarouselStyle';
+import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
 
 interface GalleryModalItem {
   src: string;
   label: string;
 }
 
-const sectionImages = [
+// Static fallback images used only if the backend has no active entries
+const STATIC_FALLBACK_IMAGES: GalleryModalItem[] = [
   { src: '/assets/PHYSICAL SET-UP 2026/READING AREA.jpg', label: 'Reading Area' },
   { src: '/assets/PHYSICAL SET-UP 2026/CIRCULATION SECTION.jpg', label: 'Circulation Section' },
   { src: '/assets/PHYSICAL SET-UP 2026/REFERENCE SECTION.jpg', label: 'Reference Section' },
@@ -21,6 +25,14 @@ const sectionImages = [
   { src: '/assets/PHYSICAL SET-UP 2026/INFORMATION COUNTER.jpg', label: 'Information Counter' },
   { src: '/assets/PHYSICAL SET-UP 2026/WORKSTATION.jpg', label: 'Workstation' },
 ];
+
+/** Resolve a GalleryImage from the backend into a displayable src URL */
+function resolveImageSrc(img: GalleryImage): string {
+  if (!img.image) return '';
+  if (img.image.startsWith('http')) return img.image;
+  // Media files served from Django backend
+  return `http://localhost:8000${img.image.startsWith('/') ? '' : '/'}${img.image}`;
+}
 
 const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; onClose: () => void }> = ({ images, isOpen, onClose }) => {
   const [page, setPage] = useState(0);
@@ -159,13 +171,35 @@ export const LibrarySectionCarousel: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [activeIdx, setActiveIdx] = useState(0);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const carouselStyle = useCarouselStyle();
+
+  // Dynamic images from backend — falls back to static if DB is empty
+  const [sectionImages, setSectionImages] = useState<GalleryModalItem[]>(STATIC_FALLBACK_IMAGES);
+
+  useEffect(() => {
+    galleryApi.getAllImages()
+      .then((data: GalleryImage[]) => {
+        const activeImages = data.filter(img => img.is_active);
+        if (activeImages.length > 0) {
+          setSectionImages(
+            activeImages.map(img => ({
+              src: resolveImageSrc(img),
+              label: img.section_label || img.title || 'Library Section',
+            }))
+          );
+        }
+        // If no active images from DB, static fallback remains
+      })
+      .catch(() => {
+        // Silently keep static fallback images
+      });
+  }, []);
 
   const goTo = useCallback((idx: number) => {
     const len = sectionImages.length;
     const wrapped = ((idx % len) + len) % len;
     setActiveIdx(wrapped);
-    document.body.style.backgroundImage = `url('${sectionImages[wrapped].src}')`;
-  }, []);
+  }, [sectionImages.length]);
 
   const prev = useCallback(() => goTo(activeIdx - 1), [goTo, activeIdx]);
   const next = useCallback(() => goTo(activeIdx + 1), [goTo, activeIdx]);
@@ -174,10 +208,6 @@ export const LibrarySectionCarousel: React.FC = () => {
     const id = setInterval(next, 5000);
     return () => clearInterval(id);
   }, [next]);
-
-  useEffect(() => {
-    return () => { document.body.style.backgroundImage = ''; };
-  }, []);
 
   const getPosition = (idx: number): 'active' | 'right' | 'left' | 'far-right' | 'far-left' | 'hidden' => {
     const len = sectionImages.length;
@@ -203,11 +233,28 @@ export const LibrarySectionCarousel: React.FC = () => {
         </div>
 
         <div className="p-6 md:p-10 bg-transparent">
-          <div className="relative w-full max-w-5xl mx-auto flex items-center justify-center">
-            {/* Nav Left */}
-            <button className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-50" onClick={prev} aria-label="Previous section picture">
-              <span className="material-symbols-outlined">chevron_left</span>
-            </button>
+          {carouselStyle === 'classic' ? (
+            <>
+              <ClassicHorizontalCarousel
+                items={sectionImages.map(img => ({ src: img.src, label: img.label }))}
+                onCardClick={(_, idx) => setGalleryOpen(true)}
+              />
+              <div className="flex justify-center mt-6 relative z-40">
+                <button
+                  onClick={() => setGalleryOpen(true)}
+                  className="bg-gold-light text-primary px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-gold-pale hover:scale-105 transition-all shadow-lg cursor-pointer border-none"
+                >
+                  View All List
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="relative w-full max-w-5xl mx-auto flex items-center justify-center">
+                {/* Nav Left */}
+                <button className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-50" onClick={prev} aria-label="Previous section picture">
+                  <span className="material-symbols-outlined">chevron_left</span>
+                </button>
 
             <div className="carousel-3d-stage relative min-h-[450px] md:min-h-[550px] w-full">
               {sectionImages.map((img, idx) => {
@@ -253,33 +300,35 @@ export const LibrarySectionCarousel: React.FC = () => {
             <button className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-50" onClick={next} aria-label="Next section picture">
               <span className="material-symbols-outlined">chevron_right</span>
             </button>
-          </div>
+              </div>
 
-          <div className="flex items-center justify-center gap-2 mt-8 relative z-40">
-            {sectionImages.map((_, idx) => (
-              <button
-                key={idx}
-                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-                  idx === activeIdx ? 'bg-gold-light w-6' : 'bg-white/40 hover:bg-white/60'
-                }`}
-                onClick={() => goTo(idx)}
-                aria-label={`Go to ${sectionImages[idx].label}`}
-              />
-            ))}
-          </div>
+              <div className="flex items-center justify-center gap-2 mt-8 relative z-40">
+                {sectionImages.map((_, idx) => (
+                  <button
+                    key={idx}
+                    className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                      idx === activeIdx ? 'bg-gold-light w-6' : 'bg-white/40 hover:bg-white/60'
+                    }`}
+                    onClick={() => goTo(idx)}
+                    aria-label={`Go to ${sectionImages[idx].label}`}
+                  />
+                ))}
+              </div>
 
-          <p className="text-center text-sm mt-4 font-bold relative z-40" style={{ color: '#001851' }}>
-            {sectionImages[activeIdx].label}
-          </p>
+              <p className="text-center text-sm mt-4 font-bold relative z-40" style={{ color: '#001851' }}>
+                {sectionImages[activeIdx]?.label}
+              </p>
 
-          <div className="flex justify-center mt-6 relative z-40">
-            <button
-              onClick={() => setGalleryOpen(true)}
-              className="bg-gold-light text-primary px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-gold-pale hover:scale-105 transition-all shadow-lg cursor-pointer border-none"
-            >
-              View All List
-            </button>
-          </div>
+              <div className="flex justify-center mt-6 relative z-40">
+                <button
+                  onClick={() => setGalleryOpen(true)}
+                  className="bg-gold-light text-primary px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-gold-pale hover:scale-105 transition-all shadow-lg cursor-pointer border-none"
+                >
+                  View All List
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
       <GalleryViewModal images={sectionImages} isOpen={galleryOpen} onClose={() => setGalleryOpen(false)} />

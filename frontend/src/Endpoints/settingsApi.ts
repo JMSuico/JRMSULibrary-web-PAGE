@@ -8,6 +8,7 @@ export interface SiteSettings {
   opening_hours_mon_fri: string;
   opening_hours_sat: string;
   opening_hours_sun: string;
+  carousel_style: 'default' | 'classic';
   updated_at?: string;
 }
 

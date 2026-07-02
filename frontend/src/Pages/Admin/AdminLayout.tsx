@@ -78,7 +78,7 @@ export default function AdminLayout() {
 
   return (
     <ToastProvider>
-      <div className="admin-layout relative overflow-hidden bg-gray-50 min-h-screen">
+      <div className="admin-layout relative overflow-x-hidden bg-gray-50 min-h-screen">
         
         {/* Dynamic Background Elements shared across all Admin pages */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0 fixed">
@@ -91,13 +91,14 @@ export default function AdminLayout() {
           mobileOpen={mobileOpen}
           onCloseMobile={handleCloseMobile}
         />
-        <div className={`admin-main ${sidebarCollapsed ? 'sidebar-collapsed' : ''} relative z-10`}>
+        <div className={`admin-main ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
           <AdminTopbar
             pageTitle={pageTitle}
             onToggleSidebar={handleToggleSidebar}
+            user={user}
           />
-          <div className="admin-content relative z-10 bg-transparent">
-            <div className="bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-[#002B7F]/5 border border-white/50 p-6 md:p-8 min-h-[calc(100vh-120px)]">
+          <div className="admin-content bg-transparent">
+            <div className="bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-[#002B7F]/5 border border-white/50 p-6 md:p-8 min-h-[calc(100vh-120px)] relative">
               <Outlet />
             </div>
           </div>

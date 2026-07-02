@@ -119,18 +119,25 @@ export default function CollectionPage() {
   const [loadingResources, setLoadingResources] = useState(false);
   const [onlineViewMode, setOnlineViewMode] = useState<'grid' | 'table'>('grid');
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   useEffect(() => {
     const load = async () => {
       setLoadingResources(true);
+      setErrorMsg(null);
       try {
+        console.log('Fetching Collection resources...');
         const [deps, links] = await Promise.all([
           eresourceApi.getAllDepartments(),
           cmsApi.getAllLinks()
         ]);
+        console.log('Fetched deps:', deps);
+        console.log('Fetched links:', links);
         setDepartments(deps);
         setOnlineLinks(links.filter(l => l.is_active));
-      } catch (e) {
+      } catch (e: any) {
         console.error('Failed to load Collection resources', e);
+        setErrorMsg(e.message || 'Failed to load');
       } finally {
         setLoadingResources(false);
       }
@@ -138,7 +145,7 @@ export default function CollectionPage() {
     load();
   }, []);
 
-  const activeTab = tab === 'local-books' ? 'local-books' : tab === 'online' ? 'online' : 'newly-acquired';
+  const activeTab = tab === 'online' ? 'online' : tab === 'newly-acquired' ? 'newly-acquired' : 'local-books';
   
   const localTree = useMemo(() => mapDepartmentsToTree(departments), [departments]);
   const onlineTree = useMemo(() => mapLinksToTree(onlineLinks), [onlineLinks]);
@@ -189,6 +196,10 @@ export default function CollectionPage() {
               <div className="flex justify-center py-12">
                 <Loader2 className="animate-spin text-gold-light w-8 h-8" />
               </div>
+            ) : errorMsg ? (
+              <div className="text-center text-red-500 py-12">
+                Error: {errorMsg}
+              </div>
             ) : filteredTree.length > 0 ? (
               <TreeView
                 nodes={filteredTree}
@@ -232,6 +243,10 @@ export default function CollectionPage() {
             {loadingResources ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="animate-spin text-gold-light w-8 h-8" />
+              </div>
+            ) : errorMsg ? (
+              <div className="text-center text-red-500 py-12">
+                Error: {errorMsg}
               </div>
             ) : onlineLinks.length > 0 ? (
               <div className="space-y-12">

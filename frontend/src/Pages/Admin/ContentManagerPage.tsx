@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { Save, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
-import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
+import { HtmlSyntaxEditor } from '@/src/Components/Shared/HtmlSyntaxEditor';
 
 export default function ContentManagerPage() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files'>('content');
@@ -13,6 +14,7 @@ export default function ContentManagerPage() {
 
   // Content State
   const [contents, setContents] = useState<PageContent[]>([]);
+  const [editedContents, setEditedContents] = useState<Record<string, string>>({});
   
   // Link State
   const [links, setLinks] = useState<ManagedLink[]>([]);
@@ -24,7 +26,7 @@ export default function ContentManagerPage() {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   useEffect(() => {
     loadData();
@@ -89,20 +91,25 @@ export default function ContentManagerPage() {
   };
 
   const handleDeleteLink = (id: number) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Link',
-      message: 'Are you sure you want to delete this link? This action cannot be undone.',
-      onConfirm: async () => {
+    const linkToDelete = links.find(l => l.id === id);
+    if (!linkToDelete) return;
+
+    triggerDelete(
+      linkToDelete.title,
+      async () => {
         try {
           await cmsApi.deleteLink(id);
-          showToast('Link deleted successfully', 'success');
-          loadData();
         } catch (err: any) {
+          setLinks(prev => [...prev, linkToDelete]);
           showToast(err.message || 'Failed to delete link', 'error');
         }
+      },
+      () => {
+        setLinks(prev => [...prev, linkToDelete]);
+        showToast('Link restoration undone', 'success');
       }
-    });
+    );
+    setLinks(prev => prev.filter(l => l.id !== id));
   };
 
   // --- File Handlers ---
@@ -126,20 +133,25 @@ export default function ContentManagerPage() {
   };
 
   const handleDeleteFile = (id: number) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete File',
-      message: 'Are you sure you want to delete this file? This action cannot be undone.',
-      onConfirm: async () => {
+    const fileToDelete = files.find(f => f.id === id);
+    if (!fileToDelete) return;
+
+    triggerDelete(
+      fileToDelete.title,
+      async () => {
         try {
           await cmsApi.deleteFile(id);
-          showToast('File deleted successfully', 'success');
-          loadData();
         } catch (err: any) {
+          setFiles(prev => [...prev, fileToDelete]);
           showToast(err.message || 'Failed to delete file', 'error');
         }
+      },
+      () => {
+        setFiles(prev => [...prev, fileToDelete]);
+        showToast('File restoration undone', 'success');
       }
-    });
+    );
+    setFiles(prev => prev.filter(f => f.id !== id));
   };
 
   if (loading && contents.length === 0) {
@@ -183,17 +195,22 @@ export default function ContentManagerPage() {
               {contents.map((item) => (
                 <div key={item.id} style={{ border: '1px solid #e5e7eb', padding: '16px', borderRadius: '8px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>{item.title}</h3>
-                  <textarea 
-                    defaultValue={item.content}
-                    id={`content-${item.slug}`}
-                    style={{ width: '100%', height: '100px', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '4px', marginBottom: '12px' }}
-                  />
+                  <div className="mb-3">
+                    <HtmlSyntaxEditor 
+                      value={editedContents[item.slug] ?? item.content} 
+                      onChange={(v) => setEditedContents(prev => ({ ...prev, [item.slug]: v }))}
+                      id={`content-${item.slug}`}
+                    />
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button 
                       className="admin-btn admin-btn--primary flex items-center gap-2"
                       onClick={() => {
-                        const val = (document.getElementById(`content-${item.slug}`) as HTMLTextAreaElement).value;
-                        handleSaveContent(item.slug, val);
+                         let val = editedContents[item.slug] ?? item.content;
+                         if (!val.includes('<p>') && !val.includes('<div>')) {
+                           val = `<p>${val}</p>`;
+                         }
+                         handleSaveContent(item.slug, val);
                       }}
                     >
                       <Save size={16} /> Save Changes
@@ -373,13 +390,34 @@ export default function ContentManagerPage() {
         </div>
       )}
 
-      <ConfirmModal 
-        isOpen={!!confirmModal} 
-        title={confirmModal?.title || ''} 
-        message={confirmModal?.message || ''} 
-        onConfirm={() => confirmModal?.onConfirm()} 
-        onCancel={() => setConfirmModal(null)} 
-      />
+      {/* Undo Delete Toast */}
+      {undoState && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium text-gray-700">{undoState.itemName}</span> has been moved to the recycle bin.</p>
+            </div>
+            <button 
+              onClick={() => cancelDelete()}
+              className="text-sm font-bold text-[#002B7F] hover:text-[#001655] px-2 py-1 bg-blue-50 rounded"
+            >
+              Undo
+            </button>
+          </div>
+          
+          {/* Progress bar */}
+          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-red-500"
+              style={{ 
+                width: `${(undoState.timeLeft / 3000) * 100}%`,
+                transition: 'width 100ms linear'
+              }}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

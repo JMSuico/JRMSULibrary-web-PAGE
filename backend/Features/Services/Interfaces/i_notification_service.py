@@ -15,3 +15,10 @@ class INotificationService(ABC):
         Returns a dict with keys: notifications, unread_count, total_visits.
         """
         pass
+
+    @abstractmethod
+    def mark_all_read(self) -> None:
+        """
+        Mark all unread notifications as read.
+        """
+        pass

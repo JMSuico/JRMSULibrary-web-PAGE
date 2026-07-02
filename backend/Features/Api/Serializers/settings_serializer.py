@@ -15,6 +15,7 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
             'opening_hours_mon_fri',
             'opening_hours_sat',
             'opening_hours_sun',
+            'carousel_style',
             'updated_at'
         ]
         read_only_fields = ['updated_at']

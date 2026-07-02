@@ -35,14 +35,20 @@ class EResourceDepartmentSerializer(serializers.ModelSerializer):
         return EResourceDepartmentSerializer(obj.children.all(), many=True).data
 
     def get_files(self, obj):
-        files = obj.files.filter(is_active=True)
-        return EResourceFileSerializer(files, many=True).data
+        # Admin (authenticated) sees all files; public sees only active ones
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            files = obj.files.all().order_by('name')
+        else:
+            files = obj.files.filter(is_active=True).order_by('name')
+        return EResourceFileSerializer(files, many=True, context=self.context).data
 
 
 class EResourceFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = EResourceFile
-        fields = ['id', 'name', 'file', 'department', 'is_active']
+        fields = ['id', 'name', 'file', 'department', 'is_active', 'created_at']
+        read_only_fields = ['created_at']
 
 
 class PageContentSerializer(serializers.ModelSerializer):

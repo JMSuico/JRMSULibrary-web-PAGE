@@ -50,7 +50,7 @@ export default function DashboardPage() {
 
   if (loading || !data) return <div className="p-8 text-center text-gray-500">Loading Dashboard...</div>;
 
-  const weeklyVisitors = data.visitors_data.reduce((sum, d) => sum + d.visitors, 0);
+  const weeklyVisitors = (data.trend_data ?? []).reduce((sum, d) => sum + d.visits, 0);
 
   const MOCK_METRICS = [
     { label: 'Total Books', value: data.total_books, icon: <BookOpen size={22} />, variant: 'navy' as const },
@@ -128,7 +128,7 @@ export default function DashboardPage() {
           </div>
           <div style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.visitors_data.slice().reverse()} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <BarChart data={(data.trend_data ?? []).slice().reverse()} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
@@ -137,7 +137,7 @@ export default function DashboardPage() {
                   cursor={{ fill: '#f3f4f6' }}
                 />
                 <Bar 
-                  dataKey="visitors" 
+                  dataKey="visits" 
                   fill="#C9A84C" 
                   radius={[4, 4, 0, 0]} 
                   barSize={40}

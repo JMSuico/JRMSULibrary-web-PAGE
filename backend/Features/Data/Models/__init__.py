@@ -14,6 +14,7 @@ from .acquisition_batch_model import AcquisitionBatch
 from .batch_history_model import BatchHistory
 from .site_settings_model import SiteSettings
 from .recycle_bin_model import RecycleBin
+from .generated_report_model import GeneratedReport
 
 __all__ = [
     'Account',
@@ -33,4 +34,5 @@ __all__ = [
     'BatchHistory',
     'SiteSettings',
     'RecycleBin',
+    'GeneratedReport',
 ]

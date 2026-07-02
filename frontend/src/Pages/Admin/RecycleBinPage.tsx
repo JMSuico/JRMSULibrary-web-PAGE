@@ -92,6 +92,7 @@ export default function RecycleBinPage() {
               <option value="ALL">All Modules</option>
               <option value="BOOKS">Books</option>
               <option value="GALLERY">Sections</option>
+              <option value="BATCH">Batches (Newly Acquired)</option>
             </select>
           </div>
         </div>
@@ -126,9 +127,13 @@ export default function RecycleBinPage() {
                     </td>
                     <td>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                        item.source_module === 'BOOKS' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                        item.source_module === 'BOOKS'
+                          ? 'bg-blue-100 text-blue-800'
+                          : item.source_module === 'BATCH'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-purple-100 text-purple-800'
                       }`}>
-                        {item.source_module.toLowerCase()}
+                        {item.source_module === 'BATCH' ? 'Batch' : item.source_module.toLowerCase()}
                       </span>
                     </td>
                     <td>

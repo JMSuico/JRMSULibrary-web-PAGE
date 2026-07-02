@@ -13,9 +13,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
-import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { contactApi, ContactMessage } from '@/src/Endpoints/contactApi';
+import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
@@ -102,7 +102,7 @@ export default function EmailMessagePage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File, id?: string }[] } | null>(null);
   const [bulkReplyModal, setBulkReplyModal] = useState<{ body: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<{ id: number, action: string } | null>(null);
@@ -224,62 +224,73 @@ export default function EmailMessagePage() {
   };
 
   const deleteMessage = (id: number) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Message',
-      message: 'Are you sure you want to permanently delete this message? This action cannot be undone.',
-      onConfirm: async () => {
+    const msgToDelete = messages.find(m => m.id === id);
+    if (!msgToDelete) return;
+
+    triggerDelete(
+      msgToDelete.subject || `Message from ${msgToDelete.email}`,
+      async () => {
         try {
           await contactApi.deleteMessage(id);
-          showToast('Message deleted', 'success');
-          fetchMessages();
           if (selectedIds.has(id)) {
             const newSet = new Set(selectedIds);
             newSet.delete(id);
             setSelectedIds(newSet);
           }
         } catch (err: any) {
+          setMessages(prev => [...prev, msgToDelete]);
           showToast(err.message || 'Failed to delete message', 'error');
         }
+      },
+      () => {
+        setMessages(prev => [...prev, msgToDelete]);
+        showToast('Message restoration undone', 'success');
       }
-    });
+    );
+
+    // Optimistic delete
+    setMessages(prev => prev.filter(m => m.id !== id));
   };
 
   const handleBulkAction = async (action: ContactMessage['status'] | 'DELETE') => {
     if (selectedIds.size === 0) return;
     
     if (action === 'DELETE') {
-      setConfirmModal({
-        isOpen: true,
-        title: 'Bulk Delete',
-        message: `Are you sure you want to permanently delete ${selectedIds.size} messages?`,
-        onConfirm: async () => {
+      const msgsToDelete = messages.filter(m => selectedIds.has(m.id));
+      if (msgsToDelete.length === 0) return;
+
+      triggerDelete(
+        `${msgsToDelete.length} messages`,
+        async () => {
           try {
-            setLoading(true);
             await Promise.all(Array.from<number>(selectedIds).map(id => contactApi.deleteMessage(id)));
-            showToast(`Bulk action completed for ${selectedIds.size} messages`, 'success');
             setSelectedIds(new Set());
-            fetchMessages();
           } catch (err: any) {
-            showToast(err.message || 'Failed to perform bulk action', 'error');
-            setLoading(false);
+            setMessages(prev => [...prev, ...msgsToDelete]);
+            showToast(err.message || 'Failed to perform bulk delete', 'error');
           }
+        },
+        () => {
+          setMessages(prev => [...prev, ...msgsToDelete]);
+          showToast('Bulk deletion undone', 'success');
         }
-      });
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      await Promise.all(
-        Array.from<number>(selectedIds).map(id => contactApi.updateMessageStatus(id, action))
       );
-      showToast(`Bulk action completed for ${selectedIds.size} messages`, 'success');
-      setSelectedIds(new Set());
-      fetchMessages();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to perform bulk action', 'error');
-      setLoading(false);
+
+      // Optimistic bulk delete
+      setMessages(prev => prev.filter(m => !selectedIds.has(m.id)));
+    } else {
+      try {
+        setLoading(true);
+        await Promise.all(
+          Array.from<number>(selectedIds).map(id => contactApi.updateMessageStatus(id, action))
+        );
+        showToast(`Bulk action completed for ${selectedIds.size} messages`, 'success');
+        setSelectedIds(new Set());
+        fetchMessages();
+      } catch (err: any) {
+        showToast(err.message || 'Failed to perform bulk action', 'error');
+        setLoading(false);
+      }
     }
   };
 
@@ -580,14 +591,6 @@ export default function EmailMessagePage() {
         )}
       </div>
 
-      <ConfirmModal 
-        isOpen={!!confirmModal} 
-        title={confirmModal?.title || ''} 
-        message={confirmModal?.message || ''} 
-        onConfirm={() => confirmModal?.onConfirm()} 
-        onCancel={() => setConfirmModal(null)} 
-      />
-
       {/* SMTP Reply Modal */}
       {replyModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !isSendingReply && setReplyModal(null)}>
@@ -796,6 +799,34 @@ export default function EmailMessagePage() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Undo Delete Toast */}
+      {undoState && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium text-gray-700">{undoState.itemName}</span> has been moved to the recycle bin.</p>
+            </div>
+            <button 
+              onClick={() => cancelDelete()}
+              className="text-sm font-bold text-[#002B7F] hover:text-[#001655] px-2 py-1 bg-blue-50 rounded"
+            >
+              Undo
+            </button>
+          </div>
+          
+          {/* Progress bar */}
+          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-red-500"
+              style={{ 
+                width: `${(undoState.timeLeft / 3000) * 100}%`,
+                transition: 'width 100ms linear'
+              }}
+            />
           </div>
         </div>
       )}

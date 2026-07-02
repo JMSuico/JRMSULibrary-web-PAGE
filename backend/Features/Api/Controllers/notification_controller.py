@@ -23,3 +23,9 @@ class NotificationViewSet(viewsets.ViewSet):
         """Return all current notifications aggregated from system data."""
         data = self.service.get_all_notifications()
         return Response(data)
+
+    @action(detail=False, methods=['post'], url_path='mark-all-read')
+    def mark_all_read(self, request):
+        """Mark all notifications as read."""
+        self.service.mark_all_read()
+        return Response({"success": True, "message": "All notifications marked as read."})

@@ -3,13 +3,15 @@ import {
   Bell, Menu, X, LogOut, Users, TrendingUp, Mail, Send, Calendar, Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { userApi } from '@/src/Endpoints/userApi';
+import { userApi, User } from '@/src/Endpoints/userApi';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { notificationApi, Notification } from '@/src/Endpoints/notificationApi';
+import { NotificationDetailModal } from '@/src/Components/Modals/NotificationDetailModal';
 
 interface AdminTopbarProps {
   pageTitle: string;
   onToggleSidebar: () => void;
+  user?: User | null;
 }
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -36,15 +38,19 @@ const DOT_MAP: Record<string, string> = {
   purple: 'bg-purple-500',
 };
 
-export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
+export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [totalVisits, setTotalVisits] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [readIds, setReadIds] = useState<Set<number>>(new Set());
+  const [filterMode, setFilterMode] = useState<'all' | 'unread'>('all');
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  
   const panelRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const fetchNotifications = useCallback(async () => {
@@ -53,15 +59,13 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
       const data = await notificationApi.getAll();
       setNotifications(data.notifications);
       setTotalVisits(data.total_visits);
-      // Unread = server unread minus locally marked-as-read
-      const serverUnread = data.notifications.filter(n => !n.read && !readIds.has(n.id));
-      setUnreadCount(serverUnread.length);
+      setUnreadCount(data.unread_count);
     } catch (err) {
       console.error('Failed to load notifications', err);
     } finally {
       setLoading(false);
     }
-  }, [readIds]);
+  }, []);
 
   // Fetch on mount, then poll every 60 seconds
   useEffect(() => {
@@ -76,6 +80,9 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setShowNotifications(false);
       }
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setShowProfile(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -83,11 +90,16 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
 
   const handleOpenPanel = () => {
     setShowNotifications(v => !v);
-    if (!showNotifications) {
-      // Mark all visible unread as read locally
-      const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
-      setReadIds(prev => new Set([...prev, ...unreadIds]));
+  };
+
+  const handleMarkAllRead = async () => {
+    if (unreadCount === 0) return;
+    try {
+      await notificationApi.markAllRead();
       setUnreadCount(0);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (err) {
+      console.error('Failed to mark notifications as read', err);
     }
   };
 
@@ -135,7 +147,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
           {/* Notification Dropdown */}
           {showNotifications && (
             <div
-              className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
+              className="fixed right-4 md:right-6 top-[68px] w-[calc(100vw-32px)] md:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
               style={{ animation: 'fadeInDown 0.15s ease-out' }}
               role="dialog"
               aria-modal="true"
@@ -153,9 +165,20 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-white/60">
-                    {totalVisits.toLocaleString()} total visits
-                  </span>
+                  <div className="flex bg-black/20 rounded-lg p-0.5 mr-2">
+                    <button 
+                      onClick={() => setFilterMode('all')}
+                      className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md transition-colors ${filterMode === 'all' ? 'bg-white text-[#002B7F]' : 'text-white hover:bg-white/10'}`}
+                    >
+                      All
+                    </button>
+                    <button 
+                      onClick={() => setFilterMode('unread')}
+                      className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md transition-colors ${filterMode === 'unread' ? 'bg-white text-[#002B7F]' : 'text-white hover:bg-white/10'}`}
+                    >
+                      Unread
+                    </button>
+                  </div>
                   <button
                     onClick={() => setShowNotifications(false)}
                     className="text-white/60 hover:text-white transition-colors cursor-pointer"
@@ -167,23 +190,30 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
               </div>
 
               {/* Body */}
-              <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50">
+              <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-400">
                 {loading ? (
                   <div className="flex justify-center items-center py-12">
                     <Loader2 size={20} className="animate-spin text-[#002B7F]" />
                   </div>
-                ) : notifications.length === 0 ? (
+                ) : notifications.filter(n => filterMode === 'all' ? true : !n.read).length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
                     <Bell size={28} className="opacity-30" />
-                    <p className="text-sm">No notifications yet</p>
+                    <p className="text-sm">No {filterMode === 'unread' ? 'unread ' : ''}notifications yet</p>
                   </div>
                 ) : (
-                  notifications.map(n => {
-                    const isRead = n.read || readIds.has(n.id);
+                  notifications.filter(n => filterMode === 'all' ? true : !n.read).map(n => {
+                    const isRead = n.read;
                     return (
                       <div
                         key={n.id}
-                        className={`flex items-start gap-3 px-4 py-3 transition-colors cursor-default ${isRead ? 'bg-white' : 'bg-blue-50/40'} hover:bg-gray-50`}
+                        onClick={() => {
+                          setSelectedNotification(n);
+                          if (!isRead) {
+                            setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
+                            setUnreadCount(prev => Math.max(0, prev - 1));
+                          }
+                        }}
+                        className={`flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer ${isRead ? 'bg-white' : 'bg-blue-50/40'} hover:bg-gray-50`}
                       >
                         {/* Icon badge */}
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${COLOR_MAP[n.color]}`}>
@@ -200,7 +230,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
                               <span className={`w-2 h-2 rounded-full shrink-0 mt-1 ${DOT_MAP[n.color]}`} />
                             )}
                           </div>
-                          <p className="text-xs text-gray-500 mt-0.5 leading-snug">{n.body}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 leading-snug truncate">{n.body}</p>
                           {n.time_ago && (
                             <p className="text-[11px] text-[#002B7F]/70 mt-1 font-medium">{n.time_ago}</p>
                           )}
@@ -213,20 +243,74 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
 
               {/* Footer */}
               <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
-                <button
-                  onClick={fetchNotifications}
-                  className="text-xs text-[#002B7F] font-semibold hover:underline cursor-pointer"
-                >
-                  Refresh
-                </button>
-                <span className="text-[11px] text-gray-400">{notifications.length} notification{notifications.length !== 1 ? 's' : ''}</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={fetchNotifications}
+                    className="text-xs text-[#002B7F] font-semibold hover:underline cursor-pointer border-none bg-transparent"
+                  >
+                    Refresh
+                  </button>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-xs text-gray-500 font-medium hover:text-gray-700 cursor-pointer border-none bg-transparent"
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] text-gray-400">{totalVisits.toLocaleString()} site visits</span>
               </div>
             </div>
           )}
         </div>
 
-        <div className="admin-topbar__avatar" aria-label="Admin user">
-          A
+        <div className="relative" ref={profileRef}>
+          <button 
+            className="admin-topbar__avatar border-none outline-none cursor-pointer overflow-hidden p-0 flex items-center justify-center bg-[#002B7F] text-white font-bold" 
+            aria-label="Admin user"
+            onClick={() => setShowProfile(!showProfile)}
+          >
+            {user?.avatar_url ? (
+              <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-sm">{user?.first_name?.[0]?.toUpperCase() || 'A'}</span>
+            )}
+          </button>
+          
+          {showProfile && user && (
+            <div 
+              className="absolute right-0 top-[48px] w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col items-center p-5"
+              style={{ animation: 'fadeInDown 0.15s ease-out' }}
+            >
+              <div className="w-20 h-20 rounded-full bg-[#002B7F] text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden">
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  user.first_name?.[0]?.toUpperCase() || 'A'
+                )}
+              </div>
+              <h3 className="font-bold text-gray-900 text-lg">{user.first_name} {user.last_name}</h3>
+              <p className="text-xs text-gray-500 mb-4">{user.email}</p>
+              <div className="w-full border-t border-gray-100 pt-3 flex gap-2">
+                <button
+                  onClick={() => {
+                    navigate('/admin/settings');
+                    setShowProfile(false);
+                  }}
+                  className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-[#002B7F] text-sm font-semibold rounded-lg transition-colors border border-gray-200 cursor-pointer"
+                >
+                  Profile
+                </button>
+                <button
+                  onClick={() => setLogoutModalOpen(true)}
+                  className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold rounded-lg transition-colors border border-red-100 cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <button
@@ -244,6 +328,12 @@ export function AdminTopbar({ pageTitle, onToggleSidebar }: AdminTopbarProps) {
         message="Do you want to Logout?"
         onConfirm={handleLogout}
         onCancel={() => setLogoutModalOpen(false)}
+      />
+
+      <NotificationDetailModal 
+        notification={selectedNotification}
+        isOpen={selectedNotification !== null}
+        onClose={() => setSelectedNotification(null)}
       />
     </header>
   );

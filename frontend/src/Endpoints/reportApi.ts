@@ -26,9 +26,10 @@ export interface ReportSummary {
     name: string;
     date: string;
   }[];
-  visitors_data: {
+  trend_data: {
     name: string;
-    visitors: number;
+    visits: number;
+    books: number;
   }[];
   recent_books: {
     id: number;
@@ -39,9 +40,34 @@ export interface ReportSummary {
   }[];
 }
 
+export interface HistoricalReport {
+  id: number;
+  title: string;
+  report_type: string;
+  date_range: string;
+  generated_at: string;
+  generated_by: string;
+}
+
+export interface HistoricalReportDetail extends HistoricalReport {
+  data: ReportSummary;
+}
+
 export const reportApi = {
-  getSummary: async (): Promise<ReportSummary> => {
-    return apiClient(`/reports/summary/`);
+  getSummary: async (reportType: string = 'summary', dateRange: string = 'this-month'): Promise<ReportSummary> => {
+    return apiClient(`/reports/summary/?type=${reportType}&dateRange=${dateRange}`);
+  },
+  generate: async (reportType: string = 'summary', dateRange: string = 'this-month', title?: string): Promise<{message: string, report_id: number, data: ReportSummary}> => {
+    return apiClient('/reports/generate/', {
+      method: 'POST',
+      body: JSON.stringify({ type: reportType, dateRange, title })
+    });
+  },
+  getHistory: async (search: string = '', limit: number = 10, offset: number = 0): Promise<{total: number, results: HistoricalReport[]}> => {
+    return apiClient(`/reports/history/?search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`);
+  },
+  getHistoryDetail: async (id: number): Promise<HistoricalReportDetail> => {
+    return apiClient(`/reports/${id}/history_detail/`);
   }
 };
 
