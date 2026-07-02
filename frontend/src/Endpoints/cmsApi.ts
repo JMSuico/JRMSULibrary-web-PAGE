@@ -11,12 +11,11 @@ export interface PageContent {
 
 export interface ManagedLink {
   id: number;
-  label: string;
+  category: string;  // maps to backend 'category' field (previously 'group')
+  name: string;      // maps to backend 'name' field (previously 'label')
   url: string;
-  group: string;
   order: number;
   is_active: boolean;
-  created_at: string;
 }
 
 export interface ManagedFile {
@@ -61,15 +60,24 @@ export const cmsApi = {
 
   // Managed Files
   getAllFiles: async (): Promise<ManagedFile[]> => {
-    return apiClient(`/files/`);
+    return apiClient(`/managed-files/`);
   },
   createFile: async (data: FormData): Promise<ManagedFile> => {
-    return apiClient(`/files/`, {
+    return apiClient(`/managed-files/`, {
       method: 'POST',
       body: data,
     });
   },
   deleteFile: async (id: number): Promise<void> => {
-    return apiClient(`/files/${id}/`, { method: 'DELETE' });
+    return apiClient(`/managed-files/${id}/`, { method: 'DELETE' });
+  },
+};
+
+// Public endpoint — no auth required
+export const publicApi = {
+  getVisitorCount: async (): Promise<{ total_visits: number; this_week: number }> => {
+    const resp = await fetch('/api/site-visits/count/');
+    if (!resp.ok) throw new Error('Failed to fetch visitor count');
+    return resp.json();
   },
 };

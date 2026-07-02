@@ -83,12 +83,33 @@ def is_email_domain_valid(email: str) -> bool:
         return False
 
 
+def _send_with_retry(email_message, max_retries=2):
+    """
+    Send an email with retry logic.
+    We let Django manage the connection lifecycle (open/close) automatically per send 
+    to avoid 'Server not connected' stale connection errors when sending large attachments.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            email_message.send(fail_silently=False)
+            return True
+        except Exception as e:
+            logger.warning(f"SMTP send attempt {attempt + 1} failed: {e}")
+            # Clear the stale connection so Django creates a fresh one on the next attempt
+            email_message.connection = None
+            if attempt == max_retries:
+                raise
+    return False
+
+
+# Maximum attachment size: 10 MB
+MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
+
+
 def send_reply_email(to_email: str, to_name: str, subject: str, reply_body: str) -> bool:
     """
     Sends a reply email from the library's official email address to a user.
-    Returns True on success, False on failure.
-
-    Uses Django's EmailMessage to support HTML-like formatting in the body.
+    Uses retry logic for reliability.
     """
     try:
         full_subject = f"[JRMSU-KC Library] Re: {subject}"
@@ -115,11 +136,114 @@ Please do not reply to this email with sensitive personal information.
             to=[to_email],
             reply_to=[settings.EMAIL_HOST_USER],
         )
-        email.send(fail_silently=False)
+        _send_with_retry(email)
         logger.info(f"Reply email sent to {to_email} regarding '{subject}'")
         return True
     except Exception as e:
         logger.error(f"Failed to send reply email to {to_email}: {e}")
+        return False
+
+def send_reply_with_attachments(to_email: str, to_name: str, subject: str, reply_body: str, file_entries: list) -> bool:
+    """
+    Sends a reply email with attached files from the staging area.
+    Uses retry logic and validates file sizes up to 25MB.
+    
+    file_entries: list of dicts with 'id' (UUID filename on disk) and 'name' (original filename).
+                  Also accepts plain strings for backward compatibility.
+    """
+    import os
+    import mimetypes
+    try:
+        full_subject = f"[JRMSU-KC Library] Re: {subject}"
+        body = f"Dear {to_name},\n\nThank you for reaching out.\n\n{reply_body}\n\n---\nJRMSU Katipunan Campus Library\nThis is an official reply. Please do not reply with sensitive info."
+        email = EmailMessage(
+            subject=full_subject,
+            body=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[to_email],
+            reply_to=[settings.EMAIL_HOST_USER],
+        )
+        
+        # Resolve MEDIA_ROOT to a plain string for Windows path safety
+        media_root = str(settings.MEDIA_ROOT)
+        temp_dir = os.path.join(media_root, 'temp_attachments')
+        
+        attachment_paths = []
+        for entry in file_entries:
+            # Support both dict format {id, name} and plain string format
+            if isinstance(entry, dict):
+                fid = entry.get('id', '')
+                original_name = entry.get('name', fid)
+            else:
+                fid = str(entry)
+                original_name = fid
+            
+            path = os.path.join(temp_dir, os.path.basename(fid))
+            logger.info(f"[ATTACH] Looking for file: {path} | exists={os.path.exists(path)}")
+            
+            if os.path.exists(path):
+                file_size = os.path.getsize(path)
+                if file_size > MAX_ATTACHMENT_SIZE:
+                    logger.warning(f"Skipping attachment {fid}: {file_size} bytes exceeds 10MB limit")
+                    continue
+                    
+                # Read file content and attach with original filename
+                mimetype, _ = mimetypes.guess_type(original_name)
+                if not mimetype:
+                    mimetype = 'application/octet-stream'
+                with open(path, 'rb') as f:
+                    content = f.read()
+                email.attach(original_name, content, mimetype)
+                attachment_paths.append(path)
+                logger.info(f"[ATTACH] Attached '{original_name}' ({file_size} bytes, {mimetype})")
+            else:
+                logger.error(f"[ATTACH] File NOT FOUND at path: {path}")
+                # List contents of temp_dir for debugging
+                if os.path.isdir(temp_dir):
+                    logger.error(f"[ATTACH] Files in {temp_dir}: {os.listdir(temp_dir)}")
+                else:
+                    logger.error(f"[ATTACH] Directory does not exist: {temp_dir}")
+                
+        if not attachment_paths:
+            logger.warning(f"[ATTACH] No attachments found for file_entries={file_entries}. Sending text-only.")
+            
+        _send_with_retry(email)
+        
+        # Cleanup temp files after successful send
+        for path in attachment_paths:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+                
+        logger.info(f"Reply email with {len(attachment_paths)} attachment(s) sent to {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send reply with attachments to {to_email}: {e}")
+        return False
+
+def send_approval_email(to_email: str, to_name: str, subject: str) -> bool:
+    """Sends reservation approval email."""
+    try:
+        full_subject = f"[JRMSU-KC Library] Reservation Approved: {subject}"
+        body = f"Dear {to_name},\n\nYour library reservation request for '{subject}' has been APPROVED.\n\nPlease arrive on time and present this email or your ID to the library staff.\n\n---\nJRMSU Katipunan Campus Library"
+        email = EmailMessage(subject=full_subject, body=body, from_email=settings.DEFAULT_FROM_EMAIL, to=[to_email], reply_to=[settings.EMAIL_HOST_USER])
+        _send_with_retry(email)
+        return True
+    except Exception as e:
+        logger.error(f"Approval email failed for {to_email}: {e}")
+        return False
+
+def send_decline_email(to_email: str, to_name: str, subject: str) -> bool:
+    """Sends reservation decline email."""
+    try:
+        full_subject = f"[JRMSU-KC Library] Reservation Declined: {subject}"
+        body = f"Dear {to_name},\n\nWe regret to inform you that your library reservation request for '{subject}' has been DECLINED due to scheduling conflicts or library policies.\n\nIf you have questions, please submit a new inquiry.\n\n---\nJRMSU Katipunan Campus Library"
+        email = EmailMessage(subject=full_subject, body=body, from_email=settings.DEFAULT_FROM_EMAIL, to=[to_email], reply_to=[settings.EMAIL_HOST_USER])
+        _send_with_retry(email)
+        return True
+    except Exception as e:
+        logger.error(f"Decline email failed for {to_email}: {e}")
         return False
 
 

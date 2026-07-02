@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload } from 'lucide-react';
+import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BatchBook } from '@/src/Endpoints/batchApi';
 
 interface BookFormModalProps {
@@ -91,28 +92,19 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Cover Image</label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative hover:bg-gray-50 transition-colors">
-              <div className="space-y-1 text-center">
-                <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600 justify-center">
-                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                    <span>Upload a file</span>
-                    <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        setCoverImage(e.target.files[0]);
-                      }
-                    }} accept="image/*" />
-                  </label>
-                  <p className="pl-1">or drag and drop</p>
-                </div>
-                <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
-                {coverImage && (
-                  <p className="text-sm font-medium text-green-600 mt-2">
-                    Selected: {coverImage.name}
-                  </p>
-                )}
-              </div>
-            </div>
+            <DragDropFileUpload
+              accept="image/*"
+              multiple={false}
+              maxSizeMB={5}
+              onFilesSelected={(files) => setCoverImage(files[0])}
+              label="Click to upload or drag and drop"
+              subLabel="PNG, JPG up to 5MB"
+            />
+            {coverImage && (
+              <p className="text-sm font-medium text-green-600 mt-2">
+                Selected: {coverImage.name}
+              </p>
+            )}
           </div>
           
           <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100">

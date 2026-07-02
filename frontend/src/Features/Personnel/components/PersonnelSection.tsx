@@ -1,9 +1,36 @@
 import React from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { assets } from '@/src/Libs/Assets/data';
+import { cmsApi, PageContent } from '@/src/Endpoints/cmsApi';
+import { Loader2 } from 'lucide-react';
+
+function extractTextBlocksFromHtml(html: string): string[] {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const items = Array.from(doc.querySelectorAll('p'))
+    .map(el => el.textContent?.trim() || '')
+    .filter(text => text.length > 0);
+  if (items.length === 0) return [doc.body.textContent?.trim() || ''];
+  return items;
+}
 
 export const PersonnelSection: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
+  const [personnelContent, setPersonnelContent] = React.useState<PageContent | null>(null);
+
+  React.useEffect(() => {
+    const fetchContent = async () => {
+      try {
+        const contents = await cmsApi.getAllContent();
+        setPersonnelContent(contents.find(c => c.slug === 'personnel_text') || null);
+      } catch (err) {
+        console.error('Failed to load Personnel content', err);
+      }
+    };
+    fetchContent();
+  }, []);
+
+  const textBlocks = personnelContent ? extractTextBlocksFromHtml(personnelContent.content) : [];
 
   return (
     <div id="staff" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
@@ -27,13 +54,13 @@ export const PersonnelSection: React.FC = () => {
                   <div className="flex-1 text-left">
                     <h3 className="text-3xl font-bold font-headline-lg mb-4 text-primary drop-shadow-sm">Librarian's Corner</h3>
                     <p className="italic mb-4 text-white">
-                      From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence.
+                      {textBlocks[0] || "From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence."}
                     </p>
                     <p className="text-sm leading-relaxed mb-4 text-white">
-                      The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University's Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users.
+                      {textBlocks[1] || "The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University's Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users."}
                     </p>
                     <p className="text-sm text-gold-light italic drop-shadow-sm font-medium">
-                      Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!
+                      {textBlocks[2] || "Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!"}
                     </p>
                   </div>
                   

@@ -13,6 +13,8 @@ import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useDebounce } from '@/src/Hooks/useDebounce';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -41,6 +43,8 @@ export default function UserManagementPage() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  useAutoRefresh(fetchUsers, 30000);
 
   const handleDelete = (id: number) => {
     setConfirmModal({
@@ -91,12 +95,14 @@ export default function UserManagementPage() {
     }
   };
 
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
   const filtered = users.filter(
     (u) =>
-      u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.last_name.toLowerCase().includes(searchQuery.toLowerCase())
+      u.username.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      u.email.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      u.first_name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      u.last_name.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
   return (

@@ -12,9 +12,14 @@ import {
   Upload,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
+import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { useToast } from '@/src/Hooks/useToast';
+
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useDebounce } from '@/src/Hooks/useDebounce';
+import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 
 type ViewMode = 'table' | 'grid';
 
@@ -24,6 +29,7 @@ export default function SectionsManagerPage() {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
+  const { undoState, triggerDelete, cancelDelete } = useUndoDelete();
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,19 +55,40 @@ export default function SectionsManagerPage() {
     fetchImages();
   }, []);
 
+  useAutoRefresh(fetchImages, 60000);
+
   const handleDelete = (id: number) => {
+    const imgToDelete = images.find(img => img.id === id);
+    if (!imgToDelete) return;
+
     setConfirmModal({
       isOpen: true,
       title: 'Delete Image',
-      message: 'Are you sure you want to delete this image from the library sections? This action cannot be undone.',
-      onConfirm: async () => {
-        try {
-          await galleryApi.deleteImage(id);
-          showToast('Image deleted successfully', 'success');
-          fetchImages();
-        } catch (err: any) {
-          showToast(err.message || 'Failed to delete image', 'error');
-        }
+      message: 'Are you sure you want to delete this image from the library sections?',
+      onConfirm: () => {
+        triggerDelete(
+          imgToDelete.title,
+          async () => {
+            // Actual delete action
+            try {
+              await galleryApi.deleteImage(id);
+              showToast('Image permanently deleted', 'success');
+            } catch (err: any) {
+              // Revert optimistic delete
+              setImages(prev => [...prev, imgToDelete]);
+              showToast(err.message || 'Failed to delete image', 'error');
+            }
+          },
+          () => {
+            // Undo logic
+            setImages(prev => [...prev, imgToDelete]);
+            showToast('Deletion undone', 'success');
+          }
+        );
+
+        // Optimistic delete
+        setImages(prev => prev.filter(img => img.id !== id));
+        setConfirmModal(null);
       }
     });
   };
@@ -117,10 +144,12 @@ export default function SectionsManagerPage() {
     }
   };
 
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
   const filtered = images.filter(
     (img) =>
-      img.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      img.section_label.toLowerCase().includes(searchQuery.toLowerCase())
+      img.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      img.section_label.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
   const activeCount = images.filter((i) => i.is_active).length;
@@ -311,28 +340,29 @@ export default function SectionsManagerPage() {
                   <label className="block text-xs font-semibold text-gray-700 mb-2">
                     Image {editingImage ? '(Leave blank to keep current)' : '*'}
                   </label>
-                  <div
-                    className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden cursor-pointer hover:border-[#002B7F] transition-colors"
-                    style={{ minHeight: 150 }}
-                    onClick={() => document.getElementById('image-file-input')?.click()}
+                  <DragDropFileUpload
+                    accept="image/*"
+                    multiple={false}
+                    maxSizeMB={5}
+                    onFilesSelected={(files) => {
+                      const file = files[0];
+                      const event = {
+                        target: { files: [file] }
+                      } as unknown as React.ChangeEvent<HTMLInputElement>;
+                      handleFileChange(event);
+                    }}
+                    className="p-0"
                   >
                     {previewUrl ? (
                       <img src={previewUrl} alt="Preview" style={{ width: '100%', height: 160, objectFit: 'cover' }} />
                     ) : (
                       <div className="flex flex-col items-center justify-center h-36 gap-2 text-gray-400">
                         <Upload size={28} />
-                        <span className="text-sm">Click to upload image</span>
+                        <span className="text-sm">Click to upload image or drag and drop</span>
+                        <span className="text-xs text-gray-500">Max 5MB</span>
                       </div>
                     )}
-                  </div>
-                  <input
-                    id="image-file-input"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
-                    required={!editingImage}
-                  />
+                  </DragDropFileUpload>
                 </div>
 
                 <div>
@@ -387,6 +417,30 @@ export default function SectionsManagerPage() {
                 {isSaving ? 'Saving...' : editingImage ? 'Update Image' : 'Upload Image'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo Delete Toast */}
+      {undoState && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
+            </div>
+            <button
+              onClick={cancelDelete}
+              className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors"
+            >
+              Undo
+            </button>
+          </div>
+          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className="bg-gray-400 h-full transition-all ease-linear"
+              style={{ width: `${(undoState.countdown / 15) * 100}%`, transitionDuration: '1s' }}
+            />
           </div>
         </div>
       )}

@@ -1,108 +1,94 @@
-issue found in the admin and the backend 
-NOTE: work it and make it functional as realtime or real production. ADD CRUD FUNCTIONALITIES AND RATE LIMITS
-
-issues1:
-in the admin page all ui, modules, components, and function are not implement the responsiveness for any devices add it. and also add the fluid responsiveness function see the picture 1
-
-issues2:
-in the Newly Acquired Books modules issues found cant add New batch alert says "Failed to create batch"
-add function that can add batch, view batch, delete batch, and edit batch functions then connect it to the api/backend and database along with the ui functions
-
-add also floating modal card to state as alert or cautions
-
-issues3:
-in the Library sections modules issues found cant add or upload new image of books, alerts says "An error occurred: Failed to create image"
-add function that can add new image of books, view new image of books, delete new image of books, and edit new image of books functions then connect it to the api/backend and database along with the ui functions
-
-add also floating modal card to state as alert or cautions
-
-issues4:
-in the content manager issues found 
-in the page text content cant edit 
-
-add function that can add new text content, view new text contenttext content, delete text content, and edit text content functions then connect it to the api/backend and database along with the ui functions
-
-add also floating modal card to state as alert or cautions
-
-in the External links cant add link/s, alert says "Failed to save link."
-
-add function that can add new External links, view External links, delete External links, and edit External links functions then connect it to the api/backend and database along with the ui functions
-
-add also floating modal card to state as alert or cautions
-
-in the Downloadable files cant add upload file/s, alerts says "Failed to upload file."
-
-add function that can add new Downloadable files, view Downloadable files, delete Downloadable files, and edit Downloadable files functions then connect it to the api/backend and database along with the ui functions
-
-add also floating modal card to state as alert or cautions
-
-issues5:
-in the E-Resources issues found
-cant add folder or files in the departments, alert says "Failed to save department."
-
-add function that can add new folder or files in the departments, view folder or files in the departments, delete folder or files in the departments, and edit folder or files in the departments functions then connect it to the api/backend and database along with the ui functions
-
-add also floating modal card to state as alert or cautions
-
-issues6:
-in the Email & Reservations issues found
-cant received messages, cant even send messages, and delete messages, cant view and edit messages, cant even approve message or decline the message, cant even archive messages
-
-while in the Rizal bubble floating ui in the admin chatbot says "Sorry, there was an error sending your email. Please try again."
-
-add function that can send messages in the Email & Reservations and Rizal Bubble Floating Ui , can receive messages in the Email & Reservations and Rizal Bubble Floating Ui , delete messages in the Email & Reservations and Rizal Bubble Floating Ui , and edit messages in the Email & Reservations and Rizal Bubble Floating Ui, can approve or decline messages in the Email & Reservations and Rizal Bubble Floating Ui, can archive messages in the Email & Reservations and Rizal Bubble Floating Ui functions then connect it to the api/backend and database along with the ui functions
-
-add also function if the same user sent multiple message like 10 messages it will automatically batch it by its name of the user like example
-
-user send and email for reservation
-then user send spam or multiple message counted as 10
-it will batch it like this
-
-user 1 (10 new messages sent) 
-if admin saw the rest of the message like 6 messages but the admin didnt saw the new one it will show like
-
-user 1 (4 new messages sent)
-
-add also rate limit or limit rate for 10 sent if the user try to sent again againt limit rate that chatbot will say "You have sent multiple request! Please try again later."
-
-add also floating modal card to state as alert or cautions
 
 
+ISSUES
 
-issues7:
-in the User Management issues found cant add new admins
+PUT THIS (IN THE NAV COLLECTION IN THE ONLINE ACCESS WHICH CLICKABLE LINK TO REDIRECT DISPLAY IN THE MODAL CARD)
 
-add function that can add new admins, view admins, delete admins, and edit admins functions then connect it to the api/backend and database along with the ui functions
-
-add also floating modal card to state as alert or cautions
-
-
-issues8:
-in the dashboard issues found still does not connect to the backend/api, frontend/ui and database/schema
-
-work it and make it functional as realtime or real production.
-If i ask for formulas and logic/algorithms files connect and related, codebase used and variables create a Formulas.md put it here 
-
-
-issues9:
-in the Analytics issues found still does not connect to the backend/api, frontend/ui and database/schema
-
-work it and make it functional as realtime or real production.
-If i ask for formulas and logic/algorithms files connect and related, codebase used and variables create a Formulas.md put it here 
+Open Access Journal
+Agriculture -> https://www.mdpi.com/journal/agriculture
+Lis of Scientific Journal -> https://en.wikipedia.org/wiki/Lists_of_academic_journals
+List of Academic Journal -> https://en.wikipedia.org/wiki/Lists_of_academic_journals
+Worldcat -> https://search.worldcat.org/
+Google Book -> https://books.google.com/?hl=en
+Online Free E-Books -> https://www.free-ebooks.net/
+Gutenberg -> https://www.free-ebooks.net/
+Scribd -> https://www.scribd.com/
+GetFreeEbooks -> https://getfreeebooks.com/
+DOST Publication -> https://www.dost.gov.ph/index.php?option=com_content&task=view&id=712&Itemid=201&appgw_azwaf_jsc=YU_apB7IN_mPNkdEH_BnTZWX6lhlM7xFfn7z7yLstI4
+Highwire Press -> https://www.highwirepress.com/
+IPL Magazines -> https://www.ipl.org/
 
 
-issues10:
-in the Reports generator issues found cant generate reports like excel or csv with charts and graphs summaries and descriptions and lists. then still does not connect to the backend/api, frontend/ui and database/schema
+Resources
+Science Direct -> https://www.sciencedirect.com/
+Philippine Elib -> https://www.elib.gov.ph/
+ERIC Educ. Res. Info. Center -> https://eric.ed.gov/
+Gale Database -> https://link.gale.com/apps/menu?userGroupName=phusm&prodId=MENU
+Philippine E-Journals -> https://ejournals.ph/
+Springer Nature Link -> https://link.springer.com/
+E-Library USA -> https://docs.google.com/forms/d/e/1FAIpQLSdK93TrYAkWrl32xWxlOItfYFTTgUQPY_Ws2ZhxfuVMvojpiA/viewform?fbclid=IwAR07NWjxpHNoE7hV4WL85sW_9xMSLKWsWn5gbpsXCDdEUuVVxt0HAny2GPM
+Seameo-innotech eBooks
+ProQuest
 
-add function to have generate reports like excel or csv with charts and graphs summaries and descriptions and lists.
+Acquired E-Resources
+Bookshelf -> https://www.vitalsource.com/
+Scholaar -> https://scholaar.com/
 
-work it and make it functional as realtime or real production.
-If i ask for formulas and logic/algorithms files connect and related, codebase used and variables create a Formulas.md put it here 
+IN THE NAV COLLECTION -> ONLINE ACCESS PUT TO BE CLICKABLE LINKS BEFORE THE EXISTING UI I IMPLEMENTED WENT MISSING RESTORE IT
+
+IN THE CONTENT MANAGER -> EXTERNAL LINKS  CONNECT IT TO THE IN THE NAV COLLECTION -> ONLINE ACCESS SO THAT ADMIN CAN ADD, EDIT, AND REMOVE LINK 
+
+MAKE SURE ALSO THAT ALL THIS LINK ARE ALSO MIGRATED AND PUT IN THE DATABASE IN ORDER TO BE APPLY CRUDS.
 
 
-issues11:
-in the settings issues found settings cant edit Library Configuration and cant edit Security Settings
+IN THE SERVICES BELOW (REMOVE THIS )
+Downloadable Forms
+No downloadable forms available at this time.
 
-fix it add function to edit Library Configuration and edit Security Settings
-work it and make it functional as realtime or real production.
+IN THE SERVICES BELOW (REMOVE THIS )
+External Links
+No external links available at this time.
 
+EXTERNAL LINK ARE ONLY CONNECT TO THE IN THE NAV COLLECTION -> ONLINE ACCESS SO THAT ADMIN CAN ADD, EDIT, AND REMOVE LINK 
+
+
+PAGE TEXT CONTENT CONNECT TO THE FOLLOWING:
+1. IN THE NAV ABOUT IN THE About the Library (History of JRMSU Katipunan Campus WITH ITS CONTENT) (Quality Objectives WITH ITS CONTENT)
+
+2. IN THE NAV SERVICES IN THE List of Services
+Explore our streamlined processes for borrowing, research, and campus-wide clearances. WITH ITS (Our 17 Library Services WITH ITS CONTENT) (Citizens Charter
+All
+Borrowing
+Returning
+E library
+Clearance WITH ITS CONTENT) 
+
+3. IN THE NAV PERSONNEL IN THE Library Personnel (WITH ITS CONTENT)
+
+CONNECT THEM TO BE EDITABLE BUT THE EXISTING DONT CHANGE OR REMOVE IT MAKE STAY INTACT.
+
+
+
+
+IN THE COLLECTION IN THE LOCAL BOOKS -> EBOOKS AND JOURNALS, THIS FUNCTIONAL AND CONNECT IN THE ADMIN BUT IN THE E-RESOURCES MANAGER IS NOT CONNECT TO THE SYSTEM
+
+
+
+
+connect the E-Resources -> eBooks & Journals
+Browse by department and course let it existing dont change or leave it intact it just display also tree view while it can be APPLY crud in the admin panel IN THE E-RESOURCES MANAGER 
+
+SAME TREE VIEW STRUCTURE DIRECTORY
+C:\Users\provu\Desktop\JRMSU LIBRARY LANDING PAGE\frontend\src\Assets\assets\eBooks\eBooks\Department
+
+START WITH EBOOK -> DEPARTMENTS THEN MIGRATE TO THE DATABASE PUT IN THE DATABASE SO THAT ADMIN CAN EDIT , ADD OR REMOVE IT IN THE admin panel IN THE E-RESOURCES MANAGER 
+
+connect the contenct manager -> page text content to all text content like in the nav About (History of JRMSU Katipunan Campus
+and Quality Objectives) , in the nav List of Services Module (Our 17 Library Services, Citizens Charter
+ -> All
+, Borrowing
+, Returning
+, E library
+, Clearance)
+in the nav Personnel ( Library Personnel ) 
+dont change it or leave it intact

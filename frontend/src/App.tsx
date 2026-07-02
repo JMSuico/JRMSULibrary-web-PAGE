@@ -30,6 +30,7 @@ const UserManagementPage = lazy(() => import('@/src/Pages/Admin/UserManagementPa
 const ReportsPage = lazy(() => import('@/src/Pages/Admin/ReportsPage'));
 const AnalyticsPage = lazy(() => import('@/src/Pages/Admin/AnalyticsPage'));
 const SettingsPage = lazy(() => import('@/src/Pages/Admin/SettingsPage'));
+const RecycleBinPage = lazy(() => import('@/src/Pages/Admin/RecycleBinPage'));
 const LoginPage = lazy(() => import('@/src/Pages/Admin/LoginPage'));
 
 function PublicLayout() {
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="recycle-bin" element={<RecycleBinPage />} />
         </Route>
 
         {/* Public Website Routes */}

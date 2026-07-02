@@ -29,6 +29,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
   if (!file.path) return null;
 
   const isPdf = file.path.toLowerCase().endsWith('.pdf');
+  const isLink = file.path.startsWith('http://') || file.path.startsWith('https://');
 
   return (
     <div
@@ -45,7 +46,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
         {/* Header */}
         <div className="bg-gradient-to-r from-[#1e3a8a] to-[#2563eb] text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="material-symbols-outlined">description</span>
+            <span className="material-symbols-outlined">{isLink ? 'link' : 'description'}</span>
             <span className="font-medium truncate text-sm">{file.name}</span>
           </div>
           <div className="flex items-center gap-3">
@@ -82,6 +83,26 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
                 style={{ minHeight: '60vh' }}
                 title={file.name}
               />
+            ) : isLink ? (
+              <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full">
+                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="material-symbols-outlined text-4xl">public</span>
+                </div>
+                <h3 className="font-headline-md font-bold text-2xl text-navy-dark mb-3">External Link</h3>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                  You are about to navigate away from the JRMSU Library website to access <span className="font-semibold text-navy-dark">{file.name}</span>.
+                </p>
+                <a 
+                  href={file.path} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="btn btn-primary inline-flex items-center justify-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg hover:-translate-y-1 transition-all"
+                  onClick={onClose}
+                >
+                  Proceed to Website
+                  <span className="material-symbols-outlined text-sm">open_in_new</span>
+                </a>
+              </div>
             ) : (
               <div className="text-center text-on-surface-variant">
                 <span className="material-symbols-outlined text-6xl mb-4">description</span>

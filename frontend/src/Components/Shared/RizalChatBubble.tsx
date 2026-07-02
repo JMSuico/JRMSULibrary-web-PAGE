@@ -41,6 +41,14 @@ export const RizalChatBubble: React.FC = () => {
     setLoading(true);
 
     try {
+      if (chatState === 'email' || chatState === 'reservation' || chatState === 'rating') {
+        const validation = await contactApi.validateEmail(email);
+        // TODO(Temporary): Commented out for testing fake emails per user request
+        // if (validation.is_disposable || !validation.is_domain_valid) {
+        //   throw new Error('Temporary or disposable email addresses are not accepted, or domain is invalid.');
+        // }
+      }
+
       if (chatState === 'email') {
         await contactApi.submitContactMessage({
           message_type: 'EMAIL',
@@ -67,9 +75,11 @@ export const RizalChatBubble: React.FC = () => {
         });
       }
       setChatState('success');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to send message. Please try again later.');
+      const isRateLimit = err.message?.toLowerCase().includes('throttle') || err.message?.toLowerCase().includes('too many');
+      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (err.message || 'Failed to send message. Please try again later.');
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }

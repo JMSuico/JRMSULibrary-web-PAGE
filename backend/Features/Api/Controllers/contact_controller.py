@@ -28,7 +28,7 @@ class ContactMessageViewSet(viewsets.ViewSet):
     throttle_scope = 'contact'
 
     def get_permissions(self):
-        if self.action == 'create':
+        if self.action in ['create', 'validate_email', 'upload_attachment']:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -97,6 +97,77 @@ class ContactMessageViewSet(viewsets.ViewSet):
 
         try:
             result = self.service.reply_to_message(int(pk), reply_body)
+            if result['success']:
+                return Response(result, status=status.HTTP_200_OK)
+            return Response(result, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], url_path='bulk-reply')
+    def bulk_reply(self, request):
+        """
+        POST /api/contact/bulk-reply/
+        Body: { "message_ids": [1, 2, 3], "reply_body": "..." }
+        Sends replies sequentially to prevent rate limits or timeout bombs.
+        """
+        message_ids = request.data.get('message_ids', [])
+        reply_body = request.data.get('reply_body', '').strip()
+        
+        if not message_ids or not reply_body:
+            return Response({'error': 'message_ids and reply_body are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        results = []
+        for msg_id in message_ids:
+            try:
+                res = self.service.reply_to_message(int(msg_id), reply_body)
+                results.append({'id': msg_id, 'success': res['success'], 'detail': res['detail']})
+            except Exception as e:
+                results.append({'id': msg_id, 'success': False, 'detail': str(e)})
+
+        return Response({'results': results}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='upload-attachment')
+    def upload_attachment(self, request):
+        """
+        POST /api/contact/upload-attachment/
+        Uploads a file to a temporary staging area and returns its ID (path).
+        """
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        import os
+        import uuid
+        from django.core.files.storage import FileSystemStorage
+        from django.conf import settings
+        
+        fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'temp_attachments'))
+        ext = file.name.split('.')[-1]
+        filename = f"{uuid.uuid4()}.{ext}"
+        saved_name = fs.save(filename, file)
+        
+        return Response({
+            'file_id': saved_name,
+            'filename': file.name
+        })
+
+    @action(detail=True, methods=['post'], url_path='reply-with-files')
+    def reply_with_files(self, request, pk=None):
+        """
+        POST /api/contact/{id}/reply-with-files/
+        Body: { reply_body: "...", file_entries: [{"id": "uuid.pdf", "name": "original.pdf"}] }
+        """
+        reply_body = request.data.get('reply_body', '').strip()
+        # Fallback to file_ids for backward compatibility
+        file_entries = request.data.get('file_entries') or request.data.get('file_ids', [])
+        
+        if not reply_body:
+            return Response({'error': 'Reply body cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = self.service.reply_with_attachment(int(pk), reply_body, file_entries)
             if result['success']:
                 return Response(result, status=status.HTTP_200_OK)
             return Response(result, status=status.HTTP_503_SERVICE_UNAVAILABLE)

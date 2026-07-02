@@ -11,6 +11,8 @@ from .i_eresource_repository import IEResourceDepartmentRepository, IEResourceFi
 from .i_gallery_repository import ILibraryInteriorImageRepository
 from .i_personnel_repository import IPersonnelRepository
 from .i_analytics_repository import ISiteVisitRepository
+from .i_recycle_bin_repository import IRecycleBinRepository
+from .i_notification_repository import INotificationRepository
 
 __all__ = [
     'ContactRepositoryInterface',
@@ -24,5 +26,7 @@ __all__ = [
     'IEResourceFileRepository',
     'ILibraryInteriorImageRepository',
     'IPersonnelRepository',
-    'ISiteVisitRepository'
+    'ISiteVisitRepository',
+    'IRecycleBinRepository',
+    'INotificationRepository',
 ]

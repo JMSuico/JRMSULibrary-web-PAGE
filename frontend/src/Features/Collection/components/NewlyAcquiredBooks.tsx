@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
-import { BlueModalCarousel } from '@/src/Features/Collection/components/BlueModalCarousel';
+import { BookCarousel } from '@/src/Features/Collection/components/BookCarousel';
 import { BookListModal } from '@/src/Components/Modals/BookListModal';
 import { batchApi } from '@/src/Endpoints/batchApi';
 
@@ -51,7 +51,7 @@ export const NewlyAcquiredBooks: React.FC = () => {
             <div className="text-center text-primary py-10">Loading books...</div>
           ) : books.length > 0 ? (
             <>
-              <BlueModalCarousel items={books} />
+              <BookCarousel items={books} />
               <div className="flex justify-center mt-6 relative z-40">
                 <button
                   onClick={() => setModalOpen(true)}

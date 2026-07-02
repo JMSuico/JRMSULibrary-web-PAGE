@@ -152,7 +152,11 @@ class EResourceFileViewSet(viewsets.ViewSet):
         return Response(EResourceFileSerializer(data, many=True).data)
 
     def create(self, request, *args, **kwargs):
-        ser = EResourceFileSerializer(data=request.data)
+        # Merge request.data (text fields) with request.FILES (uploaded file)
+        mutable_data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
+        if 'file' in request.FILES:
+            mutable_data['file'] = request.FILES['file']
+        ser = EResourceFileSerializer(data=mutable_data)
         if ser.is_valid():
             item = self.service.create(ser.validated_data)
             return Response(EResourceFileSerializer(item).data, status=201)
@@ -259,7 +263,11 @@ class ManagedFileViewSet(viewsets.ViewSet):
         return Response(ManagedFileSerializer(data, many=True).data)
 
     def create(self, request, *args, **kwargs):
-        ser = ManagedFileSerializer(data=request.data)
+        # Merge request.data (text fields) with request.FILES (uploaded file)
+        mutable_data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
+        if 'file' in request.FILES:
+            mutable_data['file'] = request.FILES['file']
+        ser = ManagedFileSerializer(data=mutable_data)
         if ser.is_valid():
             item = self.service.create(ser.validated_data)
             return Response(ManagedFileSerializer(item).data, status=201)

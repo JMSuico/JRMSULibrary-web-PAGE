@@ -42,7 +42,7 @@ class EResourceDepartmentSerializer(serializers.ModelSerializer):
 class EResourceFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = EResourceFile
-        fields = ['id', 'name', 'file', 'is_active']
+        fields = ['id', 'name', 'file', 'department', 'is_active']
 
 
 class PageContentSerializer(serializers.ModelSerializer):

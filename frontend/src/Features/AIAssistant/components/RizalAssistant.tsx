@@ -92,6 +92,12 @@ export const RizalAssistant: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const validation = await contactApi.validateEmail(formEmail);
+      // TODO(Temporary): Commented out for testing fake emails per user request
+      // if (validation.is_disposable || !validation.is_domain_valid) {
+      //   throw new Error('Temporary or disposable email addresses are not accepted, or domain is invalid.');
+      // }
+      
       await contactApi.submitContactMessage({
         message_type: 'EMAIL',
         name: formName,
@@ -120,6 +126,12 @@ export const RizalAssistant: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const validation = await contactApi.validateEmail(formEmail);
+      // TODO(Temporary): Commented out for testing fake emails per user request
+      // if (validation.is_disposable || !validation.is_domain_valid) {
+      //   throw new Error('Temporary or disposable email addresses are not accepted, or domain is invalid.');
+      // }
+
       await contactApi.submitContactMessage({
         message_type: 'RESERVATION',
         name: formName,

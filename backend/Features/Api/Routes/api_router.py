@@ -9,7 +9,8 @@ from Features.Api.Controllers import (
     EResourceDepartmentViewSet, EResourceFileViewSet,
     PersonnelViewSet, ContactMessageViewSet, FeedbackViewSet,
     PageContentViewSet, PageImageViewSet, ManagedLinkViewSet,
-    ManagedFileViewSet, SiteVisitViewSet, AcquisitionBatchViewSet
+    ManagedFileViewSet, SiteVisitViewSet, AcquisitionBatchViewSet,
+    RecycleBinViewSet, NotificationViewSet
 )
 from Features.Api.Controllers.user_controller import UserViewSet
 from Features.Api.Controllers.report_controller import ReportViewSet
@@ -23,7 +24,7 @@ router = DefaultRouter()
 router.register(r'batches', AcquisitionBatchViewSet, basename='batch')
 router.register(r'gallery', LibraryInteriorImageViewSet, basename='gallery')
 router.register(r'eresource-departments', EResourceDepartmentViewSet, basename='department')
-router.register(r'files', EResourceFileViewSet, basename='file')
+router.register(r'eresource-files', EResourceFileViewSet, basename='eresource-file')
 router.register(r'content', PageContentViewSet, basename='page-content')
 router.register(r'page-images', PageImageViewSet, basename='page-image')
 router.register(r'links', ManagedLinkViewSet, basename='managed-link')
@@ -31,6 +32,8 @@ router.register(r'managed-files', ManagedFileViewSet, basename='managed-file')
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'reports', ReportViewSet, basename='report')
 router.register(r'settings', SettingsViewSet, basename='settings')
+router.register(r'recycle-bin', RecycleBinViewSet, basename='recycle-bin')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 # Domain endpoints
 router.register(r'personnel', PersonnelViewSet, basename='personnel')

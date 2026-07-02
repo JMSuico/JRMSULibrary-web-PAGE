@@ -54,10 +54,10 @@ class ManagedLinkRepository(IManagedLinkRepository):
 
 class ManagedFileRepository(IManagedFileRepository):
     def get_all_active(self):
-        return list(ManagedFile.objects.filter(is_active=True).order_by('-created_at'))
+        return list(ManagedFile.objects.filter(is_active=True).order_by('-uploaded_at'))
         
     def get_all(self):
-        return list(ManagedFile.objects.all().order_by('-created_at'))
+        return list(ManagedFile.objects.all().order_by('-uploaded_at'))
         
     def get_by_id(self, id: int):
         return ManagedFile.objects.filter(id=id).first()

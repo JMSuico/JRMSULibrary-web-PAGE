@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Eye, Pencil, Trash2 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { batchApi, AcquisitionBatch, BatchBook } from '@/src/Endpoints/batchApi';
@@ -7,6 +7,9 @@ import { CreateBatchModal } from '@/src/Features/Admin/components/CreateBatchMod
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useToast } from '@/src/Hooks/useToast';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useDebounce } from '@/src/Hooks/useDebounce';
+import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 
 type ViewMode = 'table' | 'grid';
 
@@ -28,6 +31,7 @@ export default function BooksManagerPage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   
   const { showToast } = useToast();
+  const { undoState, triggerDelete, cancelDelete } = useUndoDelete();
 
   const loadData = async () => {
     setLoading(true);
@@ -58,6 +62,13 @@ export default function BooksManagerPage() {
     loadData();
   }, []);
 
+  // Mutation guard — prevents auto-refresh from overwriting optimistic UI
+  const isMutating = useRef(false);
+
+  useAutoRefresh(useCallback(async () => {
+    if (isMutating.current) return; // Skip if a CRUD op is in flight
+    await loadData();
+  }, []), 30000);
   const handleCreateBatch = async (data: Partial<AcquisitionBatch>) => {
     try {
       await batchApi.createBatch(data);
@@ -98,47 +109,93 @@ export default function BooksManagerPage() {
 
   const handleAddOrUpdateBook = async (data: FormData) => {
     if (!currentBatch) return;
+    isMutating.current = true;
     try {
       if (editingBook) {
-        await batchApi.updateBook(currentBatch.id, editingBook.id, data);
+        const updatedBook = await batchApi.updateBook(currentBatch.id, editingBook.id, data);
+        // Optimistic update: replace the edited book in local state
+        setCurrentBatch(prev => prev ? {
+          ...prev,
+          books: (prev.books || []).map(b => b.id === editingBook.id ? updatedBook : b)
+        } : prev);
         showToast('Book updated successfully', 'success');
       } else {
-        await batchApi.addBookToBatch(currentBatch.id, data);
+        const newBook = await batchApi.addBookToBatch(currentBatch.id, data);
+        // Optimistic update: append new book to local state
+        setCurrentBatch(prev => prev ? {
+          ...prev,
+          books: [...(prev.books || []), newBook],
+          book_count: (prev.book_count || 0) + 1
+        } : prev);
         showToast('Book added successfully', 'success');
       }
       setIsBookFormOpen(false);
       setEditingBook(undefined);
-      handleViewBatchBooks(currentBatch.id); 
     } catch (error: any) {
       showToast(error.message || 'Failed to save book', 'error');
+      // On error, do a full refresh to ensure consistent state
+      await handleViewBatchBooks(currentBatch.id);
+    } finally {
+      isMutating.current = false;
     }
   };
 
   const handleDeleteBook = (bookId: number) => {
     if (!currentBatch) return;
+    const bookToDelete = currentBatch.books?.find(b => b.id === bookId);
+    if (!bookToDelete) return;
+
     setConfirmModal({
       isOpen: true,
       title: 'Remove Book',
       message: 'Are you sure you want to remove this book from the batch?',
-      onConfirm: async () => {
-        try {
-          await batchApi.deleteBook(currentBatch.id, bookId);
-          showToast('Book deleted successfully', 'success');
-          handleViewBatchBooks(currentBatch.id);
-        } catch (error: any) {
-          showToast(error.message || 'Failed to delete book', 'error');
-        }
+      onConfirm: () => {
+        triggerDelete(
+          bookToDelete.title,
+          async () => {
+            // Actual delete action after timeout
+            try {
+              await batchApi.deleteBook(currentBatch.id, bookId);
+              showToast('Book permanently deleted', 'success');
+            } catch (error: any) {
+              // Revert if API fails
+              setCurrentBatch(prev => prev ? {
+                ...prev,
+                books: [...(prev.books || []), bookToDelete],
+                book_count: (prev.book_count || 0) + 1
+              } : prev);
+              showToast(error.message || 'Failed to delete book', 'error');
+            }
+          },
+          () => {
+            // Local Undo Action (restore optimistic)
+            setCurrentBatch(prev => prev ? {
+              ...prev,
+              books: [...(prev.books || []), bookToDelete],
+              book_count: (prev.book_count || 0) + 1
+            } : prev);
+            showToast('Deletion undone', 'success');
+          }
+        );
+
+        // Optimistic: remove immediately from local state
+        setCurrentBatch(prev => prev ? {
+          ...prev,
+          books: (prev.books || []).filter(b => b.id !== bookId),
+          book_count: Math.max(0, (prev.book_count || 0) - 1)
+        } : prev);
       }
     });
   };
 
   // Derived state for filtering
+  const debouncedSearch = useDebounce(searchQuery, 400);
   const displayBooks = currentBatch?.books || [];
   const filteredBooks = displayBooks.filter((book) => {
     const matchesSearch =
-      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (book.accession_number && book.accession_number.toLowerCase().includes(searchQuery.toLowerCase()));
+      book.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      book.author.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      (book.accession_number && book.accession_number.toLowerCase().includes(debouncedSearch.toLowerCase()));
     const matchesCategory = selectedCategory === 'All' || book.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -394,6 +451,30 @@ export default function BooksManagerPage() {
             <div className="p-4 border-t border-gray-100 flex justify-end">
               <button onClick={() => setAuditBatch(null)} className="admin-btn admin-btn--secondary">Close</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo Delete Toast */}
+      {undoState && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
+            </div>
+            <button
+              onClick={cancelDelete}
+              className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors"
+            >
+              Undo
+            </button>
+          </div>
+          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className="bg-gray-400 h-full transition-all ease-linear"
+              style={{ width: `${(undoState.countdown / 15) * 100}%`, transitionDuration: '1s' }}
+            />
           </div>
         </div>
       )}

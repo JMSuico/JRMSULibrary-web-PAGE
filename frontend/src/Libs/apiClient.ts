@@ -1,6 +1,6 @@
 const API_BASE = '/api';
 
-function getCookie(name: string) {
+export function getCookie(name: string) {
   let cookieValue = null;
   if (document.cookie && document.cookie !== '') {
     const cookies = document.cookie.split(';');
@@ -39,7 +39,7 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
     let errorMsg = 'An error occurred';
     try {
       const errorData = await response.json();
-      errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+      errorMsg = errorData.detail || errorData.error || errorData.message || JSON.stringify(errorData);
     } catch {
       errorMsg = response.statusText || `HTTP Error ${response.status}`;
     }

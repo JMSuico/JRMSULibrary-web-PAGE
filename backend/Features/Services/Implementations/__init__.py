@@ -11,6 +11,8 @@ from .eresource_service import EResourceDepartmentService, EResourceFileService
 from .gallery_service import LibraryInteriorImageService
 from .personnel_service import PersonnelService
 from .analytics_service import SiteVisitService
+from .recycle_bin_service import RecycleBinService
+from .notification_service import NotificationService
 
 __all__ = [
     'ContactService',
@@ -24,5 +26,7 @@ __all__ = [
     'EResourceFileService',
     'LibraryInteriorImageService',
     'PersonnelService',
-    'SiteVisitService'
+    'SiteVisitService',
+    'RecycleBinService',
+    'NotificationService',
 ]

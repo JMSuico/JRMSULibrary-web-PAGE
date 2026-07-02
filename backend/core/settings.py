@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -218,7 +219,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "120/hour",
         "user": "2000/hour",
-        "contact": "10/hour"
+        "contact": "200/hour"
     }
 }
 
@@ -239,7 +240,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'katipunan.library@jrmsu.edu.ph')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'mmuh zbjb nyzg ovir')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>')
-EMAIL_TIMEOUT = 10
+EMAIL_TIMEOUT = 60  # Increased to handle large 25MB attachments
 
 # ============================================================
 # Throttle Cache — use file-based to survive restarts

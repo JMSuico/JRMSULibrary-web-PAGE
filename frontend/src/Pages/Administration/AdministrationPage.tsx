@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
+import { cmsApi, ManagedFile } from '@/src/Endpoints/cmsApi';
+import { Loader2 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 
 const tabs = [
   { id: 'administration', label: 'Administration' },
@@ -13,6 +15,9 @@ export default function AdministrationPage() {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [activeTab, setActiveTab] = useState('administration');
   const [orgImageOpen, setOrgImageOpen] = useState(false);
+  const [orgChartUrl, setOrgChartUrl] = useState<string | null>(null);
+  const [manualUrl, setManualUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (location.hash) {
@@ -22,6 +27,25 @@ export default function AdministrationPage() {
       }
     }
   }, [location.hash]);
+
+  useEffect(() => {
+    const fetchAssets = async () => {
+      try {
+        const files = await cmsApi.getAllFiles();
+        // Fallbacks included if CMS doesn't have the files yet
+        const orgChart = files.find(f => f.title.toLowerCase().includes('org') || f.title.toLowerCase().includes('structure'));
+        const manual = files.find(f => f.title.toLowerCase().includes('manual') || f.title.toLowerCase().includes('policy'));
+
+        if (orgChart) setOrgChartUrl(orgChart.file.startsWith('http') ? orgChart.file : `http://127.0.0.1:8000/media/${orgChart.file}`);
+        if (manual) setManualUrl(manual.file.startsWith('http') ? manual.file : `http://127.0.0.1:8000/media/${manual.file}`);
+      } catch (e) {
+        console.error('Failed to load administration assets from CMS', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAssets();
+  }, []);
 
   return (
     <section id="administration" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
@@ -46,7 +70,11 @@ export default function AdministrationPage() {
         </div>
 
         <div className="rounded-3xl p-4 sm:p-8 md:p-12 shadow-2xl border border-gold-light/20 w-fit mx-auto max-w-full" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
-          {activeTab === 'administration' && (
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="animate-spin text-gold-light w-8 h-8" />
+            </div>
+          ) : activeTab === 'administration' ? (
             <div>
               <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-8 text-center">
                 Library Organizational Structure
@@ -58,9 +86,9 @@ export default function AdministrationPage() {
                   aria-label="View organizational structure image"
                 >
                   <img
-                    src="/assets/organizational structure library.png"
+                    src={orgChartUrl || "/assets/organizational structure library.png"}
                     alt="JRMSU Library Organizational Structure Chart"
-                    className="w-full h-auto object-contain"
+                    className="w-full h-auto object-contain bg-white"
                   />
                   <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors flex items-center justify-center">
                     <span className="material-symbols-outlined text-white text-5xl opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg">
@@ -71,15 +99,13 @@ export default function AdministrationPage() {
                 <p className="text-sm text-white/60 mt-4">Click image to enlarge</p>
               </div>
             </div>
-          )}
-
-          {activeTab === 'manual' && (
+          ) : (
             <div className="max-w-3xl mx-auto">
               <h3 className="font-headline-md font-bold text-2xl text-gold-light mb-6 text-center">Manual</h3>
               <p className="text-white/80 mb-6 text-center">Library Policies Manual</p>
               <div className="bg-white rounded-2xl overflow-hidden shadow-lg" style={{ minHeight: '70vh' }}>
                 <iframe
-                  src="/assets/library-policies-manual.pdf#toolbar=1&navpanes=0"
+                  src={manualUrl ? `${manualUrl}#toolbar=1&navpanes=0` : "/assets/library-policies-manual.pdf#toolbar=1&navpanes=0"}
                   className="w-full h-full"
                   style={{ minHeight: '70vh' }}
                   title="Library Policies Manual"
@@ -105,9 +131,9 @@ export default function AdministrationPage() {
             <span className="material-symbols-outlined text-4xl">close</span>
           </button>
           <img
-            src="/assets/organizational structure library.png"
+            src={orgChartUrl || "/assets/organizational structure library.png"}
             alt="JRMSU Library Organizational Structure Chart"
-            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white"
             onClick={(e) => e.stopPropagation()}
           />
         </div>,

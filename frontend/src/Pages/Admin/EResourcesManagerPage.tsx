@@ -3,6 +3,8 @@ import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoint
 import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 
 export default function EResourcesManagerPage() {
   const [departments, setDepartments] = useState<EResourceDepartment[]>([]);
@@ -15,12 +17,14 @@ export default function EResourcesManagerPage() {
   const [editingDept, setEditingDept] = useState<EResourceDepartment | null>(null);
   
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
     loadData();
   }, []);
+
 
   const loadData = async () => {
     setLoading(true);
@@ -33,6 +37,8 @@ export default function EResourcesManagerPage() {
       setLoading(false);
     }
   };
+
+  useAutoRefresh(loadData, 60000);
 
   const toggleFolder = (id: number) => {
     const newSet = new Set(expandedFolders);
@@ -85,14 +91,20 @@ export default function EResourcesManagerPage() {
   const handleUploadFile = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedDeptId) return;
+    if (!selectedFile) {
+      showToast('Please select a file to upload', 'error');
+      return;
+    }
 
     const fd = new FormData(e.currentTarget);
     fd.append('department', selectedDeptId.toString());
+    fd.append('file', selectedFile);
 
     try {
       await eresourceApi.createFile(fd);
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
+      setSelectedFile(null);
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to upload file', 'error');
@@ -127,13 +139,13 @@ export default function EResourcesManagerPage() {
             onClick={() => setSelectedDeptId(dept.id)}
           >
             <div className="flex items-center gap-2 flex-1 overflow-hidden" onClick={(e) => { e.stopPropagation(); toggleFolder(dept.id); }}>
-              {dept.sub_departments && dept.sub_departments.length > 0 ? (
+              {dept.children && dept.children.length > 0 ? (
                 isExpanded ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />
               ) : <span className="w-4" />}
               <FolderOpen size={18} className="text-yellow-500" />
               <span className="font-medium text-gray-800 truncate">{dept.name}</span>
             </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ opacity: isSelected ? 1 : undefined }}>
+            <div className="flex items-center gap-1" style={{ opacity: 1 }}>
                <button 
                   onClick={(e) => { e.stopPropagation(); setEditingDept(dept); setIsDeptModalOpen(true); }} 
                   className="p-1 text-blue-600 hover:bg-blue-100 rounded"
@@ -144,9 +156,9 @@ export default function EResourcesManagerPage() {
                ><Trash2 size={14}/></button>
             </div>
           </div>
-          {isExpanded && dept.sub_departments && (
-            <div className="mt-1">
-              {renderTree(dept.sub_departments, level + 1)}
+          {isExpanded && dept.children && (
+            <div className="border-l border-gray-200 ml-3">
+              {renderTree(dept.children, level + 1)}
             </div>
           )}
         </div>
@@ -157,8 +169,8 @@ export default function EResourcesManagerPage() {
   const findDeptById = (depts: EResourceDepartment[], id: number): EResourceDepartment | null => {
     for (const d of depts) {
       if (d.id === id) return d;
-      if (d.sub_departments) {
-        const found = findDeptById(d.sub_departments, id);
+      if (d.children) {
+        const found = findDeptById(d.children, id);
         if (found) return found;
       }
     }
@@ -288,7 +300,7 @@ export default function EResourcesManagerPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">Upload File to {selectedDept?.name}</h2>
-              <button onClick={() => setIsFileModalOpen(false)} className="text-gray-400 hover:text-gray-600">×</button>
+              <button onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
             <form onSubmit={handleUploadFile} className="p-4 flex flex-col gap-4">
               <div>
@@ -297,15 +309,27 @@ export default function EResourcesManagerPage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">File</label>
-                <input required type="file" name="file" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <DragDropFileUpload
+                  accept="*/*"
+                  multiple={false}
+                  maxSizeMB={25}
+                  onFilesSelected={(files) => setSelectedFile(files[0])}
+                  label="Click to upload file or drag and drop"
+                  subLabel="Maximum file size: 25MB"
+                />
+                {selectedFile && (
+                  <p className="text-sm font-medium text-green-600 mt-2">
+                    Selected: {selectedFile.name}
+                  </p>
+                )}
               </div>
               <label className="flex items-center gap-2 cursor-pointer mt-2">
                 <input type="checkbox" name="is_active" defaultChecked={true} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600" />
                 <span className="text-sm font-medium text-gray-700">File is Active</span>
               </label>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsFileModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg">Upload</button>
+                <button type="button" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg" disabled={!selectedFile}>Upload</button>
               </div>
             </form>
           </div>

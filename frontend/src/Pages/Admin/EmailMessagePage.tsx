@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Mail,
   Search,
@@ -8,12 +8,90 @@ import {
   Inbox,
   Filter,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
+import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { contactApi, ContactMessage } from '@/src/Endpoints/contactApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useDebounce } from '@/src/Hooks/useDebounce';
+
+interface AttachmentUploaderProps {
+  file: File;
+  onComplete: (id: string) => void;
+  onError: (err: string) => void;
+  onRemove: () => void;
+}
+
+const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({ file, onComplete, onError, onRemove }) => {
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState<'uploading' | 'completed' | 'error' | 'paused'>('uploading');
+
+  useEffect(() => {
+    let isCancelled = false;
+    
+    const startUpload = async () => {
+      setStatus('uploading');
+      try {
+        const res = await contactApi.uploadAttachment(file, (p) => {
+           if (!isCancelled) setProgress(p);
+        });
+        if (!isCancelled) {
+           setProgress(100);
+           setStatus('completed');
+           onComplete(res.file_id);
+        }
+      } catch (err: any) {
+        if (!isCancelled) {
+           setStatus('error');
+           onError(err.message);
+        }
+      }
+    };
+    
+    if (navigator.onLine) {
+      startUpload();
+    } else {
+      setStatus('paused');
+    }
+
+    const handleOffline = () => setStatus('paused');
+    const handleOnline = () => {
+       setStatus(prev => {
+         if (prev === 'paused' || prev === 'error') {
+           startUpload();
+           return 'uploading';
+         }
+         return prev;
+       });
+    };
+    
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+       isCancelled = true;
+       window.removeEventListener('offline', handleOffline);
+       window.removeEventListener('online', handleOnline);
+    };
+  }, [file]);
+
+  return (
+    <div className="flex flex-col gap-1 mt-2 text-xs bg-gray-50 p-2 rounded border border-gray-100 relative pr-6">
+      <div className="flex justify-between text-gray-700">
+        <span className="truncate max-w-[250px] font-medium">{file.name}</span>
+        <span className="font-semibold">{status === 'uploading' ? `${progress}%` : status === 'completed' ? 'Done' : status === 'paused' ? 'Paused (Offline)' : 'Failed'}</span>
+      </div>
+      <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+        <div className={`h-1.5 rounded-full transition-all duration-300 ${status === 'completed' ? 'bg-green-500' : status === 'error' ? 'bg-red-500' : status === 'paused' ? 'bg-orange-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div>
+      </div>
+      <button onClick={onRemove} className="absolute right-2 top-2 text-gray-400 hover:text-red-500" aria-label="Remove attachment">&times;</button>
+    </div>
+  );
+};
 
 export default function EmailMessagePage() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
@@ -25,16 +103,92 @@ export default function EmailMessagePage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
-  const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string } | null>(null);
-  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File, id?: string }[] } | null>(null);
   const [bulkReplyModal, setBulkReplyModal] = useState<{ body: string } | null>(null);
-  const [isSendingBulkReply, setIsSendingBulkReply] = useState(false);
+  const [actionLoading, setActionLoading] = useState<{ id: number, action: string } | null>(null);
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  
+  // Background Sends UI State
+  const [backgroundSends, setBackgroundSends] = useState<{id: string, email: string, isError?: boolean, errorMessage?: string}[]>([]);
+  
+  // Advanced Queue State for Bulk Sending
+  const [queueState, setQueueState] = useState<{
+    isActive: boolean;
+    isPaused: boolean; // True when offline
+    pendingIds: number[];
+    successIds: number[];
+    failedIds: number[];
+    currentId: number | null;
+  }>({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentId: null });
+
+  // Listen for online/offline events to pause/resume queue
+  useEffect(() => {
+    const handleOffline = () => {
+      setQueueState(prev => prev.isActive ? { ...prev, isPaused: true } : prev);
+      showToast('Internet connection lost. Sending paused.', 'error');
+    };
+    const handleOnline = () => {
+      setQueueState(prev => prev.isActive ? { ...prev, isPaused: false } : prev);
+      showToast('Internet restored. Resuming sending...', 'success');
+    };
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
+  // Process the queue
+  useEffect(() => {
+    let mounted = true;
+    const processQueue = async () => {
+      if (!queueState.isActive || queueState.isPaused || queueState.currentId !== null || queueState.pendingIds.length === 0) return;
+      
+      const nextId = queueState.pendingIds[0];
+      setQueueState(prev => ({ ...prev, currentId: nextId }));
+      
+      try {
+        const result = await contactApi.replyToMessage(nextId, bulkReplyModal?.body || '');
+        if (mounted) {
+          setQueueState(prev => ({
+            ...prev,
+            currentId: null,
+            pendingIds: prev.pendingIds.slice(1),
+            successIds: result.success ? [...prev.successIds, nextId] : prev.successIds,
+            failedIds: result.success ? prev.failedIds : [...prev.failedIds, nextId]
+          }));
+        }
+      } catch (e) {
+        if (mounted) {
+          setQueueState(prev => ({
+            ...prev,
+            currentId: null,
+            pendingIds: prev.pendingIds.slice(1),
+            failedIds: [...prev.failedIds, nextId]
+          }));
+        }
+      }
+    };
+
+    if (queueState.isActive && !queueState.isPaused && queueState.pendingIds.length > 0 && queueState.currentId === null) {
+      processQueue();
+    } else if (queueState.isActive && queueState.pendingIds.length === 0 && queueState.currentId === null) {
+      // Queue finished
+      showToast(`Bulk reply completed. ${queueState.successIds.length} sent, ${queueState.failedIds.length} failed.`, 'success');
+      setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentId: null });
+      setBulkReplyModal(null);
+      setSelectedIds(new Set());
+      fetchMessages();
+    }
+    
+    return () => { mounted = false; };
+  }, [queueState, bulkReplyModal]);
   
   const { showToast } = useToast();
 
   const fetchMessages = async () => {
     try {
-      setLoading(true);
       const data = await contactApi.getAllMessages();
       setMessages(data);
     } catch (err: any) {
@@ -48,7 +202,11 @@ export default function EmailMessagePage() {
     fetchMessages();
   }, []);
 
+  // Auto-refresh messages every 15 seconds
+  useAutoRefresh(fetchMessages, 15000);
+
   const updateStatus = async (id: number, newStatus: ContactMessage['status']) => {
+    setActionLoading({ id, action: newStatus });
     try {
       await contactApi.updateMessageStatus(id, newStatus);
       showToast(`Message marked as ${newStatus}`, 'success');
@@ -60,6 +218,8 @@ export default function EmailMessagePage() {
       }
     } catch (err: any) {
       showToast(err.message || 'Failed to update message status', 'error');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -145,11 +305,13 @@ export default function EmailMessagePage() {
     setExpandedGroups(newSet);
   };
 
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
   const filtered = messages.filter((m) => {
     const matchesSearch =
-      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (m.subject && m.subject.toLowerCase().includes(searchQuery.toLowerCase()));
+      m.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      m.email.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      (m.subject && m.subject.toLowerCase().includes(debouncedSearch.toLowerCase()));
     
     const matchesType = filterType === 'ALL' || m.message_type === filterType;
     const matchesArchive = showArchived ? m.status === 'ARCHIVED' : m.status !== 'ARCHIVED';
@@ -173,7 +335,30 @@ export default function EmailMessagePage() {
     .sort((a, b) => b.unreadCount - a.unreadCount);
 
   return (
-    <>
+    <div className="w-full flex flex-col h-[calc(100vh-64px)] overflow-hidden relative">
+      {/* Background Sends Banner */}
+      {backgroundSends.length > 0 && (
+        <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+          {backgroundSends.map(send => (
+            <div key={send.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${send.isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-700'}`}>
+              {send.isError ? (
+                <div className="flex-1 flex items-center gap-3">
+                  <div className="w-5 h-5 shrink-0 bg-red-100 text-red-600 rounded-full flex items-center justify-center">!</div>
+                  <div className="text-sm font-medium">Failed to send to {send.email}: {send.errorMessage}</div>
+                  <button onClick={() => setBackgroundSends(prev => prev.filter(s => s.id !== send.id))} className="text-gray-400 hover:text-red-500 ml-2">×</button>
+                </div>
+              ) : (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600 shrink-0" />
+                  <div className="text-sm font-medium">Sending reply to {send.email}...</div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Header Panel */}
       <div className="admin-content__header">
         <h1>Email & Reservations</h1>
         <p>Manage incoming messages from the Rizal AI Assistant. Messages from the same user are batched together.</p>
@@ -346,21 +531,23 @@ export default function EmailMessagePage() {
                             <div className="flex items-center gap-2 justify-center md:justify-end">
                               <button 
                                 onClick={() => updateStatus(msg.id, 'APPROVED')}
-                                className="text-xs bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 px-2 py-1 rounded cursor-pointer"
+                                disabled={actionLoading?.id === msg.id}
+                                className={`text-xs px-2 py-1 rounded transition-colors ${actionLoading?.id === msg.id && actionLoading?.action === 'APPROVED' ? 'bg-green-50 text-green-700/50 border border-green-200/50 cursor-not-allowed flex items-center gap-1' : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 cursor-pointer'} ${(actionLoading?.id === msg.id && actionLoading?.action !== 'APPROVED') ? 'opacity-50 pointer-events-none' : ''}`}
                               >
-                                Approve
+                                {actionLoading?.id === msg.id && actionLoading?.action === 'APPROVED' ? <><div className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div> Approving...</> : 'Approve'}
                               </button>
                               <button 
                                 onClick={() => updateStatus(msg.id, 'DECLINED')}
-                                className="text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 px-2 py-1 rounded cursor-pointer"
+                                disabled={actionLoading?.id === msg.id}
+                                className={`text-xs px-2 py-1 rounded transition-colors ${actionLoading?.id === msg.id && actionLoading?.action === 'DECLINED' ? 'bg-red-50 text-red-700/50 border border-red-200/50 cursor-not-allowed flex items-center gap-1' : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 cursor-pointer'} ${(actionLoading?.id === msg.id && actionLoading?.action !== 'DECLINED') ? 'opacity-50 pointer-events-none' : ''}`}
                               >
-                                Decline
+                                {actionLoading?.id === msg.id && actionLoading?.action === 'DECLINED' ? <><div className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div> Declining...</> : 'Decline'}
                               </button>
                             </div>
                           )}
                           {msg.status !== 'REPLIED' && !['ARCHIVED'].includes(msg.status) && (
                             <button 
-                              onClick={() => setReplyModal({ message: msg, body: '' })}
+                              onClick={() => setReplyModal({ message: msg, body: '', attachments: [] })}
                               className="text-xs text-green-600 hover:text-green-800 flex items-center gap-1 justify-center md:justify-end cursor-pointer"
                             >
                               <Reply size={14} /> Reply via Email
@@ -433,66 +620,112 @@ export default function EmailMessagePage() {
                   onChange={(e) => setReplyModal({ ...replyModal, body: e.target.value })}
                 />
               </div>
-              {isSendingReply && (
-                <div className="flex items-center gap-3 mt-3 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg p-3">
-                  <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin shrink-0"></div>
-                  <p>Sending email to <strong>{replyModal.message.email}</strong>... Please wait.</p>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2 mt-3">Attachments (Max 10MB each)</label>
+                <DragDropFileUpload
+                  accept="*/*"
+                  multiple={true}
+                  maxSizeMB={10}
+                  onFilesSelected={(files) => {
+                    const newFiles = files.map(f => ({ file: f }));
+                    setReplyModal({ ...replyModal, attachments: [...replyModal.attachments, ...newFiles] });
+                  }}
+                  label="Click to attach files or drag and drop"
+                  subLabel="Maximum file size: 10MB each"
+                />
+                <div className="mt-2 max-h-[150px] overflow-y-auto pr-1">
+                  {replyModal.attachments.map((att: { file: File; id?: string }, idx: number) => (
+                <AttachmentUploader 
+                  key={`${att.file.name}-${idx}`} 
+                  file={att.file} 
+                  onComplete={(id) => {
+                    setReplyModal(prev => {
+                          if (!prev) return prev;
+                          const updated = [...prev.attachments];
+                          updated[idx] = { ...updated[idx], id };
+                          return { ...prev, attachments: updated };
+                        });
+                      }}
+                      onError={(err) => {
+                        console.error(`Upload failed for ${att.file.name}: ${err}`);
+                      }}
+                      onRemove={() => {
+                        setReplyModal(prev => {
+                          if (!prev) return prev;
+                          const updated = [...prev.attachments];
+                          updated.splice(idx, 1);
+                          return { ...prev, attachments: updated };
+                        });
+                      }}
+                    />
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
             <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
               <button
                 onClick={() => setReplyModal(null)}
-                disabled={isSendingReply}
-                className="admin-btn admin-btn--secondary disabled:opacity-50"
+                className="admin-btn admin-btn--secondary"
               >
                 Cancel
               </button>
               <button
-                disabled={isSendingReply || !replyModal.body.trim()}
-                className="admin-btn admin-btn--primary disabled:opacity-50 flex items-center gap-2"
+                disabled={!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)}
+                className={`admin-btn admin-btn--primary flex items-center gap-2 ${(!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)) ? 'opacity-50 cursor-not-allowed bg-gray-400 border-gray-400' : ''}`}
                 onClick={async () => {
-                  if (!replyModal.body.trim()) return;
-                  setIsSendingReply(true);
+                  if (!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)) return;
+                  
+                  const emailPayload = {
+                    id: replyModal.message.id,
+                    email: replyModal.message.email,
+                    body: replyModal.body,
+                    attachments: [...replyModal.attachments]
+                  };
+                  
+                  setReplyModal(null);
+                  
+                  const sendId = Math.random().toString(36).substring(7);
+                  setBackgroundSends(prev => [...prev, { id: sendId, email: emailPayload.email }]);
+                  
                   try {
-                    const result = await contactApi.replyToMessage(replyModal.message.id, replyModal.body);
-                    if (result.success) {
-                      showToast(`Reply sent to ${replyModal.message.email}`, 'success');
-                      setReplyModal(null);
-                      fetchMessages();
+                    let result;
+                    if (emailPayload.attachments.length > 0) {
+                      const fileEntries = emailPayload.attachments.map(a => ({ id: a.id!, name: a.file.name }));
+                      result = await contactApi.replyWithFiles(emailPayload.id, emailPayload.body, fileEntries);
                     } else {
-                      showToast(result.detail || 'Failed to send reply', 'error');
+                      result = await contactApi.replyToMessage(emailPayload.id, emailPayload.body);
+                    }
+                    
+                    if (result.success) {
+                      showToast(`Reply sent to ${emailPayload.email}`, 'success');
+                      setBackgroundSends(prev => prev.filter(s => s.id !== sendId));
+                      fetchMessages(); 
+                    } else {
+                      setBackgroundSends(prev => prev.map(s => s.id === sendId ? { ...s, isError: true, errorMessage: result.detail || 'Failed to send' } : s));
                     }
                   } catch (err: any) {
-                    showToast(err.message || 'SMTP error. Check email configuration.', 'error');
-                  } finally {
-                    setIsSendingReply(false);
+                    setBackgroundSends(prev => prev.map(s => s.id === sendId ? { ...s, isError: true, errorMessage: err.message || 'Network/SMTP Error' } : s));
                   }
                 }}
               >
-                {isSendingReply ? (
-                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Sending...</>
-                ) : (
-                  <><Reply size={16} /> Send Reply</>
-                )}
+                <Reply size={16} /> Send Reply
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Bulk SMTP Reply Modal */}
       {bulkReplyModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !isSendingBulkReply && setBulkReplyModal(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !queueState.isActive && setBulkReplyModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-blue-600 to-indigo-500 p-5 flex justify-between items-start">
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Reply size={20} /> Reply to {selectedIds.size} Users
                 </h2>
-                <p className="text-blue-100 text-sm mt-1">Sending via katipunan.library@jrmsu.edu.ph</p>
+                <p className="text-blue-100 text-sm mt-1">Sequential Bulk Sending</p>
               </div>
-              {!isSendingBulkReply && (
+              {!queueState.isActive && (
                 <button onClick={() => setBulkReplyModal(null)} className="text-blue-100 hover:text-white" aria-label="Close">&times;</button>
               )}
             </div>
@@ -505,55 +738,58 @@ export default function EmailMessagePage() {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Your Reply (Sent to all)</label>
                 <textarea
                   rows={6}
-                  disabled={isSendingBulkReply}
+                  disabled={queueState.isActive}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-60"
                   placeholder="Type your bulk reply here..."
                   value={bulkReplyModal.body}
                   onChange={(e) => setBulkReplyModal({ body: e.target.value })}
                 />
               </div>
-              {isSendingBulkReply && (
-                <div className="flex items-center gap-3 mt-3 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded-lg p-3">
-                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0"></div>
-                  <p>Sending emails... Please wait.</p>
+              {queueState.isActive && (
+                <div className={`flex items-center gap-3 mt-4 text-sm rounded-lg p-3 border ${queueState.isPaused ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                  {!queueState.isPaused && <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0"></div>}
+                  <div className="flex-1">
+                    <p className="font-semibold">{queueState.isPaused ? 'Paused (Offline)' : 'Sending emails...'}</p>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                      <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${((queueState.successIds.length + queueState.failedIds.length) / selectedIds.size) * 100}%` }}></div>
+                    </div>
+                    <div className="flex justify-between text-xs mt-1">
+                      <span>{queueState.successIds.length + queueState.failedIds.length} / {selectedIds.size} Processed</span>
+                      {queueState.failedIds.length > 0 && <span className="text-red-600">{queueState.failedIds.length} Failed</span>}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
             <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
               <button
-                onClick={() => setBulkReplyModal(null)}
-                disabled={isSendingBulkReply}
+                onClick={() => {
+                  if (queueState.isActive) {
+                    setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentId: null });
+                  }
+                  setBulkReplyModal(null);
+                }}
+                disabled={queueState.isActive}
                 className="admin-btn admin-btn--secondary disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                disabled={isSendingBulkReply || !bulkReplyModal.body.trim()}
+                disabled={queueState.isActive || !bulkReplyModal.body.trim()}
                 className="admin-btn admin-btn--primary disabled:opacity-50 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={async () => {
+                onClick={() => {
                   if (!bulkReplyModal.body.trim()) return;
-                  setIsSendingBulkReply(true);
-                  let successCount = 0;
-                  let failCount = 0;
-                  try {
-                    const ids = Array.from<number>(selectedIds);
-                    for (const id of ids) {
-                      const result = await contactApi.replyToMessage(id, bulkReplyModal.body);
-                      if (result.success) successCount++;
-                      else failCount++;
-                    }
-                    showToast(`Sent ${successCount} replies. ${failCount > 0 ? failCount + ' failed.' : ''}`, successCount > 0 ? 'success' : 'error');
-                    setBulkReplyModal(null);
-                    setSelectedIds(new Set());
-                    fetchMessages();
-                  } catch (err: any) {
-                    showToast(err.message || 'SMTP error during bulk send.', 'error');
-                  } finally {
-                    setIsSendingBulkReply(false);
-                  }
+                  setQueueState({
+                    isActive: true,
+                    isPaused: !navigator.onLine,
+                    pendingIds: Array.from(selectedIds),
+                    successIds: [],
+                    failedIds: [],
+                    currentId: null
+                  });
                 }}
               >
-                {isSendingBulkReply ? (
+                {queueState.isActive ? (
                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Sending...</>
                 ) : (
                   <><Reply size={16} /> Send {selectedIds.size} Replies</>
@@ -563,6 +799,6 @@ export default function EmailMessagePage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

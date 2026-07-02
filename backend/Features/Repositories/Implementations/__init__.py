@@ -11,6 +11,8 @@ from .eresource_repository import EResourceDepartmentRepository, EResourceFileRe
 from .gallery_repository import LibraryInteriorImageRepository
 from .personnel_repository import PersonnelRepository
 from .analytics_repository import SiteVisitRepository
+from .recycle_bin_repository import RecycleBinRepository
+from .notification_repository import NotificationRepository
 
 __all__ = [
     'ContactRepository',
@@ -24,5 +26,7 @@ __all__ = [
     'EResourceFileRepository',
     'LibraryInteriorImageRepository',
     'PersonnelRepository',
-    'SiteVisitRepository'
+    'SiteVisitRepository',
+    'RecycleBinRepository',
+    'NotificationRepository',
 ]

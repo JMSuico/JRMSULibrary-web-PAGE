@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
+import { publicApi } from '@/src/Endpoints/cmsApi';
 
 export const HeroSection: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver();
+  const [visitorCount, setVisitorCount] = useState<number | null>(null);
   const [timeState, setTimeState] = useState(() => {
-    const now = new Date();
     return {
       hh: '--',
       mm: '--',
@@ -14,6 +15,38 @@ export const HeroSection: React.FC = () => {
       isOpen: false,
     };
   });
+
+  // Opening hours state from backend Settings API
+  const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number } | null>(null);
+
+  useEffect(() => {
+    publicApi.getVisitorCount()
+      .then(data => setVisitorCount(data.total_visits))
+      .catch(() => setVisitorCount(null));
+    
+    // Fetch settings for dynamic opening hours
+    fetch('/api/settings/')
+      .then(r => r.json())
+      .then((s: any) => {
+        const raw: string = s?.opening_hours_mon_fri || '7:00 AM - 7:00 PM';
+        // Parse format "H:MM AM - H:MM PM" or "HH:MM AM - HH:MM PM"
+        const match = raw.match(/(\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)/i);
+        if (match) {
+          let openH = parseInt(match[1]);
+          const openM = parseInt(match[2]);
+          const openAmpm = match[3].toUpperCase();
+          let closeH = parseInt(match[4]);
+          const closeM = parseInt(match[5]);
+          const closeAmpm = match[6].toUpperCase();
+          if (openAmpm === 'PM' && openH !== 12) openH += 12;
+          if (openAmpm === 'AM' && openH === 12) openH = 0;
+          if (closeAmpm === 'PM' && closeH !== 12) closeH += 12;
+          if (closeAmpm === 'AM' && closeH === 12) closeH = 0;
+          setOpenHours({ openH, openM, closeH, closeM });
+        }
+      })
+      .catch(() => null);
+  }, []);
 
   useEffect(() => {
     const updateClock = () => {
@@ -32,7 +65,18 @@ export const HeroSection: React.FC = () => {
 
       const day = now.getDay();
       const hour = now.getHours();
-      const isOpen = (day >= 1 && day <= 5) && (hour >= 7 && hour < 19);
+      const minute = now.getMinutes();
+      
+      let isOpen: boolean;
+      if (openHours) {
+        const nowMins = hour * 60 + minute;
+        const openMins = openHours.openH * 60 + openHours.openM;
+        const closeMins = openHours.closeH * 60 + openHours.closeM;
+        isOpen = (day >= 1 && day <= 5) && nowMins >= openMins && nowMins < closeMins;
+      } else {
+        // Fallback: Mon-Fri 7AM-7PM
+        isOpen = (day >= 1 && day <= 5) && (hour >= 7 && hour < 19);
+      }
 
       setTimeState({ hh, mm, ss, ampm, dateStr, isOpen });
     };
@@ -161,7 +205,7 @@ export const HeroSection: React.FC = () => {
               Website Visitors
             </div>
             <div className="font-status-clock text-4xl md:text-5xl text-white font-bold tracking-wider drop-shadow-lg my-1">
-              12,482
+              {visitorCount !== null ? visitorCount.toLocaleString() : '--'}
             </div>
             <div className="text-white/70 text-xs uppercase tracking-widest mt-1">
               Total Count

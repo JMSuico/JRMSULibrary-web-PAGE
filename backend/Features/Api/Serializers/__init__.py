@@ -16,6 +16,8 @@ from .cms_serializers import (
 from .contact_serializer import ContactMessageSerializer
 from .feedback_serializer import FeedbackSerializer
 from .personnel_serializer import PersonnelSerializer
+from .settings_serializer import SiteSettingsSerializer
+from .recycle_bin_serializer import RecycleBinSerializer
 
 __all__ = [
     'NewlyAcquiredBookSerializer',
@@ -30,4 +32,6 @@ __all__ = [
     'ContactMessageSerializer',
     'FeedbackSerializer',
     'PersonnelSerializer',
+    'SiteSettingsSerializer',
+    'RecycleBinSerializer',
 ]

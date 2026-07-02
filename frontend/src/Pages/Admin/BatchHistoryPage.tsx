@@ -3,6 +3,8 @@ import { Archive, Search, History, X, ClipboardList, FileArchive } from 'lucide-
 import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useDebounce } from '@/src/Hooks/useDebounce';
 
 export default function BatchHistoryPage() {
   const [batches, setBatches] = useState<AcquisitionBatch[]>([]);
@@ -29,6 +31,8 @@ export default function BatchHistoryPage() {
     loadBatches();
   }, []);
 
+  useAutoRefresh(loadBatches, 30000);
+
   const handleArchive = (batch: AcquisitionBatch) => {
     setConfirmModal({
       isOpen: true,
@@ -48,8 +52,10 @@ export default function BatchHistoryPage() {
 
   const years = ['All', ...new Set(batches.map(b => new Date(b.opened_at).getFullYear().toString()))];
 
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
   const filteredBatches = batches.filter((batch) => {
-    const matchesSearch = batch.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = batch.name.toLowerCase().includes(debouncedSearch.toLowerCase());
     const year = new Date(batch.opened_at).getFullYear().toString();
     const matchesYear = selectedYear === 'All' || year === selectedYear;
     return matchesSearch && matchesYear;

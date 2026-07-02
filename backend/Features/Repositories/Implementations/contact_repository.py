@@ -27,9 +27,9 @@ class ContactRepository(ContactRepositoryInterface):
 
     def update_status(self, message_id: int, status: str):
         message = self.get_by_id(message_id)
-        if status in ['UNREAD', 'READ', 'REPLIED']:
+        if status in ['UNREAD', 'READ', 'REPLIED', 'APPROVED', 'DECLINED', 'ARCHIVED']:
             message.status = status
-            if status in ['READ', 'REPLIED']:
+            if status in ['READ', 'REPLIED', 'APPROVED', 'DECLINED', 'ARCHIVED']:
                 message.is_read = True
             message.save()
         return message

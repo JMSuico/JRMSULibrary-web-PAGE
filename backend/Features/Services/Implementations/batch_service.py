@@ -7,12 +7,15 @@ from django.utils import timezone
 from Features.Services.Interfaces.i_batch_service import IBatchService
 from Features.Repositories.Implementations.batch_repository import BatchRepository
 from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
+from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
 from Features.Data.Enums.batch_status import BatchStatus
+from Features.Api.Serializers.cms_serializers import NewlyAcquiredBookSerializer
 
 class BatchService(IBatchService):
     def __init__(self):
         self.batch_repo = BatchRepository()
         self.book_repo = NewlyAcquiredBookRepository()
+        self.recycle_repo = RecycleBinRepository()
 
     @transaction.atomic
     def create_batch(self, data: dict, user_id: int) -> Any:
@@ -71,6 +74,17 @@ class BatchService(IBatchService):
         if not book or str(book.batch_id) != str(batch_id):
             return False
         title = book.title
+        
+        # Soft delete: move to recycle bin
+        snapshot = NewlyAcquiredBookSerializer(book).data
+        self.recycle_repo.create(
+            original_id=book_id,
+            source_module='BOOKS',
+            item_name=title,
+            data_snapshot=snapshot,
+            user_id=user_id
+        )
+
         deleted = self.book_repo.delete(book_id)
         if deleted:
             self.batch_repo.record_history(batch_id, "Book Removed", f"Removed book: {title}", user_id)

@@ -11,6 +11,8 @@ from .i_eresource_service import IEResourceDepartmentService, IEResourceFileServ
 from .i_gallery_service import ILibraryInteriorImageService
 from .i_personnel_service import IPersonnelService
 from .i_analytics_service import ISiteVisitService
+from .i_recycle_bin_service import IRecycleBinService
+from .i_notification_service import INotificationService
 
 __all__ = [
     'ContactServiceInterface',
@@ -24,5 +26,7 @@ __all__ = [
     'IEResourceFileService',
     'ILibraryInteriorImageService',
     'IPersonnelService',
-    'ISiteVisitService'
+    'ISiteVisitService',
+    'IRecycleBinService',
+    'INotificationService',
 ]

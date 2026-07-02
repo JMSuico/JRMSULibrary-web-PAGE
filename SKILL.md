@@ -224,7 +224,8 @@ JRMSU LIBRARY LANDING PAGE/            # Root project folder (Vite + React setup
 │   │   ├── contactApi.ts              # POST /api/contact — contact form submission to backend
 │   │   ├── feedbackApi.ts             # POST /api/feedback — visitor feedback submission
 │   │   ├── personnelApi.ts            # GET /api/personnel — fetch library staff list from DB
-│   │   └── cmsApi.ts                  # CMS CRUD — /api/books, /api/departments, /api/gallery
+│   │   ├── cmsApi.ts                  # CMS CRUD — /api/books, /api/departments, /api/gallery
+│   │   └── notificationApi.ts         # GET /api/notifications/all/ — smart aggregated notifications
 │   │
 │   ├── Components/                    # Shared reusable UI primitives — presentational only
 │   │   ├── LayoutBars/                # Global layout frame components
@@ -234,6 +235,7 @@ JRMSU LIBRARY LANDING PAGE/            # Root project folder (Vite + React setup
 │   │   │   ├── BookListModal.tsx      # Modal for full book list display
 │   │   │   └── FileViewerModal.tsx    # Modal for PDF/file viewer from collection tree
 │   │   └── Shared/                    # Common reusable UI elements
+│   │       ├── DragDropFileUpload.tsx # Drag-and-drop file upload zone — used in all admin upload modals
 │   │       ├── FacebookBubble.tsx     # Floating Facebook Messenger bubble overlay
 │   │       ├── ImageGallery.tsx       # Reusable image slider with auto-play capabilities
 │   │       ├── SkeletonLoader.tsx     # Loading animations — Line, Circle, Card, Page variants
@@ -335,31 +337,37 @@ backend/                                    # Root Django backend application
     ├── Repositories/                      # Data access layer only — no business rules here
     │   ├── Interfaces/
     │   │   ├── contact_repository_interface.py   # Contract for contact data access
-    │   │   └── feedback_repository_interface.py  # Contract for feedback data access
+    │   │   ├── feedback_repository_interface.py  # Contract for feedback data access
+    │   │   └── i_notification_repository.py      # Contract for notification data access
     │   └── Implementations/
     │       ├── contact_repository.py      # Contact inquiry persistence via Django ORM
-    │       └── feedback_repository.py     # Feedback record persistence via Django ORM
+    │       ├── feedback_repository.py     # Feedback record persistence via Django ORM
+    │       └── notification_repository.py # Notification aggregate ORM queries
     │
     ├── Services/                          # Business logic layer only — no DB access here
     │   ├── Interfaces/
     │   │   ├── contact_service_interface.py  # Contract for contact workflow
-    │   │   └── feedback_service_interface.py # Contract for feedback workflow
+    │   │   ├── feedback_service_interface.py # Contract for feedback workflow
+    │   │   └── i_notification_service.py     # Contract for notification workflow
     │   └── Implementations/
     │       ├── contact_service.py         # Validates form, prevents spam, triggers email, saves to repo
-    │       └── feedback_service.py        # Handles feedback submission rules and dedup logic
+    │       ├── feedback_service.py        # Handles feedback submission rules and dedup logic
+    │       └── notification_service.py    # Aggregates notifications from system data
     │
     ├── Helpers/                           # Reusable support utilities — not full workflows
     │   ├── input_sanitizer.py             # Cleans and sanitizes all public form submissions (XSS guard)
     │   ├── authentication.py             # JWT helper utilities and token handling
     │   ├── permissions.py                # Role and access permission helper utilities
-    │   └── password.py                   # Password hashing and validation helpers
+    │   ├── password.py                   # Password hashing and validation helpers
+    │   └── notification_helper.py        # Notification format and time utilities
     │
     ├── Api/                              # REST API layer — expose endpoints only
     │   ├── Controllers/
     │   │   ├── contact_controller.py      # POST /api/contact — receive and dispatch contact form
     │   │   ├── feedback_controller.py     # POST /api/feedback — receive and dispatch feedback
     │   │   ├── personnel_controller.py    # GET /api/personnel — return staff list
-    │   │   └── cms_controller.py          # CRUD /api/books, /api/departments, /api/resources, /api/gallery
+    │   │   ├── cms_controller.py          # CRUD /api/books, /api/departments, /api/resources, /api/gallery
+    │   │   └── notification_controller.py # GET /api/notifications/all/ — smart aggregated notifications
     │   ├── Serializers/
     │   │   ├── contact_serializer.py      # Shape contact request and response data
     │   │   ├── feedback_serializer.py     # Shape feedback request and response data

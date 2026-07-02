@@ -1,4 +1,4 @@
-import { apiClient } from '@/src/Libs/apiClient';
+import { apiClient, getCookie } from '@/src/Libs/apiClient';
 
 export interface ContactMessage {
   id: number;
@@ -62,5 +62,76 @@ export const contactApi = {
    */
   validateEmail: async (email: string): Promise<EmailValidation> => {
     return apiClient(`/contact/validate-email/?email=${encodeURIComponent(email)}`);
+  },
+
+  /**
+   * Bulk reply sequentially.
+   */
+  bulkReply: async (message_ids: number[], reply_body: string): Promise<{ results: { id: number, success: boolean, detail: string }[] }> => {
+    return apiClient(`/contact/bulk-reply/`, {
+      method: 'POST',
+      body: JSON.stringify({ message_ids, reply_body }),
+    });
+  },
+
+  /**
+   * Upload an attachment to temporary staging area with progress tracking.
+   */
+  uploadAttachment: (file: File, onProgress: (progress: number) => void): Promise<{ file_id: string; filename: string }> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/contact/upload-attachment/', true);
+      
+      const csrfToken = getCookie('csrftoken') || '';
+      if (csrfToken) {
+        xhr.setRequestHeader('X-CSRFToken', csrfToken);
+      }
+      
+      // Send credentials for auth
+      xhr.withCredentials = true;
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          onProgress(Math.round(percentComplete));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText);
+            resolve(response);
+          } catch (e) {
+            reject(new Error('Invalid JSON response'));
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.error || error.detail || 'Upload failed'));
+          } catch (e) {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Network error during upload'));
+      };
+
+      const formData = new FormData();
+      formData.append('file', file);
+      xhr.send(formData);
+    });
+  },
+
+  /**
+   * Reply with pre-uploaded attachments.
+   */
+  replyWithFiles: async (id: number, replyBody: string, fileEntries: {id: string, name: string}[]) => {
+    return apiClient(`/contact/${id}/reply-with-files/`, {
+      method: 'POST',
+      body: JSON.stringify({ reply_body: replyBody, file_entries: fileEntries }),
+    });
   },
 };

@@ -1,6 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { libraryServices } from '@/src/Libs/Assets/data';
+import { cmsApi, ManagedFile, ManagedLink, PageContent } from '@/src/Endpoints/cmsApi';
+import { Loader2, Download, ExternalLink } from 'lucide-react';
+
+function extractTextBlocksFromHtml(html: string): string[] {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const items = Array.from(doc.querySelectorAll('li, p'))
+    .map(el => el.textContent?.trim() || '')
+    .filter(text => text.length > 0);
+  if (items.length === 0) return [doc.body.textContent?.trim() || ''];
+  return items;
+}
 
 const serviceCategories = ['all', 'borrowing', 'returning', 'e-library', 'clearance'];
 const badgeColors: Record<string, string> = {
@@ -24,6 +36,31 @@ export const ServicesSection: React.FC = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [openAccordion, setOpenAccordion] = useState<string | null>(null);
 
+  const [files, setFiles] = useState<ManagedFile[]>([]);
+  const [links, setLinks] = useState<ManagedLink[]>([]);
+  const [servicesContent, setServicesContent] = useState<PageContent | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAssets = async () => {
+      try {
+        const [f, l, c] = await Promise.all([
+          cmsApi.getAllFiles(),
+          cmsApi.getAllLinks(),
+          cmsApi.getAllContent()
+        ]);
+        setFiles(f.filter(file => file.is_active));
+        setLinks(l.filter(link => link.is_active));
+        setServicesContent(c.find(item => item.slug === 'library_services') || null);
+      } catch (e) {
+        console.error('Failed to load assets from CMS', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAssets();
+  }, []);
+
   const filteredServices = activeTab === 'all'
     ? libraryServices
     : libraryServices.filter((s) => s.badgeType === activeTab || s.id.includes(activeTab));
@@ -39,7 +76,7 @@ export const ServicesSection: React.FC = () => {
         <div className="mb-12 bg-navy-mid/60 rounded-2xl p-6 md:p-8 border border-gold-light/20">
           <h3 className="font-headline-md font-bold text-xl text-gold-light mb-6">Our 17 Library Services</h3>
           <div className="grid md:grid-cols-2 gap-3">
-            {allServicesList.map((service, idx) => (
+            {(servicesContent ? extractTextBlocksFromHtml(servicesContent.content) : allServicesList).map((service, idx) => (
               <div key={idx} className="flex items-center gap-3 p-3 bg-navy-dark/60 rounded-lg shadow-sm border border-gold-light/10 interactive-hover">
                 <span className="w-8 h-8 rounded-full bg-gold-light text-primary flex items-center justify-center text-xs font-bold shrink-0">
                   {idx + 1}
@@ -154,6 +191,11 @@ export const ServicesSection: React.FC = () => {
             );
           })}
         </div>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="animate-spin text-gold-light w-8 h-8" />
+          </div>
+        ) : null}
       </div>
     </div>
   );

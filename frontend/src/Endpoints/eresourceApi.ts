@@ -4,7 +4,7 @@ export interface EResourceDepartment {
   id: number;
   name: string;
   parent: number | null;
-  sub_departments: EResourceDepartment[];
+  children: EResourceDepartment[];
   files: EResourceFile[];
 }
 

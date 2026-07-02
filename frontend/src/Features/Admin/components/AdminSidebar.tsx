@@ -13,6 +13,7 @@ import {
   Library,
   Users,
   Mail,
+  Trash2,
 } from 'lucide-react';
 import { userApi } from '@/src/Endpoints/userApi';
 
@@ -47,6 +48,7 @@ const NAV_SECTIONS = [
       { to: '/admin/analytics', icon: BarChart3, text: 'Analytics' },
       { to: '/admin/reports', icon: FileText, text: 'Reports Generator' },
       { to: '/admin/settings', icon: Settings, text: 'Settings' },
+      { to: '/admin/recycle-bin', icon: Trash2, text: 'Recycle Bin' },
     ],
   },
 ] as const;

@@ -3,6 +3,8 @@ import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/c
 import { Save, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 
 export default function ContentManagerPage() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files'>('content');
@@ -20,12 +22,14 @@ export default function ContentManagerPage() {
   // File State
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
 
   const loadData = async () => {
     setLoading(true);
@@ -45,6 +49,8 @@ export default function ContentManagerPage() {
     }
   };
 
+  useAutoRefresh(loadData, 60000);
+
   // --- Content Handlers ---
   const handleSaveContent = async (slug: string, content: string) => {
     try {
@@ -61,9 +67,9 @@ export default function ContentManagerPage() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const payload = {
-      label: fd.get('label') as string,
+      name: fd.get('name') as string,
       url: fd.get('url') as string,
-      group: fd.get('group') as string,
+      category: fd.get('category') as string,
       order: parseInt(fd.get('order') as string, 10),
       is_active: fd.get('is_active') === 'on'
     };
@@ -102,11 +108,17 @@ export default function ContentManagerPage() {
   // --- File Handlers ---
   const handleUploadFile = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!selectedFile) {
+      showToast('Please select a file to upload', 'error');
+      return;
+    }
     const fd = new FormData(e.currentTarget);
+    fd.append('file', selectedFile);
     try {
       await cmsApi.createFile(fd);
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
+      setSelectedFile(null);
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to upload file', 'error');
@@ -206,9 +218,9 @@ export default function ContentManagerPage() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Label</th>
+                      <th>Name</th>
                       <th>URL</th>
-                      <th>Group</th>
+                      <th>Category</th>
                       <th>Order</th>
                       <th>Status</th>
                       <th>Actions</th>
@@ -217,9 +229,9 @@ export default function ContentManagerPage() {
                   <tbody>
                     {links.map((link) => (
                       <tr key={link.id}>
-                        <td style={{ fontWeight: 500 }}>{link.label}</td>
+                        <td style={{ fontWeight: 500 }}>{link.name}</td>
                         <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: '#002B7F' }}>{link.url}</a></td>
-                        <td><span className="admin-badge admin-badge--info">{link.group}</span></td>
+                        <td><span className="admin-badge admin-badge--info">{link.category}</span></td>
                         <td>{link.order}</td>
                         <td>
                           <span className={`admin-badge ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -291,16 +303,16 @@ export default function ContentManagerPage() {
             </div>
             <form onSubmit={handleSaveLink} className="p-4 flex flex-col gap-4 overflow-y-auto">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Label</label>
-                <input required type="text" name="label" defaultValue={editingLink?.label || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Name</label>
+                <input required type="text" name="name" defaultValue={editingLink?.name || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">URL</label>
                 <input required type="url" name="url" defaultValue={editingLink?.url || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Group (e.g. 'e-journals', 'partners')</label>
-                <input required type="text" name="group" defaultValue={editingLink?.group || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Category (e.g. 'Open Access Journals', 'Resources')</label>
+                <input required type="text" name="category" defaultValue={editingLink?.category || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Order Index</label>
@@ -325,7 +337,7 @@ export default function ContentManagerPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">Upload File</h2>
-              <button onClick={() => setIsFileModalOpen(false)} className="text-gray-400 hover:text-gray-600">×</button>
+              <button onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
             <form onSubmit={handleUploadFile} className="p-4 flex flex-col gap-4">
               <div>
@@ -334,15 +346,27 @@ export default function ContentManagerPage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">File</label>
-                <input required type="file" name="file" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <DragDropFileUpload
+                  accept="*/*"
+                  multiple={false}
+                  maxSizeMB={25}
+                  onFilesSelected={(files) => setSelectedFile(files[0])}
+                  label="Click to upload file or drag and drop"
+                  subLabel="Maximum file size: 25MB"
+                />
+                {selectedFile && (
+                  <p className="text-sm font-medium text-green-600 mt-2">
+                    Selected: {selectedFile.name}
+                  </p>
+                )}
               </div>
               <label className="flex items-center gap-2 cursor-pointer mt-2">
                 <input type="checkbox" name="is_active" defaultChecked={true} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600" />
                 <span className="text-sm font-medium text-gray-700">File is Active</span>
               </label>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsFileModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg">Upload</button>
+                <button type="button" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg" disabled={!selectedFile}>Upload</button>
               </div>
             </form>
           </div>

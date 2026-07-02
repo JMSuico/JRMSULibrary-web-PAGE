@@ -17,6 +17,8 @@ from .feedback_controller import FeedbackViewSet
 from .personnel_controller import PersonnelViewSet
 from .analytics_controller import SiteVisitViewSet
 from .batch_controller import AcquisitionBatchViewSet
+from .recycle_bin_controller import RecycleBinViewSet
+from .notification_controller import NotificationViewSet
 
 __all__ = [
     'NewlyAcquiredBookViewSet',
@@ -32,4 +34,6 @@ __all__ = [
     'PersonnelViewSet',
     'SiteVisitViewSet',
     'AcquisitionBatchViewSet',
+    'RecycleBinViewSet',
+    'NotificationViewSet',
 ]

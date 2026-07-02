@@ -9,7 +9,10 @@ from Features.Services.Implementations.feedback_service import FeedbackService
 
 
 class FeedbackViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    def get_permissions(self):
+        if self.action == 'create':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

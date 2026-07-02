@@ -10,25 +10,29 @@ import {
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
+  const fetchReport = async () => {
+    try {
+      const summary = await reportApi.getSummary();
+      setData(summary);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load analytics', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchReport = async () => {
-      try {
-        const summary = await reportApi.getSummary();
-        setData(summary);
-      } catch (err: any) {
-        showToast(err.message || 'Failed to load analytics', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchReport();
   }, []);
+
+  useAutoRefresh(fetchReport, 60000);
 
   const renderStars = (count: number) => {
     return Array.from({ length: 5 }, (_, i) => (
