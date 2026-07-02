@@ -1,0 +1,285 @@
+import React, { useState } from 'react';
+import { FileText, Printer, Calendar as CalendarIcon, Download } from 'lucide-react';
+import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
+import { useToast } from '@/src/Hooks/useToast';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
+export default function ReportsPage() {
+  const [reportType, setReportType] = useState('summary');
+  const [dateRange, setDateRange] = useState('this-month');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [reportData, setReportData] = useState<ReportSummary | null>(null);
+  const { showToast } = useToast();
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    try {
+      const data = await reportApi.getSummary();
+      setReportData(data);
+      showToast('Report generated successfully', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to generate report', 'error');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportCSV = () => {
+    if (!reportData) return;
+
+    const rows: string[][] = [];
+    rows.push(['JRMSU Katipunan Campus Library - Report']);
+    rows.push([`Report Type: ${reportType}`, `Period: ${dateRange.replace('-', ' ').toUpperCase()}`]);
+    rows.push([]);
+    rows.push(['Metric', 'Value']);
+    rows.push(['Total Visits', String(reportData.total_visits)]);
+    rows.push(['Total Books', String(reportData.total_books)]);
+    rows.push(['Total Emails', String(reportData.total_emails)]);
+    rows.push(['Total Reservations', String(reportData.total_reservations)]);
+    rows.push(['Average Rating', `${reportData.ratings_summary.average_rating} / 5`]);
+    rows.push([]);
+
+    if (reportData.recent_books.length > 0) {
+      rows.push(['Recent Books']);
+      rows.push(['Title', 'Author', 'Category', 'Date Added']);
+      reportData.recent_books.forEach(b => {
+        rows.push([b.title, b.author, b.category, b.dateAdded]);
+      });
+      rows.push([]);
+    }
+
+    if (reportData.recent_activity.length > 0) {
+      rows.push(['Recent Activity']);
+      rows.push(['Type', 'Name', 'Date']);
+      reportData.recent_activity.forEach(a => {
+        rows.push([a.type, a.name, new Date(a.date).toLocaleDateString()]);
+      });
+    }
+
+    const csvContent = rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `jrmsu-library-report-${dateRange}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV exported successfully', 'success');
+  };
+
+  const ratingData = reportData ? [
+    { name: '1 Star', count: reportData.ratings_summary.count_1 },
+    { name: '2 Stars', count: reportData.ratings_summary.count_2 },
+    { name: '3 Stars', count: reportData.ratings_summary.count_3 },
+    { name: '4 Stars', count: reportData.ratings_summary.count_4 },
+    { name: '5 Stars', count: reportData.ratings_summary.count_5 },
+  ] : [];
+
+  const interactionData = reportData ? [
+    { name: 'Emails', value: reportData.total_emails },
+    { name: 'Reservations', value: reportData.total_reservations }
+  ] : [];
+  const COLORS = ['#0088FE', '#00C49F'];
+
+  return (
+    <>
+      <div className="admin-content__header flex justify-between items-end print:hidden">
+        <div>
+          <h1 className="flex items-center gap-2"><FileText size={28} /> Document Reports</h1>
+          <p>Generate, export, and print official library reports.</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8 print:hidden">
+        <h2 className="text-lg font-bold text-gray-800 mb-4">Report Generator</h2>
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Report Type</label>
+            <select 
+              value={reportType} 
+              onChange={e => setReportType(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#002B7F]"
+            >
+              <option value="summary">Comprehensive Summary</option>
+              <option value="visitors">Visitor Analytics</option>
+              <option value="books">Acquired Books</option>
+              <option value="interactions">Emails & Reservations</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Date Range</label>
+            <select 
+              value={dateRange} 
+              onChange={e => setDateRange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#002B7F]"
+            >
+              <option value="this-week">This Week</option>
+              <option value="this-month">This Month</option>
+              <option value="last-month">Last Month</option>
+              <option value="this-year">This Year</option>
+              <option value="all-time">All Time</option>
+            </select>
+          </div>
+          <button 
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            className="admin-btn admin-btn--primary whitespace-nowrap disabled:opacity-70"
+          >
+            {isGenerating ? 'Generating...' : 'Generate Report'}
+          </button>
+        </div>
+      </div>
+
+      {reportData && (
+        <div className="bg-white border border-gray-200 shadow-sm p-8 rounded-none md:rounded-2xl print:border-none print:shadow-none print:p-0">
+          
+          <div className="flex justify-between items-start mb-8 print:hidden">
+            <h3 className="text-xl font-bold text-gray-800">Preview</h3>
+            <div className="flex gap-2">
+              <button onClick={handleExportCSV} className="admin-btn admin-btn--outline flex items-center gap-2">
+                <Download size={16} /> Export CSV
+              </button>
+              <button onClick={handlePrint} className="admin-btn admin-btn--primary flex items-center gap-2">
+                <Printer size={16} /> Print / Save PDF
+              </button>
+            </div>
+          </div>
+
+          {/* Printable Area */}
+          <div className="print-area font-serif text-gray-800">
+            <div className="text-center mb-8 border-b-2 border-black pb-4">
+              <h1 className="text-2xl font-bold uppercase">Jose Rizal Memorial State University</h1>
+              <h2 className="text-xl">Katipunan Campus Library</h2>
+              <p className="mt-2 text-sm font-sans">Official System Report: {reportType === 'summary' ? 'Comprehensive Summary' : reportType}</p>
+              <p className="text-sm font-sans">Period: {dateRange.replace('-', ' ').toUpperCase()}</p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="border border-gray-300 p-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Total Visits</p>
+                <p className="text-2xl font-bold font-sans">{reportData.total_visits}</p>
+              </div>
+              <div className="border border-gray-300 p-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Books Acquired</p>
+                <p className="text-2xl font-bold font-sans">{reportData.total_books}</p>
+              </div>
+              <div className="border border-gray-300 p-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Emails Processed</p>
+                <p className="text-2xl font-bold font-sans">{reportData.total_emails}</p>
+              </div>
+              <div className="border border-gray-300 p-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Avg Rating</p>
+                <p className="text-2xl font-bold font-sans">{reportData.ratings_summary.average_rating} / 5</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 break-inside-avoid">
+               <div className="border border-gray-300 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Feedback Ratings Breakdown</h4>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis allowDecimals={false} fontSize={12} />
+                        <RechartsTooltip />
+                        <Bar dataKey="count" fill="#C9A84C" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+               </div>
+               <div className="border border-gray-300 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Interactions Overview</h4>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={interactionData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {interactionData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+               </div>
+            </div>
+
+            {(reportType === 'summary' || reportType === 'books') && (
+              <div className="mb-8 break-inside-avoid">
+                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">Recent Book Acquisitions</h4>
+                <table className="w-full text-left text-sm border-collapse font-sans">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 p-2">Title</th>
+                      <th className="border border-gray-300 p-2">Author</th>
+                      <th className="border border-gray-300 p-2">Date Added</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.recent_books.map((b) => (
+                      <tr key={b.id}>
+                        <td className="border border-gray-300 p-2">{b.title}</td>
+                        <td className="border border-gray-300 p-2">{b.author}</td>
+                        <td className="border border-gray-300 p-2">{b.dateAdded}</td>
+                      </tr>
+                    ))}
+                    {reportData.recent_books.length === 0 && (
+                      <tr><td colSpan={3} className="border border-gray-300 p-2 text-center text-gray-500">No recent books.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {(reportType === 'summary' || reportType === 'interactions') && (
+              <div className="mb-8 break-inside-avoid">
+                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">Recent User Interactions</h4>
+                <table className="w-full text-left text-sm border-collapse font-sans">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 p-2">Type</th>
+                      <th className="border border-gray-300 p-2">Name</th>
+                      <th className="border border-gray-300 p-2">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.recent_activity.map((act) => (
+                      <tr key={act.id}>
+                        <td className="border border-gray-300 p-2">{act.type}</td>
+                        <td className="border border-gray-300 p-2">{act.name}</td>
+                        <td className="border border-gray-300 p-2">{new Date(act.date).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                    {reportData.recent_activity.length === 0 && (
+                      <tr><td colSpan={3} className="border border-gray-300 p-2 text-center text-gray-500">No recent interactions.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="mt-16 text-center text-sm text-gray-500 font-sans">
+              <p>Generated by JRMSU Library Admin System</p>
+              <p>Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

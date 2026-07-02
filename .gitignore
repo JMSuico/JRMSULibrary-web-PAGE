@@ -7,9 +7,45 @@ coverage/
 .env*
 !.env.example
 
-# Ignored assets and skills
+# Python virtual environment & cache
+backend/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.pyc
+*.pyo
+
+# Django media files (user uploads - never commit)
+backend/media/
+
+# ---- LARGE BINARY / MEDIA FILES (ignore everywhere) ----
+# Videos
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.wmv
+*.flv
+
+# Images (large asset folders only; keep small icon/logo PNGs in code)
+*.jfif
+frontend/public/assets/
+frontend/src/Assets/assets/Library pic converted/
+frontend/src/Assets/assets/Library pic/
+frontend/src/Assets/assets/PHYSICAL SET-UP 2026/
+frontend/src/Assets/assets/Feedback and complains mechanism/
+frontend/src/Assets/assets/Library External Services/
+frontend/src/Assets/assets/eBooks/
+frontend/src/Assets/assets/organizational structure library.png
+frontend/src/Assets/
+
+# PDFs
+*.pdf
+
+# Raw photo/book scan folders
+/NEWLY ARRIVED BOOKS/
 /SKILLS/
-/assets/eBooks/eBooks/Department/
-/assets/Library pic/
-/assets/PHYSICAL SET-UP 2026/
-/assets/eBooks/
+
+# Temp & scratch
+objects.txt
