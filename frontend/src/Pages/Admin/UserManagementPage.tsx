@@ -80,11 +80,20 @@ export default function UserManagementPage() {
     if (pwd) data.password = pwd;
 
     try {
+      let savedUser;
       if (editingUser) {
-        await userApi.updateUser(editingUser.id, data);
+        savedUser = await userApi.updateUser(editingUser.id, data);
       } else {
-        await userApi.createUser(data);
+        savedUser = await userApi.createUser(data);
       }
+
+      const avatarFile = (form.querySelector('[name=avatar]') as HTMLInputElement).files?.[0];
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append('avatar', avatarFile);
+        await userApi.uploadAvatar(savedUser.id, formData);
+      }
+
       showToast(`User ${editingUser ? 'updated' : 'created'} successfully`, 'success');
       setIsModalOpen(false);
       fetchUsers();
@@ -253,6 +262,37 @@ export default function UserManagementPage() {
             </div>
             <div className="p-6 overflow-y-auto">
               <form id="user-form" onSubmit={handleSaveUser} className="space-y-4">
+                
+                <div className="flex flex-col items-center mb-4">
+                  <div className="relative group w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden hover:border-[#002B7F] transition-colors">
+                    {editingUser?.avatar_url ? (
+                      <img src={editingUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <Users size={24} className="text-gray-400" />
+                    )}
+                    <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <span className="text-[10px] text-white font-bold text-center px-1">Upload<br/>Picture</span>
+                      <input type="file" name="avatar" accept="image/*" className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const url = URL.createObjectURL(file);
+                            const img = e.currentTarget.parentElement?.previousElementSibling;
+                            if (img && img.tagName === 'IMG') (img as HTMLImageElement).src = url;
+                            else if (img) {
+                              const newImg = document.createElement('img');
+                              newImg.src = url;
+                              newImg.className = "w-full h-full object-cover";
+                              img.replaceWith(newImg);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">Profile Picture (Optional)</p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">First Name</label>

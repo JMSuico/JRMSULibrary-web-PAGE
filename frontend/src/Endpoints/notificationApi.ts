@@ -24,4 +24,6 @@ export interface NotificationsResponse {
 export const notificationApi = {
   getAll: (): Promise<NotificationsResponse> =>
     apiClient('/notifications/all/'),
+  markAllRead: (): Promise<void> =>
+    apiClient('/notifications/mark-all-read/', { method: 'POST' }),
 };

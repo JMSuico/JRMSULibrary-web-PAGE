@@ -11,6 +11,7 @@ export interface EResourceDepartment {
 export interface EResourceFile {
   id: number;
   name: string;
+  title: string; // Same as name, alias used for display
   file: string;
   department: number;
   is_active: boolean;

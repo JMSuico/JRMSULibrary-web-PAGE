@@ -28,10 +28,13 @@ class NotificationRepository(INotificationRepository):
             ).order_by('-created_at')[:limit]
         )
 
-    def get_unread_reservations(self, limit: int = 3):
+    def get_unread_reservations(self, limit: int) -> List[Any]:
         return list(
             ContactMessage.objects.filter(
                 message_type='RESERVATION',
                 status='UNREAD'
             ).order_by('-created_at')[:limit]
         )
+
+    def mark_all_unread_as_read(self) -> None:
+        ContactMessage.objects.filter(status='UNREAD').update(status='READ', is_read=True)

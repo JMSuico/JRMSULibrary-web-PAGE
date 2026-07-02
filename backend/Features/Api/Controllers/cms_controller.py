@@ -1,6 +1,7 @@
 # [Layer: Api/Controllers] — cms_controller.py
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
+from Features.Data.Models.recycle_bin_model import RecycleBin
 
 from Features.Api.Serializers.cms_serializers import (
     NewlyAcquiredBookSerializer, LibraryInteriorImageSerializer,
@@ -88,6 +89,15 @@ class LibraryInteriorImageViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
+        item = self.service.repository.get_by_id(pk)
+        if item:
+            RecycleBin.objects.create(
+                original_id=item.id,
+                source_module='GALLERY',
+                item_name=item.title or f"Gallery Image {item.id}",
+                data_snapshot=LibraryInteriorImageSerializer(item).data,
+                deleted_by=request.user.id if request.user.is_authenticated else None
+            )
         if self.service.delete(pk):
             return Response(status=204)
         return Response(status=404)
@@ -105,11 +115,9 @@ class EResourceDepartmentViewSet(viewsets.ViewSet):
         return [permissions.IsAuthenticated()]
 
     def list(self, request):
-        if not request.user.is_authenticated:
-            data = self.service.get_departments()
-        else:
-            data = self.service.get_all()
-        return Response(EResourceDepartmentSerializer(data, many=True).data)
+        # Always return root-level departments; the serializer recursively nests children
+        data = self.service.get_departments()
+        return Response(EResourceDepartmentSerializer(data, many=True, context={'request': request}).data)
 
     def create(self, request, *args, **kwargs):
         ser = EResourceDepartmentSerializer(data=request.data)
@@ -128,6 +136,15 @@ class EResourceDepartmentViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
+        item = self.service.repository.get_by_id(pk)
+        if item:
+            RecycleBin.objects.create(
+                original_id=item.id,
+                source_module='ERESOURCE_DEPT',
+                item_name=item.name or f"Department {item.id}",
+                data_snapshot=EResourceDepartmentSerializer(item).data,
+                deleted_by=request.user.id if request.user.is_authenticated else None
+            )
         if self.service.delete(pk):
             return Response(status=204)
         return Response(status=404)
@@ -172,6 +189,15 @@ class EResourceFileViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
+        item = self.service.repository.get_by_id(pk)
+        if item:
+            RecycleBin.objects.create(
+                original_id=item.id,
+                source_module='ERESOURCE_FILE',
+                item_name=item.title or f"E-Resource File {item.id}",
+                data_snapshot=EResourceFileSerializer(item).data,
+                deleted_by=request.user.id if request.user.is_authenticated else None
+            )
         if self.service.delete(pk):
             return Response(status=204)
         return Response(status=404)
@@ -239,6 +265,15 @@ class ManagedLinkViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
+        item = self.service.repository.get_by_id(pk)
+        if item:
+            RecycleBin.objects.create(
+                original_id=item.id,
+                source_module='CMS_LINK',
+                item_name=item.title or f"Link {item.id}",
+                data_snapshot=ManagedLinkSerializer(item).data,
+                deleted_by=request.user.id if request.user.is_authenticated else None
+            )
         if self.service.delete(pk):
             return Response(status=204)
         return Response(status=404)
@@ -274,6 +309,15 @@ class ManagedFileViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
+        item = self.service.repository.get_by_id(pk)
+        if item:
+            RecycleBin.objects.create(
+                original_id=item.id,
+                source_module='CMS_FILE',
+                item_name=item.title or f"File {item.id}",
+                data_snapshot=ManagedFileSerializer(item).data,
+                deleted_by=request.user.id if request.user.is_authenticated else None
+            )
         if self.service.delete(pk):
             return Response(status=204)
         return Response(status=404)

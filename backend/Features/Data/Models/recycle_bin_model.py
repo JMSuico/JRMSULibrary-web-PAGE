@@ -6,6 +6,14 @@ class RecycleBin(models.Model):
     MODULE_CHOICES = (
         ('BOOKS', 'Newly Acquired Books'),
         ('GALLERY', 'Library Sections'),
+        ('BATCH', 'Acquisition Batches'),
+        ('CMS_CONTENT', 'Content Manager (Pages)'),
+        ('CMS_IMAGE', 'Content Manager (Images)'),
+        ('CMS_LINK', 'Content Manager (Links)'),
+        ('CMS_FILE', 'Content Manager (Files)'),
+        ('ERESOURCE_DEPT', 'E-Resources (Departments)'),
+        ('ERESOURCE_FILE', 'E-Resources (Files)'),
+        ('CONTACT_MSG', 'Contact Messages'),
     )
 
     original_id = models.IntegerField()

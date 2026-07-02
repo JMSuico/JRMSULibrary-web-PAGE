@@ -991,11 +991,13 @@ section::before {
     -webkit-overflow-scrolling: touch;
   }
 
-  /* === Global: Mobile Nav Sidebar Improvements === */
+  /* === Global: Mobile Top-Nav Sidebar Improvements === */
   @media (max-width: 1023px) {
 
-    /* Ensure sidebar is above the overlay */
-    nav {
+    /* Ensure ONLY the top navigation bar is fixed — do not use bare `nav`
+       selector which would break collection pills, breadcrumbs, and any
+       other element using the <nav> semantic tag */
+    .top-nav-bar {
       position: fixed;
       z-index: 50;
     }

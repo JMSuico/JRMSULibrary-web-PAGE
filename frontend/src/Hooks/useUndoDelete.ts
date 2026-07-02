@@ -1,5 +1,5 @@
 // [Layer: Hooks] — useUndoDelete.ts
-// Provides a 15-second undo window before executing a permanent delete action.
+// Provides a 3-second undo window before executing a permanent delete action.
 import { useState, useRef, useCallback } from 'react';
 
 export function useUndoDelete() {
@@ -22,7 +22,7 @@ export function useUndoDelete() {
     deleteActionRef.current = onExecuteDelete;
     onUndoRef.current = onUndoLocal;
 
-    setUndoState({ isOpen: true, itemName, countdown: 15 });
+    setUndoState({ isOpen: true, itemName, countdown: 3 });
 
     intervalRef.current = setInterval(() => {
       setUndoState(prev => {
@@ -39,7 +39,23 @@ export function useUndoDelete() {
         deleteActionRef.current();
       }
       setUndoState(null);
-    }, 15000);
+    }, 3000);
+  }, []);
+
+  const executeNow = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    if (deleteActionRef.current) {
+      deleteActionRef.current();
+    }
+    
+    timeoutRef.current = null;
+    intervalRef.current = null;
+    deleteActionRef.current = null;
+    onUndoRef.current = null;
+    
+    setUndoState(null);
   }, []);
 
   const cancelDelete = useCallback(() => {
@@ -58,5 +74,5 @@ export function useUndoDelete() {
     setUndoState(null);
   }, []);
 
-  return { undoState, triggerDelete, cancelDelete };
+  return { undoState, triggerDelete, cancelDelete, executeNow };
 }

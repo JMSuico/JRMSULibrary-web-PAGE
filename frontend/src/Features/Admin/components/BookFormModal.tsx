@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Upload } from 'lucide-react';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BatchBook } from '@/src/Endpoints/batchApi';
@@ -13,11 +13,22 @@ interface BookFormModalProps {
 const CATEGORIES = ['Technology', 'History', 'Health Sciences', 'Computer Science', 'Science', 'Literature', 'General Reference'];
 
 export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFormModalProps) {
-  const [title, setTitle] = useState(initialData?.title || '');
-  const [author, setAuthor] = useState(initialData?.author || '');
-  const [accessionNumber, setAccessionNumber] = useState(initialData?.accession_number || '');
-  const [category, setCategory] = useState(initialData?.category || CATEGORIES[0]);
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const [accessionNumber, setAccessionNumber] = useState('');
+  const [category, setCategory] = useState(CATEGORIES[0]);
   const [coverImage, setCoverImage] = useState<File | null>(null);
+
+  // Reset form fields whenever the modal opens or the book being edited changes
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(initialData?.title || '');
+      setAuthor(initialData?.author || '');
+      setAccessionNumber(initialData?.accession_number || '');
+      setCategory(initialData?.category || CATEGORIES[0]);
+      setCoverImage(null);
+    }
+  }, [isOpen, initialData]);
 
   if (!isOpen) return null;
 

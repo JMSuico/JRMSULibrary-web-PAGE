@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Lock, Library, Save, CheckCircle } from 'lucide-react';
+import { Settings, Lock, Library, Save, CheckCircle, Layers, Archive, RotateCcw, RefreshCw } from 'lucide-react';
 import { settingsApi, SiteSettings } from '@/src/Endpoints/settingsApi';
 import { userApi } from '@/src/Endpoints/userApi';
+import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
 import { useToast } from '@/src/Hooks/useToast';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'general' | 'security'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'carousel' | 'security' | 'archives'>('general');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedStatus, setSavedStatus] = useState(false);
+  const [archivedBatches, setArchivedBatches] = useState<AcquisitionBatch[]>([]);
+  const [archivesLoading, setArchivesLoading] = useState(false);
   const { showToast } = useToast();
   
   const [formData, setFormData] = useState<SiteSettings>({
@@ -18,7 +21,8 @@ export default function SettingsPage() {
     phone_number: '',
     opening_hours_mon_fri: '',
     opening_hours_sat: '',
-    opening_hours_sun: ''
+    opening_hours_sun: '',
+    carousel_style: 'default'
   });
 
   // Mock security data
@@ -42,6 +46,15 @@ export default function SettingsPage() {
     fetchSettings();
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== 'archives') return;
+    setArchivesLoading(true);
+    batchApi.getAllBatches()
+      .then(data => setArchivedBatches(data.filter(b => b.status === 'archived')))
+      .catch(() => showToast('Failed to load archived batches', 'error'))
+      .finally(() => setArchivesLoading(false));
+  }, [activeTab]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -57,17 +70,23 @@ export default function SettingsPage() {
     setSaving(true);
     setSavedStatus(false);
     
-    if (activeTab === 'general') {
+    if (activeTab === 'general' || activeTab === 'carousel') {
       try {
         const updated = await settingsApi.updateSettings(formData);
         setFormData(updated);
+        
+        // Instantly update the cache so the landing page reflects it immediately
+        if (updated.carousel_style) {
+          localStorage.setItem('jrmsu_carousel_style_cache', updated.carousel_style);
+        }
+
         setSavedStatus(true);
         showToast('Settings saved successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
       } catch (err: any) {
         showToast(err.message || 'Failed to save settings', 'error');
       }
-    } else {
+    } else if (activeTab === 'security') {
       if (passwords.newPass !== passwords.confirm) {
         showToast("New passwords don't match", 'error');
         setSaving(false);
@@ -116,6 +135,15 @@ export default function SettingsPage() {
               General Config
             </button>
             <button
+              onClick={() => setActiveTab('carousel')}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
+                activeTab === 'carousel' ? 'bg-blue-50 text-[#002B7F] font-semibold border-l-4 border-[#002B7F]' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+              }`}
+            >
+              <Layers size={18} />
+              Carousel Customize
+            </button>
+            <button
               onClick={() => setActiveTab('security')}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
                 activeTab === 'security' ? 'bg-blue-50 text-[#002B7F] font-semibold border-l-4 border-[#002B7F]' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
@@ -124,18 +152,88 @@ export default function SettingsPage() {
               <Lock size={18} />
               Security
             </button>
+            <button
+              onClick={() => setActiveTab('archives')}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
+                activeTab === 'archives' ? 'bg-blue-50 text-[#002B7F] font-semibold border-l-4 border-[#002B7F]' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+              }`}
+            >
+              <Archive size={18} />
+              Archive Batches
+            </button>
           </div>
         </div>
 
         {/* Settings Content */}
         <div className="flex-1">
-          {loading ? (
+          {activeTab === 'archives' ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in">
+              <div className="p-6 md:p-8 border-b border-gray-100">
+                <h2 className="text-xl font-bold text-gray-800 mb-1 flex items-center gap-2"><Archive size={22} className="text-gray-500" /> Archive Batches</h2>
+                <p className="text-sm text-gray-500">All batches that have been archived. Use Reopen to return a batch to active status.</p>
+              </div>
+              {archivesLoading ? (
+                <div className="p-10 text-center text-gray-400 flex items-center justify-center gap-2"><RefreshCw size={20} className="animate-spin" /> Loading archives...</div>
+              ) : archivedBatches.length === 0 ? (
+                <div className="p-10 text-center text-gray-400">
+                  <Archive size={40} className="mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium">No archived batches found.</p>
+                  <p className="text-sm mt-1">Batches you archive will appear here.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Batch Name</th>
+                        <th>Description</th>
+                        <th>Books</th>
+                        <th>Opened</th>
+                        <th>Closed</th>
+                        <th className="text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {archivedBatches.map(batch => (
+                        <tr key={batch.id}>
+                          <td style={{ fontWeight: 500 }}>{batch.name}</td>
+                          <td style={{ color: '#6b7280', fontSize: '0.875rem' }}>{batch.description || <span className="text-gray-300 italic">No description</span>}</td>
+                          <td>{batch.book_count || 0}</td>
+                          <td style={{ color: '#6b7280', fontSize: '0.85rem' }}>{new Date(batch.opened_at).toLocaleDateString()}</td>
+                          <td style={{ color: '#6b7280', fontSize: '0.85rem' }}>{batch.closed_at ? new Date(batch.closed_at).toLocaleDateString() : '—'}</td>
+                          <td>
+                            <div className="flex justify-end">
+                              <button
+                                className="admin-btn admin-btn--secondary"
+                                style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                onClick={async () => {
+                                  try {
+                                    await batchApi.reopenBatch(batch.id);
+                                    setArchivedBatches(prev => prev.filter(b => b.id !== batch.id));
+                                    showToast('Batch reopened successfully', 'success');
+                                  } catch (err: any) {
+                                    showToast(err.message || 'Failed to reopen batch', 'error');
+                                  }
+                                }}
+                              >
+                                <RotateCcw size={14} /> Reopen
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : loading ? (
             <div className="p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-200">Loading settings...</div>
           ) : (
             <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in">
               <div className="p-6 md:p-8 border-b border-gray-100">
                 <h2 className="text-xl font-bold text-gray-800 mb-6">
-                  {activeTab === 'general' ? 'Library Configuration' : 'Security Settings'}
+                  {activeTab === 'general' ? 'Library Configuration' : activeTab === 'carousel' ? 'Carousel Customize' : 'Security Settings'}
                 </h2>
                 
                 {activeTab === 'general' && (
@@ -175,6 +273,67 @@ export default function SettingsPage() {
                         <label className={labelClass}>Sunday</label>
                         <input type="text" name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required />
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'carousel' && (
+                  <div className="space-y-6">
+                    <p className="text-sm text-gray-500 mb-2">Choose the carousel display style for the <strong>Newly Acquired Books</strong> and <strong>Physical Setup</strong> sections of the public website.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Default 3D Option */}
+                      <button
+                        type="button"
+                        onClick={() => setFormData(p => ({ ...p, carousel_style: 'default' }))}
+                        className={`rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
+                          formData.carousel_style === 'default'
+                            ? 'border-[#002B7F] bg-blue-50 shadow-md'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            formData.carousel_style === 'default' ? 'border-[#002B7F]' : 'border-gray-400'
+                          }`}>
+                            {formData.carousel_style === 'default' && <div className="w-2.5 h-2.5 rounded-full bg-[#002B7F]" />}
+                          </div>
+                          <span className={`font-bold ${ formData.carousel_style === 'default' ? 'text-[#002B7F]' : 'text-gray-700'}`}>Default (3D)</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-1 py-3 bg-white rounded-lg border border-gray-200">
+                          <div className="w-8 h-10 bg-gray-200 rounded opacity-60 -rotate-6"></div>
+                          <div className="w-12 h-14 bg-[#002B7F] rounded shadow-lg z-10"></div>
+                          <div className="w-8 h-10 bg-gray-200 rounded opacity-60 rotate-6"></div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Fan-out 3D perspective view with auto-advance.</p>
+                      </button>
+
+                      {/* Classic Option */}
+                      <button
+                        type="button"
+                        onClick={() => setFormData(p => ({ ...p, carousel_style: 'classic' }))}
+                        className={`rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
+                          formData.carousel_style === 'classic'
+                            ? 'border-[#002B7F] bg-blue-50 shadow-md'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            formData.carousel_style === 'classic' ? 'border-[#002B7F]' : 'border-gray-400'
+                          }`}>
+                            {formData.carousel_style === 'classic' && <div className="w-2.5 h-2.5 rounded-full bg-[#002B7F]" />}
+                          </div>
+                          <span className={`font-bold ${ formData.carousel_style === 'classic' ? 'text-[#002B7F]' : 'text-gray-700'}`}>Classic (Horizontal)</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-1 py-3 bg-white rounded-lg border border-gray-200">
+                          <span className="text-gray-400 text-lg">&#8592;</span>
+                          <div className="w-8 h-12 bg-[#002B7F]/30 rounded"></div>
+                          <div className="w-8 h-12 bg-[#002B7F] rounded shadow"></div>
+                          <div className="w-8 h-12 bg-[#002B7F]/30 rounded"></div>
+                          <span className="text-gray-400 text-lg">&#8594;</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Flat scrollable row. Click-and-drag or use arrow buttons.</p>
+                      </button>
                     </div>
                   </div>
                 )}

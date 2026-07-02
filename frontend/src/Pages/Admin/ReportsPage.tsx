@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { FileText, Printer, Calendar as CalendarIcon, Download } from 'lucide-react';
-import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
+import React, { useState, useEffect } from 'react';
+import { FileText, Printer, Calendar as CalendarIcon, Download, Search, Eye, History, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { reportApi, ReportSummary, HistoricalReport } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { useDebounce } from '@/src/Hooks/useDebounce';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export default function ReportsPage() {
@@ -9,18 +10,66 @@ export default function ReportsPage() {
   const [dateRange, setDateRange] = useState('this-month');
   const [isGenerating, setIsGenerating] = useState(false);
   const [reportData, setReportData] = useState<ReportSummary | null>(null);
+  const [activeReportInfo, setActiveReportInfo] = useState<{title: string, period: string, type: string} | null>(null);
+  
+  // History Table State
+  const [history, setHistory] = useState<HistoricalReport[]>([]);
+  const [totalHistory, setTotalHistory] = useState(0);
+  const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const limit = 5;
+
+  const debouncedSearch = useDebounce(searchQuery, 400);
   const { showToast } = useToast();
+
+  const fetchHistory = async () => {
+    setIsLoadingHistory(true);
+    try {
+      const offset = (page - 1) * limit;
+      const res = await reportApi.getHistory(debouncedSearch, limit, offset);
+      setHistory(res.results);
+      setTotalHistory(res.total);
+    } catch (err: any) {
+      showToast('Failed to load report history', 'error');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, [page, debouncedSearch]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const data = await reportApi.getSummary();
-      setReportData(data);
+      const res = await reportApi.generate(reportType, dateRange);
+      setReportData(res.data);
+      setActiveReportInfo({ title: `Report - ${dateRange.replace('-', ' ').toUpperCase()}`, period: dateRange, type: reportType });
       showToast('Report generated successfully', 'success');
+      setPage(1);
+      fetchHistory();
+      setTimeout(() => {
+        document.getElementById('report-preview-area')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } catch (err: any) {
       showToast(err.message || 'Failed to generate report', 'error');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleViewHistorical = async (id: number) => {
+    try {
+      const res = await reportApi.getHistoryDetail(id);
+      setReportData(res.data);
+      setActiveReportInfo({ title: res.title, period: res.date_range, type: res.report_type });
+      setTimeout(() => {
+        document.getElementById('report-preview-area')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } catch (err: any) {
+      showToast('Failed to load report details', 'error');
     }
   };
 
@@ -33,7 +82,9 @@ export default function ReportsPage() {
 
     const rows: string[][] = [];
     rows.push(['JRMSU Katipunan Campus Library - Report']);
-    rows.push([`Report Type: ${reportType}`, `Period: ${dateRange.replace('-', ' ').toUpperCase()}`]);
+    const rType = activeReportInfo?.type || reportType;
+    const rPeriod = activeReportInfo?.period || dateRange;
+    rows.push([`Report Type: ${rType}`, `Period: ${rPeriod.replace('-', ' ').toUpperCase()}`]);
     rows.push([]);
     rows.push(['Metric', 'Value']);
     rows.push(['Total Visits', String(reportData.total_visits)]);
@@ -44,7 +95,7 @@ export default function ReportsPage() {
     rows.push([]);
 
     if (reportData.recent_books.length > 0) {
-      rows.push(['Recent Books']);
+      rows.push(['Book Acquisitions in Period']);
       rows.push(['Title', 'Author', 'Category', 'Date Added']);
       reportData.recent_books.forEach(b => {
         rows.push([b.title, b.author, b.category, b.dateAdded]);
@@ -53,7 +104,7 @@ export default function ReportsPage() {
     }
 
     if (reportData.recent_activity.length > 0) {
-      rows.push(['Recent Activity']);
+      rows.push(['User Interactions in Period']);
       rows.push(['Type', 'Name', 'Date']);
       reportData.recent_activity.forEach(a => {
         rows.push([a.type, a.name, new Date(a.date).toLocaleDateString()]);
@@ -65,18 +116,18 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `jrmsu-library-report-${dateRange}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `jrmsu-library-report-${rPeriod}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     showToast('CSV exported successfully', 'success');
   };
 
   const ratingData = reportData ? [
-    { name: '1 Star', count: reportData.ratings_summary.count_1 },
-    { name: '2 Stars', count: reportData.ratings_summary.count_2 },
-    { name: '3 Stars', count: reportData.ratings_summary.count_3 },
-    { name: '4 Stars', count: reportData.ratings_summary.count_4 },
-    { name: '5 Stars', count: reportData.ratings_summary.count_5 },
+    { name: '1 Star', count: reportData.ratings_summary.distribution[1] || 0 },
+    { name: '2 Stars', count: reportData.ratings_summary.distribution[2] || 0 },
+    { name: '3 Stars', count: reportData.ratings_summary.distribution[3] || 0 },
+    { name: '4 Stars', count: reportData.ratings_summary.distribution[4] || 0 },
+    { name: '5 Stars', count: reportData.ratings_summary.distribution[5] || 0 },
   ] : [];
 
   const interactionData = reportData ? [
@@ -134,12 +185,107 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {/* History Table */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8 print:hidden">
+        <div className="flex justify-between items-end mb-4">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><History size={20} /> Generated Reports History</h2>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search reports..."
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#002B7F] w-64"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Date Range</th>
+                <th>Generated By</th>
+                <th>Generated At</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingHistory ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-8">
+                    <Loader2 className="animate-spin text-[#002B7F] mx-auto mb-2" size={24} />
+                    <p className="text-gray-500 text-sm">Loading history...</p>
+                  </td>
+                </tr>
+              ) : history.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-gray-500">
+                    No reports found. Generate a new report above!
+                  </td>
+                </tr>
+              ) : (
+                history.map((h) => (
+                  <tr key={h.id}>
+                    <td className="font-medium text-gray-900">{h.title}</td>
+                    <td><span className="bg-blue-50 text-[#002B7F] px-2 py-1 rounded-md text-xs font-semibold uppercase">{h.report_type}</span></td>
+                    <td>{h.date_range.replace('-', ' ').toUpperCase()}</td>
+                    <td>{h.generated_by}</td>
+                    <td>{new Date(h.generated_at).toLocaleString()}</td>
+                    <td>
+                      <button
+                        onClick={() => handleViewHistorical(h.id)}
+                        className="admin-btn admin-btn--outline flex items-center gap-1 !py-1 !px-2 text-xs"
+                      >
+                        <Eye size={14} /> View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalHistory > limit && (
+          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100">
+            <p className="text-sm text-gray-500">
+              Showing {(page - 1) * limit + 1} to {Math.min(page * limit, totalHistory)} of {totalHistory}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="p-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(Math.ceil(totalHistory / limit), p + 1))}
+                disabled={page >= Math.ceil(totalHistory / limit)}
+                className="p-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div id="report-preview-area" className="scroll-mt-6"></div>
+      
       {reportData && (
-        <div className="bg-white border border-gray-200 shadow-sm p-8 rounded-none md:rounded-2xl print:border-none print:shadow-none print:p-0">
+        <div className="bg-white border border-gray-200 shadow-sm p-8 rounded-none md:rounded-2xl print:border-none print:shadow-none print:p-0 mb-8 animate-in slide-in-from-top-4 fade-in duration-300">
           
           <div className="flex justify-between items-start mb-8 print:hidden">
-            <h3 className="text-xl font-bold text-gray-800">Preview</h3>
+            <h3 className="text-xl font-bold text-gray-800">Report Preview</h3>
             <div className="flex gap-2">
+              <button onClick={() => setReportData(null)} className="admin-btn admin-btn--outline text-gray-500 flex items-center gap-2">
+                <X size={16} /> Close
+              </button>
               <button onClick={handleExportCSV} className="admin-btn admin-btn--outline flex items-center gap-2">
                 <Download size={16} /> Export CSV
               </button>
@@ -154,8 +300,8 @@ export default function ReportsPage() {
             <div className="text-center mb-8 border-b-2 border-black pb-4">
               <h1 className="text-2xl font-bold uppercase">Jose Rizal Memorial State University</h1>
               <h2 className="text-xl">Katipunan Campus Library</h2>
-              <p className="mt-2 text-sm font-sans">Official System Report: {reportType === 'summary' ? 'Comprehensive Summary' : reportType}</p>
-              <p className="text-sm font-sans">Period: {dateRange.replace('-', ' ').toUpperCase()}</p>
+              <p className="mt-2 text-sm font-sans">Official System Report: {activeReportInfo?.title || reportType}</p>
+              <p className="text-sm font-sans">Period: {(activeReportInfo?.period || dateRange).replace('-', ' ').toUpperCase()}</p>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -219,9 +365,9 @@ export default function ReportsPage() {
                </div>
             </div>
 
-            {(reportType === 'summary' || reportType === 'books') && (
-              <div className="mb-8 break-inside-avoid">
-                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">Recent Book Acquisitions</h4>
+            {(activeReportInfo?.type === 'summary' || activeReportInfo?.type === 'books' || (!activeReportInfo && (reportType === 'summary' || reportType === 'books'))) && (
+              <div className="mb-8">
+                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">Book Acquisitions in Period</h4>
                 <table className="w-full text-left text-sm border-collapse font-sans">
                   <thead>
                     <tr className="bg-gray-100">
@@ -232,7 +378,7 @@ export default function ReportsPage() {
                   </thead>
                   <tbody>
                     {reportData.recent_books.map((b) => (
-                      <tr key={b.id}>
+                      <tr key={b.id} className="break-inside-avoid">
                         <td className="border border-gray-300 p-2">{b.title}</td>
                         <td className="border border-gray-300 p-2">{b.author}</td>
                         <td className="border border-gray-300 p-2">{b.dateAdded}</td>
@@ -246,9 +392,9 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {(reportType === 'summary' || reportType === 'interactions') && (
-              <div className="mb-8 break-inside-avoid">
-                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">Recent User Interactions</h4>
+            {(activeReportInfo?.type === 'summary' || activeReportInfo?.type === 'interactions' || (!activeReportInfo && (reportType === 'summary' || reportType === 'interactions'))) && (
+              <div className="mb-8">
+                <h4 className="text-lg font-bold border-b border-gray-300 mb-2 font-sans">User Interactions in Period</h4>
                 <table className="w-full text-left text-sm border-collapse font-sans">
                   <thead>
                     <tr className="bg-gray-100">
@@ -259,7 +405,7 @@ export default function ReportsPage() {
                   </thead>
                   <tbody>
                     {reportData.recent_activity.map((act) => (
-                      <tr key={act.id}>
+                      <tr key={act.id} className="break-inside-avoid">
                         <td className="border border-gray-300 p-2">{act.type}</td>
                         <td className="border border-gray-300 p-2">{act.name}</td>
                         <td className="border border-gray-300 p-2">{new Date(act.date).toLocaleDateString()}</td>

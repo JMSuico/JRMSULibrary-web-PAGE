@@ -27,3 +27,8 @@ class INotificationRepository(ABC):
     def get_unread_reservations(self, limit: int) -> List[Any]:
         """Return list of unread ContactMessages of type RESERVATION."""
         pass
+
+    @abstractmethod
+    def mark_all_unread_as_read(self) -> None:
+        """Mark all unread ContactMessages as read."""
+        pass

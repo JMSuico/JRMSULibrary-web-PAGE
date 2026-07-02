@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Eye, Pencil, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Eye, Pencil, Trash2, X, ChevronRight, ListOrdered, MoreVertical } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { batchApi, AcquisitionBatch, BatchBook } from '@/src/Endpoints/batchApi';
 import { BatchCard } from '@/src/Features/Admin/components/BatchCard';
 import { CreateBatchModal } from '@/src/Features/Admin/components/CreateBatchModal';
+import { EditBatchModal } from '@/src/Features/Admin/components/EditBatchModal';
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
-import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
@@ -22,8 +22,11 @@ export default function BooksManagerPage() {
   const [isCreateBatchOpen, setIsCreateBatchOpen] = useState(false);
   const [isBookFormOpen, setIsBookFormOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<BatchBook | undefined>(undefined);
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<number>>(new Set());
   const [auditBatch, setAuditBatch] = useState<AcquisitionBatch | null>(null);
+  const [editBatch, setEditBatch] = useState<AcquisitionBatch | null>(null);
+  const [viewAllOpen, setViewAllOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -31,7 +34,7 @@ export default function BooksManagerPage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   
   const { showToast } = useToast();
-  const { undoState, triggerDelete, cancelDelete } = useUndoDelete();
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   const loadData = async () => {
     setLoading(true);
@@ -95,6 +98,77 @@ export default function BooksManagerPage() {
     }
   };
 
+  const handleEditBatch = async (id: number, data: Partial<AcquisitionBatch>) => {
+    try {
+      const updated = await batchApi.updateBatch(id, data);
+      setBatches(prev => prev.map(b => b.id === id ? { ...b, ...updated } : b));
+      if (currentBatch?.id === id) setCurrentBatch(prev => prev ? { ...prev, ...updated } : prev);
+      showToast('Batch updated successfully', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to update batch', 'error');
+    }
+  };
+
+  const handleDeleteBatch = (batch: AcquisitionBatch) => {
+    triggerDelete(
+      `Batch "${batch.name}"`,
+      async () => {
+        try {
+          await batchApi.deleteBatch(batch.id);
+          if (currentBatch?.id === batch.id) setCurrentBatch(null);
+        } catch (error: any) {
+          setBatches(prev => [...prev, batch]);
+          showToast(error.message || 'Failed to delete batch', 'error');
+        }
+      },
+      () => {
+        setBatches(prev => [...prev, batch]);
+        showToast('Batch restoration undone', 'success');
+      }
+    );
+
+    // Optimistic delete
+    setBatches(prev => prev.filter(b => b.id !== batch.id));
+  };
+
+  const handleViewAudit = async (id: number) => {
+    setLoading(true);
+    try {
+      const history = await batchApi.getBatchHistory(id);
+      const batch = batches.find(b => b.id === id);
+      if (batch) {
+        setAuditBatch({ ...batch, history });
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load audit trail', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkAction = async (action: 'CLOSE' | 'CONTINUE' | 'REOPEN') => {
+    if (selectedBatchIds.size === 0) return;
+    try {
+      const status = (action === 'CLOSE' ? 'closed' : 'open') as 'open' | 'closed';
+      await Promise.all(Array.from<number>(selectedBatchIds).map(id => batchApi.updateBatch(id, { status })));
+      showToast(`Successfully updated ${selectedBatchIds.size} batches`, 'success');
+      setSelectedBatchIds(new Set());
+      loadData();
+    } catch (err: any) {
+      showToast('Failed to update batches', 'error');
+    }
+  };
+
+  const updateBatchStatus = async (id: number, status: 'open' | 'closed') => {
+    try {
+      await batchApi.updateBatch(id, { status });
+      showToast(`Batch ${status === 'open' ? 'reopened' : 'closed'} successfully`, 'success');
+      loadData();
+    } catch (err: any) {
+      showToast('Failed to update batch status', 'error');
+    }
+  };
+
   const handleViewBatchBooks = async (id: number) => {
     setLoading(true);
     try {
@@ -145,47 +219,39 @@ export default function BooksManagerPage() {
     const bookToDelete = currentBatch.books?.find(b => b.id === bookId);
     if (!bookToDelete) return;
 
-    setConfirmModal({
-      isOpen: true,
-      title: 'Remove Book',
-      message: 'Are you sure you want to remove this book from the batch?',
-      onConfirm: () => {
-        triggerDelete(
-          bookToDelete.title,
-          async () => {
-            // Actual delete action after timeout
-            try {
-              await batchApi.deleteBook(currentBatch.id, bookId);
-              showToast('Book permanently deleted', 'success');
-            } catch (error: any) {
-              // Revert if API fails
-              setCurrentBatch(prev => prev ? {
-                ...prev,
-                books: [...(prev.books || []), bookToDelete],
-                book_count: (prev.book_count || 0) + 1
-              } : prev);
-              showToast(error.message || 'Failed to delete book', 'error');
-            }
-          },
-          () => {
-            // Local Undo Action (restore optimistic)
-            setCurrentBatch(prev => prev ? {
-              ...prev,
-              books: [...(prev.books || []), bookToDelete],
-              book_count: (prev.book_count || 0) + 1
-            } : prev);
-            showToast('Deletion undone', 'success');
-          }
-        );
+    // Optimistically remove immediately — keeps UI live
+    setCurrentBatch(prev => prev ? {
+      ...prev,
+      books: (prev.books || []).filter(b => b.id !== bookId),
+      book_count: Math.max(0, (prev.book_count || 0) - 1)
+    } : prev);
 
-        // Optimistic: remove immediately from local state
+    triggerDelete(
+      bookToDelete.title,
+      async () => {
+        // Actual API delete after 3s
+        try {
+          await batchApi.deleteBook(currentBatch.id, bookId);
+        } catch (error: any) {
+          // Revert if API fails
+          setCurrentBatch(prev => prev ? {
+            ...prev,
+            books: [...(prev.books || []), bookToDelete],
+            book_count: (prev.book_count || 0) + 1
+          } : prev);
+          showToast(error.message || 'Failed to delete book', 'error');
+        }
+      },
+      () => {
+        // Undo: restore book to local state
         setCurrentBatch(prev => prev ? {
           ...prev,
-          books: (prev.books || []).filter(b => b.id !== bookId),
-          book_count: Math.max(0, (prev.book_count || 0) - 1)
+          books: [...(prev.books || []), bookToDelete],
+          book_count: (prev.book_count || 0) + 1
         } : prev);
+        showToast('Deletion undone', 'success');
       }
-    });
+    );
   };
 
   // Derived state for filtering
@@ -202,7 +268,10 @@ export default function BooksManagerPage() {
 
   const uniqueCategories = ['All', ...new Set(displayBooks.map((b) => b.category))].filter(Boolean);
 
-  if (loading && !currentBatch) {
+  // Batches sorted ascending for View All modal
+  const batchesAscending = [...batches].sort((a, b) => new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime());
+
+  if (loading && batches.length === 0) {
     return <div style={{ padding: 40, textAlign: 'center' }}><RefreshCw className="animate-spin" /> Loading...</div>;
   }
 
@@ -235,23 +304,45 @@ export default function BooksManagerPage() {
 
       {/* Batch Cards Section */}
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: '1.125rem', marginBottom: 16 }}>Recent Batches</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-          {batches.slice(0, 3).map((batch) => (
-            <BatchCard
-              key={batch.id}
-              batch={batch}
-              onContinue={() => handleViewBatchBooks(batch.id)}
-              onClose={(id) => handleBatchAction('close', id)}
-              onArchive={(id) => handleBatchAction('archive', id)}
-              onReopen={(id) => handleBatchAction('reopen', id)}
-              onActivate={(id) => handleBatchAction('activate', id)}
-              onViewBooks={handleViewBatchBooks}
-              onViewAudit={(b) => setAuditBatch(b)}
-            />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h2 style={{ fontSize: '1.125rem', margin: 0 }}>Recent Batches</h2>
+          <button
+            className="admin-btn admin-btn--secondary"
+            style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => setViewAllOpen(true)}
+          >
+            <ListOrdered size={15} /> View All ({batches.length})
+          </button>
+        </div>
+        <div 
+          style={{ 
+            display: 'flex', 
+            overflowX: 'auto', 
+            gap: 16,
+            paddingBottom: 8,
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch'
+          }}
+          className="custom-scrollbar"
+        >
+          {batches.slice(0, 7).map((batch) => (
+            <div key={batch.id} style={{ minWidth: 300, flex: '0 0 auto', scrollSnapAlign: 'start' }}>
+              <BatchCard
+                batch={batch}
+                onContinue={() => handleViewBatchBooks(batch.id)}
+                onClose={(id) => handleBatchAction('close', id)}
+                onArchive={(id) => handleBatchAction('archive', id)}
+                onReopen={(id) => handleBatchAction('reopen', id)}
+                onActivate={(id) => handleBatchAction('activate', id)}
+                onViewBooks={handleViewBatchBooks}
+                onViewAudit={(b) => setAuditBatch(b)}
+                onEdit={(b) => setEditBatch(b)}
+                onDelete={handleDeleteBatch}
+              />
+            </div>
           ))}
           {batches.length === 0 && (
-            <div style={{ color: '#6b7280', gridColumn: '1 / -1' }}>No batches found. Create one to get started.</div>
+            <div style={{ color: '#6b7280', width: '100%' }}>No batches found. Create one to get started.</div>
           )}
         </div>
       </div>
@@ -363,6 +454,13 @@ export default function BooksManagerPage() {
         onClose={() => setIsCreateBatchOpen(false)}
         onSubmit={handleCreateBatch}
       />
+
+      <EditBatchModal
+        isOpen={!!editBatch}
+        batch={editBatch}
+        onClose={() => setEditBatch(null)}
+        onSubmit={handleEditBatch}
+      />
       
       <BookFormModal
         isOpen={isBookFormOpen}
@@ -371,13 +469,136 @@ export default function BooksManagerPage() {
         initialData={editingBook}
       />
 
-      <ConfirmModal
-        isOpen={!!confirmModal}
-        title={confirmModal?.title || ''}
-        message={confirmModal?.message || ''}
-        onConfirm={() => confirmModal?.onConfirm()}
-        onCancel={() => setConfirmModal(null)}
-      />
+      {/* View All Batches Modal */}
+      {viewAllOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setViewAllOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><BookOpen size={20} className="text-[#002B7F]" /> All Batches ({batches.length})</h2>
+              <button onClick={() => setViewAllOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={20} /></button>
+            </div>
+            
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex gap-2 items-center">
+              <span className="text-sm text-gray-600 font-medium mr-2">Bulk Actions:</span>
+              <button 
+                onClick={() => handleBulkAction('CLOSE')}
+                disabled={selectedBatchIds.size === 0}
+                className="admin-btn admin-btn--secondary disabled:opacity-50"
+                style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+              >
+                Close Selected
+              </button>
+              <button 
+                onClick={() => handleBulkAction('CONTINUE')}
+                disabled={selectedBatchIds.size === 0}
+                className="admin-btn admin-btn--primary disabled:opacity-50"
+                style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+              >
+                Continue / Reopen Selected
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              <table className="admin-table w-full text-left">
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }}>
+                      <input 
+                        type="checkbox" 
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedBatchIds(new Set(batchesAscending.map(b => b.id)));
+                          else setSelectedBatchIds(new Set());
+                        }}
+                        checked={selectedBatchIds.size > 0 && selectedBatchIds.size === batchesAscending.length}
+                        className="rounded border-gray-300 text-blue-600"
+                      />
+                    </th>
+                    <th>#</th>
+                    <th>Batch Name</th>
+                    <th>Status</th>
+                    <th>Books</th>
+                    <th>Opened</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batchesAscending.map((b, idx) => (
+                    <tr key={b.id} className={selectedBatchIds.has(b.id) ? 'bg-blue-50/50' : ''}>
+                      <td>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedBatchIds.has(b.id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedBatchIds);
+                            if (e.target.checked) next.add(b.id);
+                            else next.delete(b.id);
+                            setSelectedBatchIds(next);
+                          }}
+                          className="rounded border-gray-300 text-blue-600"
+                        />
+                      </td>
+                      <td style={{ color: '#9ca3af', fontSize: '0.75rem' }}>{idx + 1}</td>
+                      <td style={{ fontWeight: 500 }}>{b.name}</td>
+                      <td><span className={`admin-badge admin-badge--${b.status === 'open' ? 'info' : b.status === 'closed' ? 'success' : 'warning'}`}>{b.status.toUpperCase()}</span></td>
+                      <td>{b.book_count || 0}</td>
+                      <td style={{ color: '#6b7280', fontSize: '0.85rem' }}>{new Date(b.opened_at).toLocaleDateString()}</td>
+                      <td className="text-right">
+                        <div className="relative inline-block text-left">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === b.id ? null : b.id); }}
+                            className="p-1 rounded hover:bg-gray-100 text-gray-500"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          
+                          {activeDropdown === b.id && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
+                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 z-20 py-1" onClick={e => e.stopPropagation()}>
+                                <button 
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                  onClick={() => { setViewAllOpen(false); handleViewBatchBooks(b.id); setActiveDropdown(null); }}
+                                >
+                                  View Books
+                                </button>
+                                <button 
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                  onClick={() => { handleViewAudit(b.id); setActiveDropdown(null); }}
+                                >
+                                  View Audit
+                                </button>
+                                {b.status === 'open' ? (
+                                  <button 
+                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                    onClick={() => { updateBatchStatus(b.id, 'closed'); setActiveDropdown(null); }}
+                                  >
+                                    Close Batch
+                                  </button>
+                                ) : (
+                                  <button 
+                                    className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50"
+                                    onClick={() => { updateBatchStatus(b.id, 'open'); setActiveDropdown(null); }}
+                                  >
+                                    {b.status === 'closed' ? 'Reopen' : 'Continue'}
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {batches.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32, color: '#9ca3af' }}>No batches yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setViewAllOpen(false)} className="admin-btn admin-btn--secondary">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Audit Modal */}
       {auditBatch && (
@@ -459,21 +680,26 @@ export default function BooksManagerPage() {
       {undoState && (
         <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
               <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
               <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
             </div>
-            <button
-              onClick={cancelDelete}
-              className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors"
-            >
-              Undo
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={cancelDelete}
+                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
+              >
+                Undo
+              </button>
+              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
+                <X size={18} />
+              </button>
+            </div>
           </div>
           <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
             <div 
               className="bg-gray-400 h-full transition-all ease-linear"
-              style={{ width: `${(undoState.countdown / 15) * 100}%`, transitionDuration: '1s' }}
+              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
             />
           </div>
         </div>

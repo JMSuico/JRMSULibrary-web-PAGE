@@ -15,6 +15,9 @@ class SiteSettings(models.Model):
     opening_hours_sat = models.CharField(max_length=100, default="Closed")
     opening_hours_sun = models.CharField(max_length=100, default="Closed")
 
+    # UI Settings
+    carousel_style = models.CharField(max_length=20, default='default', choices=[('default', 'Default (3D)'), ('classic', 'Classic (Horizontal)')])
+
     # The singleton pattern is enforced at the repository/service layer
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -5,6 +5,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from Features.Data.Models.recycle_bin_model import RecycleBin
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from Features.Api.Serializers.contact_serializer import ContactMessageSerializer
 from Features.Repositories.Implementations.contact_repository import ContactRepository
@@ -77,6 +78,13 @@ class ContactMessageViewSet(viewsets.ViewSet):
         try:
             message = self.service.repository.get_by_id(pk)
             if message:
+                RecycleBin.objects.create(
+                    original_id=message.id,
+                    source_module='CONTACT_MSG',
+                    item_name=message.subject or f"Message from {message.email}",
+                    data_snapshot=ContactMessageSerializer(message).data,
+                    deleted_by=request.user.id if request.user.is_authenticated else None
+                )
                 message.delete()
                 return Response(status=status.HTTP_204_NO_CONTENT)
             return Response(status=status.HTTP_404_NOT_FOUND)

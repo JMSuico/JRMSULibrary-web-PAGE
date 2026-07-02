@@ -8,6 +8,7 @@ export interface User {
   last_name: string;
   is_active: boolean;
   date_joined: string;
+  avatar_url?: string | null;
 }
 
 export const userApi = {
@@ -52,6 +53,13 @@ export const userApi = {
     return apiClient(`/users/change_password/`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  uploadAvatar: async (id: number, data: FormData): Promise<User> => {
+    return apiClient(`/users/${id}/upload_avatar/`, {
+      method: 'POST',
+      body: data,
     });
   },
 };
