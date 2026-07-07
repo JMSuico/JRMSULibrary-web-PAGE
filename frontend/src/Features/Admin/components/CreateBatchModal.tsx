@@ -25,8 +25,8 @@ export function CreateBatchModal({ isOpen, onClose, onSubmit }: CreateBatchModal
   };
 
   return createPortal(
-    <div className="fixed backdrop-blur-sm inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+    <div className="fixed backdrop-blur-sm inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 animate-admin-modal-overlay">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-admin-modal-card">
         <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
           <h2 className="text-lg font-semibold text-gray-900 m-0">Create New Acquisition Batch</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">

@@ -17,3 +17,18 @@ class AuditLogMiddleware(MiddlewareMixin):
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
+
+class CSPMiddleware(MiddlewareMixin):
+    def process_response(self, request, response):
+        csp_header = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "img-src 'self' data: blob: https:; "
+            "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* wss://*;"
+        )
+        # Apply CSP if not already set
+        if 'Content-Security-Policy' not in response:
+            response['Content-Security-Policy'] = csp_header
+        return response

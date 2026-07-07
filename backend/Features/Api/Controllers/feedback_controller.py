@@ -9,6 +9,8 @@ from Features.Services.Implementations.feedback_service import FeedbackService
 
 
 class FeedbackViewSet(viewsets.ViewSet):
+    throttle_scope = 'feedback'
+
     def get_permissions(self):
         if self.action == 'create':
             return [permissions.AllowAny()]

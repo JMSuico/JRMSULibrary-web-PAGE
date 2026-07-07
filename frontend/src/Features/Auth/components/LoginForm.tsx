@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 export function LoginForm() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export function LoginForm() {
   const [captchaInput, setCaptchaInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const { showToast } = useToast();
 
   // Initialize Captcha
@@ -42,6 +44,7 @@ export function LoginForm() {
   };
 
   return (
+    <>
     <form onSubmit={handleLogin} className="flex flex-col gap-6 w-full max-w-md mx-auto relative z-10">
       <div className="flex flex-col text-center mb-4">
         <h2 className="font-playfair text-3xl font-bold text-gray-900 mb-2">Admin Portal</h2>
@@ -134,6 +137,16 @@ export function LoginForm() {
         </div>
       </div>
 
+      <div className="flex justify-end -mt-3">
+        <button
+          type="button"
+          onClick={() => setIsForgotModalOpen(true)}
+          className="text-sm font-medium text-navy hover:text-navy-dark transition-colors"
+        >
+          Forgot Password?
+        </button>
+      </div>
+
       <button
         type="submit"
         disabled={!isHuman || isLoading || !username || !password}
@@ -155,5 +168,11 @@ export function LoginForm() {
         </a>
       </div>
     </form>
+    
+    <ForgotPasswordModal 
+      isOpen={isForgotModalOpen} 
+      onClose={() => setIsForgotModalOpen(false)} 
+    />
+    </>
   );
 }

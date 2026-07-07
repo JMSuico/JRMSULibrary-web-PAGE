@@ -22,8 +22,12 @@ from Features.Api.Controllers.external_proxy_controller import (
 from Features.Api.Controllers.ai_controller import AIViewSet
 
 
+from Features.Api.Controllers.health_controller import HealthCheckViewSet
 
 router = DefaultRouter()
+
+# Health endpoints
+router.register(r'health', HealthCheckViewSet, basename='health')
 
 # CMS endpoints
 router.register(r'batches', AcquisitionBatchViewSet, basename='batch')

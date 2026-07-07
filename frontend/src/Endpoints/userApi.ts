@@ -75,4 +75,19 @@ export const userApi = {
       body: JSON.stringify(data),
     });
   },
+
+  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+    return apiClient(`/users/request_password_reset/`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  resetPasswordWithCode: async (email: string, code: string, new_password: string): Promise<{ message: string }> => {
+    return apiClient(`/users/reset_password_with_code/`, {
+      method: 'POST',
+      body: JSON.stringify({ email, code, new_password }),
+    });
+  },
 };
+

@@ -2,6 +2,7 @@
 // Floating modal card for editing admin profile credentials
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Camera, Save, Loader2, Eye, EyeOff, User as UserIcon } from 'lucide-react';
 import { userApi, User } from '@/src/Endpoints/userApi';
 
@@ -101,9 +102,9 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
   const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy transition-colors';
   const labelClass = 'block text-xs font-semibold text-gray-600 mb-1';
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-admin-modal-overlay"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
@@ -111,8 +112,7 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
     >
       <div
         ref={modalRef}
-        className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden"
-        style={{ animation: 'fadeInDown 0.2s ease-out' }}
+        className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden animate-admin-modal-card"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-navy to-[#001655]">
@@ -214,6 +214,7 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

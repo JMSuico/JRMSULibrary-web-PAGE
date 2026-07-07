@@ -22,11 +22,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr")
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not DEBUG and not SECRET_KEY:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("SECRET_KEY environment variable must be set when DEBUG=False.")
+elif not SECRET_KEY:
+    SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
 
 ALLOWED_HOSTS = []
 
@@ -58,6 +63,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.AuditLogMiddleware",
+    "core.middleware.CSPMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -211,17 +217,20 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle"
     ],
+    "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
     "DEFAULT_THROTTLE_RATES": {
         "anon": "120/hour",
         "user": "2000/hour",
         "contact": "200/hour",
         "login": "5/minute",
-        "chat": "100/hour"
+        "chat": "100/hour",
+        "feedback": "10/hour"
     }
 }
 
 # Production Security Settings
 if not DEBUG:
+    SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True

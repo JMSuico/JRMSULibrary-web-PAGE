@@ -10,7 +10,7 @@ from Features.Repositories.Implementations.user_repository import UserRepository
 
 class IsSuperUser(permissions.BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_superuser)
+        return bool(request.user and request.user.is_staff)
 
 class LoginRateThrottle(AnonRateThrottle):
     scope = 'login'
@@ -21,7 +21,7 @@ class UserViewSet(viewsets.ViewSet):
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsSuperUser()]
-        if self.action == 'login':
+        if self.action in ['login', 'request_password_reset', 'reset_password_with_code']:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -48,12 +48,25 @@ class UserViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], throttle_classes=[LoginRateThrottle])
     def login(self, request):
         from django.contrib.auth import authenticate, login
+        from django.core.cache import cache
         username = request.data.get("username")
         password = request.data.get("password")
+        
+        if not username:
+            return Response({"error": "Username required"}, status=400)
+            
+        cache_key = f"login_attempts_{username}"
+        attempts = cache.get(cache_key, 0)
+        if attempts >= 10:
+            return Response({"error": "Account temporarily locked due to too many failed attempts. Try again in 15 minutes."}, status=429)
+
         user = authenticate(request, username=username, password=password)
         if user is not None:
+            cache.delete(cache_key)
             login(request, user)
             return Response(self._serialize(user, request))
+            
+        cache.set(cache_key, attempts + 1, timeout=900)  # 15 minutes lockout
         return Response({"error": "Invalid credentials"}, status=400)
 
     @action(detail=False, methods=["post"])
@@ -121,6 +134,22 @@ class UserViewSet(viewsets.ViewSet):
         request.user.save()
         from django.contrib.auth import update_session_auth_hash
         update_session_auth_hash(request, request.user)
+        
+        # Send notification email
+        from django.core.mail import send_mail
+        from django.conf import settings
+        if request.user.email:
+            try:
+                send_mail(
+                    subject="Your password has been changed",
+                    message="This is a confirmation that the password for your JRMSU Library account has been changed. If you did not make this change, please contact an administrator immediately.",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[request.user.email],
+                    fail_silently=True
+                )
+            except Exception:
+                pass
+                
         return Response({"message": "Password changed successfully"})
 
     @action(detail=False, methods=["post"])
@@ -155,3 +184,69 @@ class UserViewSet(viewsets.ViewSet):
             user.save()
 
         return Response(self._serialize(user, request))
+
+    @action(detail=False, methods=["post"], throttle_classes=[AnonRateThrottle])
+    def request_password_reset(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"error": "Email is required"}, status=400)
+            
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
+        
+        if not user:
+            # Return 200 anyway to prevent email enumeration
+            return Response({"message": "If that email exists in our system, a reset code has been sent."})
+            
+        import random
+        import string
+        code = ''.join(random.choices(string.digits, k=8))
+        
+        from django.core.cache import cache
+        cache_key = f"pwd_reset_{email.lower()}"
+        cache.set(cache_key, code, timeout=900) # 15 minutes
+        
+        from django.core.mail import send_mail
+        from django.conf import settings
+        try:
+            send_mail(
+                subject="Password Reset Code",
+                message=f"Your password reset code for JRMSU Library Admin Portal is: {code}\n\nThis code is valid for 15 minutes. If you did not request this, please ignore this email.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=True
+            )
+        except Exception:
+            pass
+            
+        return Response({"message": "If that email exists in our system, a reset code has been sent."})
+
+    @action(detail=False, methods=["post"], throttle_classes=[AnonRateThrottle])
+    def reset_password_with_code(self, request):
+        email = request.data.get("email")
+        code = request.data.get("code")
+        new_password = request.data.get("new_password")
+        
+        if not email or not code or not new_password:
+            return Response({"error": "Email, code, and new password are required"}, status=400)
+            
+        from django.core.cache import cache
+        cache_key = f"pwd_reset_{email.lower()}"
+        cached_code = cache.get(cache_key)
+        
+        if not cached_code or cached_code != code:
+            return Response({"error": "Invalid or expired reset code"}, status=400)
+            
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
+        
+        if not user:
+            return Response({"error": "User not found"}, status=404)
+            
+        user.set_password(new_password)
+        user.save()
+        cache.delete(cache_key) # Invalidate code immediately
+        
+        return Response({"message": "Password successfully reset. You can now log in."})

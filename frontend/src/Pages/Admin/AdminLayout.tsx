@@ -7,6 +7,8 @@ import { ToastProvider } from '@/src/Hooks/useToast';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { Loader2 } from 'lucide-react';
 
+import bgImage from '@/src/Assets/assets/JRMSU library lib.jpg';
+
 /** Map route paths to human-readable page titles */
 const PAGE_TITLES: Record<string, string> = {
   '/admin': 'Dashboard Overview',
@@ -99,8 +101,8 @@ export default function AdminLayout() {
   useInactivityTimer(300000, handleAutoLogout);
 
   const handleToggleSidebar = useCallback(() => {
-    // On mobile, toggle the mobile overlay; on desktop, collapse/expand
-    if (window.innerWidth < 768) {
+    // Under 1024px (lg breakpoint), toggle the mobile overlay; on desktop, collapse/expand
+    if (window.innerWidth < 1024) {
       setMobileOpen((prev) => !prev);
     } else {
       setSidebarCollapsed((prev) => !prev);
@@ -128,9 +130,17 @@ export default function AdminLayout() {
 
   return (
     <ToastProvider>
-      <div className="admin-layout relative bg-gray-50 min-h-screen">
+      <div 
+        className="admin-layout relative min-h-screen"
+        style={{
+          backgroundImage: `linear-gradient(to right, rgba(248, 249, 252, 0.85), rgba(248, 249, 252, 0.85)), url("${bgImage}")`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed'
+        }}
+      >
         
-        {/* Radiant background removed as requested */}
+        {/* Background mesh gradient is handled in admin.css via .admin-layout */}
 
         <AdminSidebar
           collapsed={sidebarCollapsed}
@@ -145,7 +155,7 @@ export default function AdminLayout() {
             onUserUpdate={(updatedUser) => setUser(updatedUser)}
           />
           <div className="admin-content bg-transparent">
-            <div className="bg-white/90 rounded-3xl shadow-xl shadow-navy/5 border border-white/50 p-6 md:p-8 min-h-[calc(100vh-120px)]">
+            <div className="bg-white/95 rounded-3xl shadow-lg border border-gray-200/60 p-6 md:p-8 min-h-[calc(100vh-120px)] backdrop-blur-sm">
               <Outlet context={{ user, setUser } satisfies AdminOutletContext} />
             </div>
           </div>

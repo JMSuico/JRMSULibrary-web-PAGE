@@ -150,8 +150,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
           {/* Notification Dropdown */}
           {showNotifications && (
             <div
-              className="fixed right-4 md:right-6 top-[68px] w-[calc(100vw-32px)] md:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
-              style={{ animation: 'fadeInDown 0.15s ease-out' }}
+              className="fixed right-4 md:right-6 top-[68px] w-[calc(100vw-32px)] md:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden animate-admin-dropdown"
               role="dialog"
               aria-modal="true"
               aria-label="Notifications panel"
@@ -283,8 +282,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
           
           {showProfile && user && (
             <div 
-              className="absolute right-0 top-[48px] w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col items-center p-5"
-              style={{ animation: 'fadeInDown 0.15s ease-out' }}
+              className="absolute right-0 top-[48px] w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col items-center p-5 animate-admin-dropdown"
             >
               <div className="w-20 h-20 rounded-full bg-navy text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden">
                 {user.avatar_url ? (

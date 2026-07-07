@@ -216,16 +216,22 @@ JRMSU LIBRARY LANDING PAGE/            # Root project folder (Vite + React setup
 │   │   │   └── components/
 │   │   │       └── EResourcesPage.tsx        # E-Resources section component (unused — legacy ref)
 │   │   │
-│   │   └── AIAssistant/               # Rizal AI assistant feature slice
+│   │   ├── AIAssistant/               # Rizal AI assistant feature slice
+│   │   │   └── components/
+│   │   │       └── RizalAssistant.tsx        # Dr. Rizal floating AI assistant chat modal
+│   │   │
+│   │   └── Auth/                      # Authentication and authorization slice
 │   │       └── components/
-│   │           └── RizalAssistant.tsx        # Dr. Rizal floating AI assistant chat modal
+│   │           ├── LoginForm.tsx             # Main admin login form
+│   │           └── ForgotPasswordModal.tsx   # Floating modal for password reset flow
 │   │
 │   ├── Endpoints/                     # API endpoint stubs — frontend to backend bridge layer
 │   │   ├── contactApi.ts              # POST /api/contact — contact form submission to backend
 │   │   ├── feedbackApi.ts             # POST /api/feedback — visitor feedback submission
 │   │   ├── personnelApi.ts            # GET /api/personnel — fetch library staff list from DB
 │   │   ├── cmsApi.ts                  # CMS CRUD — /api/books, /api/departments, /api/gallery
-│   │   └── notificationApi.ts         # GET /api/notifications/all/ — smart aggregated notifications
+│   │   ├── notificationApi.ts         # GET /api/notifications/all/ — smart aggregated notifications
+│   │   └── userApi.ts                 # Auth and profile operations (login, reset password, etc)
 │   │
 │   ├── Components/                    # Shared reusable UI primitives — presentational only
 │   │   ├── LayoutBars/                # Global layout frame components

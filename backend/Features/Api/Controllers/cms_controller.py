@@ -319,6 +319,13 @@ class ManagedFileViewSet(viewsets.ViewSet):
             allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
             if ext not in allowed_extensions:
                 return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=400)
+                
+            from rest_framework.exceptions import ValidationError
+            try:
+                MalwareScannerHelper.verify_file_safety(uploaded_file)
+            except ValidationError as e:
+                return Response({'error': str(e)}, status=400)
+                
             mutable_data['file'] = uploaded_file
         ser = ManagedFileSerializer(data=mutable_data)
         if ser.is_valid():

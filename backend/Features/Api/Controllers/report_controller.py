@@ -18,7 +18,7 @@ from Features.Repositories.Implementations.recycle_bin_repository import Recycle
 
 class IsSuperUser(permissions.BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_superuser)
+        return bool(request.user and request.user.is_staff)
 
 class ReportViewSet(viewsets.ViewSet):
     permission_classes = [IsSuperUser]

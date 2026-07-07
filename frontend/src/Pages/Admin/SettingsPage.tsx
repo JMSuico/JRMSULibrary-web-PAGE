@@ -74,15 +74,6 @@ export default function SettingsPage() {
         setAvatarFile(null);
       }
 
-      if (newPassword) {
-        if (newPassword !== confirmPassword) throw new Error("New passwords don't match");
-        if (!oldPassword) throw new Error("Current password is required");
-        await userApi.changePassword({ old_password: oldPassword, new_password: newPassword });
-        setOldPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-      }
-
       setUser(updatedUser);
       setSavedStatus(true);
       showToast('Profile updated successfully', 'success');
@@ -445,30 +436,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <hr className="border-gray-100 my-6" />
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Change Password</h3>
-                <p className="text-sm text-gray-500 mb-4">Leave fields blank if you don't want to change your password.</p>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="relative">
-                    <label className={labelClass}>Current Password</label>
-                    <input type={showOldPw ? 'text' : 'password'} value={oldPassword} onChange={e => setOldPassword(e.target.value)} className={inputClass} placeholder="Required to set new password" />
-                    <button type="button" onClick={() => setShowOldPw(v => !v)} className="absolute right-3 top-[26px] text-gray-400 hover:text-gray-600 bg-transparent border-none">
-                      {showOldPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <label className={labelClass}>New Password</label>
-                    <input type={showNewPw ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} placeholder="New password" />
-                    <button type="button" onClick={() => setShowNewPw(v => !v)} className="absolute right-3 top-[26px] text-gray-400 hover:text-gray-600 bg-transparent border-none">
-                      {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Confirm New Password</label>
-                    <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className={inputClass} placeholder="Repeat new password" />
-                  </div>
-                </div>
+                {/* Password change removed - now in Security tab */}
               </div>
               <div className="px-6 md:px-8 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end">
                 <button

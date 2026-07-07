@@ -10,7 +10,7 @@ from django.utils import timezone
 
 class IsSuperUser(permissions.BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_superuser)
+        return bool(request.user and request.user.is_staff)
 
 class SiteVisitViewSet(viewsets.ViewSet):
     permission_classes = [IsSuperUser]
