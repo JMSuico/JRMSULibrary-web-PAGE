@@ -5,6 +5,7 @@ import { useToast } from '@/src/Hooks/useToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState('summary');
@@ -320,26 +321,14 @@ export default function ReportsPage() {
         </div>
 
         {totalHistory > limit && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100">
-            <p className="text-sm text-gray-500">
-              Showing {(page - 1) * limit + 1} to {Math.min(page * limit, totalHistory)} of {totalHistory}
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(Math.ceil(totalHistory / limit), p + 1))}
-                disabled={page >= Math.ceil(totalHistory / limit)}
-                className="p-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <Pagination
+              currentPage={page}
+              totalPages={Math.ceil(totalHistory / limit)}
+              onPageChange={setPage}
+              totalItems={totalHistory}
+              itemsPerPage={limit}
+            />
           </div>
         )}
       </div>

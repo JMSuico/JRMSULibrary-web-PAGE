@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Lock, Library, Save, CheckCircle, Layers, Archive, RotateCcw, RefreshCw, UserCircle, Camera, Eye, EyeOff } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import { AdminOutletContext } from './AdminLayout';
@@ -105,12 +105,16 @@ export default function SettingsPage() {
     carousel_style: 'default'
   });
 
-  // Mock security data
   const [passwords, setPasswords] = useState({
     current: '',
     newPass: '',
     confirm: ''
   });
+
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -589,16 +593,35 @@ export default function SettingsPage() {
                 {activeTab === 'security' && (
                   <div className="space-y-6 max-w-md">
                     <div>
-                      <label className={labelClass}>Current Password</label>
-                      <input type="password" name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} required />
+                      <h3 className="text-lg font-bold text-gray-800">Change Password</h3>
+                      <p className="text-sm text-gray-500">Leave fields blank if you don't want to change your password.</p>
                     </div>
                     <div>
-                      <label className={labelClass}>New Password</label>
-                      <input type="password" name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} required />
+                      <label className={labelClass}>Current Password <span className="text-xs text-gray-400 font-normal ml-2">(Required to set new password)</span></label>
+                      <div className="relative flex items-center">
+                        <input type={showCurrentPassword ? "text" : "password"} name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} placeholder="Current Password" />
+                        <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
+                          {showCurrentPassword ? <EyeOff size={22} /> : <Eye size={22} />}
+                        </button>
+                      </div>
                     </div>
                     <div>
-                      <label className={labelClass}>Confirm New Password</label>
-                      <input type="password" name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} required />
+                      <label className={labelClass}>New Password <span className="text-xs text-gray-400 font-normal ml-2">(New password)</span></label>
+                      <div className="relative flex items-center">
+                        <input type={showNewPassword ? "text" : "password"} name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} placeholder="New Password" />
+                        <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
+                          {showNewPassword ? <EyeOff size={22} /> : <Eye size={22} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Confirm New Password <span className="text-xs text-gray-400 font-normal ml-2">(Repeat new password)</span></label>
+                      <div className="relative flex items-center">
+                        <input type={showConfirmPassword ? "text" : "password"} name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} placeholder="Confirm New Password" />
+                        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
+                          {showConfirmPassword ? <EyeOff size={22} /> : <Eye size={22} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

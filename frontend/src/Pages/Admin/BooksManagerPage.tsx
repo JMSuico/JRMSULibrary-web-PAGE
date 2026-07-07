@@ -11,6 +11,7 @@ import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 type ViewMode = 'table' | 'grid';
 
@@ -33,6 +34,8 @@ export default function BooksManagerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   const { showToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
@@ -269,6 +272,13 @@ export default function BooksManagerPage() {
 
   const uniqueCategories = ['All', ...new Set(displayBooks.map((b) => b.category))].filter(Boolean);
 
+  const totalPages = Math.ceil(filteredBooks.length / itemsPerPage);
+  const paginatedBooks = filteredBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedCategory, currentBatch?.id]);
+
   // Batches sorted ascending for View All modal
   const batchesAscending = [...batches].sort((a, b) => new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime());
 
@@ -403,7 +413,7 @@ export default function BooksManagerPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBooks.map((book) => (
+                  {paginatedBooks.map((book) => (
                     <tr key={book.id}>
                       <td style={{ fontWeight: 500 }}>{book.title}</td>
                       <td>{book.author}</td>
@@ -423,12 +433,21 @@ export default function BooksManagerPage() {
                   )}
                 </tbody>
               </table>
+              {filteredBooks.length > itemsPerPage && (
+                <Pagination 
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  totalItems={filteredBooks.length}
+                  itemsPerPage={itemsPerPage}
+                />
+              )}
             </div>
           )}
 
           {viewMode === 'grid' && (
             <div className="admin-card-grid" style={{ padding: 20 }}>
-              {filteredBooks.map((book) => (
+              {paginatedBooks.map((book) => (
                 <div className="admin-grid-card" key={book.id}>
                   <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {book.cover_image ? (
@@ -444,6 +463,17 @@ export default function BooksManagerPage() {
                   </div>
                 </div>
               ))}
+              {filteredBooks.length > itemsPerPage && (
+                <div className="col-span-full">
+                  <Pagination 
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    totalItems={filteredBooks.length}
+                    itemsPerPage={itemsPerPage}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

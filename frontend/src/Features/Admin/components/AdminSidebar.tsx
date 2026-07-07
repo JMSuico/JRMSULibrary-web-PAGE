@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { userApi } from '@/src/Endpoints/userApi';
+import jrmsuLogo from '@/src/Assets/assets/JRMSU-removebg-preview.png';
 
 interface AdminSidebarProps {
   collapsed: boolean;
@@ -88,8 +89,8 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
       <aside className={sidebarClasses} aria-label="Admin navigation">
         {/* Brand */}
         <div className="admin-sidebar__brand">
-          <div className="admin-sidebar__brand-logo" aria-hidden="true">
-            <Library size={22} />
+          <div className="admin-sidebar__brand-logo flex items-center justify-center bg-white rounded-full p-1" aria-hidden="true">
+            <img src={jrmsuLogo} alt="JRMSU Logo" className="w-full h-full object-contain" />
           </div>
           {!collapsed && (
             <div className="admin-sidebar__brand-text">

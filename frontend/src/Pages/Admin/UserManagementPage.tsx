@@ -15,12 +15,15 @@ import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -106,13 +109,22 @@ export default function UserManagementPage() {
 
   const debouncedSearch = useDebounce(searchQuery, 400);
 
-  const filtered = users.filter(
-    (u) =>
-      u.username.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      u.email.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      u.first_name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      u.last_name.toLowerCase().includes(debouncedSearch.toLowerCase())
-  );
+  const filtered = users.filter((u) => {
+    if (!debouncedSearch) return true;
+    const q = debouncedSearch.toLowerCase();
+    return u.first_name.toLowerCase().includes(q) || 
+           u.last_name.toLowerCase().includes(q) || 
+           u.email.toLowerCase().includes(q) || 
+           u.username.toLowerCase().includes(q);
+  });
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedUsers = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Reset to page 1 when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   return (
     <>
@@ -176,7 +188,7 @@ export default function UserManagementPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((user) => (
+                {paginatedUsers.map((user) => (
                   <tr key={user.id}>
                     <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>
                       {user.first_name} {user.last_name}
@@ -242,6 +254,16 @@ export default function UserManagementPage() {
                 ))}
               </tbody>
             </table>
+            
+            {filtered.length > itemsPerPage && (
+              <Pagination 
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filtered.length}
+                itemsPerPage={itemsPerPage}
+              />
+            )}
           </div>
         )}
       </div>

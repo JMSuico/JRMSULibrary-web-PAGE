@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { AdminSidebar } from '@/src/Features/Admin/components/AdminSidebar';
 import { AdminTopbar } from '@/src/Features/Admin/components/AdminTopbar';
@@ -128,7 +128,7 @@ export default function AdminLayout() {
 
   return (
     <ToastProvider>
-      <div className="admin-layout relative overflow-x-hidden bg-gray-50 min-h-screen">
+      <div className="admin-layout relative bg-gray-50 min-h-screen">
         
         {/* Radiant background removed as requested */}
 

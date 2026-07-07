@@ -19,6 +19,7 @@ import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 interface AttachmentUploaderProps {
   file: File;
@@ -101,6 +102,8 @@ export default function EmailMessagePage() {
   const [showArchived, setShowArchived] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File, id?: string }[] } | null>(null);
@@ -345,6 +348,13 @@ export default function EmailMessagePage() {
   const groupedArray = (Object.values(groupedMessages) as Array<{ name: string, email: string, messages: ContactMessage[], unreadCount: number, totalCount: number }>)
     .sort((a, b) => b.unreadCount - a.unreadCount);
 
+  const totalPages = Math.ceil(groupedArray.length / itemsPerPage);
+  const paginatedGroups = groupedArray.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, filterType, showArchived]);
+
   return (
     <div className="w-full flex flex-col h-[calc(100vh-64px)] overflow-hidden relative">
       {/* Background Sends Banner */}
@@ -468,9 +478,9 @@ export default function EmailMessagePage() {
         ) : groupedArray.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No messages found.</div>
         ) : (
-          <div className="flex flex-col p-4 gap-4 bg-gray-50/50">
-            {groupedArray.map((group) => (
-              <div key={group.email} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="flex flex-col p-4 gap-4 bg-gray-50/50 flex-1 overflow-y-auto">
+            {paginatedGroups.map((group) => (
+              <div key={group.email} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden shrink-0">
                 <div 
                   className="bg-gray-50 p-4 flex justify-between items-center border-b border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors" 
                   onClick={() => toggleExpandedGroup(group.email)}
@@ -601,6 +611,18 @@ export default function EmailMessagePage() {
                 )}
               </div>
             ))}
+            
+            {groupedArray.length > itemsPerPage && (
+              <div className="mt-4 shrink-0">
+                <Pagination 
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  totalItems={groupedArray.length}
+                  itemsPerPage={itemsPerPage}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -21,6 +21,7 @@ import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 type ViewMode = 'table' | 'grid';
 
@@ -29,6 +30,8 @@ export default function SectionsManagerPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const { showToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
@@ -151,6 +154,13 @@ export default function SectionsManagerPage() {
       img.section_label.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedSections = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
+
   const activeCount = images.filter((i) => i.is_active).length;
 
   return (
@@ -230,7 +240,7 @@ export default function SectionsManagerPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((img) => (
+                    {paginatedSections.map((img) => (
                       <tr key={img.id}>
                         <td>
                           <img
@@ -273,8 +283,8 @@ export default function SectionsManagerPage() {
             )}
 
             {viewMode === 'grid' && (
-              <div className="admin-card-grid" style={{ padding: 20 }}>
-                {filtered.map((img) => (
+              <div className="admin-card-grid p-5">
+                {paginatedSections.map((img) => (
                   <div className="admin-grid-card" key={img.id}>
                     <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: 'var(--color-gray-100)' }}>
                       <img
@@ -320,6 +330,16 @@ export default function SectionsManagerPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {filtered.length > itemsPerPage && (
+              <Pagination 
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filtered.length}
+                itemsPerPage={itemsPerPage}
+              />
             )}
           </>
         )}

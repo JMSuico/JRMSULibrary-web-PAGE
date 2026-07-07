@@ -4,6 +4,7 @@ import { recycleApi, RecycleBinItem } from '@/src/Endpoints/recycleApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useDebounce } from '@/src/Hooks/useDebounce';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 export default function RecycleBinPage() {
   const [items, setItems] = useState<RecycleBinItem[]>([]);
@@ -11,6 +12,8 @@ export default function RecycleBinPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [moduleFilter, setModuleFilter] = useState<string>('ALL');
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   const { showToast } = useToast();
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -63,6 +66,13 @@ export default function RecycleBinPage() {
     const matchesModule = moduleFilter === 'ALL' || item.source_module === moduleFilter;
     return matchesSearch && matchesModule;
   });
+
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, moduleFilter]);
 
   return (
     <>
@@ -121,7 +131,7 @@ export default function RecycleBinPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredItems.map((item) => (
+                {paginatedItems.map((item) => (
                   <tr key={item.id}>
                     <td>
                       <div className="font-medium text-gray-800">{item.item_name}</div>
@@ -168,6 +178,18 @@ export default function RecycleBinPage() {
                 ))}
               </tbody>
             </table>
+            
+            {filteredItems.length > itemsPerPage && (
+              <div className="p-4 border-t border-gray-100">
+                <Pagination 
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  totalItems={filteredItems.length}
+                  itemsPerPage={itemsPerPage}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
