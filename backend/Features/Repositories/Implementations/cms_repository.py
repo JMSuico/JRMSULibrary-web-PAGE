@@ -1,3 +1,4 @@
+# [Layer: Repositories/Implementations] — cms_repository.py
 from typing import List, Optional, Any
 from Features.Data.Models import PageContent, PageImage, ManagedLink, ManagedFile
 from Features.Repositories.Interfaces import (

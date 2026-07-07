@@ -7,11 +7,13 @@ import { userApi, User } from '@/src/Endpoints/userApi';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { notificationApi, Notification } from '@/src/Endpoints/notificationApi';
 import { NotificationDetailModal } from '@/src/Components/Modals/NotificationDetailModal';
+import { ProfileEditModal } from '@/src/Features/Admin/components/ProfileEditModal';
 
 interface AdminTopbarProps {
   pageTitle: string;
   onToggleSidebar: () => void;
   user?: User | null;
+  onUserUpdate?: (updatedUser: User) => void;
 }
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -38,10 +40,11 @@ const DOT_MAP: Record<string, string> = {
   purple: 'bg-purple-500',
 };
 
-export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarProps) {
+export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: AdminTopbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [totalVisits, setTotalVisits] = useState(0);
@@ -154,9 +157,9 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
               aria-label="Notifications panel"
             >
               {/* Header */}
-              <div className="flex justify-between items-center px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-[#002B7F] to-[#001655]">
+              <div className="flex justify-between items-center px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-navy to-navy-dark">
                 <div className="flex items-center gap-2">
-                  <Bell size={15} className="text-[#C9A84C]" />
+                  <Bell size={15} className="text-gold" />
                   <h3 className="font-bold text-white text-sm">Notifications</h3>
                   {effectiveUnread > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full">
@@ -168,13 +171,13 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
                   <div className="flex bg-black/20 rounded-lg p-0.5 mr-2">
                     <button 
                       onClick={() => setFilterMode('all')}
-                      className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md transition-colors ${filterMode === 'all' ? 'bg-white text-[#002B7F]' : 'text-white hover:bg-white/10'}`}
+                      className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md transition-colors ${filterMode === 'all' ? 'bg-white text-navy' : 'text-white hover:bg-white/10'}`}
                     >
                       All
                     </button>
                     <button 
                       onClick={() => setFilterMode('unread')}
-                      className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md transition-colors ${filterMode === 'unread' ? 'bg-white text-[#002B7F]' : 'text-white hover:bg-white/10'}`}
+                      className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md transition-colors ${filterMode === 'unread' ? 'bg-white text-navy' : 'text-white hover:bg-white/10'}`}
                     >
                       Unread
                     </button>
@@ -193,7 +196,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
               <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-400">
                 {loading ? (
                   <div className="flex justify-center items-center py-12">
-                    <Loader2 size={20} className="animate-spin text-[#002B7F]" />
+                    <Loader2 size={20} className="animate-spin text-navy" />
                   </div>
                 ) : notifications.filter(n => filterMode === 'all' ? true : !n.read).length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
@@ -232,7 +235,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5 leading-snug truncate">{n.body}</p>
                           {n.time_ago && (
-                            <p className="text-[11px] text-[#002B7F]/70 mt-1 font-medium">{n.time_ago}</p>
+                            <p className="text-[11px] text-navy/70 mt-1 font-medium">{n.time_ago}</p>
                           )}
                         </div>
                       </div>
@@ -246,7 +249,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
                 <div className="flex items-center gap-3">
                   <button
                     onClick={fetchNotifications}
-                    className="text-xs text-[#002B7F] font-semibold hover:underline cursor-pointer border-none bg-transparent"
+                    className="text-xs text-navy font-semibold hover:underline cursor-pointer border-none bg-transparent"
                   >
                     Refresh
                   </button>
@@ -267,7 +270,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
 
         <div className="relative" ref={profileRef}>
           <button 
-            className="admin-topbar__avatar border-none outline-none cursor-pointer overflow-hidden p-0 flex items-center justify-center bg-[#002B7F] text-white font-bold" 
+            className="admin-topbar__avatar border-none outline-none cursor-pointer overflow-hidden p-0 flex items-center justify-center bg-navy text-white font-bold" 
             aria-label="Admin user"
             onClick={() => setShowProfile(!showProfile)}
           >
@@ -283,7 +286,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
               className="absolute right-0 top-[48px] w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col items-center p-5"
               style={{ animation: 'fadeInDown 0.15s ease-out' }}
             >
-              <div className="w-20 h-20 rounded-full bg-[#002B7F] text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden">
+              <div className="w-20 h-20 rounded-full bg-navy text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden">
                 {user.avatar_url ? (
                   <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
@@ -295,12 +298,12 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
               <div className="w-full border-t border-gray-100 pt-3 flex gap-2">
                 <button
                   onClick={() => {
-                    navigate('/admin/settings');
+                    setEditProfileOpen(true);
                     setShowProfile(false);
                   }}
-                  className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-[#002B7F] text-sm font-semibold rounded-lg transition-colors border border-gray-200 cursor-pointer"
+                  className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-navy text-sm font-semibold rounded-lg transition-colors border border-gray-200 cursor-pointer"
                 >
-                  Profile
+                  Edit Profile
                 </button>
                 <button
                   onClick={() => setLogoutModalOpen(true)}
@@ -335,6 +338,18 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user }: AdminTopbarPro
         isOpen={selectedNotification !== null}
         onClose={() => setSelectedNotification(null)}
       />
+
+      {user && (
+        <ProfileEditModal
+          isOpen={editProfileOpen}
+          user={user}
+          onClose={() => setEditProfileOpen(false)}
+          onSave={(updatedUser) => {
+            if (onUserUpdate) onUserUpdate(updatedUser);
+            setEditProfileOpen(false);
+          }}
+        />
+      )}
     </header>
   );
 }

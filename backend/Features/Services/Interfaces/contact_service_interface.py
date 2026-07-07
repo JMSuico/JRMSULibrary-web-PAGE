@@ -18,6 +18,14 @@ class ContactServiceInterface(ABC):
         pass
 
     @abstractmethod
+    def get_count_by_type_and_date(self, message_type: str, start_date=None, end_date=None) -> int:
+        pass
+
+    @abstractmethod
+    def get_recent(self, limit: int = 10):
+        pass
+
+    @abstractmethod
     def mark_message_read(self, message_id: int):
         """Mark a contact message as read."""
         pass

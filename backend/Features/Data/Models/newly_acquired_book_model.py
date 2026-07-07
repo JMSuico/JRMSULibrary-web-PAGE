@@ -1,3 +1,4 @@
+# [Layer: Data/Models] — newly_acquired_book_model.py
 from django.db import models
 
 

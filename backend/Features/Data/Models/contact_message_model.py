@@ -1,3 +1,4 @@
+# [Layer: Data/Models] — contact_message_model.py
 from django.db import models
 
 class ContactMessage(models.Model):

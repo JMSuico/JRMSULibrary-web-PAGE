@@ -11,7 +11,8 @@ class BatchRepository(IBatchRepository):
         return AcquisitionBatch.objects.filter(is_display_batch=True).first()
 
     def get_all_batches(self) -> List[Any]:
-        return list(AcquisitionBatch.objects.all())
+        # Optimize N+1 Query: prefetch 'books' reverse relation so serializers don't hit the DB in loops
+        return list(AcquisitionBatch.objects.prefetch_related('books').all())
 
     def get_batch_by_id(self, batch_id: int) -> Optional[Any]:
         try:

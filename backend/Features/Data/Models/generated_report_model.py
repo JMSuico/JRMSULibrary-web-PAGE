@@ -10,6 +10,7 @@ class GeneratedReport(models.Model):
     generated_at = models.DateTimeField(auto_now_add=True)
     generated_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
     report_data = models.JSONField()
+    is_archived = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'jrmsu_generated_reports'

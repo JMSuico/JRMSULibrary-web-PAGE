@@ -54,13 +54,13 @@ export function LoginForm() {
             id="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#002B7F] focus:border-transparent transition-all peer"
+            className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all peer"
             placeholder=" "
             required
           />
           <label
             htmlFor="username"
-            className="absolute left-4 top-4 text-gray-500 text-sm transition-all peer-placeholder-shown:text-base peer-placeholder-shown:top-4 peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-[#002B7F] peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs font-inter cursor-text"
+            className="absolute left-4 top-4 text-gray-500 text-sm transition-all peer-placeholder-shown:text-base peer-placeholder-shown:top-4 peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-navy peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs font-inter cursor-text"
           >
             Username
           </label>
@@ -72,13 +72,13 @@ export function LoginForm() {
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#002B7F] focus:border-transparent transition-all peer"
+            className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all peer"
             placeholder=" "
             required
           />
           <label
             htmlFor="password"
-            className="absolute left-4 top-4 text-gray-500 text-sm transition-all peer-placeholder-shown:text-base peer-placeholder-shown:top-4 peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-[#002B7F] peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs font-inter cursor-text"
+            className="absolute left-4 top-4 text-gray-500 text-sm transition-all peer-placeholder-shown:text-base peer-placeholder-shown:top-4 peer-focus:top-1.5 peer-focus:text-xs peer-focus:text-navy peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-xs font-inter cursor-text"
           >
             Password
           </label>
@@ -92,8 +92,8 @@ export function LoginForm() {
             Human Verification
           </span>
           <div className="flex flex-col items-center justify-center">
-            <ShieldCheck className="w-5 h-5 text-[#002B7F]" />
-            <span className="text-[9px] text-[#002B7F] mt-1 uppercase tracking-wider font-semibold">Secure</span>
+            <ShieldCheck className="w-5 h-5 text-navy" />
+            <span className="text-[9px] text-navy mt-1 uppercase tracking-wider font-semibold">Secure</span>
           </div>
         </div>
         
@@ -110,7 +110,7 @@ export function LoginForm() {
                 ? 'border-green-500 bg-green-50 text-green-700 focus:ring-green-500' 
                 : captchaInput.length > 0 
                   ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-500'
-                  : 'border-gray-300 bg-white text-gray-900 focus:ring-[#002B7F]'
+                  : 'border-gray-300 bg-white text-gray-900 focus:ring-navy'
             }`}
             placeholder="?"
             required
@@ -124,7 +124,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={!isHuman || isLoading || !username || !password}
-        className="w-full mt-2 py-3.5 rounded-xl bg-[#002B7F] hover:bg-[#001655] text-white font-inter font-semibold transition-all shadow-md shadow-[#002B7F]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        className="w-full mt-2 py-3.5 rounded-xl bg-navy hover:bg-navy-dark text-white font-inter font-semibold transition-all shadow-md shadow-navy/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isLoading ? (
           <>
@@ -137,7 +137,7 @@ export function LoginForm() {
       </button>
 
       <div className="mt-4 text-center">
-        <a href="/" className="text-sm text-gray-500 hover:text-[#002B7F] transition-colors font-medium">
+        <a href="/" className="text-sm text-gray-500 hover:text-navy transition-colors font-medium">
           &larr; Return to public website
         </a>
       </div>

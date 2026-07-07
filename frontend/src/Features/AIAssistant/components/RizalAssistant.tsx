@@ -286,7 +286,7 @@ export const RizalAssistant: React.FC = () => {
         <div className="absolute bottom-[115%] right-0 w-[calc(100vw-2rem)] sm:w-80 max-w-[360px] bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-in flex flex-col max-h-[80vh] sm:max-h-[520px]">
           
           {/* Header */}
-          <div className="bg-gradient-to-r from-[#1e3a8a] to-[#2563eb] p-4 text-white relative flex items-center shrink-0">
+          <div className="bg-gradient-to-r from-blue-900 to-blue-600 p-4 text-white relative flex items-center shrink-0">
             <div>
               <h3 className="text-lg font-bold">RIZAL</h3>
               <p className="text-xs text-blue-200">Your Friendly Library Assistant</p>

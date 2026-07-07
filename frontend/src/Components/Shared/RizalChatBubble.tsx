@@ -90,7 +90,7 @@ export const RizalChatBubble: React.FC = () => {
       {/* Floating Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-[60] w-14 h-14 rounded-full bg-[#002B7F] shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 hover:shadow-xl transition-all duration-300"
+        className="fixed bottom-6 right-6 z-[60] w-14 h-14 rounded-full bg-navy shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 hover:shadow-xl transition-all duration-300"
         aria-label="Open Chat with Rizal"
       >
         <MessageCircle size={28} className="text-white" />
@@ -105,9 +105,9 @@ export const RizalChatBubble: React.FC = () => {
             style={{ maxHeight: 'calc(100vh - 100px)' }}
           >
             {/* Header */}
-            <div className="bg-[#002B7F] text-white p-4 flex items-center justify-between shrink-0">
+            <div className="bg-navy text-white p-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#002B7F] font-bold text-xl">
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-navy font-bold text-xl">
                   R
                 </div>
                 <div>
@@ -125,7 +125,7 @@ export const RizalChatBubble: React.FC = () => {
               
               {/* Initial Greeting */}
               <div className="flex gap-2">
-                <div className="w-8 h-8 rounded-full bg-[#002B7F] shrink-0 flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-8 h-8 rounded-full bg-navy shrink-0 flex items-center justify-center text-white font-bold text-sm">
                   R
                 </div>
                 <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm text-sm text-gray-700 border border-gray-100">
@@ -138,19 +138,19 @@ export const RizalChatBubble: React.FC = () => {
                 <div className="flex flex-col gap-2 items-end ml-10 mt-2">
                   <button 
                     onClick={() => setChatState('email')}
-                    className="bg-[#002B7F] text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-[#001655] transition-colors"
+                    className="bg-navy text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-navy-dark transition-colors"
                   >
                     Would you like to send an email?
                   </button>
                   <button 
                     onClick={() => setChatState('reservation')}
-                    className="bg-[#002B7F] text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-[#001655] transition-colors"
+                    className="bg-navy text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-navy-dark transition-colors"
                   >
                     Would you like to reserve a room or table?
                   </button>
                   <button 
                     onClick={() => setChatState('rating')}
-                    className="bg-[#002B7F] text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-[#001655] transition-colors"
+                    className="bg-navy text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-navy-dark transition-colors"
                   >
                     Would you like to rate us?
                   </button>
@@ -170,7 +170,7 @@ export const RizalChatBubble: React.FC = () => {
               {/* Form Renderers */}
               {(chatState === 'email' || chatState === 'reservation' || chatState === 'rating') && (
                 <div className="flex gap-2">
-                  <div className="w-8 h-8 rounded-full bg-[#002B7F] shrink-0 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-8 h-8 rounded-full bg-navy shrink-0 flex items-center justify-center text-white font-bold text-sm">
                     R
                   </div>
                   <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm text-sm text-gray-700 border border-gray-100 flex-1">
@@ -193,7 +193,7 @@ export const RizalChatBubble: React.FC = () => {
                           required
                           value={category}
                           onChange={e => setCategory(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-[#002B7F] focus:ring-1 focus:ring-[#002B7F] outline-none"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-navy focus:ring-1 focus:ring-navy outline-none"
                         >
                           <option value="" disabled>Select Room/Table</option>
                           <option value="Discussion Room 1">Discussion Room 1</option>
@@ -209,7 +209,7 @@ export const RizalChatBubble: React.FC = () => {
                           required
                           value={category}
                           onChange={e => setCategory(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-[#002B7F] outline-none"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-navy outline-none"
                         >
                           <option value="" disabled>Category</option>
                           <option value="Service">Service</option>
@@ -222,24 +222,24 @@ export const RizalChatBubble: React.FC = () => {
                       <input 
                         type="text" required placeholder="Name"
                         value={name} onChange={e => setName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-[#002B7F] outline-none"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-navy outline-none"
                       />
                       <input 
                         type="email" required placeholder="Email"
                         value={email} onChange={e => setEmail(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-[#002B7F] outline-none"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-navy outline-none"
                       />
                       {(chatState === 'email' || chatState === 'reservation') && (
                         <input 
                           type="text" required placeholder="Subject"
                           value={subject} onChange={e => setSubject(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-[#002B7F] outline-none"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-navy outline-none"
                         />
                       )}
                       <textarea 
                         required placeholder="Message" rows={3}
                         value={message} onChange={e => setMessage(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-[#002B7F] outline-none resize-none"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-navy outline-none resize-none"
                       />
 
                       <div className="flex gap-2 mt-2">
@@ -253,7 +253,7 @@ export const RizalChatBubble: React.FC = () => {
                         <button 
                           type="submit" 
                           disabled={loading}
-                          className="flex-1 py-2 rounded-lg bg-[#002B7F] text-white font-medium hover:bg-[#001655] transition-colors flex items-center justify-center gap-2"
+                          className="flex-1 py-2 rounded-lg bg-navy text-white font-medium hover:bg-navy-dark transition-colors flex items-center justify-center gap-2"
                         >
                           {loading ? 'Sending...' : (
                             <>
@@ -270,7 +270,7 @@ export const RizalChatBubble: React.FC = () => {
               {/* Success State */}
               {chatState === 'success' && (
                  <div className="flex gap-2">
-                  <div className="w-8 h-8 rounded-full bg-[#002B7F] shrink-0 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-8 h-8 rounded-full bg-navy shrink-0 flex items-center justify-center text-white font-bold text-sm">
                     R
                   </div>
                   <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm text-sm text-gray-700 border border-gray-100">
@@ -278,7 +278,7 @@ export const RizalChatBubble: React.FC = () => {
                     <p>Thank you for reaching out to us. We will get back to you shortly.</p>
                     <button 
                       onClick={() => setChatState('idle')}
-                      className="mt-3 text-[#002B7F] font-medium hover:underline"
+                      className="mt-3 text-navy font-medium hover:underline"
                     >
                       Return to menu
                     </button>

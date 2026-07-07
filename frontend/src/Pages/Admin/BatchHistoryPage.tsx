@@ -71,7 +71,7 @@ export default function BatchHistoryPage() {
       <div className="admin-table-wrapper" style={{ marginTop: 24 }}>
         <div className="admin-table-toolbar">
           <div className="admin-table-toolbar__search">
-            <Search size={16} style={{ color: '#9ca3af' }} />
+            <Search size={16} style={{ color: 'var(--color-gray-400)' }} />
             <input
               type="text"
               placeholder="Search batches by name..."
@@ -110,7 +110,7 @@ export default function BatchHistoryPage() {
                   <tr key={batch.id}>
                     <td style={{ fontWeight: 500 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Archive size={16} color="#6b7280" /> {batch.name}
+                        <Archive size={16} color='var(--color-gray-500)' /> {batch.name}
                       </div>
                     </td>
                     <td>
@@ -118,8 +118,8 @@ export default function BatchHistoryPage() {
                         {batch.status.toUpperCase()}
                       </span>
                     </td>
-                    <td style={{ color: '#6b7280' }}>{new Date(batch.opened_at).toLocaleDateString()}</td>
-                    <td style={{ color: '#6b7280' }}>{batch.closed_at ? new Date(batch.closed_at).toLocaleDateString() : '-'}</td>
+                    <td style={{ color: 'var(--color-gray-500)' }}>{new Date(batch.opened_at).toLocaleDateString()}</td>
+                    <td style={{ color: 'var(--color-gray-500)' }}>{batch.closed_at ? new Date(batch.closed_at).toLocaleDateString() : '-'}</td>
                     <td>{batch.book_count || 0}</td>
                     <td>
                       <div className="admin-table__actions">
@@ -137,7 +137,7 @@ export default function BatchHistoryPage() {
                           <button
                             className="admin-btn admin-btn--secondary"
                             title="Archive Batch"
-                            style={{ color: '#b91c1c' }}
+                            style={{ color: 'var(--color-red-700)' }}
                             onClick={() => handleArchive(batch)}
                           >
                             <FileArchive size={14} /> Archive
@@ -148,7 +148,7 @@ export default function BatchHistoryPage() {
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>No historical batches found.</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No historical batches found.</td></tr>
               )}
             </tbody>
           </table>
@@ -158,7 +158,7 @@ export default function BatchHistoryPage() {
       {/* Audit Detail Modal */}
       {auditBatch && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4"
           onClick={() => setAuditBatch(null)}
         >
           <div

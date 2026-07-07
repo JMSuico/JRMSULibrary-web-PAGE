@@ -15,6 +15,10 @@ from Features.Api.Controllers import (
 from Features.Api.Controllers.user_controller import UserViewSet
 from Features.Api.Controllers.report_controller import ReportViewSet
 from Features.Api.Controllers.settings_controller import SettingsViewSet
+from Features.Api.Controllers.external_proxy_controller import (
+    vitalsource_auto_login,
+    scholaar_auto_login,
+)
 
 
 
@@ -45,4 +49,8 @@ router.register(r'site-visits', SiteVisitViewSet, basename='site-visit')
 
 urlpatterns = [
     path('', include(router.urls)),
+    # External library proxy (auto-login bridge pages)
+    path('external-proxy/vitalsource/', vitalsource_auto_login, name='vitalsource-proxy'),
+    path('external-proxy/scholaar/', scholaar_auto_login, name='scholaar-proxy'),
 ]
+

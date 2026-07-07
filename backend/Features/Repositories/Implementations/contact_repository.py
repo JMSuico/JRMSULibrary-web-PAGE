@@ -14,6 +14,17 @@ class ContactRepository(ContactRepositoryInterface):
     def get_all(self):
         return ContactMessage.objects.all().order_by('-created_at')
 
+    def get_count_by_type_and_date(self, message_type: str, start_date=None, end_date=None) -> int:
+        qs = ContactMessage.objects.filter(message_type=message_type)
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lt=end_date)
+        return qs.count()
+
+    def get_recent(self, limit: int = 10):
+        return ContactMessage.objects.all().order_by('-created_at')[:limit]
+
     def get_by_id(self, message_id: int):
         return ContactMessage.objects.get(pk=message_id)
 

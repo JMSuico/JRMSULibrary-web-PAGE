@@ -1,3 +1,4 @@
+# [Layer: Repositories/Interfaces] — i_eresource_repository.py
 from abc import ABC, abstractmethod
 from typing import List, Optional, Any
 

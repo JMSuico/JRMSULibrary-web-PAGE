@@ -1,3 +1,4 @@
+# [Layer: Services/Implementations] — gallery_service.py
 from typing import List, Optional, Any
 from Features.Services.Interfaces import ILibraryInteriorImageService
 from Features.Repositories.Interfaces import ILibraryInteriorImageRepository

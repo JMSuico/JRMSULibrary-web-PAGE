@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { AcquisitionBatch } from '@/src/Endpoints/batchApi';
 
@@ -23,8 +24,8 @@ export function CreateBatchModal({ isOpen, onClose, onSubmit }: CreateBatchModal
     setRemarks('');
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed backdrop-blur-sm inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
         <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
           <h2 className="text-lg font-semibold text-gray-900 m-0">Create New Acquisition Batch</h2>
@@ -59,10 +60,10 @@ export function CreateBatchModal({ isOpen, onClose, onSubmit }: CreateBatchModal
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (Internal)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (Optional)</label>
               <textarea
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Any internal notes for librarians..."
+                placeholder="Internal notes..."
                 rows={2}
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
@@ -78,20 +79,20 @@ export function CreateBatchModal({ isOpen, onClose, onSubmit }: CreateBatchModal
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              style={{ background: '#002B7F' }}
+              className="px-4 py-2 bg-navy text-white rounded-md hover:bg-blue-800 font-medium transition-colors"
             >
               Create Batch
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

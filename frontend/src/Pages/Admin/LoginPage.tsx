@@ -7,8 +7,8 @@ export default function LoginPage() {
       
       {/* Dynamic Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[#002B7F] blur-[120px] opacity-20 animate-pulse"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-[#C9A84C] blur-[120px] opacity-20" style={{ animation: 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite 2s' }}></div>
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-navy blur-[120px] opacity-20 animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-gold blur-[120px] opacity-20" style={{ animation: 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite 2s' }}></div>
       </div>
 
       <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center p-6 md:p-12 relative z-10">
@@ -25,13 +25,13 @@ export default function LoginPage() {
                 target.src = "https://via.placeholder.com/80x80/002B7F/FFFFFF?text=Logo";
               }}
             />
-            <div className="w-1 h-16 bg-[#C9A84C] rounded-full"></div>
+            <div className="w-1 h-16 bg-gold rounded-full"></div>
             <div>
-              <h1 className="font-playfair text-3xl font-bold text-[#002B7F] leading-tight">Jose Rizal<br/>Memorial State University</h1>
-              <p className="font-inter text-[#C9A84C] font-semibold tracking-wider text-sm">KATIPUNAN CAMPUS LIBRARY</p>
+              <h1 className="font-playfair text-3xl font-bold text-navy leading-tight">Jose Rizal<br/>Memorial State University</h1>
+              <p className="font-inter text-gold font-semibold tracking-wider text-sm">KATIPUNAN CAMPUS LIBRARY</p>
             </div>
           </div>
-          <div className="bg-white/60 backdrop-blur-md p-8 rounded-3xl border border-white/50 shadow-xl shadow-[#002B7F]/5">
+          <div className="bg-white/60 backdrop-blur-md p-8 rounded-3xl border border-white/50 shadow-xl shadow-navy/5">
             <h3 className="font-playfair text-2xl font-bold text-gray-900 mb-4">
               Secure Administration Portal
             </h3>
@@ -44,7 +44,7 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Form */}
-        <div className="w-full bg-white/80 backdrop-blur-xl p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-[#002B7F]/10 border border-white">
+        <div className="w-full bg-white/80 backdrop-blur-xl p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-navy/10 border border-white">
           <LoginForm />
         </div>
 

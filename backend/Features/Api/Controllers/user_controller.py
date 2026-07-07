@@ -1,8 +1,9 @@
-﻿# [Layer: Api/Controllers] — user_controller.py
+# [Layer: Api/Controllers] — user_controller.py
 
 from rest_framework import viewsets, permissions, parsers
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from Features.Api.Serializers.user_serializer import UserSerializer, UserCreateUpdateSerializer
 from Features.Services.Implementations.user_service import UserService
 from Features.Repositories.Implementations.user_repository import UserRepository
@@ -11,9 +12,18 @@ class IsSuperUser(permissions.BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_superuser)
 
+class LoginRateThrottle(AnonRateThrottle):
+    scope = 'login'
+
 class UserViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticated]
     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsSuperUser()]
+        if self.action == 'login':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -35,7 +45,7 @@ class UserViewSet(viewsets.ViewSet):
             return Response({"error": "Not authenticated"}, status=401)
         return Response(self._serialize(request.user, request))
 
-    @action(detail=False, methods=["post"], permission_classes=[permissions.AllowAny])
+    @action(detail=False, methods=["post"], throttle_classes=[LoginRateThrottle])
     def login(self, request):
         from django.contrib.auth import authenticate, login
         username = request.data.get("username")
@@ -84,6 +94,12 @@ class UserViewSet(viewsets.ViewSet):
         avatar_file = request.FILES.get("avatar")
         if not avatar_file:
             return Response({"error": "No avatar file provided"}, status=400)
+        
+        # Validate file extension
+        ext = avatar_file.name.split('.')[-1].lower()
+        if ext not in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
+            return Response({"error": "Invalid image format. Allowed formats: jpg, jpeg, png, webp, gif"}, status=400)
+
         # Delete old avatar file if it exists
         if item.avatar:
             item.avatar.delete(save=False)
@@ -106,3 +122,36 @@ class UserViewSet(viewsets.ViewSet):
         from django.contrib.auth import update_session_auth_hash
         update_session_auth_hash(request, request.user)
         return Response({"message": "Password changed successfully"})
+
+    @action(detail=False, methods=["post"])
+    def update_profile(self, request):
+        """Let the current authenticated user update their own profile fields."""
+        if not request.user.is_authenticated:
+            return Response({"error": "Not authenticated"}, status=401)
+
+        user = request.user
+        allowed_fields = ["first_name", "last_name", "email", "username"]
+        updated = False
+
+        for field in allowed_fields:
+            value = request.data.get(field)
+            if value is not None and value != getattr(user, field):
+                # Validate username uniqueness
+                if field == "username":
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    if User.objects.filter(username=value).exclude(pk=user.pk).exists():
+                        return Response({"error": "Username already taken"}, status=400)
+                # Validate email uniqueness
+                if field == "email":
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    if User.objects.filter(email=value).exclude(pk=user.pk).exists():
+                        return Response({"error": "Email already in use"}, status=400)
+                setattr(user, field, value)
+                updated = True
+
+        if updated:
+            user.save()
+
+        return Response(self._serialize(user, request))

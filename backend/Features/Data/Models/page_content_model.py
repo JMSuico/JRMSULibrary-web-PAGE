@@ -1,3 +1,4 @@
+# [Layer: Data/Models] — page_content_model.py
 from django.db import models
 
 

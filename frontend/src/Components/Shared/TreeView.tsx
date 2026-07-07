@@ -89,7 +89,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
       {/* Search + Sort Controls — always visible inside the card */}
       <div className="px-3 py-3 border-b border-outline-variant flex flex-col sm:flex-row gap-2" style={{ background: '#f4f3fa' }}>
         <div className="relative flex-1">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-base" style={{ color: '#001851', opacity: 0.5 }}>search</span>
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-base" style={{ color: 'var(--color-primary)', opacity: 0.5 }}>search</span>
           <input
             type="text"
             placeholder="Search files and folders..."
@@ -97,7 +97,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
             onChange={(e) => onSearchChange ? onSearchChange(e.target.value) : undefined}
             className="w-full rounded-lg py-2 pl-10 pr-9 text-sm focus:outline-none focus:ring-2"
             style={{
-              background: '#fff',
+              background: 'var(--color-white)',
               border: '1px solid #c4c6d3',
               color: '#1a1b21',
               boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)',
@@ -114,13 +114,13 @@ export const TreeView: React.FC<TreeViewProps> = ({
           )}
         </div>
         <div className="relative shrink-0 w-full sm:w-44">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-base" style={{ color: '#001851', opacity: 0.5 }}>sort</span>
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-base" style={{ color: 'var(--color-primary)', opacity: 0.5 }}>sort</span>
           <select
             value={sortOrder}
             onChange={(e) => onSortChange?.(e.target.value)}
             className="w-full rounded-lg py-2 pl-9 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2"
             style={{
-              background: '#fff',
+              background: 'var(--color-white)',
               border: '1px solid #c4c6d3',
               color: '#1a1b21',
             }}
@@ -130,7 +130,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
             <option value="A-Z">A to Z</option>
             <option value="Z-A">Z to A</option>
           </select>
-          <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-base" style={{ color: '#001851', opacity: 0.5 }}>expand_more</span>
+          <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-base" style={{ color: 'var(--color-primary)', opacity: 0.5 }}>expand_more</span>
         </div>
       </div>
 

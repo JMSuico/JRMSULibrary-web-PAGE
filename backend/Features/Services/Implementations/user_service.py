@@ -1,3 +1,4 @@
+# [Layer: Services/Implementations] — user_service.py
 from Features.Services.Interfaces.i_user_service import IUserService
 from Features.Repositories.Interfaces.i_user_repository import IUserRepository
 

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { NewlyAcquiredBooks } from '@/src/Features/Collection/components/NewlyAcquiredBooks';
 import { TreeView } from '@/src/Components/Shared/TreeView';
@@ -8,7 +8,8 @@ import { eBooksTree } from '@/src/Libs/Assets/treeData';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 import { eresourceApi, EResourceDepartment } from '@/src/Endpoints/eresourceApi';
 import { cmsApi, ManagedLink } from '@/src/Endpoints/cmsApi';
-import { Loader2 } from 'lucide-react';
+import { ExternalIframeModal } from '@/src/Components/Modals/ExternalIframeModal';
+import { Loader2, BookOpen, GraduationCap, ChevronDown } from 'lucide-react';
 
 function collectFiles(nodes: TreeNodeData[]): TreeNodeData[] {
   const files: TreeNodeData[] = [];
@@ -105,11 +106,13 @@ const tabOptions = [
   { id: 'newly-acquired', label: 'Newly Acquired Books' },
   { id: 'local-books', label: 'Local Books' },
   { id: 'online', label: 'Online Access' },
+  { id: 'external-libraries', label: 'External Libraries' },
 ];
 
 export default function CollectionPage() {
   const { tab } = useParams<{ tab?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [selectedFile, setSelectedFile] = useState<TreeNodeData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,6 +123,7 @@ export default function CollectionPage() {
   const [onlineViewMode, setOnlineViewMode] = useState<'grid' | 'table'>('grid');
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -145,7 +149,31 @@ export default function CollectionPage() {
     load();
   }, []);
 
-  const activeTab = tab === 'online' ? 'online' : tab === 'newly-acquired' ? 'newly-acquired' : 'local-books';
+  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries'];
+  const activeTab = validTabs.includes(tab as string) ? (tab as string) : 'newly-acquired';
+
+  // Auto-open modal if search param specifies a service
+  useEffect(() => {
+    if (activeTab === 'external-libraries') {
+      const searchParams = new URLSearchParams(location.search);
+      const service = searchParams.get('service');
+      if (service === 'vital') {
+        setExternalService({
+          title: 'VitalBooks',
+          url: 'https://bookshelf.vitalsource.com/home/my-library',
+          proxyUrl: '/api/external-proxy/vitalsource/',
+        });
+      } else if (service === 'scholaar') {
+        setExternalService({
+          title: 'Scholaar',
+          url: 'https://scholaar.com/University/HomePage.aspx',
+          proxyUrl: '/api/external-proxy/scholaar/',
+        });
+      } else {
+        setExternalService(null);
+      }
+    }
+  }, [activeTab, location.search]);
   
   const localTree = useMemo(() => mapDepartmentsToTree(departments), [departments]);
   const onlineTree = useMemo(() => mapLinksToTree(onlineLinks), [onlineLinks]);
@@ -165,8 +193,8 @@ export default function CollectionPage() {
     <section id="collection" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-10">
-          <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Collection</h2>
-          <p className="max-w-2xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Collection</h2>
+          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             Browse the library's print and digital collections — newly acquired books, local eBooks, and online research databases.
           </p>
         </div>
@@ -187,6 +215,58 @@ export default function CollectionPage() {
         {/* Newly Acquired Books — renders the existing component as-is */}
         {activeTab === 'newly-acquired' && (
           <NewlyAcquiredBooks />
+        )}
+
+        {/* External Libraries — New Page Module */}
+        {activeTab === 'external-libraries' && (
+          <div className="max-w-4xl mx-auto mb-12 animate-fade-in">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-1.5 h-8 rounded-full bg-navy-mid" />
+              <h3 className="font-headline-md font-bold text-2xl text-navy-mid" style={{ textShadow: 'none' }}>
+                External Libraries
+              </h3>
+            </div>
+            <p className="text-navy-mid/80 mb-8 max-w-2xl">
+              Access affiliated external databases and library collections. Selecting a library will open it securely within this page. Note that you may be required to log in to these third-party platforms.
+            </p>
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* VitalBooks Card */}
+              <div 
+                className="bg-white rounded-2xl p-8 border border-gray-200 flex flex-col items-center text-center shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group"
+                onClick={() => {
+                  navigate('/collection/external-libraries?service=vital');
+                }}
+              >
+                <div className="w-20 h-20 bg-navy/5 group-hover:bg-navy/10 text-navy rounded-full flex items-center justify-center mb-6 transition-colors">
+                  <BookOpen size={40} />
+                </div>
+                <h4 className="font-bold text-2xl text-navy mb-2">VitalBooks</h4>
+                <p className="text-gray-500 text-sm mb-8">Access the VitalSource Bookshelf platform for a wide range of academic titles.</p>
+                <button className="btn btn-primary mt-auto w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold shadow-md">
+                  Open VitalBooks
+                  <span className="material-symbols-outlined text-xl">login</span>
+                </button>
+              </div>
+
+              {/* Scholaar Card */}
+              <div 
+                className="bg-white rounded-2xl p-8 border border-gray-200 flex flex-col items-center text-center shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group"
+                onClick={() => {
+                  navigate('/collection/external-libraries?service=scholaar');
+                }}
+              >
+                <div className="w-20 h-20 bg-gold/10 group-hover:bg-gold/20 text-gold rounded-full flex items-center justify-center mb-6 transition-colors">
+                  <GraduationCap size={40} />
+                </div>
+                <h4 className="font-bold text-2xl text-navy-dark mb-2">Scholaar</h4>
+                <p className="text-gray-500 text-sm mb-8">University database providing access to research materials and publications.</p>
+                <button className="btn mt-auto w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold shadow-md text-navy-dark bg-gold hover:bg-[#b09340] hover:text-white transition-colors">
+                  Open Scholaar
+                  <span className="material-symbols-outlined text-xl">school</span>
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Local Books — TreeView with search/sort */}
@@ -341,6 +421,20 @@ export default function CollectionPage() {
           fileList={allFiles}
           onClose={() => setSelectedFile(null)}
           onNavigate={setSelectedFile}
+        />
+      )}
+
+      {/* External Service iFrame Modal */}
+      {externalService && (
+        <ExternalIframeModal
+          title={externalService.title}
+          url={externalService.url}
+          proxyUrl={externalService.proxyUrl}
+          onClose={() => {
+            setExternalService(null);
+            // Clear search param so it doesn't re-open on refresh
+            navigate('/collection/external-libraries', { replace: true });
+          }}
         />
       )}
     </section>

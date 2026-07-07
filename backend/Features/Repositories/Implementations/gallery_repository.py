@@ -1,3 +1,4 @@
+# [Layer: Repositories/Implementations] — gallery_repository.py
 from typing import List, Optional, Any
 from Features.Data.Models import LibraryInteriorImage
 from Features.Repositories.Interfaces import ILibraryInteriorImageRepository

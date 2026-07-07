@@ -224,10 +224,10 @@ export const LibrarySectionCarousel: React.FC = () => {
     <div id="library-section" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-8">
-          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
             Library Section
           </h2>
-          <p className="max-w-2xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             Take a visual tour of the JRMSU Katipunan Campus Library facilities and spaces.
           </p>
         </div>
@@ -315,7 +315,7 @@ export const LibrarySectionCarousel: React.FC = () => {
                 ))}
               </div>
 
-              <p className="text-center text-sm mt-4 font-bold relative z-40" style={{ color: '#001851' }}>
+              <p className="text-center text-sm mt-4 font-bold relative z-40" style={{ color: 'var(--color-primary)' }}>
                 {sectionImages[activeIdx]?.label}
               </p>
 

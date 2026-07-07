@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Eye, Pencil, Trash2, X, ChevronRight, ListOrdered, MoreVertical } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { batchApi, AcquisitionBatch, BatchBook } from '@/src/Endpoints/batchApi';
@@ -342,7 +343,7 @@ export default function BooksManagerPage() {
             </div>
           ))}
           {batches.length === 0 && (
-            <div style={{ color: '#6b7280', width: '100%' }}>No batches found. Create one to get started.</div>
+            <div style={{ color: 'var(--color-gray-500)', width: '100%' }}>No batches found. Create one to get started.</div>
           )}
         </div>
       </div>
@@ -379,10 +380,10 @@ export default function BooksManagerPage() {
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
-              <button className={`admin-btn admin-btn--icon`} onClick={() => setViewMode('grid')} style={viewMode === 'grid' ? { background: '#002B7F', color: '#fff' } : {}}>
+              <button className={`admin-btn admin-btn--icon`} onClick={() => setViewMode('grid')} style={viewMode === 'grid' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}>
                 <LayoutGrid size={16} />
               </button>
-              <button className={`admin-btn admin-btn--icon`} onClick={() => setViewMode('table')} style={viewMode === 'table' ? { background: '#002B7F', color: '#fff' } : {}}>
+              <button className={`admin-btn admin-btn--icon`} onClick={() => setViewMode('table')} style={viewMode === 'table' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}>
                 <List size={16} />
               </button>
             </div>
@@ -408,17 +409,17 @@ export default function BooksManagerPage() {
                       <td>{book.author}</td>
                       <td style={{ fontFamily: 'monospace' }}>{book.accession_number || 'N/A'}</td>
                       <td><span className="admin-badge admin-badge--info">{book.category}</span></td>
-                      <td style={{ color: '#6b7280' }}>{new Date(book.date_encoded).toLocaleDateString()}</td>
+                      <td style={{ color: 'var(--color-gray-500)' }}>{new Date(book.date_encoded).toLocaleDateString()}</td>
                       <td>
                         <div className="admin-table__actions">
                           <button className="admin-btn admin-btn--icon" onClick={() => { setEditingBook(book); setIsBookFormOpen(true); }}><Pencil size={15} /></button>
-                          <button className="admin-btn admin-btn--icon" style={{ color: '#dc2626' }} onClick={() => handleDeleteBook(book.id)}><Trash2 size={15} /></button>
+                          <button className="admin-btn admin-btn--icon" style={{ color: 'var(--color-red-600)' }} onClick={() => handleDeleteBook(book.id)}><Trash2 size={15} /></button>
                         </div>
                       </td>
                     </tr>
                   ))}
                   {filteredBooks.length === 0 && (
-                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>No books in this batch match the filter.</td></tr>
+                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No books in this batch match the filter.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -429,11 +430,11 @@ export default function BooksManagerPage() {
             <div className="admin-card-grid" style={{ padding: 20 }}>
               {filteredBooks.map((book) => (
                 <div className="admin-grid-card" key={book.id}>
-                  <div style={{ height: 140, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {book.cover_image ? (
                       <img src={book.cover_image} alt={book.title} style={{ height: '100%', objectFit: 'contain' }} />
                     ) : (
-                      <BookOpen size={40} color="#9ca3af" />
+                      <BookOpen size={40} color='var(--color-gray-400)' />
                     )}
                   </div>
                   <div className="admin-grid-card__body">
@@ -470,11 +471,11 @@ export default function BooksManagerPage() {
       />
 
       {/* View All Batches Modal */}
-      {viewAllOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setViewAllOpen(false)}>
+      {viewAllOpen && createPortal(
+<div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setViewAllOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><BookOpen size={20} className="text-[#002B7F]" /> All Batches ({batches.length})</h2>
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><BookOpen size={20} className="text-navy" /> All Batches ({batches.length})</h2>
               <button onClick={() => setViewAllOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={20} /></button>
             </div>
             
@@ -537,11 +538,11 @@ export default function BooksManagerPage() {
                           className="rounded border-gray-300 text-blue-600"
                         />
                       </td>
-                      <td style={{ color: '#9ca3af', fontSize: '0.75rem' }}>{idx + 1}</td>
+                      <td style={{ color: 'var(--color-gray-400)', fontSize: '0.75rem' }}>{idx + 1}</td>
                       <td style={{ fontWeight: 500 }}>{b.name}</td>
                       <td><span className={`admin-badge admin-badge--${b.status === 'open' ? 'info' : b.status === 'closed' ? 'success' : 'warning'}`}>{b.status.toUpperCase()}</span></td>
                       <td>{b.book_count || 0}</td>
-                      <td style={{ color: '#6b7280', fontSize: '0.85rem' }}>{new Date(b.opened_at).toLocaleDateString()}</td>
+                      <td style={{ color: 'var(--color-gray-500)', fontSize: '0.85rem' }}>{new Date(b.opened_at).toLocaleDateString()}</td>
                       <td className="text-right">
                         <div className="relative inline-block text-left">
                           <button 
@@ -589,7 +590,7 @@ export default function BooksManagerPage() {
                       </td>
                     </tr>
                   ))}
-                  {batches.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32, color: '#9ca3af' }}>No batches yet.</td></tr>}
+                  {batches.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32, color: 'var(--color-gray-400)' }}>No batches yet.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -597,12 +598,13 @@ export default function BooksManagerPage() {
               <button onClick={() => setViewAllOpen(false)} className="admin-btn admin-btn--secondary">Close</button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+document.body
+)}
 
       {/* Audit Modal */}
       {auditBatch && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAuditBatch(null)}>
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4" onClick={() => setAuditBatch(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-5 flex justify-between items-start">
               <div>

@@ -108,15 +108,15 @@ export const HeroSection: React.FC = () => {
               Republic of the Philippines
             </p>
             <h1
-              className="text-[#001851] font-black text-3xl sm:text-4xl lg:text-5xl leading-tight"
+              className="text-primary font-black text-3xl sm:text-4xl lg:text-5xl leading-tight"
               style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.25)' }}
             >
               JOSE RIZAL MEMORIAL STATE UNIVERSITY
             </h1>
-            <p className="text-[#002B7F] font-bold text-xl md:text-2xl mt-1">
+            <p className="text-navy font-bold text-xl md:text-2xl mt-1">
               KATIPUNAN CAMPUS
             </p>
-            <p className="text-[#002B7F] font-medium text-sm md:text-base mt-1">
+            <p className="text-navy font-medium text-sm md:text-base mt-1">
               Katipunan, Zamboanga del Norte
             </p>
             <p className="text-red-600 text-lg md:text-xl mt-4 tracking-wide" style={{ fontFamily: "'Brush Script MT', cursive", fontWeight: 400 }}>
@@ -136,7 +136,7 @@ export const HeroSection: React.FC = () => {
                 className="w-full h-full object-cover block absolute inset-0"
                 loading="lazy"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#001851] via-[#001851]/60 to-transparent"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/60 to-transparent"></div>
               {/* Excellence in Information — upper left */}
               <div className="absolute top-0 left-0 p-5 md:p-8">
                 <span className="text-gold-light font-bold text-base md:text-lg tracking-wider uppercase drop-shadow-lg">
@@ -220,7 +220,7 @@ export const HeroSection: React.FC = () => {
         className={`absolute bottom-6 left-1/2 -translate-x-1/2 animate-bounce hero-stagger ${isVisible ? 'visible' : ''}`}
         style={{ transitionDelay: '480ms' }}
       >
-        <span className="material-symbols-outlined text-[#002B7F] text-4xl drop-shadow-md">
+        <span className="material-symbols-outlined text-navy text-4xl drop-shadow-md">
           keyboard_arrow_down
         </span>
       </div>

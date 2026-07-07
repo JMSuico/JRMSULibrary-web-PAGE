@@ -170,19 +170,19 @@ export default function ContentManagerPage() {
         <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
           <button 
             onClick={() => setActiveTab('content')}
-            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'content' ? '2px solid #002B7F' : 'none', color: activeTab === 'content' ? '#002B7F' : '#6b7280' }}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'content' ? '2px solid #002B7F' : 'none', color: activeTab === 'content' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Page Text Content
           </button>
           <button 
             onClick={() => setActiveTab('links')}
-            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'links' ? '2px solid #002B7F' : 'none', color: activeTab === 'links' ? '#002B7F' : '#6b7280' }}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'links' ? '2px solid #002B7F' : 'none', color: activeTab === 'links' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             External Links
           </button>
           <button 
             onClick={() => setActiveTab('files')}
-            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'files' ? '2px solid #002B7F' : 'none', color: activeTab === 'files' ? '#002B7F' : '#6b7280' }}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'files' ? '2px solid #002B7F' : 'none', color: activeTab === 'files' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Downloadable Files
           </button>
@@ -247,7 +247,7 @@ export default function ContentManagerPage() {
                     {links.map((link) => (
                       <tr key={link.id}>
                         <td style={{ fontWeight: 500 }}>{link.name}</td>
-                        <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: '#002B7F' }}>{link.url}</a></td>
+                        <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>{link.url}</a></td>
                         <td><span className="admin-badge admin-badge--info">{link.category}</span></td>
                         <td>{link.order}</td>
                         <td>
@@ -257,7 +257,7 @@ export default function ContentManagerPage() {
                         </td>
                         <td style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} style={{ padding: '6px', backgroundColor: '#eff6ff', color: '#1d4ed8', borderRadius: '4px' }}><Edit2 size={16}/></button>
-                          <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                          <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
                         </td>
                       </tr>
                     ))}
@@ -291,14 +291,14 @@ export default function ContentManagerPage() {
                     {files.map((file) => (
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.title}</td>
-                        <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: '#002B7F' }}>Download</a></td>
+                        <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>Download</a></td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
                             {file.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
                         <td>
-                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
                         </td>
                       </tr>
                     ))}
@@ -312,7 +312,7 @@ export default function ContentManagerPage() {
 
       {/* Link Modal */}
       {isLinkModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">{editingLink ? 'Edit Link' : 'Add Link'}</h2>
@@ -350,7 +350,7 @@ export default function ContentManagerPage() {
 
       {/* File Modal */}
       {isFileModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">Upload File</h2>
@@ -400,7 +400,7 @@ export default function ContentManagerPage() {
             </div>
             <button 
               onClick={() => cancelDelete()}
-              className="text-sm font-bold text-[#002B7F] hover:text-[#001655] px-2 py-1 bg-blue-50 rounded"
+              className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
             >
               Undo
             </button>

@@ -1,3 +1,4 @@
+# [Layer: Services/Implementations] — personnel_service.py
 from typing import List, Optional, Any
 from Features.Services.Interfaces import IPersonnelService
 from Features.Repositories.Interfaces import IPersonnelRepository

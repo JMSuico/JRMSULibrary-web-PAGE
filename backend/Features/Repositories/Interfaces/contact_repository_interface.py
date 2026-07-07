@@ -18,6 +18,14 @@ class ContactRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    def get_count_by_type_and_date(self, message_type: str, start_date=None, end_date=None) -> int:
+        pass
+
+    @abstractmethod
+    def get_recent(self, limit: int = 10):
+        pass
+
+    @abstractmethod
     def get_by_id(self, message_id: int):
         """Retrieve a single contact message by ID."""
         pass

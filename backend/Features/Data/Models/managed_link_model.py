@@ -1,3 +1,4 @@
+# [Layer: Data/Models] — managed_link_model.py
 from django.db import models
 
 

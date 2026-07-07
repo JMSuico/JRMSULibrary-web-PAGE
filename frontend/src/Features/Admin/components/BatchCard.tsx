@@ -19,7 +19,7 @@ interface BatchCardProps {
 export function BatchCard({ batch, onContinue, onClose, onArchive, onReopen, onActivate, onViewBooks, onViewAudit, onEdit, onDelete }: BatchCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const statusColor = batch.status === 'open' ? '#3b82f6' : batch.status === 'closed' ? '#10b981' : '#6b7280';
+  const statusColor = batch.status === 'open' ? '#3b82f6' : batch.status === 'closed' ? '#10b981' : 'var(--color-gray-500)';
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -34,11 +34,11 @@ export function BatchCard({ batch, onContinue, onClose, onArchive, onReopen, onA
     <div className="admin-grid-card" style={{ padding: '20px', borderTop: `4px solid ${statusColor}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-gray-900)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <PackageOpen size={20} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{batch.name}</span>
           </h3>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '4px' }}>{batch.description}</p>
+          <p style={{ color: 'var(--color-gray-500)', fontSize: '0.875rem', marginTop: '4px' }}>{batch.description}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '8px' }}>
           {batch.is_display_batch && (
@@ -56,12 +56,12 @@ export function BatchCard({ batch, onContinue, onClose, onArchive, onReopen, onA
               <MoreVertical size={18} />
             </button>
             {menuOpen && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '4px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '160px', overflow: 'hidden' }}>
-                <button onClick={() => { setMenuOpen(false); onEdit(batch); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', textAlign: 'left' }} onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')} onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+              <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, marginTop: '4px', background: 'var(--color-white)', border: '1px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '160px', overflow: 'hidden' }}>
+                <button onClick={() => { setMenuOpen(false); onEdit(batch); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', textAlign: 'left' }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-gray-100)')} onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                   <Pencil size={15} /> Edit Batch
                 </button>
                 <div style={{ borderTop: '1px solid #f3f4f6' }} />
-                <button onClick={() => { setMenuOpen(false); onDelete(batch); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: '#dc2626', textAlign: 'left' }} onMouseEnter={e => (e.currentTarget.style.background = '#fef2f2')} onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                <button onClick={() => { setMenuOpen(false); onDelete(batch); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--color-red-600)', textAlign: 'left' }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-red-50)')} onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                   <Trash2 size={15} /> Remove Batch
                 </button>
               </div>
@@ -80,7 +80,7 @@ export function BatchCard({ batch, onContinue, onClose, onArchive, onReopen, onA
         <button className="admin-btn admin-btn--secondary" title="View Audit Trail" style={{ color: '#6366f1' }} onClick={() => onViewAudit(batch)}><ClipboardList size={16} /> View Audit</button>
         {batch.status === 'open' && (<>
           <button className="admin-btn admin-btn--primary" onClick={() => onContinue(batch.id)}>Continue</button>
-          <button className="admin-btn admin-btn--secondary" onClick={() => onClose(batch.id)} style={{ color: '#b91c1c' }}><CheckCircle2 size={16} /> Close Batch</button>
+          <button className="admin-btn admin-btn--secondary" onClick={() => onClose(batch.id)} style={{ color: 'var(--color-red-700)' }}><CheckCircle2 size={16} /> Close Batch</button>
         </>)}
         {batch.status === 'closed' && (<>
           {!batch.is_display_batch && (<button className="admin-btn admin-btn--primary" onClick={() => onActivate(batch.id)}>Set as Display</button>)}

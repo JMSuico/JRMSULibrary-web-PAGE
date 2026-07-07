@@ -29,10 +29,10 @@ export const FeedbackSection: React.FC = () => {
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
         >
-          <span className="font-headline-md font-bold text-xl" style={{ color: '#001851', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>
+          <span className="font-headline-md font-bold text-xl" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>
             View Feedback Guide
           </span>
-          <span className={`material-symbols-outlined transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} style={{ color: '#001851' }}>
+          <span className={`material-symbols-outlined transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} style={{ color: 'var(--color-primary)' }}>
             expand_more
           </span>
         </button>

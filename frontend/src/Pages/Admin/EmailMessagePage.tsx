@@ -399,7 +399,7 @@ export default function EmailMessagePage() {
       <div className="admin-table-wrapper">
         <div className="admin-table-toolbar">
           <div className="admin-table-toolbar__search">
-            <Search size={16} style={{ color: '#9ca3af', flexShrink: 0 }} />
+            <Search size={16} style={{ color: 'var(--color-gray-400)', flexShrink: 0 }} />
             <input
               type="text"
               placeholder="Search messages..."
@@ -593,7 +593,7 @@ export default function EmailMessagePage() {
 
       {/* SMTP Reply Modal */}
       {replyModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !isSendingReply && setReplyModal(null)}>
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4" onClick={() => !isSendingReply && setReplyModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-green-600 to-emerald-500 p-5 flex justify-between items-start">
               <div>
@@ -719,7 +719,7 @@ export default function EmailMessagePage() {
       )}
 
       {bulkReplyModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !queueState.isActive && setBulkReplyModal(null)}>
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4" onClick={() => !queueState.isActive && setBulkReplyModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-blue-600 to-indigo-500 p-5 flex justify-between items-start">
               <div>
@@ -812,7 +812,7 @@ export default function EmailMessagePage() {
             </div>
             <button 
               onClick={() => cancelDelete()}
-              className="text-sm font-bold text-[#002B7F] hover:text-[#001655] px-2 py-1 bg-blue-50 rounded"
+              className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
             >
               Undo
             </button>

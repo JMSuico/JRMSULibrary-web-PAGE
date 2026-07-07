@@ -124,5 +124,11 @@ class ContactService(ContactServiceInterface):
     def get_all_messages(self):
         return self.repository.get_all()
 
+    def get_count_by_type_and_date(self, message_type: str, start_date=None, end_date=None) -> int:
+        return self.repository.get_count_by_type_and_date(message_type, start_date, end_date)
+
+    def get_recent(self, limit: int = 10):
+        return self.repository.get_recent(limit)
+
     def mark_message_read(self, message_id: int):
         return self.repository.mark_as_read(message_id)

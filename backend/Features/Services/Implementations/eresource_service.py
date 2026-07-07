@@ -1,3 +1,4 @@
+# [Layer: Services/Implementations] — eresource_service.py
 from typing import List, Optional, Any
 from Features.Services.Interfaces import IEResourceDepartmentService, IEResourceFileService
 from Features.Repositories.Interfaces import IEResourceDepartmentRepository, IEResourceFileRepository

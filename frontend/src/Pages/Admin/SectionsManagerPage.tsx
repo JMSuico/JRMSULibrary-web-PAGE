@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   Image as ImageIcon,
@@ -177,7 +178,7 @@ export default function SectionsManagerPage() {
       <div className="admin-table-wrapper">
         <div className="admin-table-toolbar">
           <div className="admin-table-toolbar__search">
-            <Search size={16} style={{ color: '#9ca3af', flexShrink: 0 }} />
+            <Search size={16} style={{ color: 'var(--color-gray-400)', flexShrink: 0 }} />
             <input
               type="text"
               placeholder="Search sections..."
@@ -191,7 +192,7 @@ export default function SectionsManagerPage() {
               className="admin-btn admin-btn--icon"
               onClick={() => setViewMode('grid')}
               aria-label="Grid view"
-              style={viewMode === 'grid' ? { background: '#002B7F', color: '#fff' } : {}}
+              style={viewMode === 'grid' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}
             >
               <LayoutGrid size={16} />
             </button>
@@ -199,7 +200,7 @@ export default function SectionsManagerPage() {
               className="admin-btn admin-btn--icon"
               onClick={() => setViewMode('table')}
               aria-label="Table view"
-              style={viewMode === 'table' ? { background: '#002B7F', color: '#fff' } : {}}
+              style={viewMode === 'table' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}
             >
               <List size={16} />
             </button>
@@ -239,7 +240,7 @@ export default function SectionsManagerPage() {
                             style={{ width: 64, height: 48 }}
                           />
                         </td>
-                        <td style={{ fontWeight: 500, color: '#111827' }}>{img.title || '—'}</td>
+                        <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>{img.title || '—'}</td>
                         <td>{img.section_label || '—'}</td>
                         <td>
                           <span className={`admin-badge ${img.is_active ? 'admin-badge--success' : 'admin-badge--warning'}`}>
@@ -257,7 +258,7 @@ export default function SectionsManagerPage() {
                             <button
                               className="admin-btn admin-btn--icon"
                               aria-label={`Delete ${img.title}`}
-                              style={{ color: '#dc2626' }}
+                              style={{ color: 'var(--color-red-600)' }}
                               onClick={() => handleDelete(img.id)}
                             >
                               <Trash2 size={15} />
@@ -275,7 +276,7 @@ export default function SectionsManagerPage() {
               <div className="admin-card-grid" style={{ padding: 20 }}>
                 {filtered.map((img) => (
                   <div className="admin-grid-card" key={img.id}>
-                    <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: '#f3f4f6' }}>
+                    <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: 'var(--color-gray-100)' }}>
                       <img
                         src={getImageUrl(img.image)}
                         alt={img.title}
@@ -310,7 +311,7 @@ export default function SectionsManagerPage() {
                       <button
                         className="admin-btn admin-btn--icon"
                         aria-label={`Delete ${img.title}`}
-                        style={{ color: '#dc2626' }}
+                        style={{ color: 'var(--color-red-600)' }}
                         onClick={() => handleDelete(img.id)}
                       >
                         <Trash2 size={15} />
@@ -325,8 +326,8 @@ export default function SectionsManagerPage() {
       </div>
 
       {/* Add/Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+      {isModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="font-bold text-gray-900">
@@ -376,7 +377,7 @@ export default function SectionsManagerPage() {
                     type="text"
                     defaultValue={editingImage?.title}
                     placeholder="e.g., Circulation Section"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
                   />
                 </div>
 
@@ -387,7 +388,7 @@ export default function SectionsManagerPage() {
                     type="text"
                     defaultValue={editingImage?.section_label}
                     placeholder="e.g., Filipiniana"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
                   />
                 </div>
 
@@ -397,7 +398,7 @@ export default function SectionsManagerPage() {
                       type="checkbox"
                       name="is_active_check"
                       defaultChecked={editingImage ? editingImage.is_active : true}
-                      className="w-4 h-4 text-[#002B7F] rounded focus:ring-[#002B7F]"
+                      className="w-4 h-4 text-navy rounded focus:ring-navy"
                     />
                     <span className="text-sm font-medium text-gray-700">Visible on public website</span>
                   </label>
@@ -416,22 +417,23 @@ export default function SectionsManagerPage() {
                 type="submit"
                 form="section-image-form"
                 disabled={isSaving}
-                className="px-4 py-2 text-sm font-medium text-white bg-[#002B7F] hover:bg-[#001655] rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-navy hover:bg-navy-dark rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50"
               >
                 {isSaving ? 'Saving...' : editingImage ? 'Update Image' : 'Upload Image'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* View Full Details Modal */}
-      {viewingImage && (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setViewingImage(null)}>
+      {viewingImage && createPortal(
+<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setViewingImage(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <ImageIcon size={22} className="text-[#002B7F]" /> Section Details
+                <ImageIcon size={22} className="text-navy" /> Section Details
               </h2>
               <button onClick={() => setViewingImage(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
                 <X size={22} />
@@ -478,8 +480,9 @@ export default function SectionsManagerPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+document.body
+)}
 
       {/* Undo Delete Toast */}
       {undoState && (

@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router-dom';
 import { TopNavBar } from '@/src/Components/LayoutBars/TopNavBar';
 import { FacebookBubble } from '@/src/Components/Shared/FacebookBubble';
 import { FeedbackStickyCard } from '@/src/Features/Feedback/components/FeedbackStickyCard';
@@ -7,6 +7,9 @@ import { RizalAssistant } from '@/src/Features/AIAssistant/components/RizalAssis
 import { Footer } from '@/src/Components/LayoutBars/Footer';
 import { PageSkeleton } from '@/src/Components/Shared/SkeletonLoader';
 import { ToastProvider } from '@/src/Hooks/useToast';
+import { publicApi } from '@/src/Endpoints/cmsApi';
+import { InitialLoader } from '@/src/Components/Shared/InitialLoader';
+import { PrivacyConsentModal } from '@/src/Components/Shared/PrivacyConsentModal';
 
 // Public Pages
 const HomePage = lazy(() => import('@/src/Pages/Home/HomePage'));
@@ -34,8 +37,20 @@ const RecycleBinPage = lazy(() => import('@/src/Pages/Admin/RecycleBinPage'));
 const LoginPage = lazy(() => import('@/src/Pages/Admin/LoginPage'));
 
 function PublicLayout() {
+  const location = useLocation();
+  const [isLoaderDone, setIsLoaderDone] = useState(false);
+
+  // Track visitor on every public page navigation
+  useEffect(() => {
+    publicApi.trackVisit(location.pathname);
+  }, [location.pathname]);
+
   return (
     <>
+      {!isLoaderDone && (
+        <InitialLoader onComplete={() => setIsLoaderDone(true)} />
+      )}
+      {isLoaderDone && <PrivacyConsentModal />}
       <TopNavBar />
       <FacebookBubble />
       <FeedbackStickyCard />

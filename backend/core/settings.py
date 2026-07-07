@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -56,7 +56,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    # "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.AuditLogMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -192,16 +193,10 @@ STATIC_URL = "static/"
 AUTH_USER_MODEL = "Features.Account"
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-]
+_allowed_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000")
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -219,9 +214,22 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "120/hour",
         "user": "2000/hour",
-        "contact": "200/hour"
+        "contact": "200/hour",
+        "login": "5/minute"
     }
 }
+
+# Production Security Settings
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # Timezone (Philippine Time)
 TIME_ZONE = "Asia/Manila"
@@ -229,6 +237,10 @@ TIME_ZONE = "Asia/Manila"
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# File Upload Security Limits (Prevent DoS via disk exhaustion)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5 MB
 
 # ============================================================
 # Email (SMTP via Gmail — JRMSU Library Account)
@@ -238,7 +250,7 @@ EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'katipunan.library@jrmsu.edu.ph')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'mmuh zbjb nyzg ovir')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '') # Must be set in .env
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>')
 EMAIL_TIMEOUT = 60  # Increased to handle large 25MB attachments
 
@@ -251,3 +263,12 @@ CACHES = {
         'LOCATION': 'jrmsu-library-cache',
     }
 }
+
+# ============================================================
+# External Library Credentials (for auto-login proxy)
+# Must be set in .env — never hardcode credentials here.
+# ============================================================
+VITALSOURCE_EMAIL = os.environ.get('VITALSOURCE_EMAIL', '')
+VITALSOURCE_PASSWORD = os.environ.get('VITALSOURCE_PASSWORD', '')
+SCHOLAAR_USERNAME = os.environ.get('SCHOLAAR_USERNAME', '')
+SCHOLAAR_PASSWORD = os.environ.get('SCHOLAAR_PASSWORD', '')

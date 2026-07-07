@@ -1,3 +1,4 @@
+# [Layer: Data/Models] — eresource_model.py
 from django.db import models
 
 

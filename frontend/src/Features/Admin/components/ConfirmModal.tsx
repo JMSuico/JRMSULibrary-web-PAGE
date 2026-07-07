@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -46,8 +47,8 @@ export function ConfirmModal({
 
   const colors = getColors();
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 animate-in fade-in">
+  return createPortal(
+    <div className="fixed backdrop-blur-sm inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 animate-in fade-in">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
         <div className="flex justify-between items-start p-4">
           <div className={`p-2 rounded-full ${colors.icon} mr-3 shrink-0`}>
@@ -79,6 +80,7 @@ export function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

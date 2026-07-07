@@ -62,4 +62,11 @@ export const userApi = {
       body: data,
     });
   },
+
+  updateProfile: async (data: { first_name?: string; last_name?: string; email?: string; username?: string }): Promise<User> => {
+    return apiClient(`/users/update_profile/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 };

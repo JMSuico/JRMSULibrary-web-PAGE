@@ -151,8 +151,13 @@ class ContactMessageViewSet(viewsets.ViewSet):
         from django.core.files.storage import FileSystemStorage
         from django.conf import settings
         
+        ext = file.name.split('.')[-1].lower()
+        allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
+        
+        if ext not in allowed_extensions:
+            return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=status.HTTP_400_BAD_REQUEST)
+        
         fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'temp_attachments'))
-        ext = file.name.split('.')[-1]
         filename = f"{uuid.uuid4()}.{ext}"
         saved_name = fs.save(filename, file)
         

@@ -15,8 +15,12 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/sections': 'Library Sections',
   '/admin/content': 'Content Manager',
   '/admin/eresources': 'E-Resources',
+  '/admin/email': 'Email & Reservations',
+  '/admin/users': 'User Management',
   '/admin/analytics': 'Analytics',
+  '/admin/reports': 'Document Reports',
   '/admin/settings': 'Settings',
+  '/admin/recycle-bin': 'Recycle Bin',
 };
 
 const useAuth = () => {
@@ -36,15 +40,20 @@ const useAuth = () => {
     checkAuth();
   }, []);
 
-  return { isAuthenticated, user }; 
+  return { isAuthenticated, user, setUser }; 
 };
+
+export interface AdminOutletContext {
+  user: User | null;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+}
 
 export default function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, setUser } = useAuth();
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'Admin Panel';
 
@@ -65,7 +74,7 @@ export default function AdminLayout() {
   if (isAuthenticated === null) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <Loader2 className="w-10 h-10 animate-spin text-[#002B7F] mb-4" />
+        <Loader2 className="w-10 h-10 animate-spin text-navy mb-4" />
         <p className="text-gray-500 font-inter">Verifying session...</p>
       </div>
     );
@@ -80,11 +89,7 @@ export default function AdminLayout() {
     <ToastProvider>
       <div className="admin-layout relative overflow-x-hidden bg-gray-50 min-h-screen">
         
-        {/* Dynamic Background Elements shared across all Admin pages */}
-        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0 fixed">
-          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[#002B7F] blur-[120px] opacity-15 animate-pulse"></div>
-          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-[#C9A84C] blur-[120px] opacity-15" style={{ animation: 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite 2s' }}></div>
-        </div>
+        {/* Radiant background removed as requested */}
 
         <AdminSidebar
           collapsed={sidebarCollapsed}
@@ -96,10 +101,11 @@ export default function AdminLayout() {
             pageTitle={pageTitle}
             onToggleSidebar={handleToggleSidebar}
             user={user}
+            onUserUpdate={(updatedUser) => setUser(updatedUser)}
           />
           <div className="admin-content bg-transparent">
-            <div className="bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-[#002B7F]/5 border border-white/50 p-6 md:p-8 min-h-[calc(100vh-120px)] relative">
-              <Outlet />
+            <div className="bg-white/90 rounded-3xl shadow-xl shadow-navy/5 border border-white/50 p-6 md:p-8 min-h-[calc(100vh-120px)]">
+              <Outlet context={{ user, setUser } satisfies AdminOutletContext} />
             </div>
           </div>
         </div>

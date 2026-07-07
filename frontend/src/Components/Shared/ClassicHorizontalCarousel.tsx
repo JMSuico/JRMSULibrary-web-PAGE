@@ -97,7 +97,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
       {canScrollLeft && (
         <button
           onClick={() => scroll('left')}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-20 w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 flex items-center justify-center text-[#002B7F] hover:bg-[#002B7F] hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-20 w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 flex items-center justify-center text-navy hover:bg-navy hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100"
           aria-label="Scroll left"
         >
           <ChevronLeft size={20} />
@@ -143,8 +143,8 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
                     draggable={false}
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-[#002B7F]/10 to-[#002B7F]/30 flex items-center justify-center">
-                    <span className="material-symbols-outlined text-5xl text-[#002B7F]/50">
+                  <div className="w-full h-full bg-gradient-to-br from-navy/10 to-navy/30 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-5xl text-navy/50">
                       {item.icon || 'book'}
                     </span>
                   </div>
@@ -153,7 +153,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
 
               {/* Info */}
               <div className="p-3">
-                <p className="text-sm font-bold text-[#002B7F] leading-tight line-clamp-2">{title}</p>
+                <p className="text-sm font-bold text-navy leading-tight line-clamp-2">{title}</p>
                 {item.description && (
                   <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>
                 )}
@@ -167,7 +167,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
       {canScrollRight && (
         <button
           onClick={() => scroll('right')}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-20 w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 flex items-center justify-center text-[#002B7F] hover:bg-[#002B7F] hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-20 w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 flex items-center justify-center text-navy hover:bg-navy hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100"
           aria-label="Scroll right"
         >
           <ChevronRight size={20} />

@@ -93,6 +93,7 @@ export default function RecycleBinPage() {
               <option value="BOOKS">Books</option>
               <option value="GALLERY">Sections</option>
               <option value="BATCH">Batches (Newly Acquired)</option>
+              <option value="REPORT">Generated Reports</option>
             </select>
           </div>
         </div>

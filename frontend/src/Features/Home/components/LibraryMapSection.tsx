@@ -11,8 +11,8 @@ export const LibraryMapSection: React.FC = () => {
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         {/* Section Header */}
         <div className="text-center mb-10">
-          <h2 className="font-headline-lg text-4xl font-bold mb-4" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Library Map and Location</h2>
-          <p className="" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <h2 className="font-headline-lg text-4xl font-bold mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Library Map and Location</h2>
+          <p className="" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             Find us at the heart of Katipunan, Zamboanga del Norte.
           </p>
         </div>
@@ -44,7 +44,7 @@ export const LibraryMapSection: React.FC = () => {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-full font-bold hover:bg-navy-mid transition-all shadow-xl hover:shadow-2xl interactive-hover text-sm w-full"
-                    style={{ background: '#001851', color: '#F0D97A' }}
+                    style={{ background: 'var(--color-primary)', color: 'var(--color-gold-light)' }}
                   >
                     <span className="material-symbols-outlined text-xl">directions</span>
                     Get Directions

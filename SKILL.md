@@ -245,6 +245,10 @@ JRMSU LIBRARY LANDING PAGE/            # Root project folder (Vite + React setup
 │   ├── LayoutStyles/                  # Global styling and color system — all colors defined here
 │   │   └── index.css                  # Global CSS tokens, Tailwind base, and custom animations
 │   │
+│   ├── Libs/                          # General utilities and helper functions
+│   │   ├── chartUtils.ts              # Dynamic scaling and formatting for Recharts
+│   │   └── Assets/                    # Constants, data files, links
+│   │
 │   ├── Hooks/                         # Shared reusable hooks only
 │   │   └── useIntersectionObserver.ts # Custom hook for scroll-based fade-in animations
 │   │

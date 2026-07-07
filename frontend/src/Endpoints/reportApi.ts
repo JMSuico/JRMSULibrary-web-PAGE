@@ -68,6 +68,18 @@ export const reportApi = {
   },
   getHistoryDetail: async (id: number): Promise<HistoricalReportDetail> => {
     return apiClient(`/reports/${id}/history_detail/`);
+  },
+  archiveReport: async (id: number): Promise<{status: string}> => {
+    return apiClient(`/reports/${id}/archive/`, { method: 'POST' });
+  },
+  unarchiveReport: async (id: number): Promise<{status: string}> => {
+    return apiClient(`/reports/${id}/unarchive/`, { method: 'POST' });
+  },
+  getArchivedReports: async (): Promise<{results: HistoricalReport[]}> => {
+    return apiClient(`/reports/archived_list/`);
+  },
+  deleteReport: async (id: number): Promise<void> => {
+    return apiClient(`/reports/${id}/`, { method: 'DELETE' });
   }
 };
 

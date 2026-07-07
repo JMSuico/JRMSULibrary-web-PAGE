@@ -79,7 +79,7 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          className="fixed backdrop-blur-sm inset-0 bg-black/60 z-[100] md:hidden"
           onClick={onCloseMobile}
           aria-hidden="true"
         />

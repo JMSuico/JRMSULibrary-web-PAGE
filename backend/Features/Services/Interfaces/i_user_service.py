@@ -1,3 +1,4 @@
+# [Layer: Services/Interfaces] — i_user_service.py
 from abc import ABC, abstractmethod
 from typing import List, Optional, Any
 

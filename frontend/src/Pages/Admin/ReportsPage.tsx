@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Printer, Calendar as CalendarIcon, Download, Search, Eye, History, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { FileText, Printer, Calendar as CalendarIcon, Download, Search, Eye, History, X, ChevronLeft, ChevronRight, Loader2, Archive, Trash2 } from 'lucide-react';
 import { reportApi, ReportSummary, HistoricalReport } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState('summary');
@@ -22,6 +23,57 @@ export default function ReportsPage() {
 
   const debouncedSearch = useDebounce(searchQuery, 400);
   const { showToast } = useToast();
+
+  const handleArchive = async (id: number) => {
+    try {
+      await reportApi.archiveReport(id);
+      setHistory(prev => prev.filter(h => h.id !== id));
+      showToast('Report archived successfully', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to archive report', 'error');
+    }
+  };
+
+  const pendingDeletes = React.useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const handleDelete = (id: number) => {
+    // Optimistically hide it from UI
+    setHistory(prev => prev.filter(h => h.id !== id));
+    
+    // Custom undo toast
+    showToast(
+      <div className="flex items-center justify-between w-full">
+        <span>Report moved to recycle bin.</span>
+        <button 
+          onClick={() => {
+            if (pendingDeletes.current[id]) {
+              clearTimeout(pendingDeletes.current[id]);
+              delete pendingDeletes.current[id];
+              // Refresh to restore
+              fetchHistory();
+              showToast('Report restored', 'success');
+            }
+          }}
+          className="ml-4 text-xs bg-white text-gray-900 px-3 py-1 rounded-md font-semibold border border-gray-200 shadow-sm hover:bg-gray-50"
+        >
+          Undo
+        </button>
+      </div> as unknown as string,
+      'info',
+      4000
+    );
+
+    // Schedule actual API call
+    pendingDeletes.current[id] = setTimeout(async () => {
+      try {
+        await reportApi.deleteReport(id);
+        delete pendingDeletes.current[id];
+      } catch (err: any) {
+        showToast('Failed to permanently delete report', 'error');
+        fetchHistory(); // Refresh to restore on failure
+      }
+    }, 4000);
+  };
 
   const fetchHistory = async () => {
     setIsLoadingHistory(true);
@@ -153,7 +205,7 @@ export default function ReportsPage() {
             <select 
               value={reportType} 
               onChange={e => setReportType(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#002B7F]"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-navy"
             >
               <option value="summary">Comprehensive Summary</option>
               <option value="visitors">Visitor Analytics</option>
@@ -166,7 +218,7 @@ export default function ReportsPage() {
             <select 
               value={dateRange} 
               onChange={e => setDateRange(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#002B7F]"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-navy"
             >
               <option value="this-week">This Week</option>
               <option value="this-month">This Month</option>
@@ -194,7 +246,7 @@ export default function ReportsPage() {
             <input
               type="text"
               placeholder="Search reports..."
-              className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#002B7F] w-64"
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-navy w-64"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -217,7 +269,7 @@ export default function ReportsPage() {
               {isLoadingHistory ? (
                 <tr>
                   <td colSpan={6} className="text-center py-8">
-                    <Loader2 className="animate-spin text-[#002B7F] mx-auto mb-2" size={24} />
+                    <Loader2 className="animate-spin text-navy mx-auto mb-2" size={24} />
                     <p className="text-gray-500 text-sm">Loading history...</p>
                   </td>
                 </tr>
@@ -231,17 +283,34 @@ export default function ReportsPage() {
                 history.map((h) => (
                   <tr key={h.id}>
                     <td className="font-medium text-gray-900">{h.title}</td>
-                    <td><span className="bg-blue-50 text-[#002B7F] px-2 py-1 rounded-md text-xs font-semibold uppercase">{h.report_type}</span></td>
+                    <td><span className="bg-blue-50 text-navy px-2 py-1 rounded-md text-xs font-semibold uppercase">{h.report_type}</span></td>
                     <td>{h.date_range.replace('-', ' ').toUpperCase()}</td>
                     <td>{h.generated_by}</td>
                     <td>{new Date(h.generated_at).toLocaleString()}</td>
                     <td>
-                      <button
-                        onClick={() => handleViewHistorical(h.id)}
-                        className="admin-btn admin-btn--outline flex items-center gap-1 !py-1 !px-2 text-xs"
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleViewHistorical(h.id)}
+                          className="admin-btn admin-btn--outline flex items-center gap-1 !py-1 !px-2 text-xs"
+                          title="View"
+                        >
+                          <Eye size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleArchive(h.id)}
+                          className="admin-btn admin-btn--outline flex items-center gap-1 !py-1 !px-2 text-xs text-gray-600 hover:text-navy hover:bg-blue-50 border-gray-200"
+                          title="Archive"
+                        >
+                          <Archive size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(h.id)}
+                          className="admin-btn admin-btn--outline flex items-center gap-1 !py-1 !px-2 text-xs text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -327,15 +396,20 @@ export default function ReportsPage() {
                <div className="border border-gray-300 p-4">
                   <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Feedback Ratings Breakdown</h4>
                   <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={12} />
-                        <YAxis allowDecimals={false} fontSize={12} />
-                        <RechartsTooltip />
-                        <Bar dataKey="count" fill="#C9A84C" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {(() => {
+                      const ya = dynamicAxis(extractValues(ratingData, 'count'));
+                      return (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" fontSize={12} />
+                            <YAxis domain={ya.domain} ticks={ya.ticks} allowDecimals={false} fontSize={12} />
+                            <RechartsTooltip />
+                            <Bar dataKey="count" fill='var(--color-gold)' />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      );
+                    })()}
                   </div>
                </div>
                <div className="border border-gray-300 p-4">

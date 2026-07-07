@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Upload } from 'lucide-react';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BatchBook } from '@/src/Endpoints/batchApi';
@@ -45,8 +46,8 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
     onSubmit(formData);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed backdrop-blur-sm inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
         <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
           <h2 className="text-lg font-semibold text-gray-900 m-0">
@@ -59,7 +60,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Book Title</label>
             <input
               type="text"
               required
@@ -73,6 +74,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
             <input
               type="text"
+              required
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={author}
               onChange={(e) => setAuthor(e.target.value)}
@@ -81,9 +83,10 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Accession No.</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Accession Number</label>
               <input
                 type="text"
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={accessionNumber}
                 onChange={(e) => setAccessionNumber(e.target.value)}
@@ -96,13 +99,21 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
-                {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cover Image</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Book Cover Image</label>
+            
+            {initialData && initialData.cover_image && !coverImage && (
+              <div className="mb-3 flex items-center gap-3 p-2 border border-gray-200 rounded-md">
+                <img src={initialData.cover_image} alt="Current cover" className="w-10 h-14 object-cover rounded" />
+                <span className="text-sm text-gray-600">Current cover image</span>
+              </div>
+            )}
+            
             <DragDropFileUpload
               accept="image/*"
               multiple={false}
@@ -118,24 +129,24 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             )}
           </div>
           
-          <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="mt-6 flex justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              style={{ background: '#002B7F' }}
+              className="px-4 py-2 bg-navy text-white rounded-md hover:bg-blue-800 font-medium transition-colors"
             >
-              {initialData ? 'Update Book' : 'Add Book'}
+              {initialData ? 'Save Changes' : 'Add Book'}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

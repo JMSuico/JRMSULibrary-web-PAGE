@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { BarChart3, Users, BookOpen, Mail, CalendarDays, Star, TrendingUp, Activity, RefreshCw, Info } from "lucide-react";
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ScatterChart, Scatter, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { MetricCard } from "@/src/Features/Admin/components/MetricCard";
 import { reportApi, ReportSummary } from "@/src/Endpoints/reportApi";
 import { useToast } from "@/src/Hooks/useToast";
+import { dynamicAxis, extractValues } from "@/src/Libs/chartUtils";
 
-const NAVY="#002B7F",GOLD="#C9A84C",TEAL="#0d9488",ROSE="#f43f5e",VIOLET="#7c3aed";
+const NAVY='var(--color-navy)',GOLD='var(--color-gold)',TEAL="#0d9488",ROSE="#f43f5e",VIOLET="#7c3aed";
 const PIE_COLORS=[ROSE,"#f97316","#f59e0b",TEAL,NAVY];
 const TS={borderRadius:10,border:"none",boxShadow:"0 4px 12px rgba(0,0,0,.08)"};
 
@@ -20,9 +21,9 @@ function ChartCard({title,subtitle,icon,children,formula}:{title:string;subtitle
     <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="mb-4">
         <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-[#002B7F]">{icon}</span>
+          <span className="text-navy">{icon}</span>
           <h3 className="text-sm font-bold text-gray-800">{title}</h3>
-          {formula&&<button onClick={()=>setF(v=>!v)} className="text-gray-400 hover:text-[#002B7F] cursor-pointer" aria-label="formula"><Info size={14}/></button>}
+          {formula&&<button onClick={()=>setF(v=>!v)} className="text-gray-400 hover:text-navy cursor-pointer" aria-label="formula"><Info size={14}/></button>}
         </div>
         {subtitle&&<p className="text-xs text-gray-500">{subtitle}</p>}
         {f&&formula&&<div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100"><p className="text-xs font-mono text-blue-700">{formula}</p></div>}
@@ -42,9 +43,9 @@ export default function AnalyticsPage(){
   const load=async()=>{try{const s=await reportApi.getSummary();setData(s);setLast(new Date());}catch(e:any){showToast(e.message||"Failed","error");}finally{setLoading(false);}};
   useEffect(()=>{load();ref.current=setInterval(load,30000);return()=>{if(ref.current)clearInterval(ref.current);};},[]);
 
-  const stars=(n:number)=>Array.from({length:5},(_,i)=><Star key={i} size={14} className={i<n?"text-[#C9A84C] fill-[#C9A84C]":"text-gray-300"}/>);
+  const stars=(n:number)=>Array.from({length:5},(_,i)=><Star key={i} size={14} className={i<n?"text-gold fill-gold":"text-gray-300"}/>);
 
-  if(loading&&!data)return(<div className="flex flex-col items-center justify-center py-24 gap-3"><div className="w-10 h-10 border-4 border-[#002B7F] border-t-transparent rounded-full animate-spin"/><p className="text-gray-500 text-sm">Loading analytics...</p></div>);
+  if(loading&&!data)return(<div className="flex flex-col items-center justify-center py-24 gap-3"><div className="w-10 h-10 border-4 border-navy border-t-transparent rounded-full animate-spin"/><p className="text-gray-500 text-sm">Loading analytics...</p></div>);
   if(!data)return null;
 
   const trend=data.trend_data??[];
@@ -89,7 +90,7 @@ export default function AnalyticsPage(){
 
       <div className="admin-table-wrapper mt-6 p-6">
         <div className="flex items-center gap-3 mb-6">
-          <BarChart3 size={24} className="text-[#002B7F]"/>
+          <BarChart3 size={24} className="text-navy"/>
           <div>
             <h2 className="text-xl font-bold text-gray-800">Advanced Analytics Trends</h2>
             <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Activity size={11} className="text-green-500 animate-pulse"/> Auto-updates every 30s</p>
@@ -98,28 +99,30 @@ export default function AnalyticsPage(){
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           <ChartCard title="Site Visits Monthly" subtitle="Bar chart — last 6 months" icon={<Users size={16}/>} formula="total_visits = COUNT(SiteVisit) per month">
+            {(()=>{const ya=dynamicAxis(extractValues(trend,'visits'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <BarChart data={trend} margin={{top:8,right:8,left:-24,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6"/>
-                <XAxis dataKey="name" tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
+                <XAxis dataKey="name" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} formatter={(v:number)=>[v,"Visits"]}/>
                 <Bar dataKey="visits" name="Visits" fill={NAVY} radius={[6,6,0,0]} barSize={28}/>
               </BarChart>
-            </ResponsiveContainer></div>
+            </ResponsiveContainer></div>);})()}
           </ChartCard>
 
           <ChartCard title="Books Acquired Timeline" subtitle="Smooth curve per month" icon={<BookOpen size={16}/>} formula="COUNT(BatchBook) per month">
+            {(()=>{const ya=dynamicAxis(extractValues(trend,'books'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <AreaChart data={trend} margin={{top:8,right:8,left:-24,bottom:0}}>
                 <defs><linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={TEAL} stopOpacity={0.25}/><stop offset="95%" stopColor={TEAL} stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6"/>
-                <XAxis dataKey="name" tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
+                <XAxis dataKey="name" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} formatter={(v:number)=>[v,"Books"]}/>
-                <Area type="monotone" dataKey="books" name="Books" stroke={TEAL} strokeWidth={3} fill="url(#bg1)" dot={{r:4,strokeWidth:2,fill:"#fff",stroke:TEAL}} activeDot={{r:6,fill:TEAL}}/>
+                <Area type="monotone" dataKey="books" name="Books" stroke={TEAL} strokeWidth={3} fill="url(#bg1)" dot={{r:4,strokeWidth:2,fill:'var(--color-white)',stroke:TEAL}} activeDot={{r:6,fill:TEAL}}/>
               </AreaChart>
-            </ResponsiveContainer></div>
+            </ResponsiveContainer></div>);})()}
           </ChartCard>
 
           <ChartCard title="Engagement Breakdown" subtitle="Emails vs Reservations" icon={<Mail size={16}/>} formula="Engagement = (Emails+Res)/Visits x100">
@@ -134,16 +137,17 @@ export default function AnalyticsPage(){
           </ChartCard>
 
           <ChartCard title="Ratings Distribution Curve" subtitle="Smooth area 1-5 stars" icon={<Star size={16}/>} formula="Satisfaction = (4*+5*)/Total x100">
+            {(()=>{const rd=[1,2,3,4,5].map(s=>({rating:s+"*",count:dist[s]??0}));const ya=dynamicAxis(extractValues(rd,'count'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
-              <AreaChart data={[1,2,3,4,5].map(s=>({rating:s+"*",count:dist[s]??0}))} margin={{top:8,right:8,left:-24,bottom:0}}>
+              <AreaChart data={rd} margin={{top:8,right:8,left:-24,bottom:0}}>
                 <defs><linearGradient id="rg1" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={GOLD} stopOpacity={0.4}/><stop offset="95%" stopColor={GOLD} stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6"/>
-                <XAxis dataKey="rating" tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
+                <XAxis dataKey="rating" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} formatter={(v:number)=>[v,"Responses"]}/>
-                <Area type="monotone" dataKey="count" name="Responses" stroke={GOLD} strokeWidth={3} fill="url(#rg1)" dot={{r:5,strokeWidth:2,fill:"#fff",stroke:GOLD}} activeDot={{r:7,fill:GOLD}}/>
+                <Area type="monotone" dataKey="count" name="Responses" stroke={GOLD} strokeWidth={3} fill="url(#rg1)" dot={{r:5,strokeWidth:2,fill:'var(--color-white)',stroke:GOLD}} activeDot={{r:7,fill:GOLD}}/>
               </AreaChart>
-            </ResponsiveContainer></div>
+            </ResponsiveContainer></div>);})()}
           </ChartCard>
 
           <ChartCard title="Star Breakdown Pie" subtitle="Per star level" icon={<Star size={16}/>} formula="Weighted Avg = Sum(s*cnt)/Sum(cnt)">
@@ -158,36 +162,38 @@ export default function AnalyticsPage(){
           </ChartCard>
 
           <ChartCard title="Visits vs Books (Scatter)" subtitle="Correlation per month" icon={<TrendingUp size={16}/>} formula="Growth = (Curr-Prev)/Prev x100">
+            {(()=>{const xa=dynamicAxis(extractValues(trend,'visits'));const ya=dynamicAxis(extractValues(trend,'books'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <ScatterChart margin={{top:8,right:8,left:-24,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
-                <XAxis type="number" dataKey="visits" name="Visits" tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
-                <YAxis type="number" dataKey="books" name="Books" tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" stroke='var(--color-gray-100)'/>
+                <XAxis type="number" dataKey="visits" name="Visits" domain={xa.domain} ticks={xa.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <YAxis type="number" dataKey="books" name="Books" domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} content={({payload})=>{if(!payload?.length)return null;const d=payload[0]?.payload;return(<div className="bg-white rounded-lg shadow p-3 text-xs"><p className="font-semibold mb-1">{d?.name}</p><p className="text-blue-600">Visits: <strong>{d?.visits}</strong></p><p className="text-teal-600">Books: <strong>{d?.books}</strong></p></div>);}}/>
                 <Scatter data={trend.map(d=>({...d}))}>{trend.map((_,i)=><Cell key={i} fill={i===trend.length-1?GOLD:NAVY}/>)}</Scatter>
               </ScatterChart>
-            </ResponsiveContainer></div>
+            </ResponsiveContainer></div>);})()}
             <p className="text-xs text-gray-400 mt-1 text-center">Gold = current month</p>
           </ChartCard>
 
           <ChartCard title="Combined Trend" subtitle="Bar (visits) + Line (books)" icon={<Activity size={16}/>} formula="Growth Rate = (Curr-Prev)/Prev x100">
+            {(()=>{const allVals=[...extractValues(trend,'visits'),...extractValues(trend,'books')];const ya=dynamicAxis(allVals);return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <ComposedChart data={trend} margin={{top:8,right:8,left:-24,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6"/>
-                <XAxis dataKey="name" tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:11,fill:"#6b7280"}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
+                <XAxis dataKey="name" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS}/><Legend verticalAlign="bottom" height={30} iconType="circle"/>
                 <Bar dataKey="visits" name="Visits" fill={NAVY+"44"} radius={[4,4,0,0]} barSize={24}/>
-                <Line type="monotone" dataKey="books" name="Books" stroke={GOLD} strokeWidth={2.5} dot={{r:4,strokeWidth:2,fill:"#fff",stroke:GOLD}} activeDot={{r:6,fill:GOLD}}/>
+                <Line type="monotone" dataKey="books" name="Books" stroke={GOLD} strokeWidth={2.5} dot={{r:4,strokeWidth:2,fill:'var(--color-white)',stroke:GOLD}} activeDot={{r:6,fill:GOLD}}/>
               </ComposedChart>
-            </ResponsiveContainer></div>
+            </ResponsiveContainer></div>);})()}
           </ChartCard>
 
         </div>
       </div>
 
       <div className="admin-table-wrapper mt-6 p-6">
-        <div className="flex items-center gap-3 mb-6"><Star size={24} className="text-[#C9A84C]"/><h2 className="text-xl font-bold text-gray-800">Ratings Overview</h2></div>
+        <div className="flex items-center gap-3 mb-6"><Star size={24} className="text-gold"/><h2 className="text-xl font-bold text-gray-800">Ratings Overview</h2></div>
         {data.ratings_summary.total_ratings===0?(<p className="text-gray-500 italic">No ratings received yet.</p>):(
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div>
@@ -195,9 +201,9 @@ export default function AnalyticsPage(){
               <div className="space-y-3">
                 {[5,4,3,2,1].map(star=>{const cnt=dist[star]??0;const pct=data.ratings_summary.total_ratings>0?Math.round(cnt/data.ratings_summary.total_ratings*100):0;return(
                   <div key={star} className="flex items-center gap-3">
-                    <div className="flex items-center gap-1 w-16 shrink-0"><span className="text-sm font-medium text-gray-700">{star}</span><Star size={14} className="text-[#C9A84C] fill-[#C9A84C]"/></div>
+                    <div className="flex items-center gap-1 w-16 shrink-0"><span className="text-sm font-medium text-gray-700">{star}</span><Star size={14} className="text-gold fill-gold"/></div>
                     <div className="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-700" style={{width:`${pct}%`,backgroundColor:star>=4?"#C9A84C":star===3?"#f59e0b":"#ef4444",minWidth:cnt>0?"8px":"0px"}}/>
+                      <div className="h-full rounded-full transition-all duration-700" style={{width:`${pct}%`,backgroundColor:star>=4?'var(--color-gold)':star===3?"#f59e0b":"#ef4444",minWidth:cnt>0?"8px":"0px"}}/>
                     </div>
                     <span className="text-sm text-gray-500 w-20 text-right shrink-0">{cnt} ({pct}%)</span>
                   </div>
@@ -223,7 +229,7 @@ export default function AnalyticsPage(){
 
       {data.ratings_summary.recent_feedback.length>0&&(
         <div className="admin-table-wrapper mt-6 p-6">
-          <div className="flex items-center gap-3 mb-6"><Mail size={24} className="text-[#002B7F]"/><h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2></div>
+          <div className="flex items-center gap-3 mb-6"><Mail size={24} className="text-navy"/><h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2></div>
           <div className="space-y-3">
             {data.ratings_summary.recent_feedback.map(fb=>(
               <div key={fb.id} className="flex items-start justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100/60 transition-colors">

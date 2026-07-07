@@ -10,13 +10,18 @@ from Features.Services.Implementations.feedback_service import FeedbackService
 from Features.Repositories.Implementations.analytics_repository import SiteVisitRepository
 from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
 from Features.Repositories.Implementations.contact_repository import ContactRepository
-from Features.Data.Models.generated_report_model import GeneratedReport
-from django.db.models import Q
-
 from Features.Services.Implementations.book_service import NewlyAcquiredBookService
+from Features.Services.Implementations.report_service import ReportService
+from Features.Repositories.Implementations.report_repository import ReportRepository
+from Features.Services.Implementations.recycle_bin_service import RecycleBinService
+from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
+
+class IsSuperUser(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_superuser)
 
 class ReportViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperUser]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -24,6 +29,8 @@ class ReportViewSet(viewsets.ViewSet):
         self.book_service = NewlyAcquiredBookService(NewlyAcquiredBookRepository())
         self.contact_service = ContactService()
         self.feedback_service = FeedbackService()
+        self.report_service = ReportService(ReportRepository())
+        self.recycle_service = RecycleBinService(RecycleBinRepository())
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -35,10 +42,11 @@ class ReportViewSet(viewsets.ViewSet):
     def _get_summary_data(self, report_type, date_range):
         import datetime
         from django.utils import timezone
-        
+
         today = timezone.now().date()
         cutoff_date = None
-        
+        end_date = None
+
         if date_range == 'today':
             cutoff_date = today
         elif date_range == 'this-week':
@@ -53,52 +61,29 @@ class ReportViewSet(viewsets.ViewSet):
             end_date = first_of_this
         elif date_range == 'this-year':
             cutoff_date = today.replace(month=1, day=1)
-            
-        all_visits = self.visit_service.get_all_visits()
-        all_books = self.book_service.get_all_books()
-        all_messages = self.contact_service.get_all_messages()
-        
-        # Apply filters
-        if cutoff_date:
-            all_visits = [v for v in all_visits if v.visited_at.date() >= cutoff_date]
-            all_books = [b for b in all_books if b.date_encoded and b.date_encoded.date() >= cutoff_date]
-            all_messages = [m for m in all_messages if m.created_at.date() >= cutoff_date]
-            
-            # If last month, also filter before this month
-            if date_range == 'last-month':
-                all_visits = [v for v in all_visits if v.visited_at.date() < end_date]
-                all_books = [b for b in all_books if b.date_encoded and b.date_encoded.date() < end_date]
-                all_messages = [m for m in all_messages if m.created_at.date() < end_date]
-        
-        total_visits = len(all_visits)
-        total_books = len(all_books)
-        total_emails = len([m for m in all_messages if m.message_type == 'EMAIL'])
-        total_reservations = len([m for m in all_messages if m.message_type == 'RESERVATION'])
 
-        recent_emails = sorted([m for m in all_messages if m.message_type in ['EMAIL', 'RESERVATION']], key=lambda x: x.created_at, reverse=True)
-        
-        # Compute 6-month trends for Advanced Analytics Charts
-        today = timezone.now().date()
+        # --- Optimized Database Queries (no more in-memory list comprehensions) ---
+        total_visits = self.visit_service.get_count_by_date_range(cutoff_date, end_date)
+        total_books = self.book_service.get_count_by_date_range(cutoff_date, end_date)
+        total_emails = self.contact_service.get_count_by_type_and_date('EMAIL', cutoff_date, end_date)
+        total_reservations = self.contact_service.get_count_by_type_and_date('RESERVATION', cutoff_date, end_date)
+
+        # Recent activities (DB-limited to 10 rows for performance)
+        recent_books = self.book_service.get_recent(limit=10)
+        recent_emails = self.contact_service.get_recent(limit=10)
+
+        # 6-month trends using optimized per-month COUNT aggregations
         trend_data = []
         for i in range(5, -1, -1):
-            # Calculate the month and year
             m = (today.month - i - 1) % 12 + 1
             y = today.year + ((today.month - i - 1) // 12)
             month_name = datetime.date(y, m, 1).strftime('%b')
-            
-            # Count visits in this month
-            visits_count = len([v for v in all_visits if v.visited_at.year == y and v.visited_at.month == m])
-            # Count books encoded in this month
-            books_count = len([b for b in all_books if b.date_encoded and b.date_encoded.year == y and b.date_encoded.month == m])
-            
+
             trend_data.append({
                 "name": month_name,
-                "visits": visits_count,
-                "books": books_count
+                "visits": self.visit_service.get_count_by_month_year(m, y),
+                "books": self.book_service.get_count_by_month_year(m, y),
             })
-            
-        # Basic book trend — return all books for the table in the period.
-        recent_books = sorted(all_books, key=lambda x: x.date_encoded if x.date_encoded else timezone.now(), reverse=True)
 
         return {
             'total_visits': total_visits,
@@ -120,12 +105,12 @@ class ReportViewSet(viewsets.ViewSet):
                     'id': msg.id,
                     'type': msg.message_type,
                     'name': msg.name,
-                    'date': msg.created_at
-                } for msg in recent_emails
+                    'date': msg.created_at.isoformat() if hasattr(msg.created_at, 'isoformat') else str(msg.created_at)
+                } for msg in recent_emails if msg.message_type in ['EMAIL', 'RESERVATION']
             ],
             # --- Ratings Analytics ---
             'ratings_summary': self._get_ratings_summary(
-                cutoff_date=cutoff_date, 
+                cutoff_date=cutoff_date,
                 end_date=end_date if date_range == 'last-month' else None
             )
         }
@@ -181,7 +166,7 @@ class ReportViewSet(viewsets.ViewSet):
         
         data = self._get_summary_data(report_type, date_range)
         
-        report = GeneratedReport.objects.create(
+        report = self.report_service.generate_and_save_report(
             title=title,
             report_type=report_type,
             date_range=date_range,
@@ -200,12 +185,7 @@ class ReportViewSet(viewsets.ViewSet):
         limit = int(request.query_params.get('limit', 10))
         offset = int(request.query_params.get('offset', 0))
         
-        qs = GeneratedReport.objects.all()
-        if search:
-            qs = qs.filter(Q(title__icontains=search) | Q(report_type__icontains=search))
-            
-        total = qs.count()
-        reports = qs[offset:offset+limit]
+        total, reports = self.report_service.get_history(search, limit, offset)
         
         return Response({
             "total": total,
@@ -223,16 +203,70 @@ class ReportViewSet(viewsets.ViewSet):
 
     @action(detail=True, methods=['get'])
     def history_detail(self, request, pk=None):
-        try:
-            report = GeneratedReport.objects.get(pk=pk)
-            return Response({
-                "id": report.id,
-                "title": report.title,
-                "report_type": report.report_type,
-                "date_range": report.date_range,
-                "generated_at": report.generated_at,
-                "generated_by": f"{report.generated_by.first_name} {report.generated_by.last_name}" if report.generated_by else "System",
-                "data": report.report_data
-            })
-        except GeneratedReport.DoesNotExist:
+        report = self.report_service.get_report_by_id(pk)
+        if not report:
             return Response({"error": "Report not found"}, status=404)
+            
+        return Response({
+            "id": report.id,
+            "title": report.title,
+            "report_type": report.report_type,
+            "date_range": report.date_range,
+            "generated_at": report.generated_at,
+            "generated_by": f"{report.generated_by.first_name} {report.generated_by.last_name}" if report.generated_by else "System",
+            "data": report.report_data
+        })
+
+    @action(detail=True, methods=['post'])
+    def archive(self, request, pk=None):
+        if self.report_service.archive_report(pk):
+            return Response({"status": "archived"})
+        return Response({"error": "Report not found"}, status=404)
+
+    @action(detail=True, methods=['post'])
+    def unarchive(self, request, pk=None):
+        if self.report_service.unarchive_report(pk):
+            return Response({"status": "unarchived"})
+        return Response({"error": "Report not found"}, status=404)
+
+    @action(detail=False, methods=['get'])
+    def archived_list(self, request):
+        reports = self.report_service.get_archived_reports()
+        return Response({
+            "results": [
+                {
+                    "id": r.id,
+                    "title": r.title,
+                    "report_type": r.report_type,
+                    "date_range": r.date_range,
+                    "generated_at": r.generated_at,
+                    "generated_by": f"{r.generated_by.first_name} {r.generated_by.last_name}" if r.generated_by else "System"
+                } for r in reports
+            ]
+        })
+
+    def destroy(self, request, pk=None):
+        report = self.report_service.get_report_by_id(pk)
+        if not report:
+            return Response({"error": "Report not found"}, status=404)
+            
+        # Serialize for recycle bin
+        snapshot = {
+            "title": report.title,
+            "report_type": report.report_type,
+            "date_range": report.date_range,
+            "report_data": report.report_data,
+            "generated_by_id": report.generated_by.id if report.generated_by else None
+        }
+        
+        self.recycle_service.move_to_bin(
+            original_id=report.id,
+            source_module='REPORT',
+            item_name=f"{report.title} ({report.date_range})",
+            data_snapshot=snapshot,
+            user_id=request.user.id if request.user.is_authenticated else None
+        )
+        
+        if self.report_service.delete_report(pk):
+            return Response(status=204)
+        return Response({"error": "Failed to delete"}, status=400)

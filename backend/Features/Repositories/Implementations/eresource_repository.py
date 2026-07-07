@@ -1,3 +1,4 @@
+# [Layer: Repositories/Implementations] — eresource_repository.py
 from typing import List, Optional, Any
 from Features.Data.Models import EResourceDepartment, EResourceFile
 from Features.Repositories.Interfaces import IEResourceDepartmentRepository, IEResourceFileRepository

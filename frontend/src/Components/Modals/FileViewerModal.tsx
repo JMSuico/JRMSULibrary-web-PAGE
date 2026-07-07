@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 
 interface FileViewerModalProps {
@@ -31,9 +32,9 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
   const isPdf = file.path.toLowerCase().endsWith('.pdf');
   const isLink = file.path.startsWith('http://') || file.path.startsWith('https://');
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
@@ -44,7 +45,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
         aria-label={`Viewing: ${file.name}`}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#1e3a8a] to-[#2563eb] text-white px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="bg-gradient-to-r from-blue-900 to-blue-600 text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <span className="material-symbols-outlined">{isLink ? 'link' : 'description'}</span>
             <span className="font-medium truncate text-sm">{file.name}</span>
@@ -124,5 +125,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
         </div>
       </div>
     </div>
+  ,
+    document.body
   );
 };

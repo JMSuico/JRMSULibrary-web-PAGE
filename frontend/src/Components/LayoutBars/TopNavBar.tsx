@@ -28,23 +28,27 @@ export const TopNavBar: React.FC = () => {
     setCollectionOpen(false);
   }, [location.pathname]);
 
-  const aboutItems = [
+  type DropdownItem = { label: string; path: string };
+  type NavLink = { label: string; path: string; dropdown?: DropdownItem[] };
+
+  const aboutItems: DropdownItem[] = [
     { label: 'History of JRMSU Katipunan Campus', path: '/about#history' },
     { label: 'Quality Objectives', path: '/about#objectives' },
   ];
 
-  const administrationItems = [
+  const administrationItems: DropdownItem[] = [
     { label: 'Administration', path: '/administration#administration' },
     { label: 'Manual', path: '/administration#manual' },
   ];
 
-  const collectionItems = [
+  const collectionItems: DropdownItem[] = [
     { label: 'Newly Acquired Books', path: '/collection/newly-acquired' },
     { label: 'Local Books', path: '/collection/local-books' },
     { label: 'Online Access', path: '/collection/online' },
+    { label: 'External Libraries', path: '/collection/external-libraries' },
   ];
 
-  const navLinks = [
+  const navLinks: NavLink[] = [
     { label: 'Home', path: '/' },
     { label: 'About', path: '/about', dropdown: aboutItems },
     { label: 'Services', path: '/services' },

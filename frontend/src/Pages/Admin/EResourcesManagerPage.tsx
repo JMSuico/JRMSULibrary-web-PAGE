@@ -376,7 +376,7 @@ export default function EResourcesManagerPage() {
 
       {/* Dept Modal */}
       {isDeptModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">{editingDept ? 'Edit Folder' : 'Add Folder'}</h2>
@@ -409,7 +409,7 @@ export default function EResourcesManagerPage() {
 
       {/* File Modal */}
       {isFileModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">Upload File to {selectedDept?.name}</h2>
@@ -458,7 +458,7 @@ export default function EResourcesManagerPage() {
             </div>
             <button 
               onClick={() => cancelDelete()}
-              className="text-sm font-bold text-[#002B7F] hover:text-[#001655] px-2 py-1 bg-blue-50 rounded"
+              className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
             >
               Undo
             </button>

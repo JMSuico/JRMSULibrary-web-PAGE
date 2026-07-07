@@ -1,3 +1,4 @@
+# [Layer: Repositories/Implementations] — personnel_repository.py
 from typing import List, Optional, Any
 from Features.Data.Models import Personnel
 from Features.Repositories.Interfaces import IPersonnelRepository

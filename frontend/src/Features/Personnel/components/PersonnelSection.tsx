@@ -37,10 +37,10 @@ export const PersonnelSection: React.FC = () => {
       <div id="personnel" className="max-w-max-width mx-auto px-4 md:px-gutter">
 
         <div className="text-center mb-16">
-          <h2 className="font-headline-lg text-4xl mb-4 font-bold" style={{ color: '#001851', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <h2 className="font-headline-lg text-4xl mb-4 font-bold" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
             Library Personnel
           </h2>
-          <p className="max-w-3xl mx-auto" style={{ color: '#001851', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <p className="max-w-3xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             Meet the dedicated library professionals committed to supporting learning, research, and academic excellence at JRMSU.
           </p>
         </div>
@@ -74,7 +74,7 @@ export const PersonnelSection: React.FC = () => {
                       />
                     </div>
                     <div className="bg-navy-dark/80 backdrop-blur-sm px-4 py-3 rounded-xl border border-gold-light/10 shadow-lg w-full">
-                      <h3 className="font-headline-md font-bold text-lg mb-1" style={{ color: '#F0D97A' }}>Kiara Keren M. Alavanza</h3>
+                      <h3 className="font-headline-md font-bold text-lg mb-1" style={{ color: 'var(--color-gold-light)' }}>Kiara Keren M. Alavanza</h3>
                       <div className="h-0.5 w-12 bg-gold-light/50 mx-auto mb-2"></div>
                       <p className="text-white/90 font-bold tracking-widest text-xs uppercase">Campus Librarian</p>
                     </div>
@@ -88,19 +88,19 @@ export const PersonnelSection: React.FC = () => {
               <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 900 80" preserveAspectRatio="xMidYMid meet">
                 <defs>
                   <marker id="arrowhead-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
+                    <polygon points="0 0, 10 3.5, 0 7" fill='var(--color-gold)' />
                   </marker>
                 </defs>
                 {/* Top center down to horizontal line */}
-                <path d="M 450 0 L 450 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
+                <path d="M 450 0 L 450 20" stroke='var(--color-gold)' strokeWidth="2" fill="none" />
                 {/* Horizontal line across columns */}
-                <path d="M 150 20 L 750 20" stroke="#C9A84C" strokeWidth="2" fill="none" />
+                <path d="M 150 20 L 750 20" stroke='var(--color-gold)' strokeWidth="2" fill="none" />
                 {/* Left arrow down */}
-                <path d="M 150 20 L 150 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                <path d="M 150 20 L 150 45" stroke='var(--color-gold)' strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
                 {/* Center arrow down */}
-                <path d="M 450 20 L 450 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                <path d="M 450 20 L 450 45" stroke='var(--color-gold)' strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
                 {/* Right arrow down */}
-                <path d="M 750 20 L 750 45" stroke="#C9A84C" strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
+                <path d="M 750 20 L 750 45" stroke='var(--color-gold)' strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" />
               </svg>
             </div>
 
@@ -133,7 +133,7 @@ export const PersonnelSection: React.FC = () => {
                     <div className="w-20 h-20 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 shadow-lg">
                       {person.initials}
                     </div>
-                    <h3 className="font-headline-md font-bold mb-1 text-lg leading-tight uppercase" style={{ color: '#F0D97A' }}>
+                    <h3 className="font-headline-md font-bold mb-1 text-lg leading-tight uppercase" style={{ color: 'var(--color-gold-light)' }}>
                       {person.name}
                     </h3>
                     <p className="font-label-caps font-semibold text-xs" style={{ color: 'rgba(255,255,255,0.8)' }}>{person.title}</p>

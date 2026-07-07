@@ -139,7 +139,7 @@ export default function UserManagementPage() {
       <div className="admin-table-wrapper">
         <div className="admin-table-toolbar">
           <div className="admin-table-toolbar__search">
-            <Search size={16} style={{ color: '#9ca3af', flexShrink: 0 }} />
+            <Search size={16} style={{ color: 'var(--color-gray-400)', flexShrink: 0 }} />
             <input
               type="text"
               placeholder="Search users..."
@@ -178,7 +178,7 @@ export default function UserManagementPage() {
               <tbody>
                 {filtered.map((user) => (
                   <tr key={user.id}>
-                    <td style={{ fontWeight: 500, color: '#111827' }}>
+                    <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>
                       {user.first_name} {user.last_name}
                     </td>
                     <td>@{user.username}</td>
@@ -231,7 +231,7 @@ export default function UserManagementPage() {
                           className="admin-btn admin-btn--icon" 
                           aria-label="Delete" 
                           title="Delete User"
-                          style={{ color: '#dc2626' }}
+                          style={{ color: 'var(--color-red-600)' }}
                           onClick={() => handleDelete(user.id)}
                         >
                           <Trash2 size={15} />
@@ -264,7 +264,7 @@ export default function UserManagementPage() {
               <form id="user-form" onSubmit={handleSaveUser} className="space-y-4">
                 
                 <div className="flex flex-col items-center mb-4">
-                  <div className="relative group w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden hover:border-[#002B7F] transition-colors">
+                  <div className="relative group w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden hover:border-navy transition-colors">
                     {editingUser?.avatar_url ? (
                       <img src={editingUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
@@ -296,22 +296,22 @@ export default function UserManagementPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">First Name</label>
-                    <input required defaultValue={editingUser?.first_name} name="first_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]" />
+                    <input required defaultValue={editingUser?.first_name} name="first_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Last Name</label>
-                    <input required defaultValue={editingUser?.last_name} name="last_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]" />
+                    <input required defaultValue={editingUser?.last_name} name="last_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
-                  <input required defaultValue={editingUser?.email} name="email" type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]" />
+                  <input required defaultValue={editingUser?.email} name="email" type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Username</label>
-                  <input required defaultValue={editingUser?.username} name="username" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]" />
+                  <input required defaultValue={editingUser?.username} name="username" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                 </div>
 
                 <div>
@@ -322,7 +322,7 @@ export default function UserManagementPage() {
                     required={!editingUser} 
                     name="password" 
                     type="password" 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#002B7F]" 
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" 
                     placeholder={editingUser ? '••••••••' : ''}
                   />
                 </div>
@@ -333,7 +333,7 @@ export default function UserManagementPage() {
                       type="checkbox" 
                       name="is_active_checkbox" 
                       defaultChecked={editingUser ? editingUser.is_active : true}
-                      className="w-4 h-4 text-[#002B7F] rounded focus:ring-[#002B7F]"
+                      className="w-4 h-4 text-navy rounded focus:ring-navy"
                     />
                     <span className="text-sm font-medium text-gray-700">Account is Active</span>
                   </label>
@@ -350,7 +350,7 @@ export default function UserManagementPage() {
               <button 
                 type="submit" 
                 form="user-form"
-                className="px-4 py-2 text-sm font-medium text-white bg-[#002B7F] hover:bg-[#001655] rounded-lg shadow-sm transition"
+                className="px-4 py-2 text-sm font-medium text-white bg-navy hover:bg-navy-dark rounded-lg shadow-sm transition"
               >
                 {editingUser ? 'Update Admin' : 'Create Admin'}
               </button>

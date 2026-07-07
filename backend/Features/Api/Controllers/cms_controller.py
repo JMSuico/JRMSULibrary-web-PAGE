@@ -172,7 +172,12 @@ class EResourceFileViewSet(viewsets.ViewSet):
         # Merge request.data (text fields) with request.FILES (uploaded file)
         mutable_data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
         if 'file' in request.FILES:
-            mutable_data['file'] = request.FILES['file']
+            uploaded_file = request.FILES['file']
+            ext = uploaded_file.name.split('.')[-1].lower()
+            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
+            if ext not in allowed_extensions:
+                return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=400)
+            mutable_data['file'] = uploaded_file
         ser = EResourceFileSerializer(data=mutable_data)
         if ser.is_valid():
             item = self.service.create(ser.validated_data)
@@ -301,7 +306,12 @@ class ManagedFileViewSet(viewsets.ViewSet):
         # Merge request.data (text fields) with request.FILES (uploaded file)
         mutable_data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
         if 'file' in request.FILES:
-            mutable_data['file'] = request.FILES['file']
+            uploaded_file = request.FILES['file']
+            ext = uploaded_file.name.split('.')[-1].lower()
+            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
+            if ext not in allowed_extensions:
+                return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=400)
+            mutable_data['file'] = uploaded_file
         ser = ManagedFileSerializer(data=mutable_data)
         if ser.is_valid():
             item = self.service.create(ser.validated_data)

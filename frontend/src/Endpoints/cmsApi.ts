@@ -80,4 +80,39 @@ export const publicApi = {
     if (!resp.ok) throw new Error('Failed to fetch visitor count');
     return resp.json();
   },
+
+  /**
+   * Record a unique page visit. The backend de-duplicates by
+   * visitor_id, so the same person on the same device
+   * and browser visiting the same page twice in one day is counted once.
+   */
+  trackVisit: async (page: string): Promise<void> => {
+    try {
+      const today = new Date().toDateString();
+      const cacheKey = `jrmsu_last_visit_${page}`;
+      const lastVisit = localStorage.getItem(cacheKey);
+
+      // If we already recorded a visit to this exact page today, skip the network request
+      if (lastVisit === today) {
+        return;
+      }
+
+      let visitorId = localStorage.getItem('jrmsu_visitor_id');
+      if (!visitorId) {
+        visitorId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('jrmsu_visitor_id', visitorId);
+      }
+
+      await fetch('/api/site-visits/track/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page, visitor_id: visitorId }),
+      });
+
+      // Cache the successful visit for today
+      localStorage.setItem(cacheKey, today);
+    } catch {
+      // Silently ignore tracking errors — never block the UI
+    }
+  },
 };

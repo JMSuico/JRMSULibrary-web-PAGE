@@ -1,3 +1,4 @@
+# [Layer: management/commands] — createsuperuser_custom.py
 """
 Custom createsuperuser command for JRMSU Library Admin.
 Interactive menu with default account creation and custom input flow.
