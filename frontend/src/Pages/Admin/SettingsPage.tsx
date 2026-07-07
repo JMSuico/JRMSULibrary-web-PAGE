@@ -1,477 +1,630 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { Settings, Lock, Library, Save, CheckCircle, Layers, Archive, RotateCcw, RefreshCw, UserCircle, Camera, Eye, EyeOff } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
-import {
-  Settings, User, Lock, Globe, Clock, Save,
-  Eye, EyeOff, CheckCircle, AlertCircle, Camera, Loader2, RefreshCw,
-} from 'lucide-react';
+import { AdminOutletContext } from './AdminLayout';
 import { settingsApi, SiteSettings } from '@/src/Endpoints/settingsApi';
 import { userApi } from '@/src/Endpoints/userApi';
+import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
+import { reportApi, HistoricalReport } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
-import type { AdminOutletContext } from '@/src/Pages/Admin/AdminLayout';
 
-// ── Tab types ──────────────────────────────────────────────────────────────────
-type Tab = 'site' | 'profile' | 'security';
-
-const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'site',     label: 'Site Settings',  icon: <Globe size={16} /> },
-  { id: 'profile',  label: 'My Profile',     icon: <User size={16} /> },
-  { id: 'security', label: 'Security',       icon: <Lock size={16} /> },
-];
-
-// ── Reusable field components ──────────────────────────────────────────────────
-function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function Input({
-  id, value, onChange, placeholder, disabled, type = 'text',
-}: {
-  id: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; disabled?: boolean; type?: string;
-}) {
-  return (
-    <input
-      id={id}
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      disabled={disabled}
-      className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#002B7F]/30 focus:border-[#002B7F] transition-all disabled:bg-gray-50 disabled:text-gray-400"
-    />
-  );
-}
-
-function PasswordInput({
-  id, value, onChange, placeholder, disabled,
-}: {
-  id: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; disabled?: boolean;
-}) {
-  const [show, setShow] = useState(false);
-  return (
-    <div className="relative">
-      <input
-        id={id}
-        type={show ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="w-full px-3.5 py-2.5 pr-10 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#002B7F]/30 focus:border-[#002B7F] transition-all disabled:bg-gray-50 disabled:text-gray-400"
-      />
-      <button
-        type="button"
-        onClick={() => setShow((p) => !p)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
-        aria-label={show ? 'Hide password' : 'Show password'}
-      >
-        {show ? <EyeOff size={16} /> : <Eye size={16} />}
-      </button>
-    </div>
-  );
-}
-
-function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-50 bg-gray-50/50">
-        <h3 className="text-base font-semibold text-gray-800">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-      </div>
-      <div className="p-6 space-y-4">{children}</div>
-    </div>
-  );
-}
-
-// ── Subpage: Site Settings ─────────────────────────────────────────────────────
-function SiteSettingsTab() {
-  const { showToast } = useToast();
-  const [settings, setSettings] = useState<SiteSettings | null>(null);
+export default function SettingsPage() {
+  const { user, setUser } = useOutletContext<AdminOutletContext>();
+  const [activeTab, setActiveTab] = useState<'profile' | 'general' | 'carousel' | 'security' | 'archives'>('profile');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<Partial<SiteSettings>>({});
+  const [savedStatus, setSavedStatus] = useState(false);
+  const [archivedBatches, setArchivedBatches] = useState<AcquisitionBatch[]>([]);
+  const [archivedReports, setArchivedReports] = useState<HistoricalReport[]>([]);
+  const [archivesLoading, setArchivesLoading] = useState(false);
+  const [archiveType, setArchiveType] = useState<'batches'|'reports'>('batches');
+  const { showToast } = useToast();
 
-  const load = async () => {
-    try {
-      setLoading(true);
-      const data = await settingsApi.getSettings();
-      setSettings(data);
-      setForm(data);
-    } catch {
-      showToast('Failed to load site settings', 'error');
-    } finally {
-      setLoading(false);
+  const [firstName, setFirstName] = useState(user?.first_name || '');
+  const [lastName, setLastName] = useState(user?.last_name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [username, setUsername] = useState(user?.username || '');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar_url || null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showOldPw, setShowOldPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+
+  // Sync state if context changes
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.first_name);
+      setLastName(user.last_name);
+      setEmail(user.email);
+      setUsername(user.username);
+      if (!avatarFile) setAvatarPreview(user.avatar_url || null);
     }
+  }, [user]);
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
   };
 
-  useEffect(() => { load(); }, []);
-
-  const set = (key: keyof SiteSettings) => (value: string) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
-
-  const handleSave = async () => {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSaving(true);
     try {
-      setSaving(true);
-      await settingsApi.updateSettings(form);
-      showToast('Site settings saved successfully', 'success');
-      await load();
-    } catch {
-      showToast('Failed to save settings', 'error');
+      const payload: Record<string, string> = {};
+      if (firstName !== user.first_name) payload.first_name = firstName;
+      if (lastName !== user.last_name) payload.last_name = lastName;
+      if (email !== user.email) payload.email = email;
+      if (username !== user.username) payload.username = username;
+
+      let updatedUser = user;
+      if (Object.keys(payload).length > 0) {
+        updatedUser = await userApi.updateProfile(payload);
+      }
+
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append('avatar', avatarFile);
+        updatedUser = await userApi.uploadAvatar(user.id, formData);
+        setAvatarFile(null);
+      }
+
+      if (newPassword) {
+        if (newPassword !== confirmPassword) throw new Error("New passwords don't match");
+        if (!oldPassword) throw new Error("Current password is required");
+        await userApi.changePassword({ old_password: oldPassword, new_password: newPassword });
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+
+      setUser(updatedUser);
+      setSavedStatus(true);
+      showToast('Profile updated successfully', 'success');
+      setTimeout(() => setSavedStatus(false), 3000);
+    } catch (err: any) {
+      showToast(err.message || err.error || 'Failed to update profile', 'error');
     } finally {
       setSaving(false);
     }
   };
-
-  if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="animate-spin text-[#002B7F]" size={32} />
-    </div>
-  );
-
-  return (
-    <div className="space-y-6">
-      {/* Library Info */}
-      <SectionCard title="Library Information" subtitle="Basic details displayed across the website">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FieldGroup label="Library Name">
-            <Input id="lib-name" value={form.library_name ?? ''} onChange={set('library_name')} placeholder="e.g. JRMSU Katipunan Library" />
-          </FieldGroup>
-          <FieldGroup label="Contact Email">
-            <Input id="lib-email" value={form.contact_email ?? ''} onChange={set('contact_email')} placeholder="email@jrmsu.edu.ph" type="email" />
-          </FieldGroup>
-        </div>
-        <FieldGroup label="Address">
-          <Input id="lib-address" value={form.address ?? ''} onChange={set('address')} placeholder="Katipunan, Zamboanga del Norte" />
-        </FieldGroup>
-        <FieldGroup label="Phone Number">
-          <Input id="lib-phone" value={form.phone_number ?? ''} onChange={set('phone_number')} placeholder="+63..." />
-        </FieldGroup>
-      </SectionCard>
-
-      {/* Opening Hours */}
-      <SectionCard title="Opening Hours" subtitle="Displayed on the homepage status clock">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FieldGroup label="Mon – Fri">
-            <div className="flex items-center gap-2">
-              <Clock size={14} className="text-gray-400 shrink-0" />
-              <Input id="hours-mf" value={form.opening_hours_mon_fri ?? ''} onChange={set('opening_hours_mon_fri')} placeholder="7:00 AM – 7:00 PM" />
-            </div>
-          </FieldGroup>
-          <FieldGroup label="Saturday">
-            <div className="flex items-center gap-2">
-              <Clock size={14} className="text-gray-400 shrink-0" />
-              <Input id="hours-sat" value={form.opening_hours_sat ?? ''} onChange={set('opening_hours_sat')} placeholder="Closed" />
-            </div>
-          </FieldGroup>
-          <FieldGroup label="Sunday">
-            <div className="flex items-center gap-2">
-              <Clock size={14} className="text-gray-400 shrink-0" />
-              <Input id="hours-sun" value={form.opening_hours_sun ?? ''} onChange={set('opening_hours_sun')} placeholder="Closed" />
-            </div>
-          </FieldGroup>
-        </div>
-      </SectionCard>
-
-      {/* Display Options */}
-      <SectionCard title="Display Options" subtitle="Controls the visual presentation of the library website">
-        <FieldGroup label="Carousel Style">
-          <select
-            id="carousel-style"
-            value={form.carousel_style ?? 'default'}
-            onChange={(e) => setForm((prev) => ({ ...prev, carousel_style: e.target.value as 'default' | 'classic' }))}
-            className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#002B7F]/30 focus:border-[#002B7F] transition-all cursor-pointer"
-          >
-            <option value="default">Default (Modern Cards)</option>
-            <option value="classic">Classic (Slideshow)</option>
-          </select>
-        </FieldGroup>
-        {settings?.updated_at && (
-          <p className="text-xs text-gray-400 flex items-center gap-1.5 pt-1">
-            <CheckCircle size={12} className="text-green-400" />
-            Last saved: {new Date(settings.updated_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
-          </p>
-        )}
-      </SectionCard>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-[#002B7F] text-white text-sm font-semibold rounded-xl hover:bg-[#001655] transition-colors disabled:opacity-60 cursor-pointer"
-        >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Subpage: My Profile ────────────────────────────────────────────────────────
-function ProfileTab() {
-  const { user, setUser } = useOutletContext<AdminOutletContext>();
-  const { showToast } = useToast();
-  const [saving, setSaving] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const [form, setForm] = useState({
-    first_name: user?.first_name ?? '',
-    last_name: user?.last_name ?? '',
-    email: user?.email ?? '',
-    username: user?.username ?? '',
+  
+  const [formData, setFormData] = useState<SiteSettings>({
+    library_name: '',
+    address: '',
+    contact_email: '',
+    phone_number: '',
+    opening_hours_mon_fri: '',
+    opening_hours_sat: '',
+    opening_hours_sun: '',
+    carousel_style: 'default'
   });
 
-  const set = (key: keyof typeof form) => (value: string) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  // Mock security data
+  const [passwords, setPasswords] = useState({
+    current: '',
+    newPass: '',
+    confirm: ''
+  });
 
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      const updated = await userApi.updateProfile(form);
-      setUser(updated);
-      showToast('Profile updated successfully', 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to update profile', 'error');
-    } finally {
-      setSaving(false);
-    }
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await settingsApi.getSettings();
+        setFormData(data);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to load settings', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'archives') return;
+    setArchivesLoading(true);
+    
+    Promise.all([
+      batchApi.getAllBatches().then(data => setArchivedBatches(data.filter(b => b.status === 'archived'))).catch(() => showToast('Failed to load archived batches', 'error')),
+      reportApi.getArchivedReports().then(data => setArchivedReports(data.results)).catch(() => showToast('Failed to load archived reports', 'error'))
+    ]).finally(() => setArchivesLoading(false));
+  }, [activeTab]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-    const fd = new FormData();
-    fd.append('avatar', file);
-    try {
-      const updated = await userApi.uploadAvatar(user.id, fd);
-      setUser(updated);
-      showToast('Avatar updated', 'success');
-    } catch {
-      showToast('Failed to upload avatar', 'error');
-    }
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setPasswords(prev => ({ ...prev, [name]: value }));
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setSavedStatus(false);
+    
+    if (activeTab === 'general' || activeTab === 'carousel') {
+      try {
+        const updated = await settingsApi.updateSettings(formData);
+        setFormData(updated);
+        
+        // Instantly update the cache so the landing page reflects it immediately
+        if (updated.carousel_style) {
+          localStorage.setItem('jrmsu_carousel_style_cache', updated.carousel_style);
+        }
+
+        setSavedStatus(true);
+        showToast('Settings saved successfully', 'success');
+        setTimeout(() => setSavedStatus(false), 3000);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to save settings', 'error');
+      }
+    } else if (activeTab === 'security') {
+      if (passwords.newPass !== passwords.confirm) {
+        showToast("New passwords don't match", 'error');
+        setSaving(false);
+        return;
+      }
+      try {
+        await userApi.changePassword({
+          old_password: passwords.current,
+          new_password: passwords.newPass
+        });
+        setPasswords({ current: '', newPass: '', confirm: '' });
+        setSavedStatus(true);
+        showToast('Password updated successfully', 'success');
+        setTimeout(() => setSavedStatus(false), 3000);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to update password', 'error');
+      }
+    }
+    
+    setSaving(false);
+  };
+
+  const inputClass = "w-full border border-gray-300 rounded-lg px-4 py-2.5 mt-1 focus:ring-2 focus:ring-navy focus:border-transparent outline-none transition-all";
+  const labelClass = "block text-sm font-semibold text-gray-700";
 
   return (
-    <div className="space-y-6">
-      {/* Avatar */}
-      <SectionCard title="Profile Photo" subtitle="This avatar appears in the admin topbar">
-        <div className="flex items-center gap-5">
-          <div className="relative group">
-            <div className="w-20 h-20 rounded-full border-4 border-[#002B7F]/20 overflow-hidden bg-[#002B7F]/10 flex items-center justify-center">
-              {user?.avatar_url ? (
-                <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+    <>
+      <div className="admin-content__header flex justify-between items-end mb-6">
+        <div>
+          <h1 className="flex items-center gap-2"><Settings size={28} /> System Settings</h1>
+          <p>Manage library configuration and security.</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-8">
+        {/* Settings Sidebar Tabs */}
+        <div className="w-full md:w-64 shrink-0">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer ${
+                activeTab === 'profile' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+              }`}
+            >
+              <UserCircle size={18} />
+              My Profile
+            </button>
+            <button
+              onClick={() => setActiveTab('general')}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
+                activeTab === 'general' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+              }`}
+            >
+              <Library size={18} />
+              General Config
+            </button>
+            <button
+              onClick={() => setActiveTab('carousel')}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
+                activeTab === 'carousel' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+              }`}
+            >
+              <Layers size={18} />
+              Carousel Customize
+            </button>
+            <button
+              onClick={() => setActiveTab('security')}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
+                activeTab === 'security' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+              }`}
+            >
+              <Lock size={18} />
+              Security
+            </button>
+            <button
+              onClick={() => setActiveTab('archives')}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
+                activeTab === 'archives' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+              }`}
+            >
+              <Archive size={18} />
+              Archive Batches
+            </button>
+          </div>
+        </div>
+
+        {/* Settings Content */}
+        <div className="flex-1">
+          {activeTab === 'archives' ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in">
+              <div className="p-6 md:p-8 border-b border-gray-100 flex justify-between items-start">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800 mb-1 flex items-center gap-2"><Archive size={22} className="text-gray-500" /> Archives</h2>
+                  <p className="text-sm text-gray-500">Manage archived batches and reports. Use Reopen to return items to active status.</p>
+                </div>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button 
+                    onClick={() => setArchiveType('batches')}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${archiveType === 'batches' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Batches
+                  </button>
+                  <button 
+                    onClick={() => setArchiveType('reports')}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${archiveType === 'reports' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Reports
+                  </button>
+                </div>
+              </div>
+              {archivesLoading ? (
+                <div className="p-10 text-center text-gray-400 flex items-center justify-center gap-2"><RefreshCw size={20} className="animate-spin" /> Loading archives...</div>
+              ) : archiveType === 'batches' ? (
+                archivedBatches.length === 0 ? (
+                  <div className="p-10 text-center text-gray-400">
+                    <Archive size={40} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">No archived batches found.</p>
+                    <p className="text-sm mt-1">Batches you archive will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Batch Name</th>
+                          <th>Description</th>
+                          <th>Books</th>
+                          <th>Opened</th>
+                          <th>Closed</th>
+                          <th className="text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {archivedBatches.map(batch => (
+                          <tr key={batch.id}>
+                            <td style={{ fontWeight: 500 }}>{batch.name}</td>
+                            <td style={{ color: 'var(--color-gray-500)', fontSize: '0.875rem' }}>{batch.description || <span className="text-gray-300 italic">No description</span>}</td>
+                            <td>{batch.book_count || 0}</td>
+                            <td style={{ color: 'var(--color-gray-500)', fontSize: '0.85rem' }}>{new Date(batch.opened_at).toLocaleDateString()}</td>
+                            <td style={{ color: 'var(--color-gray-500)', fontSize: '0.85rem' }}>{batch.closed_at ? new Date(batch.closed_at).toLocaleDateString() : 'ΓÇö'}</td>
+                            <td>
+                              <div className="flex justify-end">
+                                <button
+                                  className="admin-btn admin-btn--secondary"
+                                  style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                  onClick={async () => {
+                                    try {
+                                      await batchApi.reopenBatch(batch.id);
+                                      setArchivedBatches(prev => prev.filter(b => b.id !== batch.id));
+                                      showToast('Batch reopened successfully', 'success');
+                                    } catch (err: any) {
+                                      showToast(err.message || 'Failed to reopen batch', 'error');
+                                    }
+                                  }}
+                                >
+                                  <RotateCcw size={14} /> Reopen
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               ) : (
-                <User size={32} className="text-[#002B7F]/50" />
+                archivedReports.length === 0 ? (
+                  <div className="p-10 text-center text-gray-400">
+                    <Archive size={40} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">No archived reports found.</p>
+                    <p className="text-sm mt-1">Reports you archive will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Type</th>
+                          <th>Date Range</th>
+                          <th>Generated By</th>
+                          <th>Generated At</th>
+                          <th className="text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {archivedReports.map(report => (
+                          <tr key={report.id}>
+                            <td className="font-medium text-gray-900">{report.title}</td>
+                            <td><span className="bg-blue-50 text-navy px-2 py-1 rounded-md text-xs font-semibold uppercase">{report.report_type}</span></td>
+                            <td>{report.date_range.replace('-', ' ').toUpperCase()}</td>
+                            <td>{report.generated_by}</td>
+                            <td>{new Date(report.generated_at).toLocaleString()}</td>
+                            <td>
+                              <div className="flex justify-end">
+                                <button
+                                  className="admin-btn admin-btn--secondary"
+                                  style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                  onClick={async () => {
+                                    try {
+                                      await reportApi.unarchiveReport(report.id);
+                                      setArchivedReports(prev => prev.filter(r => r.id !== report.id));
+                                      showToast('Report unarchived successfully', 'success');
+                                    } catch (err: any) {
+                                      showToast(err.message || 'Failed to unarchive report', 'error');
+                                    }
+                                  }}
+                                >
+                                  <RotateCcw size={14} /> Reopen
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               )}
             </div>
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-              aria-label="Change avatar"
-            >
-              <Camera size={18} className="text-white" />
-            </button>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-700">{user?.first_name} {user?.last_name}</p>
-            <p className="text-xs text-gray-400">@{user?.username}</p>
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="mt-2 text-xs font-medium text-[#002B7F] hover:underline cursor-pointer"
-            >
-              Change photo
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-          </div>
-        </div>
-      </SectionCard>
-
-      {/* Personal Info */}
-      <SectionCard title="Personal Information" subtitle="Update your name, username and email">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FieldGroup label="First Name">
-            <Input id="first-name" value={form.first_name} onChange={set('first_name')} placeholder="First name" />
-          </FieldGroup>
-          <FieldGroup label="Last Name">
-            <Input id="last-name" value={form.last_name} onChange={set('last_name')} placeholder="Last name" />
-          </FieldGroup>
-          <FieldGroup label="Username">
-            <Input id="username" value={form.username} onChange={set('username')} placeholder="username" />
-          </FieldGroup>
-          <FieldGroup label="Email Address">
-            <Input id="email" value={form.email} onChange={set('email')} placeholder="email@example.com" type="email" />
-          </FieldGroup>
-        </div>
-        <p className="text-xs text-gray-400 flex gap-1.5 items-center pt-1">
-          <AlertCircle size={12} className="text-amber-400 shrink-0" />
-          Member since: {user?.date_joined ? new Date(user.date_joined).toLocaleDateString('en-PH', { dateStyle: 'medium' }) : '—'}
-        </p>
-      </SectionCard>
-
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-[#002B7F] text-white text-sm font-semibold rounded-xl hover:bg-[#001655] transition-colors disabled:opacity-60 cursor-pointer"
-        >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          {saving ? 'Saving...' : 'Save Profile'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Subpage: Security ──────────────────────────────────────────────────────────
-function SecurityTab() {
-  const { showToast } = useToast();
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ old_password: '', new_password: '', confirm_password: '' });
-
-  const set = (key: keyof typeof form) => (value: string) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
-
-  const validate = (): string | null => {
-    if (!form.old_password) return 'Current password is required.';
-    if (form.new_password.length < 8) return 'New password must be at least 8 characters.';
-    if (form.new_password !== form.confirm_password) return 'New passwords do not match.';
-    return null;
-  };
-
-  const handleSubmit = async () => {
-    const err = validate();
-    if (err) { showToast(err, 'error'); return; }
-    try {
-      setSaving(true);
-      await userApi.changePassword({ old_password: form.old_password, new_password: form.new_password });
-      showToast('Password changed successfully. Please log in again.', 'success');
-      setForm({ old_password: '', new_password: '', confirm_password: '' });
-    } catch (e: any) {
-      showToast(e.message || 'Failed to change password', 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const passwordStrength = (pw: string) => {
-    if (!pw) return { label: '', color: 'bg-gray-200', width: '0%' };
-    const checks = [pw.length >= 8, /[A-Z]/.test(pw), /[0-9]/.test(pw), /[^a-zA-Z0-9]/.test(pw)];
-    const score = checks.filter(Boolean).length;
-    if (score <= 1) return { label: 'Weak', color: 'bg-red-400', width: '25%' };
-    if (score === 2) return { label: 'Fair', color: 'bg-amber-400', width: '50%' };
-    if (score === 3) return { label: 'Good', color: 'bg-blue-400', width: '75%' };
-    return { label: 'Strong', color: 'bg-green-500', width: '100%' };
-  };
-
-  const strength = passwordStrength(form.new_password);
-
-  return (
-    <div className="space-y-6">
-      <SectionCard title="Change Password" subtitle="Use a strong, unique password that you don't use elsewhere">
-        <FieldGroup label="Current Password">
-          <PasswordInput id="old-pw" value={form.old_password} onChange={set('old_password')} placeholder="Enter current password" />
-        </FieldGroup>
-        <FieldGroup label="New Password">
-          <PasswordInput id="new-pw" value={form.new_password} onChange={set('new_password')} placeholder="At least 8 characters" />
-          {form.new_password && (
-            <div className="mt-2 space-y-1">
-              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-300 ${strength.color}`} style={{ width: strength.width }} />
+          ) : loading ? (
+            <div className="p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-200">Loading settings...</div>
+          ) : activeTab === 'profile' ? (
+            <form onSubmit={handleProfileSubmit} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in">
+              <div className="p-6 md:p-8 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800 mb-1">My Profile</h2>
+                  <p className="text-sm text-gray-500">Update your account credentials and avatar.</p>
+                </div>
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full bg-navy text-white flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden border-2 border-white ring-2 ring-gray-100">
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      firstName?.[0]?.toUpperCase() || 'A'
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute bottom-0 right-[-5px] w-6 h-6 bg-navy text-white rounded-full flex items-center justify-center shadow border-2 border-white cursor-pointer hover:bg-navy-dark transition-colors"
+                  >
+                    <Camera size={12} />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
+                </div>
               </div>
-              <p className="text-xs text-gray-500">Strength: <span className="font-semibold">{strength.label}</span></p>
-            </div>
+              <div className="p-6 md:p-8 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className={labelClass}>First Name</label>
+                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} required />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Last Name</label>
+                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} required />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Email Address</label>
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} required />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Username</label>
+                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} required />
+                  </div>
+                </div>
+
+                <hr className="border-gray-100 my-6" />
+                <h3 className="text-lg font-bold text-gray-800 mb-4">Change Password</h3>
+                <p className="text-sm text-gray-500 mb-4">Leave fields blank if you don't want to change your password.</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="relative">
+                    <label className={labelClass}>Current Password</label>
+                    <input type={showOldPw ? 'text' : 'password'} value={oldPassword} onChange={e => setOldPassword(e.target.value)} className={inputClass} placeholder="Required to set new password" />
+                    <button type="button" onClick={() => setShowOldPw(v => !v)} className="absolute right-3 top-[26px] text-gray-400 hover:text-gray-600 bg-transparent border-none">
+                      {showOldPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <label className={labelClass}>New Password</label>
+                    <input type={showNewPw ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} placeholder="New password" />
+                    <button type="button" onClick={() => setShowNewPw(v => !v)} className="absolute right-3 top-[26px] text-gray-400 hover:text-gray-600 bg-transparent border-none">
+                      {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Confirm New Password</label>
+                    <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className={inputClass} placeholder="Repeat new password" />
+                  </div>
+                </div>
+              </div>
+              <div className="px-6 md:px-8 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="admin-btn admin-btn--primary flex items-center gap-2 px-6"
+                >
+                  {saving ? <RefreshCw className="animate-spin" size={18} /> : savedStatus ? <CheckCircle size={18} /> : <Save size={18} />}
+                  {saving ? 'Saving...' : savedStatus ? 'Saved!' : 'Save Profile Changes'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in">
+              <div className="p-6 md:p-8 border-b border-gray-100">
+                <h2 className="text-xl font-bold text-gray-800 mb-6">
+                  {activeTab === 'general' ? 'Library Configuration' : activeTab === 'carousel' ? 'Carousel Customize' : 'Security Settings'}
+                </h2>
+                
+                {activeTab === 'general' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className={labelClass}>Library Name</label>
+                        <input type="text" name="library_name" value={formData.library_name} onChange={handleChange} className={inputClass} required />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Contact Email</label>
+                        <input type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} className={inputClass} required />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className={labelClass}>Address</label>
+                        <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputClass} required />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Phone Number</label>
+                        <input type="text" name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className={inputClass} />
+                      </div>
+                    </div>
+                    
+                    <hr className="border-gray-100 my-6" />
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Opening Hours</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <label className={labelClass}>Monday - Friday</label>
+                        <input type="text" name="opening_hours_mon_fri" value={formData.opening_hours_mon_fri} onChange={handleChange} className={inputClass} placeholder="e.g. 7:00 AM - 7:00 PM" required />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Saturday</label>
+                        <input type="text" name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Sunday</label>
+                        <input type="text" name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'carousel' && (
+                  <div className="space-y-6">
+                    <p className="text-sm text-gray-500 mb-2">Choose the carousel display style for the <strong>Newly Acquired Books</strong> and <strong>Physical Setup</strong> sections of the public website.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Default 3D Option */}
+                      <button
+                        type="button"
+                        onClick={() => setFormData(p => ({ ...p, carousel_style: 'default' }))}
+                        className={`rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
+                          formData.carousel_style === 'default'
+                            ? 'border-navy bg-blue-50 shadow-md'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            formData.carousel_style === 'default' ? 'border-navy' : 'border-gray-400'
+                          }`}>
+                            {formData.carousel_style === 'default' && <div className="w-2.5 h-2.5 rounded-full bg-navy" />}
+                          </div>
+                          <span className={`font-bold ${ formData.carousel_style === 'default' ? 'text-navy' : 'text-gray-700'}`}>Default (3D)</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-1 py-3 bg-white rounded-lg border border-gray-200">
+                          <div className="w-8 h-10 bg-gray-200 rounded opacity-60 -rotate-6"></div>
+                          <div className="w-12 h-14 bg-navy rounded shadow-lg z-10"></div>
+                          <div className="w-8 h-10 bg-gray-200 rounded opacity-60 rotate-6"></div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Fan-out 3D perspective view with auto-advance.</p>
+                      </button>
+
+                      {/* Classic Option */}
+                      <button
+                        type="button"
+                        onClick={() => setFormData(p => ({ ...p, carousel_style: 'classic' }))}
+                        className={`rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
+                          formData.carousel_style === 'classic'
+                            ? 'border-navy bg-blue-50 shadow-md'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            formData.carousel_style === 'classic' ? 'border-navy' : 'border-gray-400'
+                          }`}>
+                            {formData.carousel_style === 'classic' && <div className="w-2.5 h-2.5 rounded-full bg-navy" />}
+                          </div>
+                          <span className={`font-bold ${ formData.carousel_style === 'classic' ? 'text-navy' : 'text-gray-700'}`}>Classic (Horizontal)</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-1 py-3 bg-white rounded-lg border border-gray-200">
+                          <span className="text-gray-400 text-lg">&#8592;</span>
+                          <div className="w-8 h-12 bg-navy/30 rounded"></div>
+                          <div className="w-8 h-12 bg-navy rounded shadow"></div>
+                          <div className="w-8 h-12 bg-navy/30 rounded"></div>
+                          <span className="text-gray-400 text-lg">&#8594;</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Flat scrollable row. Click-and-drag or use arrow buttons.</p>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'security' && (
+                  <div className="space-y-6 max-w-md">
+                    <div>
+                      <label className={labelClass}>Current Password</label>
+                      <input type="password" name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} required />
+                    </div>
+                    <div>
+                      <label className={labelClass}>New Password</label>
+                      <input type="password" name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} required />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Confirm New Password</label>
+                      <input type="password" name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} required />
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-4 md:px-8 bg-gray-50 flex items-center justify-between">
+                <div>
+                  {savedStatus && (
+                    <span className="flex items-center gap-2 text-green-600 text-sm font-semibold animate-in">
+                      <CheckCircle size={16} /> Saved successfully
+                    </span>
+                  )}
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={saving}
+                  className="admin-btn admin-btn--primary flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  <Save size={18} />
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           )}
-        </FieldGroup>
-        <FieldGroup label="Confirm New Password">
-          <PasswordInput id="confirm-pw" value={form.confirm_password} onChange={set('confirm_password')} placeholder="Repeat new password" />
-          {form.confirm_password && form.new_password !== form.confirm_password && (
-            <p className="text-xs text-red-500 mt-1 flex gap-1 items-center"><AlertCircle size={11} /> Passwords do not match</p>
-          )}
-          {form.confirm_password && form.new_password === form.confirm_password && form.new_password.length > 0 && (
-            <p className="text-xs text-green-600 mt-1 flex gap-1 items-center"><CheckCircle size={11} /> Passwords match</p>
-          )}
-        </FieldGroup>
-        <ul className="text-xs text-gray-400 space-y-0.5 pt-1 list-inside list-disc">
-          <li>At least 8 characters long</li>
-          <li>Mix uppercase letters, numbers and symbols for best security</li>
-          <li>Do not reuse old passwords</li>
-        </ul>
-      </SectionCard>
-
-      <SectionCard title="Session Security" subtitle="Current session details">
-        <div className="flex items-start gap-3 p-3 bg-green-50 rounded-xl border border-green-100">
-          <CheckCircle size={16} className="text-green-500 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-green-800">Session Active</p>
-            <p className="text-xs text-green-600 mt-0.5">Your session is secured with an HttpOnly cookie. Auto-logout triggers after 5 minutes of inactivity.</p>
-          </div>
-        </div>
-      </SectionCard>
-
-      <div className="flex justify-end">
-        <button
-          onClick={handleSubmit}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-[#002B7F] text-white text-sm font-semibold rounded-xl hover:bg-[#001655] transition-colors disabled:opacity-60 cursor-pointer"
-        >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          {saving ? 'Updating...' : 'Update Password'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Page ──────────────────────────────────────────────────────────────────
-export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('site');
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#002B7F]/10 flex items-center justify-center">
-          <Settings size={20} className="text-[#002B7F]" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">Settings</h2>
-          <p className="text-xs text-gray-500">Manage site configuration, your profile, and security preferences</p>
         </div>
       </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-100 pb-0">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-xl transition-all cursor-pointer border-b-2 ${
-              activeTab === tab.id
-                ? 'border-[#002B7F] text-[#002B7F] bg-[#002B7F]/5'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      <div>
-        {activeTab === 'site'     && <SiteSettingsTab />}
-        {activeTab === 'profile'  && <ProfileTab />}
-        {activeTab === 'security' && <SecurityTab />}
-      </div>
-    </div>
+    </>
   );
 }
