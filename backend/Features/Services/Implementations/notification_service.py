@@ -114,7 +114,25 @@ class NotificationService(INotificationService):
             })
             nid += 1
 
-        unread_count = sum(1 for n in notifications if not n['read'])
+        # -------------------------------------------------------------------
+        # 5. Unread credential requests
+        # -------------------------------------------------------------------
+        for msg in self._repo.get_unread_credential_requests(limit=3):
+            notifications.append({
+                'id': nid,
+                'type': 'CREDENTIAL_REQUEST',
+                'icon': 'key',
+                'color': 'purple',
+                'title': 'New Credential Request',
+                'body': f'From: {msg.name} \u2014 {msg.subject or "Credential Request"}',
+                'time': msg.created_at.isoformat(),
+                'time_ago': time_ago(msg.created_at),
+                'read': False,
+            })
+            nid += 1
+
+        # Calculate exact total unread count from the DB, not just the visible limited notifications
+        unread_count = self._repo.get_total_unread_count()
 
         return {
             'notifications': notifications,

@@ -14,6 +14,7 @@ class ContactMessage(models.Model):
     TYPE_CHOICES = [
         ('EMAIL', 'Email Message'),
         ('RESERVATION', 'Reservation Request'),
+        ('CREDENTIAL_REQUEST', 'Credential Request'),
     ]
 
     name = models.CharField(max_length=200)
@@ -25,6 +26,9 @@ class ContactMessage(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False) # Keep for backwards compatibility, but use status going forward
+    
+    reply_text = models.TextField(blank=True, null=True)
+    replied_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ['-created_at']

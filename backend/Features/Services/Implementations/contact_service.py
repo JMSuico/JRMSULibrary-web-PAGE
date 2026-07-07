@@ -72,15 +72,26 @@ class ContactService(ContactServiceInterface):
 
         return message
 
-    def reply_to_message(self, message_id: int, reply_body: str) -> dict:
+    def reply_to_message(self, message_id: int, reply_body: str, send_to_chatbot: bool = False) -> dict:
         """
         Sends an email reply to the user and marks the message as REPLIED.
-        Returns a dict with success status and message.
+        Optionally saves reply_text to DB so it appears in the Rizal Chatbot.
         """
         message = self.repository.get_by_id(message_id)
         if not message:
             raise ValueError(f"Message with id={message_id} not found.")
 
+        from django.utils import timezone
+
+        # Conditionally save to DB for Rizal Chatbot visibility
+        if send_to_chatbot:
+            message.reply_text = reply_body
+            message.replied_at = timezone.now()
+            message.save()
+
+        self.repository.update_status(message_id, 'REPLIED')
+
+        # Send email
         success = send_reply_email(
             to_email=message.email,
             to_name=message.name,
@@ -88,11 +99,19 @@ class ContactService(ContactServiceInterface):
             reply_body=reply_body,
         )
 
+        channels = []
         if success:
-            self.repository.update_status(message_id, 'REPLIED')
-            return {'success': True, 'detail': f'Reply sent to {message.email}'}
+            channels.append('Email')
+        if send_to_chatbot:
+            channels.append('Chatbot')
+
+        if success:
+            return {'success': True, 'detail': f'Reply sent via: {", ".join(channels)} to {message.email}'}
         else:
-            return {'success': False, 'detail': 'Failed to send email. Check SMTP configuration.'}
+            detail = 'Failed to send email. Check SMTP configuration.'
+            if send_to_chatbot:
+                detail = 'Reply saved to Chatbot, but email failed. Check SMTP configuration.'
+            return {'success': send_to_chatbot, 'detail': detail}
 
     def update_message_status(self, message_id: int, status: str):
         message = self.repository.update_status(message_id, status)
@@ -102,11 +121,22 @@ class ContactService(ContactServiceInterface):
             send_decline_email(message.email, message.name, message.subject or "Your inquiry")
         return message
 
-    def reply_with_attachment(self, message_id: int, reply_body: str, file_entries: list) -> dict:
+    def reply_with_attachment(self, message_id: int, reply_body: str, file_entries: list, send_to_chatbot: bool = False) -> dict:
         message = self.repository.get_by_id(message_id)
         if not message:
             raise ValueError(f"Message with id={message_id} not found.")
 
+        from django.utils import timezone
+
+        # Conditionally save to DB for Rizal Chatbot visibility
+        if send_to_chatbot:
+            message.reply_text = reply_body
+            message.replied_at = timezone.now()
+            message.save()
+
+        self.repository.update_status(message_id, 'REPLIED')
+
+        # Send email with attachments
         success = send_reply_with_attachments(
             to_email=message.email,
             to_name=message.name,
@@ -115,11 +145,19 @@ class ContactService(ContactServiceInterface):
             file_entries=file_entries
         )
 
+        channels = []
         if success:
-            self.repository.update_status(message_id, 'REPLIED')
-            return {'success': True, 'detail': f'Reply sent to {message.email}'}
+            channels.append('Email')
+        if send_to_chatbot:
+            channels.append('Chatbot')
+
+        if success:
+            return {'success': True, 'detail': f'Reply sent via: {", ".join(channels)} to {message.email}'}
         else:
-            return {'success': False, 'detail': 'Failed to send email. Check SMTP configuration.'}
+            detail = 'Failed to send email. Check SMTP configuration.'
+            if send_to_chatbot:
+                detail = 'Reply saved to Chatbot, but email failed. Check SMTP configuration.'
+            return {'success': send_to_chatbot, 'detail': detail}
 
     def get_all_messages(self):
         return self.repository.get_all()
@@ -132,3 +170,10 @@ class ContactService(ContactServiceInterface):
 
     def mark_message_read(self, message_id: int):
         return self.repository.mark_as_read(message_id)
+
+    def get_replies_by_email(self, email: str):
+        # Only return messages that have a reply
+        return self.repository.model.objects.filter(
+            email=email, 
+            status='REPLIED'
+        ).exclude(reply_text__isnull=True).order_by('-replied_at')

@@ -29,7 +29,7 @@ class ContactMessageViewSet(viewsets.ViewSet):
     throttle_scope = 'contact'
 
     def get_permissions(self):
-        if self.action in ['create', 'validate_email', 'upload_attachment']:
+        if self.action in ['create', 'validate_email', 'upload_attachment', 'check_replies']:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -95,16 +95,17 @@ class ContactMessageViewSet(viewsets.ViewSet):
     def reply(self, request, pk=None):
         """
         POST /api/contact/{id}/reply/
-        Body: { "reply_body": "Dear user, ..." }
+        Body: { "reply_body": "Dear user, ...", "send_to_chatbot": true }
         Sends a real SMTP email reply from the library's Gmail to the original sender.
-        Marks the message as REPLIED.
+        Optionally saves reply_text to DB so it appears in the Rizal Chatbot.
         """
         reply_body = request.data.get('reply_body', '').strip()
+        send_to_chatbot = request.data.get('send_to_chatbot', False)
         if not reply_body:
             return Response({'error': 'Reply body cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            result = self.service.reply_to_message(int(pk), reply_body)
+            result = self.service.reply_to_message(int(pk), reply_body, send_to_chatbot=send_to_chatbot)
             if result['success']:
                 return Response(result, status=status.HTTP_200_OK)
             return Response(result, status=status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -170,9 +171,10 @@ class ContactMessageViewSet(viewsets.ViewSet):
     def reply_with_files(self, request, pk=None):
         """
         POST /api/contact/{id}/reply-with-files/
-        Body: { reply_body: "...", file_entries: [{"id": "uuid.pdf", "name": "original.pdf"}] }
+        Body: { reply_body: "...", file_entries: [{"id": "uuid.pdf", "name": "original.pdf"}], send_to_chatbot: true }
         """
         reply_body = request.data.get('reply_body', '').strip()
+        send_to_chatbot = request.data.get('send_to_chatbot', False)
         # Fallback to file_ids for backward compatibility
         file_entries = request.data.get('file_entries') or request.data.get('file_ids', [])
         
@@ -180,7 +182,7 @@ class ContactMessageViewSet(viewsets.ViewSet):
             return Response({'error': 'Reply body cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            result = self.service.reply_with_attachment(int(pk), reply_body, file_entries)
+            result = self.service.reply_with_attachment(int(pk), reply_body, file_entries, send_to_chatbot=send_to_chatbot)
             if result['success']:
                 return Response(result, status=status.HTTP_200_OK)
             return Response(result, status=status.HTTP_503_SERVICE_UNAVAILABLE)

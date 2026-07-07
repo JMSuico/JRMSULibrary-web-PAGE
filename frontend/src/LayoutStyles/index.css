@@ -582,6 +582,10 @@ section::before {
     animation: float-bob 3s ease-in-out infinite;
   }
 
+  .float-bubble:hover {
+    animation-play-state: paused;
+  }
+
   @keyframes float-bob {
 
     0%,
@@ -608,6 +612,27 @@ section::before {
     50% {
       box-shadow: 0 0 0 12px rgba(37, 99, 235, 0);
     }
+  }
+
+  /* === 3D Bubble Animation (Social/AI) === */
+  .bubble-3d-container {
+    transform-style: preserve-3d;
+    transition: all 0.5s ease-in-out;
+  }
+
+  .bubble-3d-container:hover {
+    background-color: white;
+    background-position: -100px 100px, -100px 100px;
+    transform: perspective(180px) rotateX(60deg) translateY(2px);
+    box-shadow: 0px 10px 10px rgb(1, 49, 182);
+  }
+
+  .bubble-3d-btn {
+    transition: all 0.5s ease-in-out;
+  }
+
+  .bubble-3d-container:hover .bubble-3d-btn {
+    transform: translate3d(0px, 0px, 15px) perspective(180px) rotateX(-35deg) translateY(2px);
   }
 
   /* === About Dropdown === */

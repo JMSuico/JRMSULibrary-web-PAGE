@@ -28,13 +28,24 @@ class NotificationRepository(INotificationRepository):
             ).order_by('-created_at')[:limit]
         )
 
-    def get_unread_reservations(self, limit: int) -> List[Any]:
+    def get_unread_reservations(self, limit: int) -> list:
         return list(
             ContactMessage.objects.filter(
                 message_type='RESERVATION',
                 status='UNREAD'
             ).order_by('-created_at')[:limit]
         )
+
+    def get_unread_credential_requests(self, limit: int) -> list:
+        return list(
+            ContactMessage.objects.filter(
+                message_type='CREDENTIAL_REQUEST',
+                status='UNREAD'
+            ).order_by('-created_at')[:limit]
+        )
+
+    def get_total_unread_count(self) -> int:
+        return ContactMessage.objects.filter(status='UNREAD').count()
 
     def mark_all_unread_as_read(self) -> None:
         ContactMessage.objects.filter(status='UNREAD').update(status='READ', is_read=True)

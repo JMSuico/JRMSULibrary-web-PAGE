@@ -29,6 +29,16 @@ class INotificationRepository(ABC):
         pass
 
     @abstractmethod
+    def get_unread_credential_requests(self, limit: int) -> List[Any]:
+        """Return list of unread ContactMessages of type CREDENTIAL_REQUEST."""
+        pass
+
+    @abstractmethod
+    def get_total_unread_count(self) -> int:
+        """Return total count of unread ContactMessages across all types."""
+        pass
+
+    @abstractmethod
     def mark_all_unread_as_read(self) -> None:
         """Mark all unread ContactMessages as read."""
         pass

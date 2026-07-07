@@ -2,7 +2,7 @@ import { apiClient, getCookie } from '@/src/Libs/apiClient';
 
 export interface ContactMessage {
   id: number;
-  message_type: 'EMAIL' | 'RESERVATION';
+  message_type: 'EMAIL' | 'RESERVATION' | 'CREDENTIAL_REQUEST';
   name: string;
   email: string;
   subject: string;
@@ -10,6 +10,8 @@ export interface ContactMessage {
   status: 'UNREAD' | 'READ' | 'REPLIED' | 'ARCHIVED' | 'APPROVED' | 'DECLINED';
   is_read: boolean;
   created_at: string;
+  reply_text?: string;
+  replied_at?: string;
 }
 
 export interface EmailValidation {
@@ -47,12 +49,12 @@ export const contactApi = {
 
   /** 
    * Sends a real SMTP reply email from the library Gmail account to the sender.
-   * Marks message as REPLIED on success.
+   * Optionally saves reply to DB for Rizal Chatbot visibility.
    */
-  replyToMessage: async (id: number, reply_body: string): Promise<{ success: boolean; detail: string }> => {
+  replyToMessage: async (id: number, reply_body: string, send_to_chatbot: boolean = false): Promise<{ success: boolean; detail: string }> => {
     return apiClient(`/contact/${id}/reply/`, {
       method: 'POST',
-      body: JSON.stringify({ reply_body }),
+      body: JSON.stringify({ reply_body, send_to_chatbot }),
     });
   },
 
@@ -128,10 +130,17 @@ export const contactApi = {
   /**
    * Reply with pre-uploaded attachments.
    */
-  replyWithFiles: async (id: number, replyBody: string, fileEntries: {id: string, name: string}[]) => {
+  replyWithFiles: async (id: number, replyBody: string, fileEntries: {id: string, name: string}[], sendToChatbot: boolean = false) => {
     return apiClient(`/contact/${id}/reply-with-files/`, {
       method: 'POST',
-      body: JSON.stringify({ reply_body: replyBody, file_entries: fileEntries }),
+      body: JSON.stringify({ reply_body: replyBody, file_entries: fileEntries, send_to_chatbot: sendToChatbot }),
     });
+  },
+
+  /**
+   * Check replies for a specific email
+   */
+  checkReplies: async (email: string): Promise<ContactMessage[]> => {
+    return apiClient(`/contact/check-replies/?email=${encodeURIComponent(email)}`);
   },
 };

@@ -215,7 +215,8 @@ REST_FRAMEWORK = {
         "anon": "120/hour",
         "user": "2000/hour",
         "contact": "200/hour",
-        "login": "5/minute"
+        "login": "5/minute",
+        "chat": "100/hour"
     }
 }
 
@@ -231,6 +232,12 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+# Enforce strict session management
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_AGE = 43200  # 12 hours max session length (in seconds)
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+
 # Timezone (Philippine Time)
 TIME_ZONE = "Asia/Manila"
 
@@ -239,8 +246,8 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # File Upload Security Limits (Prevent DoS via disk exhaustion)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5 MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5 MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
 
 # ============================================================
 # Email (SMTP via Gmail — JRMSU Library Account)

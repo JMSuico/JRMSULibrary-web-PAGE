@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { AdminSidebar } from '@/src/Features/Admin/components/AdminSidebar';
 import { AdminTopbar } from '@/src/Features/Admin/components/AdminTopbar';
@@ -43,6 +43,34 @@ const useAuth = () => {
   return { isAuthenticated, user, setUser }; 
 };
 
+const useInactivityTimer = (timeoutMs: number, onTimeout: () => void) => {
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      onTimeout();
+    }, timeoutMs);
+  }, [timeoutMs, onTimeout]);
+
+  useEffect(() => {
+    const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
+    
+    const handleActivity = () => resetTimer();
+    
+    // Set initial timer
+    resetTimer();
+
+    // Attach listeners
+    events.forEach(event => document.addEventListener(event, handleActivity));
+    
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      events.forEach(event => document.removeEventListener(event, handleActivity));
+    };
+  }, [resetTimer]);
+};
+
 export interface AdminOutletContext {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
@@ -56,6 +84,19 @@ export default function AdminLayout() {
   const { isAuthenticated, user, setUser } = useAuth();
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'Admin Panel';
+
+  const handleAutoLogout = useCallback(async () => {
+    try {
+      await userApi.logout();
+    } catch (e) {
+      console.warn("Auto-logout error:", e);
+    }
+    // Reload to fully clear all memory state
+    window.location.href = '/admin/login?timeout=1';
+  }, []);
+
+  // 5 minutes = 300000 ms
+  useInactivityTimer(300000, handleAutoLogout);
 
   const handleToggleSidebar = useCallback(() => {
     // On mobile, toggle the mobile overlay; on desktop, collapse/expand

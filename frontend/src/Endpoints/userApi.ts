@@ -24,7 +24,13 @@ export const userApi = {
   },
 
   me: async (): Promise<User> => {
-    return apiClient(`/users/me/`);
+    return apiClient(`/users/me/`, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
   },
 
   getAllUsers: async (): Promise<User[]> => {

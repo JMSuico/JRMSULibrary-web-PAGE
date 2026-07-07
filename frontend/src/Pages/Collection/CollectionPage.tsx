@@ -123,7 +123,7 @@ export default function CollectionPage() {
   const [onlineViewMode, setOnlineViewMode] = useState<'grid' | 'table'>('grid');
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string } | null>(null);
+  const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string; } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -166,7 +166,7 @@ export default function CollectionPage() {
       } else if (service === 'scholaar') {
         setExternalService({
           title: 'Scholaar',
-          url: 'https://scholaar.com/University/HomePage.aspx',
+          url: 'https://scholaar.com/Login.aspx',
           proxyUrl: '/api/external-proxy/scholaar/',
         });
       } else {

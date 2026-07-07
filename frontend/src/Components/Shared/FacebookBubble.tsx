@@ -6,20 +6,17 @@ export const FacebookBubble: React.FC = () => {
   return (
     <>
       {/* Floating Bubble */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-24 right-4 sm:right-6 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#1877F2] shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 hover:shadow-xl transition-all duration-300 float-bubble"
-        aria-label="Open Facebook Page"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          className="w-7 h-7"
-          fill="white"
+      <div className="group fixed bottom-24 right-4 sm:right-6 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-lg cursor-pointer float-bubble bubble-3d-container flex items-center justify-center bg-[#1877F2]">
+        <button
+          onClick={() => setIsOpen(true)}
+          className="bubble-3d-btn w-full h-full flex items-center justify-center cursor-pointer border-none bg-transparent"
+          aria-label="Open Facebook Page"
         >
-          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-        </svg>
-      </button>
+          <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 320 512" className="fill-white group-hover:fill-[#1877F2] transition-colors duration-500">
+            <path d="M279.14 288l14.22-92.66h-88.91v-60.13c0-25.35 12.42-50.06 52.24-50.06h40.42V6.26S260.43 0 225.36 0c-73.22 0-121.08 44.38-121.08 124.72v70.62H22.89V288h81.39v224h100.17V288z" />
+          </svg>
+        </button>
+      </div>
 
       {/* Modal Overlay */}
       {isOpen && (

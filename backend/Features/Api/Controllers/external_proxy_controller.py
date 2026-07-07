@@ -4,11 +4,18 @@
 # Credentials are read from environment variables — NEVER hardcoded.
 
 import os
+import logging
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from Features.Helpers.external_proxy_helper import (
+    fetch_vitalsource_tokens,
+    fetch_scholaar_tokens,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _build_bridge_html(
@@ -189,7 +196,8 @@ def _build_bridge_html(
 def vitalsource_auto_login(request):
     """
     Serves an HTML bridge page that auto-submits VitalSource login credentials.
-    The iframe navigates to VitalSource's sign-in endpoint with POST data.
+    Uses the exact login URL and field names from the VitalSource login form.
+    Field names: user[username], user[password] (Ruby on Rails convention).
     """
     email = os.environ.get("VITALSOURCE_EMAIL", "")
     password = os.environ.get("VITALSOURCE_PASSWORD", "")
@@ -204,14 +212,38 @@ def vitalsource_auto_login(request):
             content_type="text/html",
         )
 
+    # The exact login URL provided by the user (JWT-based auth endpoint)
+    login_url = (
+        "https://login.vitalsource.com/"
+        "?context=store"
+        "&redirect_uri=https%3A%2F%2Fwww.vitalsource.com%2F"
+        "&locale=en-US"
+        "&brand=www.vitalsource.com"
+        "&method=jwt"
+        "&marketing=true"
+        "&role=learner"
+        "&auth_host=www.vitalsource.com"
+        "&auth_protocol=https%3A"
+        "&ux_mode=popup"
+    )
+
+    # Fetch CSRF tokens from the login page (Rails authenticity_token)
+    tokens = fetch_vitalsource_tokens(login_url)
+    logger.info("VitalSource tokens fetched: %s", list(tokens.keys()))
+
+    # Build credential fields with correct form field names
+    fields = {
+        "user[username]": email,
+        "user[password]": password,
+    }
+    # Merge server-fetched tokens (authenticity_token, utf8, etc.)
+    fields.update(tokens)
+
     html = _build_bridge_html(
         title="VitalSource Bookshelf",
-        login_url="https://bookshelf.vitalsource.com/signin",
+        login_url=login_url,
         target_url="https://bookshelf.vitalsource.com/home/my-library",
-        fields={
-            "email": email,
-            "password": password,
-        },
+        fields=fields,
         brand_color="#0073C6",
     )
     return HttpResponse(html, content_type="text/html")
@@ -223,6 +255,7 @@ def scholaar_auto_login(request):
     """
     Serves an HTML bridge page that auto-submits Scholaar login credentials.
     Scholaar uses ASP.NET WebForms — form POSTs to Login.aspx.
+    Field names: txtUsername, txtPassword, btnLogin (from inspected HTML).
     """
     username = os.environ.get("SCHOLAAR_USERNAME", "")
     password = os.environ.get("SCHOLAAR_PASSWORD", "")
@@ -237,15 +270,26 @@ def scholaar_auto_login(request):
             content_type="text/html",
         )
 
+    login_url = "https://scholaar.com/Login.aspx"
+
+    # Fetch ASP.NET ViewState tokens from the login page
+    tokens = fetch_scholaar_tokens(login_url)
+    logger.info("Scholaar tokens fetched: %s", list(tokens.keys()))
+
+    # Build credential fields with correct form field names (lowercase 'n' in Username)
+    fields = {
+        "txtUsername": username,
+        "txtPassword": password,
+        "btnLogin": "Login",
+    }
+    # Merge server-fetched tokens (__VIEWSTATE, __EVENTVALIDATION, etc.)
+    fields.update(tokens)
+
     html = _build_bridge_html(
         title="Scholaar Database",
-        login_url="https://scholaar.com/Login.aspx",
+        login_url=login_url,
         target_url="https://scholaar.com/University/HomePage.aspx",
-        fields={
-            "txtUserName": username,
-            "txtPassword": password,
-            "btnLogin": "Login",
-        },
+        fields=fields,
         brand_color="#C9A84C",
     )
     return HttpResponse(html, content_type="text/html")

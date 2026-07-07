@@ -22,6 +22,7 @@ from Features.Services.Implementations import (
     PageContentService, PageImageService,
     ManagedLinkService, ManagedFileService
 )
+from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
 
 class NewlyAcquiredBookViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -174,9 +175,16 @@ class EResourceFileViewSet(viewsets.ViewSet):
         if 'file' in request.FILES:
             uploaded_file = request.FILES['file']
             ext = uploaded_file.name.split('.')[-1].lower()
-            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
+            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv', 'xlsx'}
             if ext not in allowed_extensions:
                 return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=400)
+            
+            from rest_framework.exceptions import ValidationError
+            try:
+                MalwareScannerHelper.verify_file_safety(uploaded_file)
+            except ValidationError as e:
+                return Response({'error': str(e)}, status=400)
+                
             mutable_data['file'] = uploaded_file
         ser = EResourceFileSerializer(data=mutable_data)
         if ser.is_valid():

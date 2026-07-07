@@ -65,6 +65,17 @@ Add rigorous file extension validation in `contact_controller.py` and enforce st
 
 ---
 
+### VI. AI Chatbot Rate Limiting & Session Caching
+The integrated AI Chatbot (Rizal Assistant) utilizes the following security protocols:
+1. **Frontend Local Storage**: Chat history is persisted via `localStorage` with a strictly enforced 2-hour sliding window expiration (`CACHE_EXPIRY_MS = 2 * 60 * 60 * 1000`). Once the cache naturally expires, the chatbot history is forcibly wiped to preserve user privacy on shared terminals.
+2. **Backend Throttling (Rate Limiting)**: The `/api/ai/chat/` endpoint routes to the `AIViewSet` which restricts users under a specific `throttle_scope = 'chat'`. The global setting limits this to **100 requests per hour** to mitigate potential Denial of Service (DoS) and prevent token exhaustion on the local Ollama LLM inference service.
+3. **Internal Proxy Security**: The Ollama API (`127.0.0.1:11434`) is never exposed externally. All queries are handled server-side through `ai_service.py` where a trusted System Prompt grounds responses based strictly on validated local library policy data.
+
+---
+
+### VII. Implementation Docker and Kubernetes
+This project uses Docker for local testing and containerization. Security constraints apply during orchestration.
+
 ## Security Implementation Status (Current)
 
 Based on the recent patches, here is the current status of system security:

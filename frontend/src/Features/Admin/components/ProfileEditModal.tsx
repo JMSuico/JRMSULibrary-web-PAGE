@@ -18,12 +18,6 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
   const [email, setEmail] = useState(user.email);
   const [username, setUsername] = useState(user.username);
 
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showOldPw, setShowOldPw] = useState(false);
-  const [showNewPw, setShowNewPw] = useState(false);
-
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar_url || null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
@@ -90,24 +84,6 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
         formData.append('avatar', avatarFile);
         updatedUser = await userApi.uploadAvatar(user.id, formData);
         setAvatarFile(null);
-      }
-
-      // 3. Change password if provided
-      if (newPassword) {
-        if (newPassword !== confirmPassword) {
-          setError("New passwords don't match");
-          setSaving(false);
-          return;
-        }
-        if (!oldPassword) {
-          setError('Current password is required to set a new password');
-          setSaving(false);
-          return;
-        }
-        await userApi.changePassword({ old_password: oldPassword, new_password: newPassword });
-        setOldPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
       }
 
       setSuccessMsg('Profile updated successfully');
@@ -204,62 +180,6 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
             <div>
               <label className={labelClass}>Username</label>
               <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} />
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-gray-100 pt-5 mb-4">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">Change Password</h3>
-            <p className="text-xs text-gray-400 mb-3">Leave blank to keep current password.</p>
-          </div>
-
-          {/* Password Fields */}
-          <div className="space-y-3">
-            <div className="relative">
-              <label className={labelClass}>Current Password</label>
-              <input
-                type={showOldPw ? 'text' : 'password'}
-                value={oldPassword}
-                onChange={e => setOldPassword(e.target.value)}
-                className={inputClass}
-                placeholder="Enter current password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowOldPw(v => !v)}
-                className="absolute right-3 top-7 text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none"
-                aria-label={showOldPw ? 'Hide password' : 'Show password'}
-              >
-                {showOldPw ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <div className="relative">
-              <label className={labelClass}>New Password</label>
-              <input
-                type={showNewPw ? 'text' : 'password'}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                className={inputClass}
-                placeholder="Enter new password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPw(v => !v)}
-                className="absolute right-3 top-7 text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none"
-                aria-label={showNewPw ? 'Hide password' : 'Show password'}
-              >
-                {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <div>
-              <label className={labelClass}>Confirm New Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                className={inputClass}
-                placeholder="Re-enter new password"
-              />
             </div>
           </div>
 

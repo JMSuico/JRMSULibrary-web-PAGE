@@ -19,6 +19,7 @@ from Features.Api.Controllers.external_proxy_controller import (
     vitalsource_auto_login,
     scholaar_auto_login,
 )
+from Features.Api.Controllers.ai_controller import AIViewSet
 
 
 
@@ -43,6 +44,7 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 router.register(r'personnel', PersonnelViewSet, basename='personnel')
 router.register(r'contact', ContactMessageViewSet, basename='contact')
 router.register(r'feedback', FeedbackViewSet, basename='feedback')
+router.register(r'ai', AIViewSet, basename='ai')
 
 # Analytics endpoints (admin-only)
 router.register(r'site-visits', SiteVisitViewSet, basename='site-visit')

@@ -97,7 +97,7 @@ export default function EmailMessagePage() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'EMAIL' | 'RESERVATION'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'EMAIL' | 'RESERVATION' | 'CREDENTIAL_REQUEST'>('ALL');
   const [showArchived, setShowArchived] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -418,6 +418,7 @@ export default function EmailMessagePage() {
                 <option value="ALL">All Types</option>
                 <option value="EMAIL">Emails</option>
                 <option value="RESERVATION">Reservations</option>
+                <option value="CREDENTIAL_REQUEST">Credential Requests</option>
               </select>
             </div>
             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer border border-gray-200 px-3 py-1.5 rounded-lg bg-white">
@@ -507,9 +508,22 @@ export default function EmailMessagePage() {
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${msg.message_type === 'RESERVATION' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                              {msg.message_type}
-                            </span>
+                            {msg.message_type === 'RESERVATION' ? (
+                                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 text-amber-500 rounded-full text-xs font-bold font-mono">
+                                      <Clock size={14} />
+                                      RESERVATION
+                                    </span>
+                                  ) : msg.message_type === 'CREDENTIAL_REQUEST' ? (
+                                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/20 text-purple-500 rounded-full text-xs font-bold font-mono">
+                                      <span className="material-symbols-outlined text-[14px]">key</span>
+                                      CREDENTIAL REQ
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 text-blue-500 rounded-full text-xs font-bold font-mono">
+                                      <Mail size={14} />
+                                      EMAIL
+                                    </span>
+                                  )}
                             <h3 className={`text-sm ${msg.status === 'UNREAD' ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>
                               {msg.subject || 'No Subject'}
                             </h3>
@@ -623,6 +637,9 @@ export default function EmailMessagePage() {
                   onChange={(e) => setReplyModal({ ...replyModal, body: e.target.value })}
                 />
               </div>
+
+
+              
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2 mt-3">Attachments (Max 10MB each)</label>
                 <DragDropFileUpload
@@ -694,9 +711,9 @@ export default function EmailMessagePage() {
                     let result;
                     if (emailPayload.attachments.length > 0) {
                       const fileEntries = emailPayload.attachments.map(a => ({ id: a.id!, name: a.file.name }));
-                      result = await contactApi.replyWithFiles(emailPayload.id, emailPayload.body, fileEntries);
+                      result = await contactApi.replyWithFiles(emailPayload.id, emailPayload.body, fileEntries, false);
                     } else {
-                      result = await contactApi.replyToMessage(emailPayload.id, emailPayload.body);
+                      result = await contactApi.replyToMessage(emailPayload.id, emailPayload.body, false);
                     }
                     
                     if (result.success) {

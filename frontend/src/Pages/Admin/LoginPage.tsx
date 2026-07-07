@@ -1,7 +1,19 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { LoginForm } from '@/src/Features/Auth/components/LoginForm';
+import { useToast } from '@/src/Hooks/useToast';
 
 export default function LoginPage() {
+  const location = useLocation();
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('timeout') === '1') {
+      showToast('You have been logged out due to inactivity.', 'info');
+    }
+  }, [location.search, showToast]);
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 relative overflow-hidden">
       

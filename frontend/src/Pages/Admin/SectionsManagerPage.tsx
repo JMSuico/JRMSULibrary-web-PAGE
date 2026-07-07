@@ -124,7 +124,7 @@ export default function SectionsManagerPage() {
   const openEditModal = (img: GalleryImage) => {
     setEditingImage(img);
     setSelectedFile(null);
-    setPreviewUrl(img.image.startsWith('http') ? img.image : `/media/${img.image}`);
+    setPreviewUrl(getImageUrl(img.image));
     setIsModalOpen(true);
   };
 
