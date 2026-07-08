@@ -104,7 +104,7 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-admin-modal-overlay"
+      className="fixed inset-0 ] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-modal-overlay z-[9999]"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
@@ -112,7 +112,7 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
     >
       <div
         ref={modalRef}
-        className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden animate-admin-modal-card"
+        className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden animate-modal-card"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-navy to-[#001655]">

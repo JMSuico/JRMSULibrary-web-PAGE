@@ -6,6 +6,22 @@ import { assets } from '@/src/Libs/Assets/data';
 export const Footer: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [settings, setSettings] = useState<any>({
+    library_name: 'JRMSU Katipunan Campus Library',
+    contact_email: 'katipunan.library@jrmsu.edu.ph',
+    address: 'Katipunan, Zamboanga del Norte'
+  });
+
+  React.useEffect(() => {
+    fetch('/api/settings/')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.library_name) {
+          setSettings(data);
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   return (
     <>
@@ -21,10 +37,10 @@ export const Footer: React.FC = () => {
             />
             <div>
               <span className="font-headline-md font-bold text-2xl text-gold-light block leading-tight">
-                JRMSU Library
+                {settings.library_name.replace(/ Library$/i, '')} Library
               </span>
               <span className="text-[10px] text-gold-light/60 uppercase tracking-[0.1em]">
-                Katipunan Campus
+                {settings.address}
               </span>
             </div>
           </div>
@@ -50,8 +66,8 @@ export const Footer: React.FC = () => {
           <ul className="space-y-3 font-body-md text-sm">
             <li>
               <span className="block text-gold-light/60 text-[10px] uppercase tracking-wider">Email</span>
-              <a href="mailto:katipunan.library@jrmsu.edu.ph" className="text-on-primary-container hover:text-gold-pale transition-colors">
-                katipunan.library@jrmsu.edu.ph
+              <a href={`mailto:${settings.contact_email}`} className="text-on-primary-container hover:text-gold-pale transition-colors">
+                {settings.contact_email}
               </a>
             </li>
             <li>
@@ -86,9 +102,9 @@ export const Footer: React.FC = () => {
 
     {/* Terms & Conditions Modal */}
     {isTermsOpen && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in" onClick={() => setIsTermsOpen(false)}>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-modal-overlay" onClick={() => setIsTermsOpen(false)}>
         <div 
-          className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95"
+          className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden animate-modal-card"
           onClick={e => e.stopPropagation()}
         >
           <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">

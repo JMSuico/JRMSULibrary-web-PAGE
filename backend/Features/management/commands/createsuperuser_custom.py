@@ -24,7 +24,15 @@ class Command(BaseCommand):
         self.stdout.write('\n' + '=' * 60)
         self.stdout.write('  JRMSU Katipunan Campus Library — Super Admin Setup')
         self.stdout.write('=' * 60)
-        self.stdout.write('\nSelect an option:')
+        self.stdout.write('\nPASSWORD REQUIREMENTS (enforced):')
+        self.stdout.write('  - At least 10 characters')
+        self.stdout.write('  - At least 1 uppercase letter (A-Z)')
+        self.stdout.write('  - At least 1 lowercase letter (a-z)')
+        self.stdout.write('  - At least 1 number (0-9)')
+        self.stdout.write('  - At least 1 special character (!@#$%^&*)')
+        self.stdout.write('\nNote: The same policy applies to `python manage.py createsuperuser`.')
+        self.stdout.write('      Use this command (`createsuperuser_custom`) for a guided setup.\n')
+        self.stdout.write('Select an option:')
         self.stdout.write('  [1] Create default Library Admin account (recommended)')
         self.stdout.write('  [2] Enter custom superuser details')
         self.stdout.write('  [0] Cancel\n')
@@ -87,14 +95,20 @@ class Command(BaseCommand):
         first_name = input('First Name: ').strip()
         last_name = input('Last Name: ').strip()
 
-        password = getpass.getpass('Password (min 8 chars): ')
-        if not password or len(password) < 8:
-            self.stdout.write(self.style.ERROR('Password must be at least 8 characters.'))
-            return
-
+        self.stdout.write('\nPassword Requirements: 10+ chars, 1 uppercase, 1 lowercase, 1 number, 1 special (!@#$%^&*)')
+        password = getpass.getpass('Password: ')
         confirm = getpass.getpass('Confirm Password: ')
         if password != confirm:
             self.stdout.write(self.style.ERROR('Passwords do not match.'))
+            return
+
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(password)
+        except ValidationError as e:
+            for msg in e.messages:
+                self.stdout.write(self.style.ERROR(msg))
             return
 
         user = User.objects.create_superuser(

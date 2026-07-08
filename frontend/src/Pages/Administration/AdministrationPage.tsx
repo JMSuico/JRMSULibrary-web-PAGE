@@ -35,8 +35,8 @@ export default function AdministrationPage() {
       try {
         const files = await cmsApi.getAllFiles();
         // Fallbacks included if CMS doesn't have the files yet
-        const orgChart = files.find(f => f.title.toLowerCase().includes('org') || f.title.toLowerCase().includes('structure'));
-        const manual = files.find(f => f.title.toLowerCase().includes('manual') || f.title.toLowerCase().includes('policy'));
+        const orgChart = files.find(f => f.name.toLowerCase().includes('org') || f.name.toLowerCase().includes('structure'));
+        const manual = files.find(f => f.name.toLowerCase().includes('manual') || f.name.toLowerCase().includes('policy'));
 
         if (orgChart) setOrgChartUrl(orgChart.file.startsWith('http') ? orgChart.file : `http://127.0.0.1:8000/media/${orgChart.file}`);
         if (manual) setManualUrl(manual.file.startsWith('http') ? manual.file : `http://127.0.0.1:8000/media/${manual.file}`);
@@ -114,47 +114,18 @@ export default function AdministrationPage() {
                   </div>
                 ) : (
                   allFiles.map(file => {
-                    const fileUrl = file.file.startsWith('http') ? file.file : `http://127.0.0.1:8000/media/${file.file}`;
-                    const isExpanded = expandedFileId === file.id;
-                    const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
-                    const isImage = fileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/);
-                    
                     return (
-                      <div key={file.id} className="bg-white rounded-xl overflow-hidden shadow-lg transition-all duration-300">
+                      <div key={file.id} className="bg-white rounded-xl overflow-hidden shadow-lg transition-all animate-modal-card">
                         <button
-                          onClick={() => setExpandedFileId(isExpanded ? null : file.id)}
+                          onClick={() => setExpandedFileId(file.id)}
                           className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer text-left"
                         >
                           <div className="flex items-center gap-3">
                             <FileText className="text-primary w-5 h-5" />
-                            <span className="font-semibold text-gray-900">{file.title}</span>
+                            <span className="font-semibold text-gray-900">{file.name}</span>
                           </div>
-                          {isExpanded ? <ChevronDown className="text-gray-500 w-5 h-5" /> : <ChevronRight className="text-gray-500 w-5 h-5" />}
+                          <ChevronRight className="text-gray-500 w-5 h-5" />
                         </button>
-                        
-                        {/* Expanded Content View (Read-Only) */}
-                        {isExpanded && (
-                          <div className="border-t border-gray-200">
-                            {isPdf ? (
-                              <iframe
-                                src={`${fileUrl}#toolbar=0&navpanes=0`}
-                                className="w-full"
-                                style={{ height: '70vh' }}
-                                title={file.title}
-                              />
-                            ) : isImage ? (
-                              <div className="p-4 bg-gray-100 flex justify-center">
-                                <img src={fileUrl} alt={file.title} className="max-w-full h-auto max-h-[70vh] object-contain rounded shadow" />
-                              </div>
-                            ) : (
-                              <div className="p-8 text-center bg-gray-50">
-                                <FileText className="mx-auto w-12 h-12 text-gray-400 mb-3" />
-                                <p className="text-gray-600 mb-2">This file type ({fileUrl.split('.').pop()}) cannot be previewed inline.</p>
-                                <a href={fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline text-sm">Open in new tab (Read Only)</a>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     );
                   })
@@ -165,6 +136,71 @@ export default function AdministrationPage() {
         </div>
       </div>
 
+      {/* Floating Modal for Manual Viewer */}
+      {expandedFileId && createPortal((() => {
+        const file = allFiles.find(f => f.id === expandedFileId);
+        if (!file) return null;
+        const fileUrl = file.file.startsWith('http') ? file.file : `http://127.0.0.1:8000/media/${file.file}`;
+        const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
+        const isImage = fileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/);
+
+        return (
+          <div className="fixed inset-0 ] flex items-center justify-center p-4 sm:p-6 md:p-8 z-[9999] animate-modal-overlay">
+            <div 
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-modal-overlay"
+              onClick={() => setExpandedFileId(null)}
+              aria-hidden="true"
+            />
+            <div className="relative z-10 w-full max-w-5xl h-[85vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-modal-card">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-navy to-navy-dark">
+                <div className="flex items-center gap-3">
+                  <FileText className="text-gold-light w-6 h-6" />
+                  <h3 className="text-lg font-bold text-white m-0 line-clamp-1">{file.name}</h3>
+                </div>
+                <button
+                  onClick={() => setExpandedFileId(null)}
+                  className="text-white/80 hover:text-white transition-colors p-1"
+                  aria-label="Close modal"
+                >
+                  <span className="material-symbols-outlined text-2xl">close</span>
+                </button>
+              </div>
+              
+              {/* Body */}
+              <div className="flex-1 bg-gray-50 overflow-hidden relative">
+                {isPdf ? (
+                  <iframe
+                    src={`${fileUrl}#toolbar=0&navpanes=0`}
+                    className="w-full h-full border-0"
+                    title={file.name}
+                  />
+                ) : isImage ? (
+                  <div className="w-full h-full flex items-center justify-center p-4">
+                    <img src={fileUrl} alt={file.name} className="max-w-full max-h-full object-contain rounded shadow" />
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center p-8 text-center">
+                    <div>
+                      <FileText className="mx-auto w-16 h-16 text-gray-400 mb-4" />
+                      <p className="text-gray-600 mb-4">This file type cannot be previewed inline.</p>
+                      <a 
+                        href={fileUrl} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-navy text-white font-semibold rounded-xl hover:bg-navy-dark transition-colors shadow-lg hover:shadow-xl"
+                      >
+                        <span className="material-symbols-outlined text-xl">download</span>
+                        Download or View (Read Only)
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })(), document.body)}
       {orgImageOpen && createPortal(
         <div
           className="modal-overlay"

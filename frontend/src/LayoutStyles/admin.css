@@ -842,38 +842,28 @@
   .admin-grid-card,
   .admin-sidebar__link,
   .admin-btn,
-  .animate-admin-modal-overlay,
-  .animate-admin-modal-card,
   .animate-admin-dropdown {
     transition: none !important;
     animation: none !important;
   }
 }
 
-/* ---------- Admin Modal & Dropdown Animations ---------- */
-@keyframes adminModalOverlayIn {
-  from { opacity: 0; backdrop-filter: blur(0); }
-  to { opacity: 1; backdrop-filter: blur(6px); }
-}
-
-@keyframes adminModalCardIn {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
+/* ---------- Admin Dropdown Animations ---------- */
 @keyframes adminDropdownIn {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.animate-admin-modal-overlay {
-  animation: adminModalOverlayIn 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-}
-
-.animate-admin-modal-card {
-  animation: adminModalCardIn 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-}
-
 .animate-admin-dropdown {
   animation: adminDropdownIn 0.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+/* ---------- Print Styles ---------- */
+@media print {
+  .chart-card-print {
+    page-break-before: always;
+    break-before: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Archive, Search, History, X, ClipboardList, FileArchive } from 'lucide-react';
 import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
 import { useToast } from '@/src/Hooks/useToast';
@@ -90,8 +91,8 @@ export default function BatchHistoryPage() {
           </div>
         </div>
 
-        <div className="admin-table-scroll">
-          <table className="admin-table">
+        <div className="admin-table-scroll overflow-x-auto w-full">
+          <table className="admin-table w-full min-w-[800px]">
             <thead>
               <tr>
                 <th>Batch Name</th>
@@ -132,8 +133,8 @@ export default function BatchHistoryPage() {
                         >
                           <ClipboardList size={14} /> View Audit
                         </button>
-                        {/* Archive — only for closed batches */}
-                        {batch.status === 'closed' && (
+                        {/* Archive — for open or closed batches */}
+                        {batch.status !== 'archived' && (
                           <button
                             className="admin-btn admin-btn--secondary"
                             title="Archive Batch"
@@ -141,6 +142,32 @@ export default function BatchHistoryPage() {
                             onClick={() => handleArchive(batch)}
                           >
                             <FileArchive size={14} /> Archive
+                          </button>
+                        )}
+                        {/* Reopen — for archived batches */}
+                        {batch.status === 'archived' && (
+                          <button
+                            className="admin-btn admin-btn--secondary"
+                            title="Restore Batch"
+                            style={{ color: '#10b981' }}
+                            onClick={() => {
+                              setConfirmModal({
+                                isOpen: true,
+                                title: 'Restore Batch',
+                                message: `Are you sure you want to restore "${batch.name}"? It will become open.`,
+                                onConfirm: async () => {
+                                  try {
+                                    await batchApi.reopenBatch(batch.id);
+                                    showToast('Batch restored successfully', 'success');
+                                    loadBatches();
+                                  } catch (err: any) {
+                                    showToast(err.message || 'Failed to restore batch', 'error');
+                                  }
+                                }
+                              });
+                            }}
+                          >
+                            <History size={14} /> Restore
                           </button>
                         )}
                       </div>
@@ -156,13 +183,13 @@ export default function BatchHistoryPage() {
       </div>
 
       {/* Audit Detail Modal */}
-      {auditBatch && (
+      {auditBatch && createPortal(
         <div
-          className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center ] p-4 z-[9999] animate-modal-overlay"
           onClick={() => setAuditBatch(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-modal-card"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -267,7 +294,8 @@ export default function BatchHistoryPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ConfirmModal

@@ -50,8 +50,8 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 ] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-modal-overlay z-[9999]" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="font-headline-md text-lg font-bold text-primary">Library Section Gallery</h2>
           <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
         {/* Lightbox Overlay */}
         {selectedImage && (
           <div 
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" 
+            className="fixed inset-0 ] flex items-center justify-center bg-black/90 p-4 animate-modal-overlay z-[9999]" 
             onClick={() => setSelectedImage(null)}
           >
             <button 
@@ -156,7 +156,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
             <img 
               src={selectedImage} 
               alt="Enlarged view" 
-              className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
+              className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl animate-modal-card" 
               onClick={(e) => e.stopPropagation()} 
             />
           </div>

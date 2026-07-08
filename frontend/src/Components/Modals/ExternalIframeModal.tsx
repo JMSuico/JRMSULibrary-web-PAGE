@@ -67,20 +67,20 @@ export const ExternalIframeModal: React.FC<ExternalIframeModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      className="fixed inset-0 ] flex items-center justify-center p-4 z-[9999] animate-modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label={`${title} viewer`}
     >
       {/* Dark overlay */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-admin-modal-overlay"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-modal-overlay"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal card */}
-      <div className="relative z-10 w-full max-w-7xl h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-admin-modal-card">
+      <div className="relative z-10 w-full max-w-7xl h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-modal-card">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-navy to-navy-dark">
           <div className="flex items-center gap-3">

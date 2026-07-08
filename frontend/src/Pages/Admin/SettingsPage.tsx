@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedStatus, setSavedStatus] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [archivedBatches, setArchivedBatches] = useState<AcquisitionBatch[]>([]);
   const [archivedReports, setArchivedReports] = useState<HistoricalReport[]>([]);
   const [archivesLoading, setArchivesLoading] = useState(false);
@@ -76,6 +77,7 @@ export default function SettingsPage() {
 
       setUser(updatedUser);
       setSavedStatus(true);
+      setIsEditing(false);
       showToast('Profile updated successfully', 'success');
       setTimeout(() => setSavedStatus(false), 3000);
     } catch (err: any) {
@@ -157,6 +159,7 @@ export default function SettingsPage() {
         }
 
         setSavedStatus(true);
+        setIsEditing(false);
         showToast('Settings saved successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
       } catch (err: any) {
@@ -175,6 +178,7 @@ export default function SettingsPage() {
         });
         setPasswords({ current: '', newPass: '', confirm: '' });
         setSavedStatus(true);
+        setIsEditing(false);
         showToast('Password updated successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
       } catch (err: any) {
@@ -202,7 +206,7 @@ export default function SettingsPage() {
         <div className="w-full md:w-64 shrink-0">
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
             <button
-              onClick={() => setActiveTab('profile')}
+              onClick={() => { setActiveTab('profile'); setIsEditing(false); }}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer ${
                 activeTab === 'profile' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
               }`}
@@ -211,7 +215,7 @@ export default function SettingsPage() {
               My Profile
             </button>
             <button
-              onClick={() => setActiveTab('general')}
+              onClick={() => { setActiveTab('general'); setIsEditing(false); }}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
                 activeTab === 'general' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
               }`}
@@ -220,7 +224,7 @@ export default function SettingsPage() {
               General Config
             </button>
             <button
-              onClick={() => setActiveTab('carousel')}
+              onClick={() => { setActiveTab('carousel'); setIsEditing(false); }}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
                 activeTab === 'carousel' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
               }`}
@@ -229,7 +233,7 @@ export default function SettingsPage() {
               Carousel Customize
             </button>
             <button
-              onClick={() => setActiveTab('security')}
+              onClick={() => { setActiveTab('security'); setIsEditing(false); }}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
                 activeTab === 'security' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
               }`}
@@ -238,7 +242,7 @@ export default function SettingsPage() {
               Security
             </button>
             <button
-              onClick={() => setActiveTab('archives')}
+              onClick={() => { setActiveTab('archives'); setIsEditing(false); }}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer border-t border-gray-100 ${
                 activeTab === 'archives' ? 'bg-blue-50 text-navy font-semibold border-l-4 border-navy' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
               }`}
@@ -283,7 +287,7 @@ export default function SettingsPage() {
                     <p className="text-sm mt-1">Batches you archive will appear here.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="admin-table-scroll">
                     <table className="admin-table">
                       <thead>
                         <tr>
@@ -336,7 +340,7 @@ export default function SettingsPage() {
                     <p className="text-sm mt-1">Reports you archive will appear here.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="admin-table-scroll">
                     <table className="admin-table">
                       <thead>
                         <tr>
@@ -402,8 +406,8 @@ export default function SettingsPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute bottom-0 right-[-5px] w-6 h-6 bg-navy text-white rounded-full flex items-center justify-center shadow border-2 border-white cursor-pointer hover:bg-navy-dark transition-colors"
+                    onClick={() => isEditing && fileInputRef.current?.click()}
+                    className={`absolute bottom-0 right-[-5px] w-6 h-6 text-white rounded-full flex items-center justify-center shadow border-2 border-white transition-colors ${isEditing ? 'bg-navy cursor-pointer hover:bg-navy-dark' : 'bg-gray-400 cursor-not-allowed opacity-50'}`}
                   >
                     <Camera size={12} />
                   </button>
@@ -420,33 +424,52 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className={labelClass}>First Name</label>
-                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} required />
+                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Last Name</label>
-                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} required />
+                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Email Address</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} required />
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Username</label>
-                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} required />
+                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                 </div>
 
                 {/* Password change removed - now in Security tab */}
               </div>
-              <div className="px-6 md:px-8 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="admin-btn admin-btn--primary flex items-center gap-2 px-6"
-                >
-                  {saving ? <RefreshCw className="animate-spin" size={18} /> : savedStatus ? <CheckCircle size={18} /> : <Save size={18} />}
-                  {saving ? 'Saving...' : savedStatus ? 'Saved!' : 'Save Profile Changes'}
-                </button>
+              <div className="px-6 md:px-8 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+                {!isEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="admin-btn flex items-center gap-2 px-6 bg-blue-600 hover:bg-blue-700 text-white border-none transition-colors"
+                  >
+                    Edit
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="admin-btn admin-btn--secondary flex items-center gap-2 px-6"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="admin-btn admin-btn--primary flex items-center gap-2 px-6"
+                    >
+                      {saving ? <RefreshCw className="animate-spin" size={18} /> : savedStatus ? <CheckCircle size={18} /> : <Save size={18} />}
+                      {saving ? 'Saving...' : savedStatus ? 'Saved!' : 'Save Profile Changes'}
+                    </button>
+                  </>
+                )}
               </div>
             </form>
           ) : (
@@ -461,19 +484,19 @@ export default function SettingsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className={labelClass}>Library Name</label>
-                        <input type="text" name="library_name" value={formData.library_name} onChange={handleChange} className={inputClass} required />
+                        <input type="text" name="library_name" value={formData.library_name} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Contact Email</label>
-                        <input type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} className={inputClass} required />
+                        <input type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
                       </div>
                       <div className="md:col-span-2">
                         <label className={labelClass}>Address</label>
-                        <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputClass} required />
+                        <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Phone Number</label>
-                        <input type="text" name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className={inputClass} />
+                        <input type="text" name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className={inputClass} disabled={!isEditing} />
                       </div>
                     </div>
                     
@@ -483,16 +506,24 @@ export default function SettingsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
                         <label className={labelClass}>Monday - Friday</label>
-                        <input type="text" name="opening_hours_mon_fri" value={formData.opening_hours_mon_fri} onChange={handleChange} className={inputClass} placeholder="e.g. 7:00 AM - 7:00 PM" required />
+                        <input type="text" name="opening_hours_mon_fri" value={formData.opening_hours_mon_fri} onChange={handleChange} className={inputClass} placeholder="e.g. 7:00 AM - 7:00 PM" required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Saturday</label>
-                        <input type="text" name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required />
+                        <input type="text" name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Sunday</label>
-                        <input type="text" name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required />
+                        <input type="text" name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required disabled={!isEditing} />
                       </div>
+                    </div>
+
+                    <hr className="border-gray-100 my-6" />
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Lock size={18} className="text-emerald-600" /> Security Note
+                    </h3>
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-sm">
+                      <p><strong>Local AI Processing (Ollama):</strong> The system's AI assistant is powered by Ollama running completely locally on your secure server. No data is sent to external networks, ensuring 100% privacy and compliance with data security policies.</p>
                     </div>
                   </div>
                 )}
@@ -504,12 +535,12 @@ export default function SettingsPage() {
                       {/* Default 3D Option */}
                       <button
                         type="button"
-                        onClick={() => setFormData(p => ({ ...p, carousel_style: 'default' }))}
-                        className={`rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
+                        onClick={() => isEditing && setFormData(p => ({ ...p, carousel_style: 'default' }))}
+                        className={`rounded-xl border-2 p-4 text-left transition-all ${
                           formData.carousel_style === 'default'
                             ? 'border-navy bg-blue-50 shadow-md'
                             : 'border-gray-200 hover:border-gray-400'
-                        }`}
+                        } ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
                       >
                         <div className="flex items-center gap-3 mb-3">
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -530,12 +561,12 @@ export default function SettingsPage() {
                       {/* Classic Option */}
                       <button
                         type="button"
-                        onClick={() => setFormData(p => ({ ...p, carousel_style: 'classic' }))}
-                        className={`rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
+                        onClick={() => isEditing && setFormData(p => ({ ...p, carousel_style: 'classic' }))}
+                        className={`rounded-xl border-2 p-4 text-left transition-all ${
                           formData.carousel_style === 'classic'
                             ? 'border-navy bg-blue-50 shadow-md'
                             : 'border-gray-200 hover:border-gray-400'
-                        }`}
+                        } ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
                       >
                         <div className="flex items-center gap-3 mb-3">
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -563,11 +594,21 @@ export default function SettingsPage() {
                     <div>
                       <h3 className="text-lg font-bold text-gray-800">Change Password</h3>
                       <p className="text-sm text-gray-500">Leave fields blank if you don't want to change your password.</p>
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs font-semibold text-blue-800 mb-1">Password Requirements:</p>
+                        <ul className="text-xs text-blue-700 space-y-0.5 list-disc list-inside">
+                          <li>At least 10 characters</li>
+                          <li>At least 1 uppercase letter (A-Z)</li>
+                          <li>At least 1 lowercase letter (a-z)</li>
+                          <li>At least 1 number (0-9)</li>
+                          <li>At least 1 special character (!@#$%^&*)</li>
+                        </ul>
+                      </div>
                     </div>
                     <div>
                       <label className={labelClass}>Current Password <span className="text-xs text-gray-400 font-normal ml-2">(Required to set new password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showCurrentPassword ? "text" : "password"} name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} placeholder="Current Password" />
+                        <input type={showCurrentPassword ? "text" : "password"} name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} placeholder="Current Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showCurrentPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -576,7 +617,7 @@ export default function SettingsPage() {
                     <div>
                       <label className={labelClass}>New Password <span className="text-xs text-gray-400 font-normal ml-2">(New password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showNewPassword ? "text" : "password"} name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} placeholder="New Password" />
+                        <input type={showNewPassword ? "text" : "password"} name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} placeholder="New Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showNewPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -585,7 +626,7 @@ export default function SettingsPage() {
                     <div>
                       <label className={labelClass}>Confirm New Password <span className="text-xs text-gray-400 font-normal ml-2">(Repeat new password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showConfirmPassword ? "text" : "password"} name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} placeholder="Confirm New Password" />
+                        <input type={showConfirmPassword ? "text" : "password"} name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} placeholder="Confirm New Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showConfirmPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -595,22 +636,34 @@ export default function SettingsPage() {
                 )}
               </div>
               
-              <div className="p-4 md:px-8 bg-gray-50 flex items-center justify-between">
-                <div>
-                  {savedStatus && (
-                    <span className="flex items-center gap-2 text-green-600 text-sm font-semibold animate-in">
-                      <CheckCircle size={16} /> Saved successfully
-                    </span>
-                  )}
-                </div>
-                <button 
-                  type="submit" 
-                  disabled={saving}
-                  className="admin-btn admin-btn--primary flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  <Save size={18} />
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
+              <div className="px-6 md:px-8 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+                {!isEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="admin-btn flex items-center gap-2 px-6 bg-blue-600 hover:bg-blue-700 text-white border-none transition-colors"
+                  >
+                    Edit
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="admin-btn admin-btn--secondary flex items-center gap-2 px-6"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="admin-btn admin-btn--primary flex items-center gap-2 px-6"
+                    >
+                      {saving ? <RefreshCw className="animate-spin" size={18} /> : savedStatus ? <CheckCircle size={18} /> : <Save size={18} />}
+                      {saving ? 'Saving...' : savedStatus ? 'Saved!' : 'Save Settings'}
+                    </button>
+                  </>
+                )}
               </div>
             </form>
           )}

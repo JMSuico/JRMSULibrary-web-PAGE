@@ -17,11 +17,14 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  AreaChart,
+  Area,
 } from 'recharts';
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
 import { useEffect, useState, useMemo } from 'react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useDebounce } from '@/src/Hooks/useDebounce';
 import { createPortal } from 'react-dom';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 
@@ -30,6 +33,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [showAllBooksModal, setShowAllBooksModal] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
+  const debouncedBookSearch = useDebounce(bookSearch, 400);
   const { showToast } = useToast();
 
   const loadData = async () => {
@@ -126,7 +130,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Site Visitors Bar Chart */}
+        {/* Site Visitors Curved Line Chart */}
         <div className="admin-table-wrapper" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <Eye size={18} style={{ color: 'var(--color-gold)' }} />
@@ -138,21 +142,30 @@ export default function DashboardPage() {
             return (
               <div style={{ height: 260 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={visitData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                  <AreaChart data={visitData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <defs>
+                      <linearGradient id="visitorGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--color-gold)" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="var(--color-gold)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-200)' />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--color-gray-500)', fontSize: 12 }} dy={10} />
                     <YAxis type="number" domain={yAxis.domain} ticks={yAxis.ticks} axisLine={false} tickLine={false} tick={{ fill: 'var(--color-gray-500)', fontSize: 12 }} />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                      cursor={{ fill: 'var(--color-gray-100)' }}
+                      cursor={{ stroke: 'var(--color-gold)', strokeWidth: 1.5, strokeDasharray: '4 2' }}
                     />
-                    <Bar 
-                      dataKey="visits" 
-                      fill='var(--color-gold)' 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={40}
+                    <Area
+                      type="monotone"
+                      dataKey="visits"
+                      stroke="var(--color-gold)"
+                      strokeWidth={2.5}
+                      fill="url(#visitorGradient)"
+                      dot={{ fill: 'var(--color-gold)', strokeWidth: 0, r: 4 }}
+                      activeDot={{ r: 6, fill: 'var(--color-gold)', stroke: '#fff', strokeWidth: 2 }}
                     />
-                  </BarChart>
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             );
@@ -207,8 +220,8 @@ export default function DashboardPage() {
 
       {/* All Books Modal */}
       {showAllBooksModal && createPortal(
-        <div className="fixed backdrop-blur-sm inset-0 z-[200] flex items-center justify-center bg-black/60 p-4" onClick={() => setShowAllBooksModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed backdrop-blur-sm inset-0 ] flex items-center justify-center bg-black/60 p-4 z-[9999] animate-modal-overlay" onClick={() => setShowAllBooksModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
               <div>
                 <h2 className="font-bold text-lg text-gray-900">All Added Books</h2>
@@ -246,10 +259,10 @@ export default function DashboardPage() {
                     .slice()
                     .sort((a, b) => a.dateAdded.localeCompare(b.dateAdded))
                     .filter(b =>
-                      !bookSearch ||
-                      b.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
-                      b.author.toLowerCase().includes(bookSearch.toLowerCase()) ||
-                      b.category.toLowerCase().includes(bookSearch.toLowerCase())
+                      !debouncedBookSearch ||
+                      b.title.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
+                      b.author.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
+                      b.category.toLowerCase().includes(debouncedBookSearch.toLowerCase())
                     )
                     .map((book, idx) => (
                       <tr key={book.id} className="border-b border-gray-100 hover:bg-gray-50">

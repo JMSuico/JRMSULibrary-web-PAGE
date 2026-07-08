@@ -10,6 +10,7 @@ import { ToastProvider } from '@/src/Hooks/useToast';
 import { publicApi } from '@/src/Endpoints/cmsApi';
 import { InitialLoader } from '@/src/Components/Shared/InitialLoader';
 import { PrivacyConsentModal } from '@/src/Components/Shared/PrivacyConsentModal';
+import { PageTransition } from '@/src/Components/Shared/PageTransition';
 
 // Public Pages
 const HomePage = lazy(() => import('@/src/Pages/Home/HomePage'));
@@ -57,7 +58,9 @@ function PublicLayout() {
       <RizalAssistant />
       <main>
         <Suspense fallback={<PageSkeleton />}>
-          <Outlet />
+          <PageTransition>
+            <Outlet />
+          </PageTransition>
         </Suspense>
       </main>
       <Footer />

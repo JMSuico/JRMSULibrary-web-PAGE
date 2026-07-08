@@ -6,6 +6,7 @@ import '@/src/LayoutStyles/admin.css';
 import { ToastProvider } from '@/src/Hooks/useToast';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { Loader2 } from 'lucide-react';
+import { PageTransition } from '@/src/Components/Shared/PageTransition';
 
 import bgImage from '@/src/Assets/assets/JRMSU library lib.jpg';
 
@@ -156,7 +157,9 @@ export default function AdminLayout() {
           />
           <div className="admin-content bg-transparent">
             <div className="bg-white/95 rounded-3xl shadow-lg border border-gray-200/60 p-6 md:p-8 min-h-[calc(100vh-120px)] backdrop-blur-sm">
-              <Outlet context={{ user, setUser } satisfies AdminOutletContext} />
+              <PageTransition>
+                <Outlet context={{ user, setUser } satisfies AdminOutletContext} />
+              </PageTransition>
             </div>
           </div>
         </div>

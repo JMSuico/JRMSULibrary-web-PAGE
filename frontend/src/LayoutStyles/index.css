@@ -113,6 +113,42 @@ section::before {
     }
   }
 
+  /* ---------- Global Modal Animations ---------- */
+  @keyframes modalOverlayIn {
+    from { opacity: 0; backdrop-filter: blur(0); }
+    to { opacity: 1; backdrop-filter: blur(6px); }
+  }
+
+  @keyframes modalCardIn {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .animate-modal-overlay {
+    animation: modalOverlayIn 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  }
+
+  .animate-modal-card {
+    animation: modalCardIn 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  }
+
+  @keyframes pageIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-page-in {
+    animation: pageIn 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-modal-overlay,
+    .animate-modal-card {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
   .nav-underline::after {
     content: '';
     position: absolute;
@@ -318,7 +354,7 @@ section::before {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.85);
-    z-index: 100;
+    z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -48,8 +48,8 @@ export function ConfirmModal({
   const colors = getColors();
 
   return createPortal(
-    <div className="fixed backdrop-blur-sm inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 animate-admin-modal-overlay">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-admin-modal-card">
+    <div className="fixed backdrop-blur-sm inset-0 ] flex items-center justify-center p-4 bg-black/60 animate-modal-overlay z-[9999]">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-modal-card">
         <div className="flex justify-between items-start p-4">
           <div className={`p-2 rounded-full ${colors.icon} mr-3 shrink-0`}>
             <AlertTriangle size={24} />

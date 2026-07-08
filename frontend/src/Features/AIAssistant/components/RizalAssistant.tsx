@@ -386,21 +386,21 @@ export const RizalAssistant: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-[60]">
+    <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-[9999]">
       {/* Chat Panel — opens directly as chatbot, no options menu */}
       {isExpanded && (
         <>
           {isFullscreen && (
             <div 
-              className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm animate-in fade-in" 
+              className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm animate-modal-overlay" 
               onClick={() => setIsFullscreen(false)}
             />
           )}
           <div className={`${
             isFullscreen 
-              ? 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[95vw] sm:w-[90vw] max-w-[800px] h-[90vh] sm:h-[85vh] max-h-[900px]' 
+              ? 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] w-[95vw] sm:w-[90vw] max-w-[800px] h-[90vh] sm:h-[85vh] max-h-[900px]' 
               : 'absolute bottom-[115%] right-0 z-50 w-[calc(100vw-2rem)] sm:w-80 max-w-[360px] max-h-[80vh] sm:max-h-[520px]'
-          } bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-in slide-in-from-bottom-5 flex flex-col transition-all duration-300`}>
+          } bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-modal-card flex flex-col transition-all duration-300`}>
           
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-900 to-blue-600 p-4 text-white relative flex items-center justify-between shrink-0">
@@ -467,20 +467,7 @@ export const RizalAssistant: React.FC = () => {
                 </div>
               )}
               
-              {chatFlowState === 'suggestions' && !isTyping && (
-                <div className="flex flex-col gap-2 mt-2 fade-in">
-                  <p className="text-xs text-gray-400 text-center uppercase tracking-wider font-bold mb-1">Quick Actions</p>
-                  <button onClick={() => handleSuggestionClick('email')} className="text-left bg-white text-navy-mid hover:bg-gold-light/10 border border-navy-mid/20 rounded-xl px-4 py-2 text-sm font-semibold transition-colors shadow-sm flex items-center gap-2">
-                    <Mail size={16} /> Send an Email
-                  </button>
-                  <button onClick={() => handleSuggestionClick('reservation')} className="text-left bg-white text-navy-mid hover:bg-gold-light/10 border border-navy-mid/20 rounded-xl px-4 py-2 text-sm font-semibold transition-colors shadow-sm flex items-center gap-2">
-                    <Calendar size={16} /> Reserve a Room
-                  </button>
-                  <button onClick={() => handleSuggestionClick('rate')} className="text-left bg-white text-navy-mid hover:bg-gold-light/10 border border-navy-mid/20 rounded-xl px-4 py-2 text-sm font-semibold transition-colors shadow-sm flex items-center gap-2">
-                    <Star size={16} /> Rate Us
-                  </button>
-                </div>
-              )}
+
               
               {/* Inline form (rendered in chat scroll area) */}
               {renderChatInlineForm()}
@@ -490,7 +477,20 @@ export const RizalAssistant: React.FC = () => {
           </div>
 
           {/* AI Chat Input Box */}
-          <div className="p-3 bg-white border-t border-gray-100">
+          <div className="p-3 bg-white border-t border-gray-100 flex flex-col gap-3">
+            {chatFlowState === 'suggestions' && !isTyping && (
+              <div className="grid grid-cols-2 gap-2 animate-fade-in">
+                <button onClick={() => handleSuggestionClick('email')} className="flex items-center justify-center gap-2 bg-white text-navy-mid hover:bg-gold-light/20 border border-navy-mid/20 rounded-xl px-3 py-2 text-xs font-semibold transition-colors shadow-sm">
+                  <Mail size={14} /> Send an Email
+                </button>
+                <button onClick={() => handleSuggestionClick('reservation')} className="flex items-center justify-center gap-2 bg-white text-navy-mid hover:bg-gold-light/20 border border-navy-mid/20 rounded-xl px-3 py-2 text-xs font-semibold transition-colors shadow-sm">
+                  <Calendar size={14} /> Reserve a Room
+                </button>
+                <button onClick={() => handleSuggestionClick('rate')} className="col-span-2 flex items-center justify-center gap-2 bg-white text-navy-mid hover:bg-gold-light/20 border border-navy-mid/20 rounded-xl px-3 py-2 text-xs font-semibold transition-colors shadow-sm">
+                  <Star size={14} /> Rate Us
+                </button>
+              </div>
+            )}
             <form onSubmit={handleChatTextSubmit} className="flex gap-2">
               <input 
                 type="text" 
@@ -503,7 +503,7 @@ export const RizalAssistant: React.FC = () => {
               <button 
                 type="submit" 
                 disabled={!chatInput.trim() || isTyping}
-                className="w-9 h-9 rounded-full bg-navy-mid text-white flex items-center justify-center hover:bg-navy-dark transition-colors disabled:opacity-50 disabled:hover:bg-navy-mid"
+                className="w-9 h-9 rounded-full bg-navy-mid text-white flex items-center justify-center hover:bg-navy-dark transition-colors disabled:opacity-50 disabled:hover:bg-navy-mid shrink-0"
               >
                 <span className="material-symbols-outlined text-[18px] ml-1">send</span>
               </button>

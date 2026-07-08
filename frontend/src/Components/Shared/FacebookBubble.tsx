@@ -21,11 +21,11 @@ export const FacebookBubble: React.FC = () => {
       {/* Modal Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center"
+          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-modal-overlay"
           onClick={() => setIsOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl overflow-hidden w-[90vw] max-w-[500px] h-[80vh] max-h-[700px] flex flex-col"
+            className="bg-white rounded-2xl shadow-2xl overflow-hidden w-[90vw] max-w-[500px] h-[80vh] max-h-[700px] flex flex-col animate-modal-card"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

@@ -289,8 +289,18 @@ export default function BooksManagerPage() {
   return (
     <>
       <div className="admin-content__header">
-        <h1>Newly Acquired Books</h1>
-        <p>Manage batches of new acquisitions. Only one batch can be actively displayed to the public at a time.</p>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <h1>Newly Acquired Books</h1>
+            <p className="text-sm text-gray-500 mt-1">Manage batches of new acquisitions. Only one batch can be actively displayed to the public at a time.</p>
+          </div>
+          <button
+            className="admin-btn admin-btn--primary self-start sm:self-center flex items-center justify-center gap-2"
+            onClick={() => setIsCreateBatchOpen(true)}
+          >
+            <Plus size={16} /> New Batch
+          </button>
+        </div>
       </div>
 
       <div className="admin-metrics">
@@ -306,11 +316,6 @@ export default function BooksManagerPage() {
           icon={<Tag size={22} />}
           variant="gold"
         />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flex: 1 }}>
-          <button className="admin-btn admin-btn--primary" onClick={() => setIsCreateBatchOpen(true)}>
-            <Plus size={16} /> New Batch
-          </button>
-        </div>
       </div>
 
       {/* Batch Cards Section */}
@@ -502,8 +507,8 @@ export default function BooksManagerPage() {
 
       {/* View All Batches Modal */}
       {viewAllOpen && createPortal(
-<div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setViewAllOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+<div className="fixed inset-0 ] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]" onClick={() => setViewAllOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden animate-modal-card" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><BookOpen size={20} className="text-navy" /> All Batches ({batches.length})</h2>
               <button onClick={() => setViewAllOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={20} /></button>
@@ -584,8 +589,8 @@ export default function BooksManagerPage() {
                           
                           {activeDropdown === b.id && (
                             <>
-                              <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
-                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 z-20 py-1" onClick={e => e.stopPropagation()}>
+                              <div className="fixed inset-0 z-[9999] animate-modal-overlay" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
+                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 z-20 py-1 animate-modal-card" onClick={e => e.stopPropagation()}>
                                 <button 
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                   onClick={() => { setViewAllOpen(false); handleViewBatchBooks(b.id); setActiveDropdown(null); }}
@@ -633,9 +638,9 @@ document.body
 )}
 
       {/* Audit Modal */}
-      {auditBatch && (
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4" onClick={() => setAuditBatch(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      {auditBatch && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center ] p-4 animate-modal-overlay z-[9999]" onClick={() => setAuditBatch(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-5 flex justify-between items-start">
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -705,12 +710,13 @@ document.body
               <button onClick={() => setAuditBatch(null)} className="admin-btn admin-btn--secondary">Close</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Undo Delete Toast */}
       {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
           <div className="flex justify-between items-start">
             <div className="flex-1">
               <p className="font-semibold text-gray-800 text-sm">Item deleted</p>

@@ -1,4 +1,4 @@
-﻿# [Layer: Api/Serializers] — user_serializer.py
+# [Layer: Api/Serializers] — user_serializer.py
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
@@ -23,6 +23,11 @@ class UserSerializer(serializers.ModelSerializer):
 class UserCreateUpdateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     avatar = serializers.ImageField(required=False, allow_null=True)
+
+    def validate_password(self, value):
+        from django.contrib.auth.password_validation import validate_password
+        validate_password(value)
+        return value
 
     class Meta:
         model = User

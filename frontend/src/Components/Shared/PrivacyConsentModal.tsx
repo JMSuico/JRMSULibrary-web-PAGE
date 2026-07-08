@@ -29,14 +29,12 @@ export const PrivacyConsentModal: React.FC = () => {
   if (!mounted || !isVisible) return null;
 
   const modalContent = (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+    <div className="fixed inset-0 ] flex items-center justify-center p-4 animate-modal-overlay z-[9999]">
       {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" 
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       {/* Modal Container */}
-      <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up-fade">
+      <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
         
         {/* Header */}
         <div className="bg-navy px-6 py-5 flex items-center justify-between shrink-0">

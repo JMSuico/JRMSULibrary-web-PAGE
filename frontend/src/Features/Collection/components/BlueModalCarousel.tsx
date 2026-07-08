@@ -18,12 +18,12 @@ interface BlueModalCarouselProps {
 
 const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = ({ item, onClose }) => createPortal(
   <div
-    className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+    className="fixed inset-0 ] flex items-center justify-center p-4 animate-modal-overlay z-[9999]"
     style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
     onClick={onClose}
   >
     <div
-      className="relative w-full max-w-lg rounded-3xl p-8 shadow-2xl border border-gold-light/20 overflow-hidden"
+      className="relative w-full max-w-lg rounded-3xl p-8 shadow-2xl border border-gold-light/20 overflow-hidden animate-modal-card"
       style={{ background: 'linear-gradient(135deg, #001655, #002B7F)' }}
       onClick={(e) => e.stopPropagation()}
     >

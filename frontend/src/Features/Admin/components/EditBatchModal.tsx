@@ -38,11 +38,11 @@ export function EditBatchModal({ isOpen, batch, onClose, onSubmit }: EditBatchMo
 
   return createPortal(
     <div
-      className="fixed backdrop-blur-sm inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 animate-admin-modal-overlay"
+      className="fixed backdrop-blur-sm inset-0 ] flex items-center justify-center p-4 bg-black/60 animate-modal-overlay z-[9999]"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-admin-modal-card"
+        className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-modal-card"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">

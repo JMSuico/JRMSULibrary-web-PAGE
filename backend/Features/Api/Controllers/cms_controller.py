@@ -90,7 +90,7 @@ class LibraryInteriorImageViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.repository.get_by_id(pk)
+        item = self.service.get_by_id(pk)
         if item:
             RecycleBin.objects.create(
                 original_id=item.id,
@@ -137,7 +137,7 @@ class EResourceDepartmentViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.repository.get_by_id(pk)
+        item = self.service.get_by_id(pk)
         if item:
             RecycleBin.objects.create(
                 original_id=item.id,
@@ -202,7 +202,7 @@ class EResourceFileViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.repository.get_by_id(pk)
+        item = self.service.get_by_id(pk)
         if item:
             RecycleBin.objects.create(
                 original_id=item.id,
@@ -232,6 +232,8 @@ class PageContentViewSet(viewsets.ViewSet):
             item = self.service.update_content(pk, ser.validated_data)
             return Response(PageContentSerializer(item).data) if item else Response(status=404)
         return Response(ser.errors, status=400)
+    def partial_update(self, request, pk=None):
+        return self.update(request, pk)
 
 
 class PageImageViewSet(viewsets.ViewSet):
@@ -278,12 +280,12 @@ class ManagedLinkViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.repository.get_by_id(pk)
+        item = self.service.get_by_id(pk)
         if item:
             RecycleBin.objects.create(
                 original_id=item.id,
                 source_module='CMS_LINK',
-                item_name=item.title or f"Link {item.id}",
+                item_name=item.name or f"Link {item.id}",
                 data_snapshot=ManagedLinkSerializer(item).data,
                 deleted_by=request.user.id if request.user.is_authenticated else None
             )
@@ -316,7 +318,7 @@ class ManagedFileViewSet(viewsets.ViewSet):
         if 'file' in request.FILES:
             uploaded_file = request.FILES['file']
             ext = uploaded_file.name.split('.')[-1].lower()
-            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
+            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv', 'xlsx', 'pptx', 'zip'}
             if ext not in allowed_extensions:
                 return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=400)
                 
@@ -334,12 +336,12 @@ class ManagedFileViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.repository.get_by_id(pk)
+        item = self.service.get_by_id(pk)
         if item:
             RecycleBin.objects.create(
                 original_id=item.id,
                 source_module='CMS_FILE',
-                item_name=item.title or f"File {item.id}",
+                item_name=item.name or f"File {item.id}",
                 data_snapshot=ManagedFileSerializer(item).data,
                 deleted_by=request.user.id if request.user.is_authenticated else None
             )

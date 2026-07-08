@@ -15,12 +15,27 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const { showToast } = useToast();
 
-  // Initialize Captcha
+  // Initialize Captcha and Remember Me
   useEffect(() => {
     setCaptchaNum1(Math.floor(Math.random() * 10) + 1);
     setCaptchaNum2(Math.floor(Math.random() * 10) + 1);
+    
+    const remembered = localStorage.getItem('jrmsu_admin_remember_me');
+    if (remembered) {
+      try {
+        const parsed = JSON.parse(remembered);
+        if (parsed.username && parsed.password) {
+          setUsername(parsed.username);
+          setPassword(parsed.password);
+          setRememberMe(true);
+        }
+      } catch (e) {
+        // ignore JSON parse errors
+      }
+    }
   }, []);
 
   const isHuman = captchaInput === (captchaNum1 + captchaNum2).toString();
@@ -31,8 +46,19 @@ export function LoginForm() {
     
     setIsLoading(true);
     
+    // Autofill fix: Read directly from DOM to handle browser autofill bypassing React's onChange
+    const actualUsername = (document.getElementById('username') as HTMLInputElement)?.value || username;
+    const actualPassword = (document.getElementById('password') as HTMLInputElement)?.value || password;
+    
     try {
-      await userApi.login({ username, password });
+      await userApi.login({ username: actualUsername, password: actualPassword });
+      
+      if (rememberMe) {
+        localStorage.setItem('jrmsu_admin_remember_me', JSON.stringify({ username: actualUsername, password: actualPassword }));
+      } else {
+        localStorage.removeItem('jrmsu_admin_remember_me');
+      }
+
       showToast('Login successful', 'success');
       // Redirect to admin dashboard
       navigate('/admin');
@@ -137,7 +163,20 @@ export function LoginForm() {
         </div>
       </div>
 
-      <div className="flex justify-end -mt-3">
+      <div className="flex justify-between items-center -mt-3 px-1">
+        <label className="flex items-center gap-2 cursor-pointer group">
+          <div className="relative flex items-center justify-center w-5 h-5">
+            <input 
+              type="checkbox" 
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="peer appearance-none w-5 h-5 border-2 border-gray-300 rounded-md checked:bg-navy checked:border-navy transition-all"
+            />
+            <CheckCircle className="absolute text-white w-3.5 h-3.5 opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" strokeWidth={3} />
+          </div>
+          <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900 transition-colors">Remember me</span>
+        </label>
+        
         <button
           type="button"
           onClick={() => setIsForgotModalOpen(true)}

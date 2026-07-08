@@ -8,6 +8,9 @@ export const TopNavBar: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
+  // Settings state
+  const [libraryName, setLibraryName] = useState('JRMSU Katipunan Campus Library');
+
   // State for dropdowns
   const [aboutOpen, setAboutOpen] = useState(false);
   const [administrationOpen, setAdministrationOpen] = useState(false);
@@ -18,6 +21,17 @@ export const TopNavBar: React.FC = () => {
       setScrolled(window.scrollY > 60);
     };
     window.addEventListener('scroll', handleScroll);
+    
+    // Fetch settings
+    fetch('/api/settings/')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.library_name) {
+          setLibraryName(data.library_name);
+        }
+      })
+      .catch(err => console.error(err));
+
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -102,9 +116,9 @@ export const TopNavBar: React.FC = () => {
               className="h-12 w-auto object-contain"
               src={assets.logos.jrmsu}
             />
-            <div className="text-left">
-              <span className="font-headline-md font-bold text-primary block leading-tight text-[13px] sm:text-base">
-                JRMSU Katipunan Campus
+            <div className="text-left max-w-[200px] sm:max-w-[250px]">
+              <span className="font-headline-md font-bold text-primary block leading-tight text-[13px] sm:text-base truncate">
+                {libraryName.replace(/ Library$/i, '')}
               </span>
               <span className="font-label-caps text-primary/70 tracking-[0.1em] uppercase text-[10px] sm:text-[11px]">
                 Library
@@ -195,7 +209,7 @@ export const TopNavBar: React.FC = () => {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden animate-modal-overlay"
           onClick={() => setSidebarOpen(false)}
         />
       )}

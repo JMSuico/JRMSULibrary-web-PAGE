@@ -11,6 +11,7 @@ export default function ReportsPage() {
   const [reportType, setReportType] = useState('summary');
   const [dateRange, setDateRange] = useState('this-month');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
   const [reportData, setReportData] = useState<ReportSummary | null>(null);
   const [activeReportInfo, setActiveReportInfo] = useState<{title: string, period: string, type: string} | null>(null);
   
@@ -128,6 +129,60 @@ export default function ReportsPage() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const savePdf = async () => {
+    const el = document.getElementById('report-preview-area');
+    if (!el) return;
+
+    try {
+      setIsPdfGenerating(true);
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas-pro'),
+      ]);
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        foreignObjectRendering: false,
+        imageTimeout: 0,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = pdfWidth;
+      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+      
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+      
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+      
+      const rPeriod = activeReportInfo?.period || dateRange;
+      pdf.save(`jrmsu-library-report-${rPeriod}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      showToast('PDF downloaded successfully', 'success');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to generate PDF: ' + err.message, 'error');
+    } finally {
+      setIsPdfGenerating(false);
+    }
   };
 
   const handleExportCSV = () => {
@@ -347,14 +402,17 @@ export default function ReportsPage() {
               <button onClick={handleExportCSV} className="admin-btn admin-btn--outline flex items-center gap-2">
                 <Download size={16} /> Export CSV
               </button>
+              <button onClick={savePdf} disabled={isPdfGenerating} className="admin-btn admin-btn--primary flex items-center gap-2 bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60">
+                {isPdfGenerating ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : 'Save as PDF'}
+              </button>
               <button onClick={handlePrint} className="admin-btn admin-btn--primary flex items-center gap-2">
-                <Printer size={16} /> Print / Save PDF
+                <Printer size={16} /> Print
               </button>
             </div>
           </div>
 
           {/* Printable Area */}
-          <div className="print-area font-serif text-gray-800">
+          <div id="report-preview-area" className="print-area font-serif text-gray-800 bg-white p-8">
             <div className="text-center mb-8 border-b-2 border-black pb-4">
               <h1 className="text-2xl font-bold uppercase">Jose Rizal Memorial State University</h1>
               <h2 className="text-xl">Katipunan Campus Library</h2>

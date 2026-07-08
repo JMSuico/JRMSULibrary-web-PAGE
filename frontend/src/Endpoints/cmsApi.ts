@@ -20,10 +20,11 @@ export interface ManagedLink {
 
 export interface ManagedFile {
   id: number;
-  title: string;
+  category: string;
+  name: string;
   file: string;
   is_active: boolean;
-  created_at: string;
+  uploaded_at: string;
 }
 
 export const cmsApi = {

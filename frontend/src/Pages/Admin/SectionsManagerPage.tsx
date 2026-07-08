@@ -347,8 +347,8 @@ export default function SectionsManagerPage() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && createPortal(
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-black/60 ] flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="font-bold text-gray-900">
                 {editingImage ? 'Edit Image' : 'Upload New Image'}
@@ -449,8 +449,8 @@ export default function SectionsManagerPage() {
 
       {/* View Full Details Modal */}
       {viewingImage && createPortal(
-<div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setViewingImage(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+<div className="fixed inset-0 bg-black/60 ] flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]" onClick={() => setViewingImage(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-modal-card" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <ImageIcon size={22} className="text-navy" /> Section Details
@@ -506,7 +506,7 @@ document.body
 
       {/* Undo Delete Toast */}
       {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
           <div className="flex justify-between items-start">
             <div className="flex-1">
               <p className="font-semibold text-gray-800 text-sm">Item deleted</p>

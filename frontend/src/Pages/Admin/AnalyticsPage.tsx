@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { BarChart3, Users, BookOpen, Mail, CalendarDays, Star, TrendingUp, Activity, RefreshCw, Info } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { BarChart3, Users, BookOpen, Mail, CalendarDays, Star, TrendingUp, Activity, RefreshCw, Info, FileDown } from "lucide-react";
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ScatterChart, Scatter, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { MetricCard } from "@/src/Features/Admin/components/MetricCard";
 import { reportApi, ReportSummary } from "@/src/Endpoints/reportApi";
@@ -18,7 +18,7 @@ function sat(dist:Record<number,number>,tot:number):string{return tot===0?"0%":(
 function ChartCard({title,subtitle,icon,children,formula}:{title:string;subtitle?:string;icon:React.ReactNode;children:React.ReactNode;formula?:string}){
   const [f,setF]=useState(false);
   return(
-    <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div className="chart-card-print bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="mb-4">
         <div className="flex items-center gap-2 mb-0.5">
           <span className="text-navy">{icon}</span>
@@ -36,12 +36,100 @@ function ChartCard({title,subtitle,icon,children,formula}:{title:string;subtitle
 export default function AnalyticsPage(){
   const [data,setData]=useState<ReportSummary|null>(null);
   const [loading,setLoading]=useState(true);
+  const [isPdfGenerating,setIsPdfGenerating]=useState(false);
   const [last,setLast]=useState<Date>(new Date());
   const ref=useRef<ReturnType<typeof setInterval>|null>(null);
   const{showToast}=useToast();
 
   const load=async()=>{try{const s=await reportApi.getSummary();setData(s);setLast(new Date());}catch(e:any){showToast(e.message||"Failed","error");}finally{setLoading(false);}};
   useEffect(()=>{load();ref.current=setInterval(load,30000);return()=>{if(ref.current)clearInterval(ref.current);};},[]);
+
+  const savePdf = useCallback(async () => {
+    if (isPdfGenerating) return;
+    setIsPdfGenerating(true);
+    try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas-pro'),
+      ]);
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 12;
+      const contentW = pageW - margin * 2;
+
+      const sectionIds = [
+        'pdf-section-metrics',
+        'pdf-section-visits',
+        'pdf-section-books-timeline',
+        'pdf-section-engagement',
+        'pdf-section-ratings-dist',
+        'pdf-section-star-pie',
+        'pdf-section-scatter',
+        'pdf-section-combined',
+      ];
+
+      const titles = [
+        'Summary Metrics',
+        'Site Visits Monthly',
+        'Books Acquired Timeline',
+        'Engagement Breakdown',
+        'Ratings Distribution',
+        'Star Breakdown',
+        'Visits vs Books (Scatter)',
+        'Combined Trend',
+      ];
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+      for (let i = 0; i < sectionIds.length; i++) {
+        const el = document.getElementById(sectionIds[i]);
+        if (!el) continue;
+
+        if (i > 0) pdf.addPage();
+
+        // Page header
+        pdf.setFillColor(0, 43, 127); // navy
+        pdf.rect(0, 0, pageW, 14, 'F');
+        pdf.setTextColor(201, 168, 76); // gold
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('JRMSU Katipunan Campus Library — Analytics Report', margin, 9);
+        pdf.setTextColor(180, 180, 180);
+        pdf.setFontSize(7);
+        pdf.text(dateStr, pageW - margin, 9, { align: 'right' });
+
+        // Section title
+        pdf.setTextColor(30, 30, 30);
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(titles[i], margin, 22);
+
+        // Capture chart
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/png');
+        const imgH = (canvas.height / canvas.width) * contentW;
+        const maxImgH = pageH - 30;
+        const finalH = Math.min(imgH, maxImgH);
+        pdf.addImage(imgData, 'PNG', margin, 26, contentW, finalH);
+
+        // Page footer
+        pdf.setFontSize(7);
+        pdf.setTextColor(160, 160, 160);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Page ${i + 1} of ${sectionIds.length}`, pageW / 2, pageH - 6, { align: 'center' });
+      }
+
+      pdf.save(`JRMSU-Library-Analytics-${now.toISOString().slice(0,10)}.pdf`);
+      showToast('PDF saved successfully', 'success');
+    } catch (err: any) {
+      showToast('Failed to generate PDF: ' + (err.message || err), 'error');
+    } finally {
+      setIsPdfGenerating(false);
+    }
+  }, [isPdfGenerating, showToast]);
 
   const stars=(n:number)=>Array.from({length:5},(_,i)=><Star key={i} size={14} className={i<n?"text-gold fill-gold":"text-gray-300"}/>);
 
@@ -59,17 +147,30 @@ export default function AnalyticsPage(){
 
   return(
     <>
-      <div className="admin-content__header">
+      <div className="admin-content__header flex flex-wrap justify-between items-start gap-4">
         <div>
           <h1>Analytics</h1>
           <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5"><Activity size={12} className="text-green-500 animate-pulse"/>Real-time · {last.toLocaleTimeString()}</p>
         </div>
-        <button onClick={()=>{setLoading(true);load();}} disabled={loading} className="admin-btn admin-btn--secondary flex items-center gap-2 disabled:opacity-50">
-          <RefreshCw size={14} className={loading?"animate-spin":""}/> Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={()=>window.print()} className="admin-btn admin-btn--secondary flex items-center gap-2 print:hidden" style={{ borderColor: 'var(--color-navy)', color: 'var(--color-navy)' }}>
+            Print Report
+          </button>
+          <button
+            onClick={savePdf}
+            disabled={isPdfGenerating}
+            className="admin-btn admin-btn--primary flex items-center gap-2 print:hidden bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60"
+          >
+            {isPdfGenerating ? (
+              <><RefreshCw size={14} className="animate-spin"/> Generating PDF...</>
+            ) : (
+              <><FileDown size={14}/> Save as PDF</>
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="admin-metrics">
+      <div id="pdf-section-metrics" className="admin-metrics">
         <MetricCard label="Total Site Visits" value={data.total_visits} icon={<Users size={22}/>} variant="blue"/>
         <MetricCard label="Books Acquired" value={data.total_books} icon={<BookOpen size={22}/>} variant="green"/>
         <MetricCard label="Emails Received" value={data.total_emails} icon={<Mail size={22}/>} variant="orange"/>
@@ -98,6 +199,7 @@ export default function AnalyticsPage(){
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
+          <div id="pdf-section-visits">
           <ChartCard title="Site Visits Monthly" subtitle="Bar chart — last 6 months" icon={<Users size={16}/>} formula="total_visits = COUNT(SiteVisit) per month">
             {(()=>{const ya=dynamicAxis(extractValues(trend,'visits'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
@@ -110,7 +212,9 @@ export default function AnalyticsPage(){
               </BarChart>
             </ResponsiveContainer></div>);})()}
           </ChartCard>
+          </div>
 
+          <div id="pdf-section-books-timeline">
           <ChartCard title="Books Acquired Timeline" subtitle="Smooth curve per month" icon={<BookOpen size={16}/>} formula="COUNT(BatchBook) per month">
             {(()=>{const ya=dynamicAxis(extractValues(trend,'books'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
@@ -124,7 +228,9 @@ export default function AnalyticsPage(){
               </AreaChart>
             </ResponsiveContainer></div>);})()}
           </ChartCard>
+          </div>
 
+          <div id="pdf-section-engagement">
           <ChartCard title="Engagement Breakdown" subtitle="Emails vs Reservations" icon={<Mail size={16}/>} formula="Engagement = (Emails+Res)/Visits x100">
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <PieChart>
@@ -135,7 +241,9 @@ export default function AnalyticsPage(){
               </PieChart>
             </ResponsiveContainer></div>
           </ChartCard>
+          </div>
 
+          <div id="pdf-section-ratings-dist">
           <ChartCard title="Ratings Distribution Curve" subtitle="Smooth area 1-5 stars" icon={<Star size={16}/>} formula="Satisfaction = (4*+5*)/Total x100">
             {(()=>{const rd=[1,2,3,4,5].map(s=>({rating:s+"*",count:dist[s]??0}));const ya=dynamicAxis(extractValues(rd,'count'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
@@ -149,7 +257,9 @@ export default function AnalyticsPage(){
               </AreaChart>
             </ResponsiveContainer></div>);})()}
           </ChartCard>
+          </div>
 
+          <div id="pdf-section-star-pie">
           <ChartCard title="Star Breakdown Pie" subtitle="Per star level" icon={<Star size={16}/>} formula="Weighted Avg = Sum(s*cnt)/Sum(cnt)">
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <PieChart>
@@ -160,7 +270,9 @@ export default function AnalyticsPage(){
               </PieChart>
             </ResponsiveContainer></div>
           </ChartCard>
+          </div>
 
+          <div id="pdf-section-scatter">
           <ChartCard title="Visits vs Books (Scatter)" subtitle="Correlation per month" icon={<TrendingUp size={16}/>} formula="Growth = (Curr-Prev)/Prev x100">
             {(()=>{const xa=dynamicAxis(extractValues(trend,'visits'));const ya=dynamicAxis(extractValues(trend,'books'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
@@ -174,7 +286,9 @@ export default function AnalyticsPage(){
             </ResponsiveContainer></div>);})()}
             <p className="text-xs text-gray-400 mt-1 text-center">Gold = current month</p>
           </ChartCard>
+          </div>
 
+          <div id="pdf-section-combined">
           <ChartCard title="Combined Trend" subtitle="Bar (visits) + Line (books)" icon={<Activity size={16}/>} formula="Growth Rate = (Curr-Prev)/Prev x100">
             {(()=>{const allVals=[...extractValues(trend,'visits'),...extractValues(trend,'books')];const ya=dynamicAxis(allVals);return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
@@ -188,6 +302,7 @@ export default function AnalyticsPage(){
               </ComposedChart>
             </ResponsiveContainer></div>);})()}
           </ChartCard>
+          </div>
 
         </div>
       </div>
@@ -227,27 +342,23 @@ export default function AnalyticsPage(){
         )}
       </div>
 
-      {data.ratings_summary.recent_feedback.length>0&&(
-        <div className="admin-table-wrapper mt-6 p-6">
-          <div className="flex items-center gap-3 mb-6"><Mail size={24} className="text-navy"/><h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2></div>
-          <div className="space-y-3">
-            {data.ratings_summary.recent_feedback.map(fb=>(
-              <div key={fb.id} className="flex items-start justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100/60 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1"><p className="font-semibold text-gray-800">{fb.name}</p><span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">{fb.category}</span></div>
-                  <div className="flex items-center gap-1 mb-1">{stars(fb.rating)}</div>
-                  <p className="text-sm text-gray-600 truncate">{fb.message}</p>
-                  <p className="text-xs text-gray-400 mt-1">{fb.created_at}</p>
+        {data.ratings_summary.recent_feedback.length>0&&(
+          <div className="admin-table-wrapper mt-6 p-6">
+            <div className="flex items-center gap-3 mb-6"><Mail size={24} className="text-navy"/><h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2></div>
+            <div className="space-y-3">
+              {data.ratings_summary.recent_feedback.map(fb=>(
+                <div key={fb.id} className="flex items-start justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100/60 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1"><p className="font-semibold text-gray-800">{fb.name}</p><span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">{fb.category}</span></div>
+                    <div className="flex items-center gap-1 mb-1">{stars(fb.rating)}</div>
+                    <p className="text-sm text-gray-600 truncate">{fb.message}</p>
+                    <p className="text-xs text-gray-400 mt-1">{fb.created_at}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-
-      <div className="mt-6 flex gap-3">
-        <button className="admin-btn admin-btn--primary" onClick={()=>window.print()}>Print Report</button>
-      </div>
-    </>
+        )}
+      </>
   );
 }

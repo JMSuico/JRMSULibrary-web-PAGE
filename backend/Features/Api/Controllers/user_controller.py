@@ -56,22 +56,39 @@ class UserViewSet(viewsets.ViewSet):
             return Response({"error": "Username required"}, status=400)
             
         cache_key = f"login_attempts_{username}"
+        cache_key_ts = f"login_lockout_ts_{username}"
         attempts = cache.get(cache_key, 0)
-        if attempts >= 10:
-            return Response({"error": "Account temporarily locked due to too many failed attempts. Try again in 15 minutes."}, status=429)
+        if attempts >= 5:
+            import time
+            lockout_start = cache.get(cache_key_ts, 0)
+            elapsed = int(time.time() - lockout_start) if lockout_start else 0
+            remaining = max(600 - elapsed, 0)
+            remaining_min = remaining // 60
+            remaining_sec = remaining % 60
+            return Response({"error": f"Account temporarily locked due to too many failed attempts. Try again in {remaining_min}m {remaining_sec}s."}, status=429)
 
         user = authenticate(request, username=username, password=password)
         if user is not None:
             cache.delete(cache_key)
+            cache.delete(cache_key_ts)
             login(request, user)
             return Response(self._serialize(user, request))
             
-        cache.set(cache_key, attempts + 1, timeout=900)  # 15 minutes lockout
-        return Response({"error": "Invalid credentials"}, status=400)
+        import time
+        new_attempts = attempts + 1
+        cache.set(cache_key, new_attempts, timeout=600)  # 10 minutes lockout
+        if new_attempts >= 5:
+            cache.set(cache_key_ts, time.time(), timeout=600)
+        remaining_attempts = max(5 - new_attempts, 0)
+        return Response({"error": f"Invalid username or password. You have {remaining_attempts} attempt(s) remaining."}, status=400)
 
     @action(detail=False, methods=["post"])
     def logout(self, request):
         from django.contrib.auth import logout
+        from django.core.cache import cache
+        if request.user.is_authenticated:
+            cache.delete(f"login_attempts_{request.user.username}")
+            cache.delete(f"login_lockout_ts_{request.user.username}")
         logout(request)
         return Response({"message": "Successfully logged out."})
 
@@ -130,6 +147,13 @@ class UserViewSet(viewsets.ViewSet):
             return Response({"error": "Both old and new passwords are required"}, status=400)
         if not request.user.check_password(old_password):
             return Response({"error": "Incorrect old password"}, status=400)
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(new_password, request.user)
+        except ValidationError as e:
+            return Response({"error": " ".join(e.messages)}, status=400)
+            
         request.user.set_password(new_password)
         request.user.save()
         from django.contrib.auth import update_session_auth_hash
@@ -190,6 +214,19 @@ class UserViewSet(viewsets.ViewSet):
         email = request.data.get("email")
         if not email:
             return Response({"error": "Email is required"}, status=400)
+
+        from django.core.cache import cache
+        import time
+        reset_attempt_key = f"reset_attempts_{email.lower()}"
+        reset_lockout_key = f"reset_lockout_ts_{email.lower()}"
+        reset_attempts = cache.get(reset_attempt_key, 0)
+        if reset_attempts >= 3:
+            lockout_start = cache.get(reset_lockout_key, 0)
+            elapsed = int(time.time() - lockout_start) if lockout_start else 0
+            remaining = max(300 - elapsed, 0)
+            remaining_min = remaining // 60
+            remaining_sec = remaining % 60
+            return Response({"error": f"Too many reset requests. Try again in {remaining_min}m {remaining_sec}s."}, status=429)
             
         from django.contrib.auth import get_user_model
         User = get_user_model()
@@ -219,6 +256,12 @@ class UserViewSet(viewsets.ViewSet):
             )
         except Exception:
             pass
+
+        # Increment reset attempt counter
+        new_reset_attempts = reset_attempts + 1
+        cache.set(reset_attempt_key, new_reset_attempts, timeout=300)  # 5 minutes cooldown
+        if new_reset_attempts >= 3:
+            cache.set(reset_lockout_key, time.time(), timeout=300)
             
         return Response({"message": "If that email exists in our system, a reset code has been sent."})
 
@@ -244,6 +287,13 @@ class UserViewSet(viewsets.ViewSet):
         
         if not user:
             return Response({"error": "User not found"}, status=404)
+            
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(new_password, user)
+        except ValidationError as e:
+            return Response({"error": " ".join(e.messages)}, status=400)
             
         user.set_password(new_password)
         user.save()

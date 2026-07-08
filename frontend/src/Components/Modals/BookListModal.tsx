@@ -33,11 +33,11 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 ] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-modal-overlay z-[9999]"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-modal-card"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -162,7 +162,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
         {/* Lightbox Overlay */}
         {selectedBook && (
           <div 
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" 
+            className="fixed inset-0 ] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-modal-overlay z-[9999]" 
             onClick={() => setSelectedBook(null)}
           >
             <button 
@@ -173,7 +173,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
               <span className="material-symbols-outlined text-4xl">close</span>
             </button>
             <div 
-              className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center flex flex-col items-center" 
+              className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center flex flex-col items-center animate-modal-card" 
               onClick={(e) => e.stopPropagation()}
             >
               {selectedBook.image ? (

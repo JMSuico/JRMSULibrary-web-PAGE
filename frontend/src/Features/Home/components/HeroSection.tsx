@@ -18,6 +18,7 @@ export const HeroSection: React.FC = () => {
 
   // Opening hours state from backend Settings API
   const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number } | null>(null);
+  const [rawOpenHours, setRawOpenHours] = useState<string>('Working days MONDAY TO FRIDAY | 7AM TO 7PM');
 
   useEffect(() => {
     publicApi.getVisitorCount()
@@ -29,6 +30,7 @@ export const HeroSection: React.FC = () => {
       .then(r => r.json())
       .then((s: any) => {
         const raw: string = s?.opening_hours_mon_fri || '7:00 AM - 7:00 PM';
+        setRawOpenHours(`Working days MONDAY TO FRIDAY | ${raw}`);
         // Parse format "H:MM AM - H:MM PM" or "HH:MM AM - HH:MM PM"
         const match = raw.match(/(\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)/i);
         if (match) {
@@ -84,7 +86,7 @@ export const HeroSection: React.FC = () => {
     updateClock();
     const interval = setInterval(updateClock, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [openHours]);
 
   return (
     <section
@@ -187,8 +189,8 @@ export const HeroSection: React.FC = () => {
                 {timeState.dateStr}
               </div>
 
-              <div className="text-xs text-gold-pale/70 font-label-caps tracking-wider text-center">
-                Working days MONDAY TO FRIDAY &nbsp;|&nbsp; 7AM TO 7PM
+              <div className="text-xs text-gold-pale/70 font-label-caps tracking-wider text-center uppercase">
+                {rawOpenHours}
               </div>
             </div>
           </div>

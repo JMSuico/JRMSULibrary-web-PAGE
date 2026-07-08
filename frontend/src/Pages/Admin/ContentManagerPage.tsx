@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { Save, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
-import { HtmlSyntaxEditor } from '@/src/Components/Shared/HtmlSyntaxEditor';
+import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
 
 export default function ContentManagerPage() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files'>('content');
@@ -15,11 +16,13 @@ export default function ContentManagerPage() {
   // Content State
   const [contents, setContents] = useState<PageContent[]>([]);
   const [editedContents, setEditedContents] = useState<Record<string, string>>({});
+  const [editingContentId, setEditingContentId] = useState<string | null>(null);
   
   // Link State
   const [links, setLinks] = useState<ManagedLink[]>([]);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<ManagedLink | null>(null);
+  const [isSavingLink, setIsSavingLink] = useState(false);
 
   // File State
   const [files, setFiles] = useState<ManagedFile[]>([]);
@@ -76,6 +79,7 @@ export default function ContentManagerPage() {
       is_active: fd.get('is_active') === 'on'
     };
 
+    setIsSavingLink(true);
     try {
       if (editingLink) {
         await cmsApi.updateLink(editingLink.id, payload);
@@ -87,6 +91,8 @@ export default function ContentManagerPage() {
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to save link', 'error');
+    } finally {
+      setIsSavingLink(false);
     }
   };
 
@@ -95,7 +101,7 @@ export default function ContentManagerPage() {
     if (!linkToDelete) return;
 
     triggerDelete(
-      linkToDelete.title,
+      linkToDelete.name,
       async () => {
         try {
           await cmsApi.deleteLink(id);
@@ -137,7 +143,7 @@ export default function ContentManagerPage() {
     if (!fileToDelete) return;
 
     triggerDelete(
-      fileToDelete.title,
+      fileToDelete.name,
       async () => {
         try {
           await cmsApi.deleteFile(id);
@@ -162,7 +168,7 @@ export default function ContentManagerPage() {
     <>
       <div className="admin-content__header">
         <h1>Content Manager</h1>
-        <p>Manage the dynamic content, external links, and downloadable files.</p>
+        <p>Manage the dynamic content, external links, and manual files.</p>
       </div>
 
       <div className="admin-table-wrapper" style={{ padding: 0 }}>
@@ -184,7 +190,7 @@ export default function ContentManagerPage() {
             onClick={() => setActiveTab('files')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'files' ? '2px solid #002B7F' : 'none', color: activeTab === 'files' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
-            Downloadable Files
+            Manual Files
           </button>
         </div>
 
@@ -196,25 +202,54 @@ export default function ContentManagerPage() {
                 <div key={item.id} style={{ border: '1px solid #e5e7eb', padding: '16px', borderRadius: '8px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>{item.title}</h3>
                   <div className="mb-3">
-                    <HtmlSyntaxEditor 
-                      value={editedContents[item.slug] ?? item.content} 
-                      onChange={(v) => setEditedContents(prev => ({ ...prev, [item.slug]: v }))}
-                      id={`content-${item.slug}`}
-                    />
+                    {editingContentId === item.slug ? (
+                      <BlockTextEditor 
+                        key={item.slug}
+                        value={editedContents[item.slug] ?? item.content} 
+                        onChange={(v) => setEditedContents(prev => ({ ...prev, [item.slug]: v }))}
+                        id={`content-${item.slug}`}
+                      />
+                    ) : (
+                      <div className="p-4 bg-gray-50 border border-gray-100 rounded-lg text-sm text-gray-700 min-h-[100px]" dangerouslySetInnerHTML={{ __html: item.content }} />
+                    )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button 
-                      className="admin-btn admin-btn--primary flex items-center gap-2"
-                      onClick={() => {
-                         let val = editedContents[item.slug] ?? item.content;
-                         if (!val.includes('<p>') && !val.includes('<div>')) {
-                           val = `<p>${val}</p>`;
-                         }
-                         handleSaveContent(item.slug, val);
-                      }}
-                    >
-                      <Save size={16} /> Save Changes
-                    </button>
+                    {editingContentId === item.slug ? (
+                      <div className="flex gap-2">
+                        <button 
+                          className="admin-btn admin-btn--outline flex items-center gap-2"
+                          onClick={() => {
+                            setEditingContentId(null);
+                            setEditedContents(prev => {
+                              const newC = { ...prev };
+                              delete newC[item.slug];
+                              return newC;
+                            });
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          className="admin-btn admin-btn--primary flex items-center gap-2"
+                          onClick={async () => {
+                             let val = editedContents[item.slug] ?? item.content;
+                             await handleSaveContent(item.slug, val);
+                             setEditingContentId(null);
+                          }}
+                        >
+                          <Save size={16} /> Save Changes
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        className="admin-btn admin-btn--primary flex items-center gap-2"
+                        onClick={() => {
+                          setEditingContentId(item.slug);
+                        }}
+                      >
+                        <Edit2 size={16} /> Edit
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -281,7 +316,7 @@ export default function ContentManagerPage() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Title</th>
+                      <th>Name</th>
                       <th>File URL</th>
                       <th>Status</th>
                       <th>Actions</th>
@@ -290,7 +325,7 @@ export default function ContentManagerPage() {
                   <tbody>
                     {files.map((file) => (
                       <tr key={file.id}>
-                        <td style={{ fontWeight: 500 }}>{file.title}</td>
+                        <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>Download</a></td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -311,9 +346,9 @@ export default function ContentManagerPage() {
       </div>
 
       {/* Link Modal */}
-      {isLinkModalOpen && (
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+      {isLinkModalOpen && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center ] p-4 z-[9999] animate-modal-overlay">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">{editingLink ? 'Edit Link' : 'Add Link'}</h2>
               <button onClick={() => setIsLinkModalOpen(false)} className="text-gray-400 hover:text-gray-600">×</button>
@@ -340,27 +375,36 @@ export default function ContentManagerPage() {
                 <span className="text-sm font-medium text-gray-700">Link is Active</span>
               </label>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsLinkModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg">Save</button>
+                <button type="button" onClick={() => setIsLinkModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg" disabled={isSavingLink}>Cancel</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg flex items-center gap-2" disabled={isSavingLink}>
+                  {isSavingLink ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : 'Save'}
+                </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* File Modal */}
-      {isFileModalOpen && (
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+      {isFileModalOpen && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center ] p-4 z-[9999] animate-modal-overlay">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">Upload File</h2>
               <button onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
             <form onSubmit={handleUploadFile} className="p-4 flex flex-col gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Title</label>
-                <input required type="text" name="title" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Name</label>
+                <input required type="text" name="name" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
+              <input type="hidden" name="category" value="Manual" />
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">File</label>
                 <DragDropFileUpload
@@ -387,12 +431,13 @@ export default function ContentManagerPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Undo Delete Toast */}
       {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-900">Item deleted</p>

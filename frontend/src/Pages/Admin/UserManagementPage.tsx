@@ -19,6 +19,7 @@ import { Pagination } from '@/src/Components/Shared/Pagination';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -34,8 +35,12 @@ export default function UserManagementPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const data = await userApi.getAllUsers();
+      const [data, me] = await Promise.all([
+        userApi.getAllUsers(),
+        userApi.me()
+      ]);
       setUsers(data);
+      setCurrentUser(me);
     } catch (err: any) {
       showToast(err.message || 'Failed to load users', 'error');
     } finally {
@@ -211,8 +216,11 @@ export default function UserManagementPage() {
                         <button 
                           className="admin-btn admin-btn--icon" 
                           aria-label={user.is_active ? "Suspend User" : "Activate User"}
-                          title={user.is_active ? "Suspend User" : "Activate User"}
+                          title={user.id === currentUser?.id ? "Cannot suspend own account" : (user.is_active ? "Suspend User" : "Activate User")}
+                          disabled={user.id === currentUser?.id}
+                          style={{ opacity: user.id === currentUser?.id ? 0.3 : 1, cursor: user.id === currentUser?.id ? 'not-allowed' : 'pointer' }}
                           onClick={() => {
+                            if (user.id === currentUser?.id) return;
                             setConfirmModal({
                               isOpen: true,
                               title: user.is_active ? 'Suspend User' : 'Activate User',
@@ -269,8 +277,8 @@ export default function UserManagementPage() {
       </div>
 
       {isModalOpen && createPortal(
-        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-black/60 ] flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="font-bold text-gray-900">
                 {editingUser ? 'Edit Admin User' : 'Create New Admin'}
@@ -347,6 +355,16 @@ export default function UserManagementPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" 
                     placeholder={editingUser ? '••••••••' : ''}
                   />
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs font-semibold text-blue-800 mb-1">Password Requirements:</p>
+                    <ul className="text-xs text-blue-700 space-y-0.5 list-disc list-inside">
+                      <li>At least 10 characters</li>
+                      <li>At least 1 uppercase letter (A-Z)</li>
+                      <li>At least 1 lowercase letter (a-z)</li>
+                      <li>At least 1 number (0-9)</li>
+                      <li>At least 1 special character (!@#$%^&*)</li>
+                    </ul>
+                  </div>
                 </div>
 
                 <div className="pt-2">
