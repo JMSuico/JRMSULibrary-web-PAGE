@@ -160,7 +160,7 @@ export const RizalChatBubble: React.FC = () => {
                     href="https://www.facebook.com/JRMSUkatipunanlibrary"
                     target="_blank"
                     rel="noreferrer"
-                    className="bg-[#1877F2] text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-[#166fe5] transition-colors flex items-center gap-2"
+                    className="bg-facebook text-white text-sm px-4 py-2 rounded-2xl rounded-tr-none hover:bg-facebook-hover transition-colors flex items-center gap-2"
                   >
                     Visit our Facebook Page
                   </a>

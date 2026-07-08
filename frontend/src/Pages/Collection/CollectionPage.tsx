@@ -193,8 +193,8 @@ export default function CollectionPage() {
     <section id="collection" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-10">
-          <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Collection</h2>
-          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>Collection</h2>
+          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px var(--color-black-alpha-50)' }}>
             Browse the library's print and digital collections — newly acquired books, local eBooks, and online research databases.
           </p>
         </div>
@@ -260,7 +260,7 @@ export default function CollectionPage() {
                 </div>
                 <h4 className="font-bold text-2xl text-navy-dark mb-2">Scholaar</h4>
                 <p className="text-gray-500 text-sm mb-8">University database providing access to research materials and publications.</p>
-                <button className="btn mt-auto w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold shadow-md text-navy-dark bg-gold hover:bg-[#b09340] hover:text-white transition-colors">
+                <button className="btn mt-auto w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold shadow-md text-navy-dark bg-gold hover:bg-gold-hover hover:text-white transition-colors">
                   Open Scholaar
                   <span className="material-symbols-outlined text-xl">school</span>
                 </button>

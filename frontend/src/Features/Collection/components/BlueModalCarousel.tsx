@@ -19,12 +19,12 @@ interface BlueModalCarouselProps {
 const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = ({ item, onClose }) => createPortal(
   <div
     className="fixed inset-0 ] flex items-center justify-center p-4 animate-modal-overlay z-[9999]"
-    style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+    style={{ background: 'var(--color-black-alpha-70)', backdropFilter: 'blur(8px)' }}
     onClick={onClose}
   >
     <div
       className="relative w-full max-w-lg rounded-3xl p-8 shadow-2xl border border-gold-light/20 overflow-hidden animate-modal-card"
-      style={{ background: 'linear-gradient(135deg, #001655, #002B7F)' }}
+      style={{ background: 'linear-gradient(135deg, var(--color-navy-dark), var(--color-navy))' }}
       onClick={(e) => e.stopPropagation()}
     >
       {item.image && (
@@ -40,7 +40,7 @@ const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = (
       )}
       {item.icon && !item.image && (
         <div className="flex justify-center mb-5">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(201,168,76,0.15)' }}>
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: 'var(--color-gold-alpha-15)' }}>
             <span className="material-symbols-outlined text-5xl text-gold-light">{item.icon}</span>
           </div>
         </div>
@@ -134,7 +134,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                       ? 'bg-gradient-to-br from-navy-dark to-navy-mid text-white shadow-2xl'
                       : 'bg-navy-dark/80 backdrop-blur-md text-white/70 border border-white/10'
                   }`}
-                  style={pos === 'active' ? { boxShadow: '0 0 60px rgba(37, 99, 235, 0.35)' } : undefined}
+                  style={pos === 'active' ? { boxShadow: '0 0 60px var(--color-blue-alpha-35)' } : undefined}
                 >
                   {item.image && (
                     <div className="w-24 h-24 md:w-32 md:h-32 rounded-xl overflow-hidden flex-shrink-0 mx-auto mb-4">

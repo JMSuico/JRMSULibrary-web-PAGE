@@ -160,3 +160,43 @@ class BatchService(IBatchService):
 
     def get_batch_by_id(self, batch_id: int) -> Optional[Any]:
         return self.batch_repo.get_batch_by_id(batch_id)
+
+    @transaction.atomic
+    def delete_batch(self, batch_id: int, user_id: int = None) -> bool:
+        batch = self.batch_repo.get_batch_by_id(batch_id)
+        if not batch:
+            return False
+
+        books_snapshot = []
+        for book in batch.books.all():
+            books_snapshot.append({
+                'title': book.title,
+                'author': book.author,
+                'accession_number': book.accession_number,
+                'category': book.category,
+                'cover_image': book.cover_image.name if book.cover_image else None,
+                'date_encoded': book.date_encoded.isoformat() if book.date_encoded else None,
+            })
+
+        snapshot = {
+            'id': batch.id,
+            'name': batch.name,
+            'description': batch.description,
+            'status': batch.status,
+            'is_display_batch': batch.is_display_batch,
+            'opened_at': batch.opened_at.isoformat() if batch.opened_at else None,
+            'closed_at': batch.closed_at.isoformat() if batch.closed_at else None,
+            'remarks': batch.remarks,
+            'books': books_snapshot,
+        }
+
+        self.recycle_repo.create(
+            original_id=batch.id,
+            source_module='BATCH',
+            item_name=batch.name,
+            data_snapshot=snapshot,
+            user_id=user_id,
+        )
+
+        batch.delete()
+        return True

@@ -3,6 +3,8 @@
 # Do NOT query database directly — use ContactRepository only.
 
 from Features.Repositories.Implementations.contact_repository import ContactRepository
+from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
+from Features.Api.Serializers.contact_serializer import ContactMessageSerializer
 from Features.Helpers.input_sanitizer import sanitize_input
 from Features.Helpers.email_helper import (
     is_disposable_email,
@@ -24,6 +26,7 @@ class ContactService(ContactServiceInterface):
 
     def __init__(self):
         self.repository = ContactRepository()
+        self.recycle_repository = RecycleBinRepository()
 
     def submit_contact(self, data: dict):
         sanitized = {
@@ -177,3 +180,18 @@ class ContactService(ContactServiceInterface):
             email=email, 
             status='REPLIED'
         ).exclude(reply_text__isnull=True).order_by('-replied_at')
+
+    def delete_message(self, message_id: int, user_id: int = None) -> bool:
+        message = self.repository.get_by_id(message_id)
+        if message:
+            snapshot = ContactMessageSerializer(message).data
+            self.recycle_repository.create(
+                original_id=message.id,
+                source_module='CONTACT_MSG',
+                item_name=message.subject or f"Message from {message.email}",
+                data_snapshot=snapshot,
+                user_id=user_id
+            )
+            message.delete()
+            return True
+        return False

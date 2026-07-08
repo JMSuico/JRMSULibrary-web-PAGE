@@ -23,13 +23,13 @@ export const ExternalServicesSection: React.FC = () => {
       ref={ref as any}
     >
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
-        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+        <div className="rounded-3xl p-8 md:p-12 shadow-2xl border border-gold-light/20" style={{ background: 'var(--color-navy-alpha-90)', backdropFilter: 'blur(8px)' }}>
         <button
           className="w-full flex items-center justify-between p-4 bg-gold-light/30 rounded-xl hover:bg-gold-light/50 transition-all cursor-pointer"
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
         >
-          <span className="font-headline-md font-bold text-xl" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(255,255,255,0.5)' }}>
+          <span className="font-headline-md font-bold text-xl" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px var(--color-white-alpha-50)' }}>
             View External Services Gallery
           </span>
           <span className={`material-symbols-outlined transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} style={{ color: 'var(--color-primary)' }}>

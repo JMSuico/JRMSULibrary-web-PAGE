@@ -26,7 +26,8 @@ class CSPMiddleware(MiddlewareMixin):
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' data: https://fonts.gstatic.com; "
             "img-src 'self' data: blob: https:; "
-            "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* wss://*;"
+            "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* wss://*; "
+            "frame-ancestors 'self' http://localhost:* http://127.0.0.1:*;"
         )
         # Apply CSP if not already set
         if 'Content-Security-Policy' not in response:

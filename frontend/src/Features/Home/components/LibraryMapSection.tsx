@@ -11,8 +11,8 @@ export const LibraryMapSection: React.FC = () => {
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         {/* Section Header */}
         <div className="text-center mb-10">
-          <h2 className="font-headline-lg text-4xl font-bold mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>Library Map and Location</h2>
-          <p className="" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <h2 className="font-headline-lg text-4xl font-bold mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>Library Map and Location</h2>
+          <p className="" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px var(--color-black-alpha-50)' }}>
             Find us at the heart of Katipunan, Zamboanga del Norte.
           </p>
         </div>
@@ -22,7 +22,7 @@ export const LibraryMapSection: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 items-stretch">
             {/* Left Column: Address Info Card */}
             <div className="flex flex-col justify-center space-y-6">
-              <div className="rounded-2xl p-6 md:p-10 border border-gold-light/20 shadow-lg flex-1 flex flex-col justify-center" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+              <div className="rounded-2xl p-6 md:p-10 border border-gold-light/20 shadow-lg flex-1 flex flex-col justify-center" style={{ background: 'var(--color-navy-alpha-90)', backdropFilter: 'blur(8px)' }}>
                 <div className="flex items-start gap-4 mb-8">
                   <div className="w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-md bg-gold-light text-primary">
                     <span className="material-symbols-outlined text-3xl">location_on</span>

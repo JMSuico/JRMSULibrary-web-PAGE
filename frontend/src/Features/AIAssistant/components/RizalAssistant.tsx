@@ -334,15 +334,7 @@ export const RizalAssistant: React.FC = () => {
       return (
         <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
           <form onSubmit={handleRateFormSubmit} className="space-y-3">
-            <style dangerouslySetInnerHTML={{__html: `
-              .chat-rating { display: inline-flex; direction: rtl; gap: 2px; }
-              .chat-rating input { display: none; }
-              .chat-rating label { cursor: pointer; color: #ccc; transition: color 0.3s; font-size: 32px; line-height: 1; }
-              .chat-rating label:before { content: '\\2605'; }
-              .chat-rating input:checked ~ label,
-              .chat-rating label:hover,
-              .chat-rating label:hover ~ label { color: #C9A84C; }
-            `}} />
+
             <div className="flex justify-center">
               <div className="chat-rating">
                 {[5, 4, 3, 2, 1].map(star => (

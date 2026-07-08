@@ -115,7 +115,7 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
         className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden animate-modal-card"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-navy to-[#001655]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-navy to-navy-dark">
           <h2 className="text-white font-bold text-lg flex items-center gap-2">
             <UserIcon size={20} className="text-gold" /> Edit Profile
           </h2>
@@ -218,3 +218,5 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
     document.body
   );
 }
+
+

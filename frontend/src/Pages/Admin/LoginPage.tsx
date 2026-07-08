@@ -61,6 +61,12 @@ export default function LoginPage() {
         </div>
 
       </div>
+
+      {/* Developer Footer */}
+      <div className="absolute bottom-6 left-0 w-full text-center z-20">
+        <p className="text-gray-500 font-medium text-sm">Developed by JM Suico, Rodman Wong, John Lester Uy</p>
+        <p className="text-gray-400 text-xs mt-1">CS - A</p>
+      </div>
     </div>
   );
 }

@@ -32,3 +32,5 @@ export function MetricCard({ label, value, icon, variant, trend }: MetricCardPro
     </div>
   );
 }
+
+

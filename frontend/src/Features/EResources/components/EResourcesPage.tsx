@@ -65,7 +65,7 @@ interface LinkTableProps {
 }
 
 const LinkTable: React.FC<LinkTableProps> = ({ title, links }) => (
-  <div className="rounded-2xl p-6 shadow-lg border border-gold-light/20" style={{ background: 'rgba(0,24,81,0.9)', backdropFilter: 'blur(8px)' }}>
+  <div className="rounded-2xl p-6 shadow-lg border border-gold-light/20" style={{ background: 'var(--color-navy-alpha-90)', backdropFilter: 'blur(8px)' }}>
     <h3 className="font-headline-md font-bold text-xl mb-4 text-gold-light">{title}</h3>
     <div className="space-y-1">
       {links.map((link, idx) => (
@@ -106,8 +106,8 @@ export const EResourcesPage: React.FC = () => {
     <section id="e-resources" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-10">
-          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>E-Resources</h2>
-          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>E-Resources</h2>
+          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px var(--color-black-alpha-50)' }}>
             Access digital books, journals, and online research databases available to the JRMSU community.
           </p>
         </div>

@@ -1,8 +1,6 @@
 # [Layer: Api/Controllers] — cms_controller.py
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
-from Features.Data.Models.recycle_bin_model import RecycleBin
-
 from Features.Api.Serializers.cms_serializers import (
     NewlyAcquiredBookSerializer, LibraryInteriorImageSerializer,
     EResourceDepartmentSerializer, EResourceFileSerializer,
@@ -22,8 +20,6 @@ from Features.Services.Implementations import (
     PageContentService, PageImageService,
     ManagedLinkService, ManagedFileService
 )
-from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
-
 class NewlyAcquiredBookViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
@@ -90,16 +86,8 @@ class LibraryInteriorImageViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.get_by_id(pk)
-        if item:
-            RecycleBin.objects.create(
-                original_id=item.id,
-                source_module='GALLERY',
-                item_name=item.title or f"Gallery Image {item.id}",
-                data_snapshot=LibraryInteriorImageSerializer(item).data,
-                deleted_by=request.user.id if request.user.is_authenticated else None
-            )
-        if self.service.delete(pk):
+        user_id = request.user.id if request.user.is_authenticated else None
+        if self.service.delete(pk, user_id):
             return Response(status=204)
         return Response(status=404)
 
@@ -137,16 +125,8 @@ class EResourceDepartmentViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.get_by_id(pk)
-        if item:
-            RecycleBin.objects.create(
-                original_id=item.id,
-                source_module='ERESOURCE_DEPT',
-                item_name=item.name or f"Department {item.id}",
-                data_snapshot=EResourceDepartmentSerializer(item).data,
-                deleted_by=request.user.id if request.user.is_authenticated else None
-            )
-        if self.service.delete(pk):
+        user_id = request.user.id if request.user.is_authenticated else None
+        if self.service.delete(pk, user_id):
             return Response(status=204)
         return Response(status=404)
 
@@ -170,27 +150,16 @@ class EResourceFileViewSet(viewsets.ViewSet):
         return Response(EResourceFileSerializer(data, many=True).data)
 
     def create(self, request, *args, **kwargs):
-        # Merge request.data (text fields) with request.FILES (uploaded file)
         mutable_data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
-        if 'file' in request.FILES:
-            uploaded_file = request.FILES['file']
-            ext = uploaded_file.name.split('.')[-1].lower()
-            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv', 'xlsx'}
-            if ext not in allowed_extensions:
-                return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=400)
-            
-            from rest_framework.exceptions import ValidationError
-            try:
-                MalwareScannerHelper.verify_file_safety(uploaded_file)
-            except ValidationError as e:
-                return Response({'error': str(e)}, status=400)
-                
-            mutable_data['file'] = uploaded_file
-        ser = EResourceFileSerializer(data=mutable_data)
-        if ser.is_valid():
-            item = self.service.create(ser.validated_data)
+        uploaded_file = request.FILES.get('file')
+        from rest_framework.exceptions import ValidationError
+        try:
+            item = self.service.create(mutable_data, uploaded_file)
             return Response(EResourceFileSerializer(item).data, status=201)
-        return Response(ser.errors, status=400)
+        except ValidationError as e:
+            return Response(e.detail, status=400)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
 
     def partial_update(self, request, pk=None, *args, **kwargs):
         ser = EResourceFileSerializer(data=request.data, partial=True)
@@ -202,16 +171,8 @@ class EResourceFileViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.get_by_id(pk)
-        if item:
-            RecycleBin.objects.create(
-                original_id=item.id,
-                source_module='ERESOURCE_FILE',
-                item_name=item.title or f"E-Resource File {item.id}",
-                data_snapshot=EResourceFileSerializer(item).data,
-                deleted_by=request.user.id if request.user.is_authenticated else None
-            )
-        if self.service.delete(pk):
+        user_id = request.user.id if request.user.is_authenticated else None
+        if self.service.delete(pk, user_id):
             return Response(status=204)
         return Response(status=404)
 
@@ -280,16 +241,8 @@ class ManagedLinkViewSet(viewsets.ViewSet):
         return Response(ser.errors, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.get_by_id(pk)
-        if item:
-            RecycleBin.objects.create(
-                original_id=item.id,
-                source_module='CMS_LINK',
-                item_name=item.name or f"Link {item.id}",
-                data_snapshot=ManagedLinkSerializer(item).data,
-                deleted_by=request.user.id if request.user.is_authenticated else None
-            )
-        if self.service.delete(pk):
+        user_id = request.user.id if request.user.is_authenticated else None
+        if self.service.delete(pk, user_id):
             return Response(status=204)
         return Response(status=404)
 
@@ -313,38 +266,19 @@ class ManagedFileViewSet(viewsets.ViewSet):
         return Response(ManagedFileSerializer(data, many=True).data)
 
     def create(self, request, *args, **kwargs):
-        # Merge request.data (text fields) with request.FILES (uploaded file)
         mutable_data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
-        if 'file' in request.FILES:
-            uploaded_file = request.FILES['file']
-            ext = uploaded_file.name.split('.')[-1].lower()
-            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv', 'xlsx', 'pptx', 'zip'}
-            if ext not in allowed_extensions:
-                return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=400)
-                
-            from rest_framework.exceptions import ValidationError
-            try:
-                MalwareScannerHelper.verify_file_safety(uploaded_file)
-            except ValidationError as e:
-                return Response({'error': str(e)}, status=400)
-                
-            mutable_data['file'] = uploaded_file
-        ser = ManagedFileSerializer(data=mutable_data)
-        if ser.is_valid():
-            item = self.service.create(ser.validated_data)
+        uploaded_file = request.FILES.get('file')
+        from rest_framework.exceptions import ValidationError
+        try:
+            item = self.service.create(mutable_data, uploaded_file)
             return Response(ManagedFileSerializer(item).data, status=201)
-        return Response(ser.errors, status=400)
+        except ValidationError as e:
+            return Response(e.detail, status=400)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
 
     def destroy(self, request, pk=None):
-        item = self.service.get_by_id(pk)
-        if item:
-            RecycleBin.objects.create(
-                original_id=item.id,
-                source_module='CMS_FILE',
-                item_name=item.name or f"File {item.id}",
-                data_snapshot=ManagedFileSerializer(item).data,
-                deleted_by=request.user.id if request.user.is_authenticated else None
-            )
-        if self.service.delete(pk):
+        user_id = request.user.id if request.user.is_authenticated else None
+        if self.service.delete(pk, user_id):
             return Response(status=204)
         return Response(status=404)

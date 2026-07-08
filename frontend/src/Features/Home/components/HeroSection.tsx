@@ -111,7 +111,7 @@ export const HeroSection: React.FC = () => {
             </p>
             <h1
               className="text-primary font-black text-3xl sm:text-4xl lg:text-5xl leading-tight"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.25)' }}
+              style={{ textShadow: '2px 2px 4px var(--color-black-alpha-25)' }}
             >
               JOSE RIZAL MEMORIAL STATE UNIVERSITY
             </h1>
@@ -198,7 +198,7 @@ export const HeroSection: React.FC = () => {
           {/* RIGHT: Visitors Card */}
           <div 
             className="rounded-2xl p-5 md:p-6 text-center hover-3d-tilt shadow-2xl flex flex-col items-center justify-center border border-gold-light/20 w-full md:w-72 flex-shrink-0"
-            style={{ background: 'rgba(0, 24, 81, 0.80)', backdropFilter: 'blur(12px)' }}
+            style={{ background: 'var(--color-navy-alpha-80)', backdropFilter: 'blur(12px)' }}
           >
             <span className="material-symbols-outlined text-gold-light text-3xl mb-2 drop-shadow-md">
               visibility

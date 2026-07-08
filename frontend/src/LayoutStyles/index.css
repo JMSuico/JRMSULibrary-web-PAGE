@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 @theme {
   --color-surface-container-highest: #e3e2e9;
@@ -19,6 +19,53 @@
   --color-on-surface-variant: #444651;
   --color-surface-container-low: #f4f3fa;
   --color-secondary-fixed: #ffe08f;
+
+  --color-teal: #0d9488;
+  --color-rose: #f43f5e;
+  --color-violet: #7c3aed;
+  --color-orange: #f97316;
+  --color-amber: #f59e0b;
+  --color-indigo: #6366f1;
+  --color-blue: #3b82f6;
+  --color-facebook: #1877F2;
+  --color-facebook-hover: #166fe5;
+  --color-gold-hover: #b09340;
+  
+  --color-navy-alpha-95: rgba(0, 24, 81, 0.95);
+  --color-navy-alpha-90: rgba(0, 24, 81, 0.90);
+  --color-navy-alpha-80: rgba(0, 24, 81, 0.80);
+  --color-navy-alpha-50: rgba(0, 24, 81, 0.50);
+  --color-navy-alpha-10: rgba(0, 24, 81, 0.10);
+  
+  --color-black-alpha-85: rgba(0, 0, 0, 0.85);
+  --color-black-alpha-70: rgba(0, 0, 0, 0.70);
+  --color-black-alpha-60: rgba(0, 0, 0, 0.60);
+  --color-black-alpha-50: rgba(0, 0, 0, 0.50);
+  --color-black-alpha-25: rgba(0, 0, 0, 0.25);
+  
+  --color-white-alpha-85: rgba(255, 255, 255, 0.85);
+  --color-white-alpha-80: rgba(255, 255, 255, 0.80);
+  --color-white-alpha-75: rgba(255, 255, 255, 0.75);
+  --color-white-alpha-70: rgba(255, 255, 255, 0.70);
+  --color-white-alpha-10: rgba(255, 255, 255, 0.10);
+  --color-white-alpha-00: rgba(255, 255, 255, 0);
+
+  --color-gold-light-alpha-20: rgba(240, 217, 122, 0.20);
+  --color-gold-light-alpha-08: rgba(240, 217, 122, 0.08);
+  --color-gold-light-alpha-30: rgba(240, 217, 122, 0.30);
+  --color-gold-alpha-15: rgba(201, 168, 76, 0.15);
+  --color-gold-alpha-30: rgba(201, 168, 76, 0.30);
+
+  --color-blue-alpha-35: rgba(37, 99, 235, 0.35);
+  --color-blue-alpha-40: rgba(37, 99, 235, 0.40);
+  --color-blue-alpha-00: rgba(37, 99, 235, 0);
+
+  --color-navy-alpha-30: rgba(0, 43, 127, 0.30);
+  --color-navy-alpha-10: rgba(0, 43, 127, 0.10);
+  --color-navy-alpha-06: rgba(0, 43, 127, 0.06);
+  --color-navy-dark-alpha-40: rgba(0, 24, 81, 0.40);
+  --color-navy-dark-alpha-30: rgba(0, 24, 81, 0.30);
+  --color-navy-dark-alpha-10: rgba(0, 24, 81, 0.10);
 
   --font-label-caps: "Inter", sans-serif;
   --font-status-clock: "JetBrains Mono", monospace;
@@ -43,7 +90,7 @@
   --spacing-gutter: 24px;
 }
 
-/* Body background — library image visible through sections */
+/* Body background â€” library image visible through sections */
 body {
   background-image: url('/assets/JRMSU library lib.jpg');
   background-attachment: fixed;
@@ -65,7 +112,7 @@ section::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--color-white-alpha-75);
   pointer-events: none;
   z-index: -1;
 }
@@ -786,7 +833,7 @@ section::before {
 
   /* =============================================
    * GLOBAL RESPONSIVE DEVICE ENHANCEMENTS
-   * Covers: iPhone SE → Galaxy Z Fold → iPad Pro → Nest Hub Max
+   * Covers: iPhone SE â†’ Galaxy Z Fold â†’ iPad Pro â†’ Nest Hub Max
    * ============================================= */
 
   /* --- iPhone SE (375x667) & very small phones --- */
@@ -848,7 +895,7 @@ section::before {
     }
   }
 
-  /* --- iPhone 12 Pro / iPhone XR (390–414px) --- */
+  /* --- iPhone 12 Pro / iPhone XR (390â€“414px) --- */
   @media (min-width: 376px) and (max-width: 430px) {
     :root {
       --spacing-section-py-desktop: 48px;
@@ -889,7 +936,7 @@ section::before {
     }
   }
 
-  /* --- Samsung Galaxy S8+ / Pixel 7 (360–412px landscape) --- */
+  /* --- Samsung Galaxy S8+ / Pixel 7 (360â€“412px landscape) --- */
   @media (max-width: 480px) and (orientation: landscape) {
     .min-h-screen {
       min-height: unset;
@@ -1057,7 +1104,7 @@ section::before {
   /* === Global: Mobile Top-Nav Sidebar Improvements === */
   @media (max-width: 1023px) {
 
-    /* Ensure ONLY the top navigation bar is fixed — do not use bare `nav`
+    /* Ensure ONLY the top navigation bar is fixed â€” do not use bare `nav`
        selector which would break collection pills, breadcrumbs, and any
        other element using the <nav> semantic tag */
     .top-nav-bar {
@@ -1253,4 +1300,57 @@ section::before {
 
 .animate-logo-fill {
   animation: logo-fill-up 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* === Chat Rating === */
+.chat-rating { display: inline-flex; direction: rtl; gap: 2px; }
+.chat-rating input { display: none; }
+.chat-rating label { cursor: pointer; color: var(--color-outline-variant); transition: color 0.3s; font-size: 32px; line-height: 1; }
+.chat-rating label:before { content: "\2605"; }
+.chat-rating input:checked ~ label,
+.chat-rating label:hover,
+.chat-rating label:hover ~ label { color: var(--color-gold); }
+
+/* === Star Rating === */
+.star-rating-wrapper .rating {
+  display: inline-block;
+  direction: rtl;
+}
+.star-rating-wrapper .rating input {
+  display: none;
+}
+.star-rating-wrapper .rating label {
+  float: right;
+  cursor: pointer;
+  color: var(--color-outline-variant);
+  transition: color 0.3s;
+}
+.star-rating-wrapper .rating label:before {
+  content: "\2605";
+  font-size: 30px;
+}
+.star-rating-wrapper .rating input:checked ~ label,
+.star-rating-wrapper .rating label:hover,
+.star-rating-wrapper .rating label:hover ~ label {
+  color: var(--color-gold);
+  transition: color 0.3s;
+}
+
+/* === Base Colors === */
+@theme {
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-red-50: #fef2f2;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-black-alpha-10: rgba(0, 0, 0, 0.1);
+  --color-black-alpha-05: rgba(0, 0, 0, 0.05);
 }

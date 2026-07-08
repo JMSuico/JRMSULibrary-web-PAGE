@@ -246,27 +246,7 @@ class ReportViewSet(viewsets.ViewSet):
         })
 
     def destroy(self, request, pk=None):
-        report = self.report_service.get_report_by_id(pk)
-        if not report:
-            return Response({"error": "Report not found"}, status=404)
-            
-        # Serialize for recycle bin
-        snapshot = {
-            "title": report.title,
-            "report_type": report.report_type,
-            "date_range": report.date_range,
-            "report_data": report.report_data,
-            "generated_by_id": report.generated_by.id if report.generated_by else None
-        }
-        
-        self.recycle_service.move_to_bin(
-            original_id=report.id,
-            source_module='REPORT',
-            item_name=f"{report.title} ({report.date_range})",
-            data_snapshot=snapshot,
-            user_id=request.user.id if request.user.is_authenticated else None
-        )
-        
-        if self.report_service.delete_report(pk):
+        user_id = request.user.id if request.user.is_authenticated else None
+        if self.report_service.delete_report(pk, user_id):
             return Response(status=204)
         return Response({"error": "Failed to delete"}, status=400)

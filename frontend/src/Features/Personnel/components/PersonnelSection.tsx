@@ -37,10 +37,10 @@ export const PersonnelSection: React.FC = () => {
       <div id="personnel" className="max-w-max-width mx-auto px-4 md:px-gutter">
 
         <div className="text-center mb-16">
-          <h2 className="font-headline-lg text-4xl mb-4 font-bold" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <h2 className="font-headline-lg text-4xl mb-4 font-bold" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>
             Library Personnel
           </h2>
-          <p className="max-w-3xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <p className="max-w-3xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px var(--color-black-alpha-50)' }}>
             Meet the dedicated library professionals committed to supporting learning, research, and academic excellence at JRMSU.
           </p>
         </div>
@@ -49,7 +49,7 @@ export const PersonnelSection: React.FC = () => {
           <div className="flex flex-col items-center">
             {/* Librarian's Corner + Photo Card merged */}
             <div className="w-full mb-10">
-              <div className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20 hover-3d-tilt" style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}>
+              <div className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20 hover-3d-tilt" style={{ background: 'var(--color-navy-alpha-50)', backdropFilter: 'blur(8px)' }}>
                 <div className="flex flex-col md:flex-row gap-8 items-center md:items-center">
                   <div className="flex-1 text-left">
                     <h3 className="text-3xl font-bold font-headline-lg mb-4 text-primary drop-shadow-sm">Librarian's Corner</h3>
@@ -128,7 +128,7 @@ export const PersonnelSection: React.FC = () => {
                   <div className="fade-up-entrance flex flex-col items-center" style={{ transitionDelay: person.delay }}>
                   <div
                     className="border-2 border-gold-light/30 rounded-2xl p-6 text-center w-full shadow-md hover-3d-tilt"
-                    style={{ background: 'rgba(0,24,81,0.5)', backdropFilter: 'blur(8px)' }}
+                    style={{ background: 'var(--color-navy-alpha-50)', backdropFilter: 'blur(8px)' }}
                   >
                     <div className="w-20 h-20 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 shadow-lg">
                       {person.initials}
@@ -136,7 +136,7 @@ export const PersonnelSection: React.FC = () => {
                     <h3 className="font-headline-md font-bold mb-1 text-lg leading-tight uppercase" style={{ color: 'var(--color-gold-light)' }}>
                       {person.name}
                     </h3>
-                    <p className="font-label-caps font-semibold text-xs" style={{ color: 'rgba(255,255,255,0.8)' }}>{person.title}</p>
+                    <p className="font-label-caps font-semibold text-xs" style={{ color: 'var(--color-white-alpha-80)' }}>{person.title}</p>
                   </div>
                   </div>
                 </React.Fragment>

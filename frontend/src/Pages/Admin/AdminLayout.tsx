@@ -134,7 +134,7 @@ export default function AdminLayout() {
       <div 
         className="admin-layout relative min-h-screen"
         style={{
-          backgroundImage: `linear-gradient(to right, rgba(248, 249, 252, 0.85), rgba(248, 249, 252, 0.85)), url("${bgImage}")`,
+          backgroundImage: `linear-gradient(to right, color-mix(in srgb, var(--color-surface-container-low) 85%, transparent), color-mix(in srgb, var(--color-surface-container-low) 85%, transparent)), url("${bgImage}")`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundAttachment: 'fixed'

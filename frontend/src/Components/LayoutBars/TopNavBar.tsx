@@ -91,7 +91,7 @@ export const TopNavBar: React.FC = () => {
   return (
     <nav
       className="fixed top-0 w-full z-50 h-20 transition-all duration-300 bg-white shadow-sm border-b border-gray-200"
-      style={{ background: 'linear-gradient(to right, #ffffff, #001851)' }}
+      style={{ background: 'linear-gradient(to right, var(--color-on-primary), var(--color-primary))' }}
     >
       <div className="flex justify-between items-center max-w-max-width mx-auto px-4 md:px-gutter h-full">
         {/* Left side: Hamburger + Logo + Text */}

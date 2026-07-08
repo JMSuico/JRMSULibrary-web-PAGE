@@ -10,9 +10,9 @@ from Features.Api.Serializers.batch_serializer import (
     AcquisitionBatchSerializer,
     AcquisitionBatchDetailSerializer,
     BatchHistorySerializer,
+    BatchHistorySerializer,
     BatchBookSerializer
 )
-from Features.Data.Models import RecycleBin
 from Features.Data.Models.acquisition_batch_model import AcquisitionBatch
 
 class AcquisitionBatchViewSet(viewsets.ViewSet):
@@ -146,43 +146,10 @@ class AcquisitionBatchViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
     def destroy(self, request, pk=None):
-        """Soft-delete a batch: snapshot it into RecycleBin, then delete from DB."""
         try:
-            batch = AcquisitionBatch.objects.prefetch_related('books').get(pk=pk)
-        except AcquisitionBatch.DoesNotExist:
+            user_id = request.user.id if request.user.is_authenticated else None
+            if self.service.delete_batch(pk, user_id):
+                return Response(status=status.HTTP_204_NO_CONTENT)
             return Response({'error': 'Batch not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        # Build JSON snapshot of the batch and all its books
-        books_snapshot = []
-        for book in batch.books.all():
-            books_snapshot.append({
-                'title': book.title,
-                'author': book.author,
-                'accession_number': book.accession_number,
-                'category': book.category,
-                'cover_image': book.cover_image.name if book.cover_image else None,
-                'date_encoded': book.date_encoded.isoformat() if book.date_encoded else None,
-            })
-
-        snapshot = {
-            'id': batch.id,
-            'name': batch.name,
-            'description': batch.description,
-            'status': batch.status,
-            'is_display_batch': batch.is_display_batch,
-            'opened_at': batch.opened_at.isoformat() if batch.opened_at else None,
-            'closed_at': batch.closed_at.isoformat() if batch.closed_at else None,
-            'remarks': batch.remarks,
-            'books': books_snapshot,
-        }
-
-        RecycleBin.objects.create(
-            original_id=batch.id,
-            source_module='BATCH',
-            item_name=batch.name,
-            data_snapshot=snapshot,
-            deleted_by=request.user.id if request.user.is_authenticated else None,
-        )
-
-        batch.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

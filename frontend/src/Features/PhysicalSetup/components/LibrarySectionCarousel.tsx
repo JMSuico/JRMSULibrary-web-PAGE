@@ -224,10 +224,10 @@ export const LibrarySectionCarousel: React.FC = () => {
     <div id="library-section" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-8">
-          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>
             Library Section
           </h2>
-          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+          <p className="max-w-2xl mx-auto" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px var(--color-black-alpha-50)' }}>
             Take a visual tour of the JRMSU Katipunan Campus Library facilities and spaces.
           </p>
         </div>

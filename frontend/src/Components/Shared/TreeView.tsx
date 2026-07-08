@@ -87,7 +87,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
       </div>
 
       {/* Search + Sort Controls — always visible inside the card */}
-      <div className="px-3 py-3 border-b border-outline-variant flex flex-col sm:flex-row gap-2" style={{ background: '#f4f3fa' }}>
+      <div className="px-3 py-3 border-b border-outline-variant flex flex-col sm:flex-row gap-2" style={{ background: 'var(--color-surface-container-low)' }}>
         <div className="relative flex-1">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-base" style={{ color: 'var(--color-primary)', opacity: 0.5 }}>search</span>
           <input
@@ -98,16 +98,16 @@ export const TreeView: React.FC<TreeViewProps> = ({
             className="w-full rounded-lg py-2 pl-10 pr-9 text-sm focus:outline-none focus:ring-2"
             style={{
               background: 'var(--color-white)',
-              border: '1px solid #c4c6d3',
-              color: '#1a1b21',
-              boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)',
+              border: '1px solid var(--color-outline-variant)',
+              color: 'var(--color-on-surface)',
+              boxShadow: 'inset 0 1px 3px var(--color-black-alpha-10)',
             }}
           />
           {searchQuery && (
             <button
               onClick={() => onSearchChange?.('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-              style={{ color: '#444651' }}
+              style={{ color: 'var(--color-on-surface-variant)' }}
             >
               <span className="material-symbols-outlined text-base">close</span>
             </button>
@@ -121,8 +121,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
             className="w-full rounded-lg py-2 pl-9 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2"
             style={{
               background: 'var(--color-white)',
-              border: '1px solid #c4c6d3',
-              color: '#1a1b21',
+              border: '1px solid var(--color-outline-variant)',
+              color: 'var(--color-on-surface)',
             }}
           >
             <option value="Folders First">Folders First</option>

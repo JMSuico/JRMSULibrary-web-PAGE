@@ -69,7 +69,7 @@ export function Pagination({
             onClick={() => onPageChange(number)}
             className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors cursor-pointer ${
               currentPage === number
-                ? 'z-10 bg-[#002B7F] border-[#002B7F] text-white'
+                ? 'z-10 bg-navy border-navy text-white'
                 : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >

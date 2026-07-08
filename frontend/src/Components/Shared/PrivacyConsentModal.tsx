@@ -141,7 +141,7 @@ export const PrivacyConsentModal: React.FC = () => {
           </button>
           <button
             onClick={handleUnderstand}
-            className="w-full sm:w-auto px-8 py-2.5 text-sm font-bold uppercase tracking-wider text-navy bg-gold border-2 border-gold rounded-lg hover:bg-[#b8973b] hover:border-[#b8973b] transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+            className="w-full sm:w-auto px-8 py-2.5 text-sm font-bold uppercase tracking-wider text-navy bg-gold border-2 border-gold rounded-lg hover:bg-gold-hover hover:border-gold-hover transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
           >
             <CheckCircle className="w-4 h-4" />
             I Understand & Agree
