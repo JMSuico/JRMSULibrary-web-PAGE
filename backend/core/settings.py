@@ -33,7 +33,8 @@ if not DEBUG and not SECRET_KEY:
 elif not SECRET_KEY:
     SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
 
-ALLOWED_HOSTS = []
+_raw_allowed_hosts = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS = [h.strip() for h in _raw_allowed_hosts.split(",") if h.strip()]
 
 
 # Application definition
@@ -191,6 +192,7 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Custom user model
 AUTH_USER_MODEL = "Features.Account"

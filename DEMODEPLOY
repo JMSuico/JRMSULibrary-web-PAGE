@@ -1,0 +1,139 @@
+# JRMSU Library System — Docker Demo Deployment Plan
+
+## Current State
+Docker Desktop is installed. The VS Code Docker + Kubernetes extensions are installed.
+The `demo.md` and `implementationDockerandKubernates.md` documents are complete.
+
+**The problem:** The actual Docker/container files do NOT exist yet in the project. The demo cannot run until these are created.
+
+---
+
+## What Needs to Be Done (In Order)
+
+> [!IMPORTANT]
+> All steps below must be completed BEFORE `docker-compose up` can succeed. These are the actual files that are missing from the project right now.
+
+---
+
+## Phase 0 — Pre-Checks (Already Done)
+- [x] Docker Desktop installed
+- [x] VS Code Docker extension installed  
+- [x] VS Code Kubernetes extension installed
+- [x] `demo.md` written
+- [x] `implementationDockerandKubernates.md` written
+
+---
+
+## Phase 1 — Create Missing Files (BLOCKING)
+
+These files do not exist yet. Nothing will work without them.
+
+---
+
+### Layer 1 & 2 — Frontend Files
+
+#### [NEW] `frontend/Dockerfile`
+Multi-stage build: Node 20 builds the Vite app → Nginx serves the dist.
+
+#### [NEW] `frontend/nginx.conf`
+Required by the Dockerfile. Routes all traffic to `index.html` for React Router to work (SPA config). Without this, browser refresh on `/admin` or any route will return 404 from Nginx.
+
+---
+
+### Layer 3 — Backend Files
+
+#### [NEW] `backend/Dockerfile`
+Python 3.11-slim image. Installs requirements, collects static files, runs Gunicorn.
+
+> [!WARNING]
+> The current `requirements.txt` includes `mssql-django` and `pyodbc` which require Microsoft ODBC drivers that are NOT available in standard Linux Docker images. We need to either:
+> - Add ODBC driver installation steps to the Dockerfile, OR
+> - Switch to PostgreSQL (`psycopg2-binary`) for the Docker environment
+
+#### [NEW] `backend/requirements-docker.txt`
+A Docker-specific requirements file that replaces the MSSQL drivers with PostgreSQL (`psycopg2-binary`) since MSSQL requires heavy system-level drivers that inflate image size.
+
+---
+
+### Root Level — Orchestration Files
+
+#### [NEW] `docker-compose.yml` (at project root)
+Wires all 4 layers together. Currently only documented — the actual file does not exist.
+
+#### [NEW] `.env.docker` (at project root)
+Environment variables for the Docker Compose run. Never committed to git.
+
+#### [NEW] `k8s/` directory with all manifests
+All Kubernetes YAML files documented in `implementationDockerandKubernates.md` need to be physically created:
+- `k8s/namespace.yaml`
+- `k8s/secrets.yaml`
+- `k8s/database.yaml`
+- `k8s/backend.yaml`
+- `k8s/frontend-webpage.yaml`
+- `k8s/frontend-admin.yaml`
+- `k8s/ingress.yaml`
+
+---
+
+## Phase 2 — Backend Database Config for Docker
+
+The backend's `settings.py` currently reads `DB_ENGINE` from `.env`. For Docker:
+- Must set `DB_ENGINE=postgresql` in the Docker `.env`
+- `psycopg2-binary` must be in the Docker requirements
+
+#### [MODIFY] `backend/core/settings.py`
+Verify `ALLOWED_HOSTS` accepts `*` or the container hostname. Currently `ALLOWED_HOSTS = []` which will block Docker requests.
+
+---
+
+## Phase 3 — Run the Demo (Per demo.md Steps)
+
+Once Phase 1 and Phase 2 are done, follow `demo.md` exactly:
+
+```
+Step 1 → Create .env file at project root
+Step 2 → docker-compose up -d --build
+Step 3 → Run migrations + create superuser
+Step 4 → Verify all 4 layers in browser
+Step 5 → Check logs if any layer fails
+Step 6 → docker-compose down to stop
+```
+
+### Layer Access URLs After Demo is Running
+
+| Layer | URL | What It Is |
+|-------|-----|-----------|
+| Layer 1 | http://localhost:3000 | Public Library Webpage |
+| Layer 2 | http://localhost:3001 | Admin Panel |
+| Layer 3 | http://localhost:8000 | Django REST API |
+| Layer 4 | localhost:5432 | PostgreSQL (via pgAdmin/DBeaver) |
+
+---
+
+## Phase 4 — Optional: Kubernetes (After Demo Works)
+
+Only after Docker Compose demo works successfully:
+1. Build and tag images for a registry
+2. Apply `k8s/` manifests with `kubectl apply -f k8s/`
+3. Configure Ingress for `library.jrmsu.edu.ph` and `admin.library.jrmsu.edu.ph`
+
+---
+
+## Summary of Files to Create
+
+| # | File | Status |
+|---|------|--------|
+| 1 | `frontend/Dockerfile` | MISSING |
+| 2 | `frontend/nginx.conf` | MISSING |
+| 3 | `backend/Dockerfile` | MISSING |
+| 4 | `backend/requirements-docker.txt` | MISSING |
+| 5 | `docker-compose.yml` (root) | MISSING |
+| 6 | `.env.docker` (root) | MISSING |
+| 7 | `k8s/namespace.yaml` | MISSING |
+| 8 | `k8s/secrets.yaml` | MISSING |
+| 9 | `k8s/database.yaml` | MISSING |
+| 10 | `k8s/backend.yaml` | MISSING |
+| 11 | `k8s/frontend-webpage.yaml` | MISSING |
+| 12 | `k8s/frontend-admin.yaml` | MISSING |
+| 13 | `k8s/ingress.yaml` | MISSING |
+| 14 | Fix `ALLOWED_HOSTS` in `settings.py` | NEEDED |

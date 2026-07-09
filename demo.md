@@ -2,6 +2,15 @@
 
 This guide provides a step-by-step walkthrough to run the JRMSU Library System locally using Docker Compose, as outlined in Phase 2 of the Docker & Kubernetes Deployment Plan.
 
+The system runs as **4 distinct layers**:
+
+| Layer | Service | Local URL |
+|-------|---------|------|
+| **Layer 1** | Frontend — Webpage (Public Landing Page) | `http://localhost:3000` |
+| **Layer 2** | Frontend — Admin Page | `http://localhost:3001` |
+| **Layer 3** | Backend (Django + DRF API) | `http://localhost:8000` |
+| **Layer 4** | Database (PostgreSQL) | `localhost:5432` |
+
 ## Prerequisites
 - **Docker Desktop** (or Docker Engine + Docker Compose) installed and running.
 - Your project should have the `docker-compose.yml` and `Dockerfile`s set up as defined in `implementationDockerandKubernates.md`.
@@ -13,12 +22,18 @@ DB_PASSWORD=super_secure_db_password
 DJANGO_SECRET_KEY=your_django_development_secret_key
 ```
 
-## Step 2: Build and Start the Containers
+## Step 2: Build and Start All 4 Layers
 Open your terminal in the project root (PowerShell or Command Prompt) and run:
 ```bash
 docker-compose up -d --build
 ```
-*The `-d` flag runs the containers in the background, and `--build` ensures the latest code is built into the images.*
+*The `-d` flag runs the containers in the background, and `--build` ensures the latest code is built into images.*
+
+This command starts all 4 containers:
+- **Layer 4** — Database container starts first (PostgreSQL)
+- **Layer 3** — Backend container starts once the database is ready
+- **Layer 1** — Webpage frontend container starts once the backend is ready
+- **Layer 2** — Admin frontend container starts once the backend is ready
 
 ## Step 3: Initialize the Database
 Once the containers are successfully running, you need to apply the database migrations and create an initial admin account for the backend.
@@ -34,22 +49,26 @@ Once the containers are successfully running, you need to apply the database mig
    *Follow the prompts in the terminal to set up your admin username, email, and password.*
 
 ## Step 4: Verify Local Hosting
-You can now test the application locally in your web browser:
+You can now access all 4 layers in your web browser:
 
-- **Frontend (React Landing Page & Admin UI):** Navigate to `http://localhost:3000`
-- **Backend API & Django Admin Panel:** Navigate to `http://localhost:8000` (e.g., `http://localhost:8000/admin`)
-- **Database (PostgreSQL):** Accessible on `localhost:5432` using your preferred database client (e.g., DBeaver, pgAdmin) using the credentials defined in your `.env`.
+| Layer | Access URL | Description |
+|-------|-----------|-------------|
+| **Layer 1** | `http://localhost:3000` | Public landing page for library visitors |
+| **Layer 2** | `http://localhost:3001` | Restricted admin panel for library staff |
+| **Layer 3** | `http://localhost:8000` | Django REST API & Django Admin (`/admin`) |
+| **Layer 4** | `localhost:5432` | PostgreSQL database (via DBeaver, pgAdmin, etc.) |
 
 ## Step 5: Viewing Logs (Troubleshooting)
-If a service fails to load or you encounter errors, you can view the live logs:
+If a layer fails to load or you encounter errors, you can view live logs:
 ```bash
-# View logs for all services combined
+# View logs for all 4 layers combined
 docker-compose logs -f
 
-# View logs for a specific service
-docker-compose logs -f frontend
-docker-compose logs -f backend
-docker-compose logs -f db
+# View logs for a specific layer
+docker-compose logs -f frontend-webpage   # Layer 1 — Webpage
+docker-compose logs -f frontend-admin     # Layer 2 — Admin Page
+docker-compose logs -f backend            # Layer 3 — Backend
+docker-compose logs -f db                 # Layer 4 — Database
 ```
 
 ## Step 6: Shutting Down

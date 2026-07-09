@@ -1,0 +1,40 @@
+# Layer 1 — Frontend: Public Webpage
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-webpage
+  namespace: jrmsu-library
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend-webpage
+  template:
+    metadata:
+      labels:
+        app: frontend-webpage
+    spec:
+      containers:
+        - name: nginx
+          image: jrmsu-library/frontend-webpage:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-webpage-svc
+  namespace: jrmsu-library
+spec:
+  selector:
+    app: frontend-webpage
+  ports:
+    - port: 80
+      targetPort: 80

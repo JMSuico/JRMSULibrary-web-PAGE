@@ -1,0 +1,40 @@
+# Layer 2 — Frontend: Admin Page
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-admin
+  namespace: jrmsu-library
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend-admin
+  template:
+    metadata:
+      labels:
+        app: frontend-admin
+    spec:
+      containers:
+        - name: nginx
+          image: jrmsu-library/frontend-admin:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-admin-svc
+  namespace: jrmsu-library
+spec:
+  selector:
+    app: frontend-admin
+  ports:
+    - port: 80
+      targetPort: 80

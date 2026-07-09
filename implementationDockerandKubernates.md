@@ -6,27 +6,45 @@
 
 ## Architecture Overview
 
+The system is structured into **4 distinct layers**:
+
+| Layer | Service | Description |
+|-------|---------|-------------|
+| **Layer 1** | Frontend — Webpage | Public-facing React landing page (Nginx, Port 3000) |
+| **Layer 2** | Frontend — Admin Page | Restricted admin panel React app (Nginx, Port 3001) |
+| **Layer 3** | Backend | Django + DRF API server (Gunicorn, Port 8000) |
+| **Layer 4** | Database | PostgreSQL / MariaDB data store (Port 5432) |
+
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Kubernetes Cluster                     │
-│                                                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │   Frontend   │  │   Backend    │  │   Database    │  │
-│  │   Container  │  │   Container  │  │   Container   │  │
-│  │              │  │              │  │               │  │
-│  │  React+Vite  │→ │  Django+DRF  │→ │  PostgreSQL   │  │
-│  │  (Nginx)     │  │  (Gunicorn)  │  │  or MariaDB   │  │
-│  │              │  │              │  │               │  │
-│  │  Port: 80    │  │  Port: 8000  │  │  Port: 5432   │  │
-│  └──────────────┘  └──────────────┘  └───────────────┘  │
-│         │                 │                  │           │
-│         └─────────┬───────┘                  │           │
-│                   │                          │           │
-│          ┌────────┴────────┐     ┌──────────┴────────┐  │
-│          │  Ingress/LB     │     │  Persistent Vol   │  │
-│          │  (HTTPS)        │     │  (PVC)            │  │
-│          └─────────────────┘     └───────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                           Kubernetes Cluster                              │
+│                                                                          │
+│  ┌─────────────────┐  ┌─────────────────┐                               │
+│  │   Layer 1       │  │   Layer 2        │                               │
+│  │   Frontend      │  │   Frontend       │                               │
+│  │   Webpage       │  │   Admin Page     │                               │
+│  │                 │  │                 │                               │
+│  │  React+Vite     │  │  React+Vite     │                               │
+│  │  (Nginx)        │  │  (Nginx)        │                               │
+│  │  Port: 3000     │  │  Port: 3001     │                               │
+│  └────────┬────────┘  └────────┬────────┘                               │
+│           │                    │                                         │
+│           └────────┬───────────┘                                         │
+│                    ▼                                                     │
+│          ┌─────────────────┐         ┌─────────────────┐                │
+│          │   Layer 3       │         │   Layer 4        │                │
+│          │   Backend       │────────▶│   Database       │                │
+│          │                 │         │                 │                │
+│          │  Django + DRF   │         │  PostgreSQL      │                │
+│          │  (Gunicorn)     │         │  or MariaDB      │                │
+│          │  Port: 8000     │         │  Port: 5432      │                │
+│          └─────────────────┘         └─────────────────┘                │
+│                    │                          │                          │
+│          ┌─────────┴──────────┐   ┌──────────┴────────┐                │
+│          │  Ingress / LB      │   │  Persistent Vol   │                │
+│          │  (HTTPS)           │   │  (PVC)            │                │
+│          └────────────────────┘   └───────────────────┘                │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -93,6 +111,8 @@ Use the official PostgreSQL or MariaDB image directly — no custom Dockerfile n
 ```yaml
 version: "3.9"
 services:
+
+  # ─── Layer 4: Database ───────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     environment:
@@ -104,6 +124,7 @@ services:
     ports:
       - "5432:5432"
 
+  # ─── Layer 3: Backend ────────────────────────────────────────────────
   backend:
     build: ./backend
     depends_on:
@@ -118,15 +139,29 @@ services:
     volumes:
       - media_data:/app/media
 
-  frontend:
+  # ─── Layer 1: Frontend — Webpage (Public Landing Page) ───────────────
+  frontend-webpage:
     build:
       context: ./frontend
       args:
         VITE_API_BASE_URL: http://localhost:8000/api
+        VITE_APP_MODE: webpage
     depends_on:
       - backend
     ports:
       - "3000:80"
+
+  # ─── Layer 2: Frontend — Admin Page ──────────────────────────────────
+  frontend-admin:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000/api
+        VITE_APP_MODE: admin
+    depends_on:
+      - backend
+    ports:
+      - "3001:80"
 
 volumes:
   db_data:
@@ -260,28 +295,28 @@ spec:
       targetPort: 8000
 ```
 
-### 3.4 Frontend Deployment
+### 3.4 Frontend Deployments (Layer 1 — Webpage & Layer 2 — Admin)
 
 ```yaml
-# k8s/frontend.yaml
+# k8s/frontend-webpage.yaml  (Layer 1 — Public Webpage)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: frontend-webpage
   namespace: jrmsu-library
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: frontend
+      app: frontend-webpage
   template:
     metadata:
       labels:
-        app: frontend
+        app: frontend-webpage
     spec:
       containers:
         - name: nginx
-          image: jrmsu-library/frontend:latest
+          image: jrmsu-library/frontend-webpage:latest
           ports:
             - containerPort: 80
           resources:
@@ -295,11 +330,52 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend-svc
+  name: frontend-webpage-svc
   namespace: jrmsu-library
 spec:
   selector:
-    app: frontend
+    app: frontend-webpage
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# k8s/frontend-admin.yaml  (Layer 2 — Admin Page)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-admin
+  namespace: jrmsu-library
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend-admin
+  template:
+    metadata:
+      labels:
+        app: frontend-admin
+    spec:
+      containers:
+        - name: nginx
+          image: jrmsu-library/frontend-admin:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-admin-svc
+  namespace: jrmsu-library
+spec:
+  selector:
+    app: frontend-admin
   ports:
     - port: 80
       targetPort: 80
@@ -318,6 +394,7 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
+    # Layer 1 — Public Webpage
     - host: library.jrmsu.edu.ph
       http:
         paths:
@@ -325,7 +402,25 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: frontend-svc
+                name: frontend-webpage-svc
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-svc
+                port:
+                  number: 8000
+    # Layer 2 — Admin Page
+    - host: admin.library.jrmsu.edu.ph
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-admin-svc
                 port:
                   number: 80
           - path: /api
@@ -370,31 +465,46 @@ stringData:
 ### Step-by-Step Commands
 
 ```bash
-# 1. Build Docker images
-docker build -t jrmsu-library/frontend:latest ./frontend
-docker build -t jrmsu-library/backend:latest ./backend
+# ── Layer 4: Build & push Database (uses official image — no build needed) ──
+# No build step required; Postgres/MariaDB image is pulled directly.
 
-# 2. Test locally with docker-compose
+# ── Layer 3: Build & push Backend ──────────────────────────────────────────
+docker build -t jrmsu-library/backend:latest ./backend
+docker tag jrmsu-library/backend:latest registry.example.com/jrmsu/backend:v1.0
+docker push registry.example.com/jrmsu/backend:v1.0
+
+# ── Layer 1: Build & push Frontend — Webpage ───────────────────────────────
+docker build -t jrmsu-library/frontend-webpage:latest \
+  --build-arg VITE_API_BASE_URL=https://library.jrmsu.edu.ph/api \
+  --build-arg VITE_APP_MODE=webpage ./frontend
+docker tag jrmsu-library/frontend-webpage:latest registry.example.com/jrmsu/frontend-webpage:v1.0
+docker push registry.example.com/jrmsu/frontend-webpage:v1.0
+
+# ── Layer 2: Build & push Frontend — Admin Page ────────────────────────────
+docker build -t jrmsu-library/frontend-admin:latest \
+  --build-arg VITE_API_BASE_URL=https://library.jrmsu.edu.ph/api \
+  --build-arg VITE_APP_MODE=admin ./frontend
+docker tag jrmsu-library/frontend-admin:latest registry.example.com/jrmsu/frontend-admin:v1.0
+docker push registry.example.com/jrmsu/frontend-admin:v1.0
+
+# ── Test locally with docker-compose ───────────────────────────────────────
 docker-compose up -d
 docker-compose exec backend python manage.py migrate
 docker-compose exec backend python manage.py createsuperuser
 
-# 3. Push to container registry (DockerHub / GHCR / GCR)
-docker tag jrmsu-library/frontend:latest registry.example.com/jrmsu/frontend:v1.0
-docker push registry.example.com/jrmsu/frontend:v1.0
-
-# 4. Apply Kubernetes manifests
+# ── Apply Kubernetes manifests (bottom-up: DB → Backend → Frontend) ────────
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/secrets.yaml
-kubectl apply -f k8s/database.yaml
-kubectl apply -f k8s/backend.yaml
-kubectl apply -f k8s/frontend.yaml
+kubectl apply -f k8s/database.yaml        # Layer 4
+kubectl apply -f k8s/backend.yaml         # Layer 3
+kubectl apply -f k8s/frontend-webpage.yaml  # Layer 1
+kubectl apply -f k8s/frontend-admin.yaml    # Layer 2
 kubectl apply -f k8s/ingress.yaml
 
-# 5. Run database migrations inside the cluster
+# ── Run database migrations inside the cluster ─────────────────────────────
 kubectl exec -n jrmsu-library deploy/backend -- python manage.py migrate
 
-# 6. Verify
+# ── Verify all 4 layers are running ───────────────────────────────────────
 kubectl get pods -n jrmsu-library
 kubectl get svc -n jrmsu-library
 ```
