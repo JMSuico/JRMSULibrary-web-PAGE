@@ -21,16 +21,17 @@ export const FacebookBubble: React.FC = () => {
       {/* Modal Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-modal-overlay"
+          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-modal-overlay"
           onClick={() => setIsOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl overflow-hidden w-[90vw] max-w-[500px] h-[80vh] max-h-[700px] flex flex-col animate-modal-card"
+            className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-[480px] flex flex-col animate-modal-card"
+            style={{ height: 'min(85vh, 680px)' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="bg-facebook text-white p-4 flex items-center justify-between shrink-0">
-              <span className="font-bold">JRMSU Katipunan Library</span>
+            <div className="bg-facebook text-white px-4 py-3 flex items-center justify-between shrink-0">
+              <span className="font-bold text-sm sm:text-base">JRMSU Katipunan Library</span>
               <button
                 onClick={() => setIsOpen(false)}
                 className="text-white hover:text-white/70 transition-colors cursor-pointer"
@@ -40,18 +41,21 @@ export const FacebookBubble: React.FC = () => {
               </button>
             </div>
 
-            {/* Iframe */}
-            <iframe
-              src="https://www.facebook.com/plugins/page.php?href=https%3A%2F%2Fwww.facebook.com%2FJRMSUkatipunanlibrary&tabs=timeline&width=500&height=600&small_header=false&adapt_container_width=true&hide_cover=false&show_facepile=true"
-              width="100%"
-              height="100%"
-              style={{ border: 'none', overflow: 'hidden' }}
-              scrolling="no"
-              frameBorder="0"
-              allowFullScreen
-              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-              title="JRMSU Katipunan Library Facebook Page"
-            />
+            {/* Responsive iframe wrapper */}
+            <div className="flex-1 overflow-hidden relative">
+              <iframe
+                src="https://www.facebook.com/plugins/page.php?href=https%3A%2F%2Fwww.facebook.com%2FJRMSUkatipunanlibrary&tabs=timeline&width=480&height=600&small_header=true&adapt_container_width=true&hide_cover=false&show_facepile=false&appId"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  display: 'block',
+                }}
+                allowFullScreen
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                title="JRMSU Katipunan Library Facebook Page"
+              />
+            </div>
           </div>
         </div>
       )}

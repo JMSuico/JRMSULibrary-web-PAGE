@@ -22,14 +22,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, onFileSelect }) => {
   if (node.type === 'file') {
     return (
       <div className="tree-node">
-        <div
-          className="tree-node-header file"
-          onClick={() => node.path && onFileSelect(node)}
-          style={{ paddingLeft: `${12 + depth * 20}px` }}
+        <a
+          className="tree-node-header file block"
+          href={node.path}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ paddingLeft: `${12 + depth * 20}px`, textDecoration: 'none', color: 'inherit' }}
         >
           <span className="tree-icon file-icon material-symbols-outlined text-sm">description</span>
           <span className="text-sm truncate">{node.name}</span>
-        </div>
+        </a>
       </div>
     );
   }

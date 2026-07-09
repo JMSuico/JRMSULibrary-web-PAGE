@@ -86,8 +86,8 @@ export function Dashboard() {
       </div>
 
 
-      {/* Quick Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 20, marginBottom: 24 }}>
+      {/* Quick Charts — uses .admin-dashboard-charts CSS class (not inline style) */}
+      <div className="admin-dashboard-charts">
         
         {/* Newly Acquired Books Trend */}
         <div className="admin-table-wrapper" style={{ padding: 20 }}>
@@ -281,7 +281,7 @@ export function Dashboard() {
               </table>
             </div>
             <div className="px-6 py-3 border-t border-gray-100 text-right">
-              <button onClick={() => setShowAllBooksModal(false)} className="px-4 py-2 text-sm font-medium rounded-lg cursor-pointer border-none" style={{ background: 'var(--color-navy)', color: 'white' }}>Close</button>
+              <button onClick={() => setShowAllBooksModal(false)} className="admin-btn admin-btn--primary cursor-pointer">Close</button>
             </div>
           </div>
         </div>,

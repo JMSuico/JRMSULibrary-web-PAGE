@@ -255,7 +255,7 @@ export function Reports() {
 
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8 print:hidden">
         <h2 className="text-lg font-bold text-gray-800 mb-4">Report Generator</h2>
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-end">
           <div className="flex-1">
             <label className="block text-sm font-semibold text-gray-700 mb-1">Report Type</label>
             <select 
@@ -286,7 +286,7 @@ export function Reports() {
           <button 
             onClick={handleGenerate}
             disabled={isGenerating}
-            className="admin-btn admin-btn--primary whitespace-nowrap disabled:opacity-70"
+            className="admin-btn admin-btn--primary w-full md:w-auto justify-center whitespace-nowrap disabled:opacity-70"
           >
             {isGenerating ? 'Generating...' : 'Generate Report'}
           </button>

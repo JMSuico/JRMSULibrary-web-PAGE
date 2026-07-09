@@ -87,15 +87,13 @@ export const Footer: React.FC = () => {
       </div>
 
       {/* Bottom bar */}
-      <div className="max-w-max-width mx-auto px-4 md:px-gutter pt-8 border-t border-gold-light/10 flex flex-col md:flex-row justify-between items-center gap-4 opacity-70">
-        <p className="text-sm text-center md:text-left">© {new Date().getFullYear()} JRMSU-Katipunan Campus Library. All Rights Reserved.</p>
+      <div className="max-w-max-width mx-auto px-4 md:px-gutter pt-8 border-t border-gold-light/10 flex flex-col md:flex-row justify-between items-center gap-3 opacity-70">
+        <p className="text-sm text-center md:text-left shrink-0">© {new Date().getFullYear()} JRMSU-Katipunan Campus Library. All Rights Reserved.</p>
         
-        <p className="text-sm font-semibold text-gold-light text-center tracking-wider">Developed by JM Suico CS - A</p>
-
-        <div className="flex gap-4 sm:gap-6 text-sm flex-wrap justify-center">
-          <a className="hover:text-gold-light transition-colors" href="https://jrmsu.edu.ph/" target="_blank" rel="noopener noreferrer">JRMSU Main</a>
-          <a className="hover:text-gold-light transition-colors" href="https://www.gov.ph/" target="_blank" rel="noopener noreferrer">GOV.PH</a>
-          <button onClick={() => setIsTermsOpen(true)} className="hover:text-gold-light transition-colors cursor-pointer text-left">Data Privacy & Terms</button>
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm justify-center">
+          <a className="hover:text-gold-light transition-colors whitespace-nowrap" href="https://jrmsu.edu.ph/" target="_blank" rel="noopener noreferrer">JRMSU Main</a>
+          <a className="hover:text-gold-light transition-colors whitespace-nowrap" href="https://www.gov.ph/" target="_blank" rel="noopener noreferrer">GOV.PH</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setIsTermsOpen(true); }} className="hover:text-gold-light transition-colors cursor-pointer text-center whitespace-nowrap">Data Privacy & Terms</a>
         </div>
       </div>
     </footer>

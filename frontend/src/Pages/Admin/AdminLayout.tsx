@@ -156,7 +156,7 @@ export default function AdminLayout() {
             onUserUpdate={(updatedUser) => setUser(updatedUser)}
           />
           <div className="admin-content bg-transparent">
-            <div className="bg-white/95 rounded-3xl shadow-lg border border-gray-200/60 p-6 md:p-8 min-h-[calc(100vh-120px)] backdrop-blur-sm">
+            <div className="bg-white/95 rounded-3xl shadow-lg border border-gray-200/60 p-4 sm:p-6 md:p-8 min-h-[calc(100vh-120px)] backdrop-blur-sm overflow-x-hidden">
               <PageTransition>
                 <Outlet context={{ user, setUser } satisfies AdminOutletContext} />
               </PageTransition>

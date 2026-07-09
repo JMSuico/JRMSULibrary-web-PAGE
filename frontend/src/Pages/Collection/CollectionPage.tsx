@@ -414,15 +414,7 @@ export default function CollectionPage() {
         )}
       </div>
 
-      {/* File Viewer Modal for Local Books */}
-      {selectedFile && (
-        <FileViewerModal
-          file={selectedFile}
-          fileList={allFiles}
-          onClose={() => setSelectedFile(null)}
-          onNavigate={setSelectedFile}
-        />
-      )}
+      {/* File Viewer Modal for Local Books - Removed (Files open in new tab) */}
 
       {/* External Service iFrame Modal */}
       {externalService && (

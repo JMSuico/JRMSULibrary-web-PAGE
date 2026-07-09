@@ -77,9 +77,7 @@ export const cmsApi = {
 // Public endpoint — no auth required
 export const publicApi = {
   getVisitorCount: async (): Promise<{ total_visits: number; this_week: number }> => {
-    const resp = await fetch('/api/site-visits/count/');
-    if (!resp.ok) throw new Error('Failed to fetch visitor count');
-    return resp.json();
+    return apiClient('/site-visits/count/');
   },
 
   /**
@@ -104,9 +102,8 @@ export const publicApi = {
         localStorage.setItem('jrmsu_visitor_id', visitorId);
       }
 
-      await fetch('/api/site-visits/track/', {
+      await apiClient('/site-visits/track/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ page, visitor_id: visitorId }),
       });
 

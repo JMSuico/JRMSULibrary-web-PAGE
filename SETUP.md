@@ -1,4 +1,4 @@
-﻿# JRMSU Library Landing Page — SETUP
+# JRMSU Library Landing Page — SETUP
 
 This file covers two deployment modes:
 - **Mode A — Local Development** (SSMS 19 + npm run dev)
@@ -127,10 +127,10 @@ docker-compose down
 | Layer   | What              | URL                            | Notes                          |
 |---------|-------------------|--------------------------------|--------------------------------|
 | Layer 1 | Public Webpage    | http://localhost:3000          | Student-facing library site    |
-| Layer 2 | Admin Panel       | http://localhost:3001          | Login: admin / admin123        |
-| Layer 3 | Backend API       | http://localhost:8000/api      | JSON REST API                  |
-| Layer 3 | Django Admin      | http://localhost:8000/admin    | Raw Django admin panel         |
-| Layer 4 | PostgreSQL DB     | localhost:5432                 | Use DBeaver or pgAdmin to view |
+| Layer 1 | Admin Panel       | http://localhost:3000/admin    | Login: admin / admin123        |
+| Layer 2 | Backend API       | http://localhost:8000/api      | JSON REST API                  |
+| Layer 2 | Django Admin      | http://localhost:8000/admin    | Raw Django admin panel         |
+| Layer 3 | PostgreSQL DB     | localhost:5432                 | Use DBeaver or pgAdmin to view |
 
 ### 4. Database Credentials (Docker / PostgreSQL)
 
@@ -156,7 +156,31 @@ Useful psql commands inside:
 SELECT COUNT(*) FROM "Features_book";
 ```
 
-### 5. Terminal Access to Backend Container
+### 5. Migrating Data from SSMS19 (Development) to Docker PostgreSQL
+
+If you entered data into your SQL Server (SSMS19) database during development (Mode A) and want to transfer it to your new Docker environment (Mode B):
+
+1. **Dump the Data from SSMS19:**
+   Open a terminal in the `backend` folder where your `venv` is active, and your `.env` points to SQL Server:
+   ```bash
+   venv\Scripts\activate
+   python manage.py dumpdata -e contenttypes -e auth.Permission > data.json
+   ```
+
+2. **Convert to UTF-8 (Required for Windows PowerShell):**
+   ```bash
+   python -c "import codecs; codecs.open('data_utf8.json', 'w', 'utf-8').write(codecs.open('data.json', 'r', 'utf-16').read())"
+   ```
+
+3. **Copy to the Docker Container and Load:**
+   Ensure your Docker containers are running, then execute:
+   ```bash
+   docker cp data_utf8.json jrmsulibrarylandingpage-backend-1:/app/data_utf8.json
+   docker exec jrmsulibrarylandingpage-backend-1 python manage.py flush --no-input
+   docker exec jrmsulibrarylandingpage-backend-1 python manage.py loaddata data_utf8.json
+   ```
+
+### 6. Terminal Access to Backend Container
 
 While containers are running, use these commands:
 

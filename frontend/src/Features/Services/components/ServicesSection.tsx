@@ -86,8 +86,9 @@ export const ServicesSection: React.FC = () => {
             ))}
           </div>
         </div>
-
-        {/* Citizens Charter - Tab Filters */}
+        {/* Citizens Charter Section */}
+        <div className="bg-navy-mid/60 rounded-2xl p-6 md:p-8 border border-gold-light/20 shadow-md">
+          {/* Citizens Charter - Tab Filters */}
         <div className="mb-8">
           <h3 className="font-headline-md font-bold text-xl text-gold-light mb-4">Citizens Charter</h3>
           <div className="flex flex-wrap gap-2 mb-6">
@@ -191,11 +192,12 @@ export const ServicesSection: React.FC = () => {
             );
           })}
         </div>
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="animate-spin text-gold-light w-8 h-8" />
-          </div>
-        ) : null}
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="animate-spin text-gold-light w-8 h-8" />
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

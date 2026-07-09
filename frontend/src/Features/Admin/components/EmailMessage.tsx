@@ -485,8 +485,8 @@ export function EmailMessage() {
                   className="bg-gray-50 p-4 flex justify-between items-center border-b border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors" 
                   onClick={() => toggleExpandedGroup(group.email)}
                 >
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-gray-900">{group.name} <span className="text-gray-500 font-normal">({group.email})</span></h3>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <h3 className="font-semibold text-gray-900 break-all sm:break-normal">{group.name} <span className="text-gray-500 font-normal break-all">({group.email})</span></h3>
                     <span className="text-xs bg-blue-100 text-blue-800 font-medium px-2 py-0.5 rounded-full">
                       {group.totalCount} message{group.totalCount > 1 ? 's' : ''} sent
                     </span>
@@ -516,7 +516,7 @@ export function EmailMessage() {
                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-1"
                           />
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             {msg.message_type === 'RESERVATION' ? (
                                     <span className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 text-amber-500 rounded-full text-xs font-bold font-mono">
@@ -534,12 +534,12 @@ export function EmailMessage() {
                                       EMAIL
                                     </span>
                                   )}
-                            <h3 className={`text-sm ${msg.status === 'UNREAD' ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>
+                            <h3 className={`text-sm break-words ${msg.status === 'UNREAD' ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>
                               {msg.subject || 'No Subject'}
                             </h3>
                           </div>
                           <p className="text-xs text-gray-500 mb-2">{new Date(msg.created_at).toLocaleString()}</p>
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white border border-gray-100 p-3 rounded-lg shadow-sm">{msg.message}</p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap break-words bg-white border border-gray-100 p-3 rounded-lg shadow-sm">{msg.message}</p>
                         </div>
                         
                         <div className="flex flex-col justify-start md:items-end gap-2 md:w-36 shrink-0">

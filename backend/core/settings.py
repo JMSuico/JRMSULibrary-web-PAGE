@@ -229,9 +229,10 @@ REST_FRAMEWORK = {
 
 # Production Security Settings
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    _ssl_enabled = os.environ.get("DISABLE_SSL_REDIRECT", "False").lower() not in ("true", "1", "yes")
+    SECURE_SSL_REDIRECT = _ssl_enabled
+    SESSION_COOKIE_SECURE = _ssl_enabled
+    CSRF_COOKIE_SECURE = _ssl_enabled
     SESSION_COOKIE_HTTPONLY = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True

@@ -15,7 +15,7 @@ export default function LoginPage() {
   }, [location.search, showToast]);
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 relative overflow-hidden">
+    <div className="min-h-screen w-full flex flex-col items-center bg-gray-50 relative">
       
       {/* Dynamic Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
@@ -23,7 +23,7 @@ export default function LoginPage() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-gold blur-[120px] opacity-20" style={{ animation: 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite 2s' }}></div>
       </div>
 
-      <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center p-6 md:p-12 relative z-10">
+      <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center p-6 md:p-12 relative z-10 flex-grow my-auto">
         
         {/* Left Side: Branding */}
         <div className="hidden lg:flex flex-col gap-6 p-8">
@@ -63,7 +63,7 @@ export default function LoginPage() {
       </div>
 
       {/* Developer Footer */}
-      <div className="absolute bottom-6 left-0 w-full text-center z-20">
+      <div className="w-full text-center z-20 pb-6 mt-4">
         <p className="text-gray-500 font-medium text-sm">Developed by JM Suico, Rodman Wong, John Lester Uy</p>
         <p className="text-gray-400 text-xs mt-1">CS - A</p>
       </div>

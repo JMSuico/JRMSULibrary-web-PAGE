@@ -82,37 +82,37 @@ export const ExternalIframeModal: React.FC<ExternalIframeModalProps> = ({
       {/* Modal card */}
       <div className="relative z-10 w-full max-w-7xl h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-modal-card">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-navy to-navy-dark">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-navy to-navy-dark gap-4">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-8 h-8 shrink-0 bg-white/15 rounded-lg flex items-center justify-center">
               <ExternalLink size={16} className="text-white" />
             </div>
-            <div>
-              <h2 className="text-white font-bold text-lg leading-tight">{title}</h2>
-              <p className="text-white/60 text-xs truncate max-w-md">{url}</p>
+            <div className="min-w-0">
+              <h2 className="text-white font-bold text-lg leading-tight truncate">{title}</h2>
+              <p className="text-white/60 text-xs truncate max-w-[200px] sm:max-w-md">{url}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
             {/* Reconnect Button */}
             <button
               onClick={handleReconnect}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-medium hover:bg-white/25 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-medium hover:bg-white/25 transition-colors cursor-pointer whitespace-nowrap"
               title="Reload frame"
             >
-              <RefreshCw size={12} /> Reload
+              <RefreshCw size={12} /> <span className="hidden sm:inline">Reload</span>
             </button>
             {/* Open in New Tab */}
             <a
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-medium hover:bg-white/25 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-medium hover:bg-white/25 transition-colors cursor-pointer whitespace-nowrap"
             >
-              <ExternalLink size={12} /> Open in New Tab
+              <ExternalLink size={12} /> <span className="hidden sm:inline">Open in New Tab</span>
             </a>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/15 transition-colors cursor-pointer ml-2"
+              className="p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/15 transition-colors cursor-pointer ml-auto sm:ml-2"
               aria-label="Close modal"
             >
               <X size={20} />

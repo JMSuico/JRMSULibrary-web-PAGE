@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   db:
@@ -36,38 +34,25 @@ services:
       DB_PORT: 5432
       SECRET_KEY: ${DJANGO_SECRET_KEY}
       DEBUG: "False"
+      DISABLE_SSL_REDIRECT: "True"
       ALLOWED_HOSTS: "*"
+      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://192.168.137.1:3000,http://192.168.137.1:3001,http://192.168.6.126:3000,http://192.168.6.126:3001"
     ports:
       - "8000:8000"
     volumes:
-      - media_data:/app/media
+      - ./backend/media:/app/media
 
-  frontend-webpage:
+  frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: http://localhost:8000/api
-        VITE_APP_MODE: webpage
     restart: unless-stopped
     depends_on:
       - backend
     ports:
       - "3000:80"
 
-  frontend-admin:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: http://localhost:8000/api
-        VITE_APP_MODE: admin
-    restart: unless-stopped
-    depends_on:
-      - backend
-    ports:
-      - "3001:80"
-
 volumes:
   db_data:
-  media_data:

@@ -29,10 +29,10 @@ export const ExternalServicesSection: React.FC = () => {
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
         >
-          <span className="font-headline-md font-bold text-xl" style={{ color: 'var(--color-primary)', textShadow: '0 1px 4px var(--color-white-alpha-50)' }}>
+          <span className="font-headline-md font-bold text-xl text-white">
             View External Services Gallery
           </span>
-          <span className={`material-symbols-outlined transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} style={{ color: 'var(--color-primary)' }}>
+          <span className={`material-symbols-outlined transition-transform duration-300 text-white ${expanded ? 'rotate-180' : ''}`}>
             expand_more
           </span>
         </button>

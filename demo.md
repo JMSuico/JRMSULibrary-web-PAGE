@@ -2,14 +2,13 @@
 
 This guide provides a step-by-step walkthrough to run the JRMSU Library System locally using Docker Compose, as outlined in Phase 2 of the Docker & Kubernetes Deployment Plan.
 
-The system runs as **4 distinct layers**:
+The system runs as **3 distinct layers**:
 
 | Layer | Service | Local URL |
 |-------|---------|------|
-| **Layer 1** | Frontend — Webpage (Public Landing Page) | `http://localhost:3000` |
-| **Layer 2** | Frontend — Admin Page | `http://localhost:3001` |
-| **Layer 3** | Backend (Django + DRF API) | `http://localhost:8000` |
-| **Layer 4** | Database (PostgreSQL) | `localhost:5432` |
+| **Layer 1** | Frontend (Webpage & Admin Page) | `http://localhost:3000` & `http://localhost:3000/admin` |
+| **Layer 2** | Backend (Django + DRF API) | `http://localhost:8000` |
+| **Layer 3** | Database (PostgreSQL) | `localhost:5432` |
 
 ## Prerequisites
 - **Docker Desktop** (or Docker Engine + Docker Compose) installed and running.
@@ -22,18 +21,17 @@ DB_PASSWORD=super_secure_db_password
 DJANGO_SECRET_KEY=your_django_development_secret_key
 ```
 
-## Step 2: Build and Start All 4 Layers
+## Step 2: Build and Start All 3 Layers
 Open your terminal in the project root (PowerShell or Command Prompt) and run:
 ```bash
 docker-compose up -d --build
 ```
 *The `-d` flag runs the containers in the background, and `--build` ensures the latest code is built into images.*
 
-This command starts all 4 containers:
-- **Layer 4** — Database container starts first (PostgreSQL)
-- **Layer 3** — Backend container starts once the database is ready
-- **Layer 1** — Webpage frontend container starts once the backend is ready
-- **Layer 2** — Admin frontend container starts once the backend is ready
+This command starts all containers:
+- **Layer 3** — Database container starts first (PostgreSQL)
+- **Layer 2** — Backend container starts once the database is ready
+- **Layer 1** — Frontend containers (Webpage & Admin) start once the backend is ready
 
 ## Step 3: Initialize the Database
 Once the containers are successfully running, you need to apply the database migrations and create an initial admin account for the backend.
