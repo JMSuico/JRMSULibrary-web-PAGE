@@ -6,21 +6,23 @@
 
 ## Architecture Overview
 
-The system is structured into **3 distinct layers**:
+The system is structured into **5 distinct layers**:
 
 | Layer | Service | Description |
 |-------|---------|-------------|
-| **Layer 1** | Frontend | Webpage & Admin Page (Port 3000) React app |
-| **Layer 2** | Backend | Django + DRF API server (Gunicorn, Port 8000) |
-| **Layer 3** | Database | PostgreSQL / MariaDB data store (Port 5432) |
+| **Layer 1** | Frontend Webpage | Public Landing Page (Port 3000) React app |
+| **Layer 2** | Frontend Admin Page | Secure Admin Panel (Port 3000) React app |
+| **Layer 3** | Backend | Django + DRF API server (Gunicorn, Port 8000) |
+| **Layer 4** | Database | PostgreSQL / MariaDB data store (Port 5432) |
+| **Layer 5** | Model AI | Local AI Engine running Qwen2.5:1.5b (Port 11434) |
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                           Kubernetes Cluster                              │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────┐                     │
-│  │   Layer 1                                       │                     │
-│  │   Frontend (Webpage & Admin)                    │                     │
+│  │   Layer 1 & 2                                   │                     │
+│  │   Frontend Webpage & Admin                      │                     │
 │  │                                                 │                     │
 │  │  React+Vite (Nginx)                             │                     │
 │  │  Port: 3000                                     │                     │
@@ -28,12 +30,21 @@ The system is structured into **3 distinct layers**:
 │                          │                                               │
 │                          ▼                                               │
 │                 ┌─────────────────┐         ┌─────────────────┐          │
-│                 │   Layer 2       │         │   Layer 3       │          │
+│                 │   Layer 3       │         │   Layer 4       │          │
 │                 │   Backend       │────────▶│   Database      │          │
 │                 │                 │         │                 │          │
 │                 │  Django + DRF   │         │  PostgreSQL     │          │
 │                 │  Port: 8000     │         │  Port: 5432     │          │
-│                 └─────────────────┘         └─────────────────┘          │
+│                 └────────┬────────┘         └─────────────────┘          │
+│                          │                                               │
+│                          ▼                                               │
+│                 ┌─────────────────┐                                      │
+│                 │   Layer 5       │                                      │
+│                 │   Model AI      │                                      │
+│                 │                 │                                      │
+│                 │  Qwen2.5:1.5b   │                                      │
+│                 │  Port: 11434    │                                      │
+│                 └─────────────────┘                                      │
 │                          │                           │                   │
 │                 ┌────────┴────────┐         ┌────────┴────────┐          │
 │                 │  Ingress / LB   │         │ Persistent Vol  │          │

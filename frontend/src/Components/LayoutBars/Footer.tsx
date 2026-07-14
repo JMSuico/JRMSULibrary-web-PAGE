@@ -88,7 +88,11 @@ export const Footer: React.FC = () => {
 
       {/* Bottom bar */}
       <div className="max-w-max-width mx-auto px-4 md:px-gutter pt-8 border-t border-gold-light/10 flex flex-col md:flex-row justify-between items-center gap-3 opacity-70">
-        <p className="text-sm text-center md:text-left shrink-0">© {new Date().getFullYear()} JRMSU-Katipunan Campus Library. All Rights Reserved.</p>
+        <p className="text-sm text-center md:text-left shrink-0">
+          <a href="/admin/login" className="hover:text-gold-light transition-colors text-inherit decoration-transparent" title="Admin Portal">
+            © {new Date().getFullYear()} JRMSU-Katipunan Campus Library. All Rights Reserved.
+          </a>
+        </p>
         
         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm justify-center">
           <a className="hover:text-gold-light transition-colors whitespace-nowrap" href="https://jrmsu.edu.ph/" target="_blank" rel="noopener noreferrer">JRMSU Main</a>

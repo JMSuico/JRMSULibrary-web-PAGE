@@ -26,7 +26,8 @@ export const HeroSection: React.FC = () => {
       .catch(() => setVisitorCount(null));
     
     // Fetch settings for dynamic opening hours
-    fetch('/api/settings/')
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+    fetch(`http://${hostname}:8000/api/settings/`)
       .then(r => r.json())
       .then((s: any) => {
         const raw: string = s?.opening_hours_mon_fri || '7:00 AM - 7:00 PM';

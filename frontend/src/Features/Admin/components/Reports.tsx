@@ -6,6 +6,7 @@ import { useDebounce } from '@/src/Hooks/useDebounce';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 
 export function Reports() {
   const [reportType, setReportType] = useState('summary');
@@ -36,45 +37,30 @@ export function Reports() {
     }
   };
 
-  const pendingDeletes = React.useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   const handleDelete = (id: number) => {
-    // Optimistically hide it from UI
-    setHistory(prev => prev.filter(h => h.id !== id));
+    const reportToDelete = history.find(h => h.id === id);
+    if (!reportToDelete) return;
     
-    // Custom undo toast
-    showToast(
-      <div className="flex items-center justify-between w-full">
-        <span>Report moved to recycle bin.</span>
-        <button 
-          onClick={() => {
-            if (pendingDeletes.current[id]) {
-              clearTimeout(pendingDeletes.current[id]);
-              delete pendingDeletes.current[id];
-              // Refresh to restore
-              fetchHistory();
-              showToast('Report restored', 'success');
-            }
-          }}
-          className="ml-4 text-xs bg-white text-gray-900 px-3 py-1 rounded-md font-semibold border border-gray-200 shadow-sm hover:bg-gray-50"
-        >
-          Undo
-        </button>
-      </div> as unknown as string,
-      'info',
-      4000
+    triggerDelete(
+      `Report "${reportToDelete.title}"`,
+      async () => {
+        try {
+          await reportApi.deleteReport(id);
+        } catch (err: any) {
+          setHistory(prev => [...prev, reportToDelete]);
+          showToast('Failed to permanently delete report', 'error');
+        }
+      },
+      () => {
+        setHistory(prev => [...prev, reportToDelete].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+        showToast('Report restoration undone', 'success');
+      }
     );
 
-    // Schedule actual API call
-    pendingDeletes.current[id] = setTimeout(async () => {
-      try {
-        await reportApi.deleteReport(id);
-        delete pendingDeletes.current[id];
-      } catch (err: any) {
-        showToast('Failed to permanently delete report', 'error');
-        fetchHistory(); // Refresh to restore on failure
-      }
-    }, 4000);
+    // Optimistically hide it from UI
+    setHistory(prev => prev.filter(h => h.id !== id));
   };
 
   const fetchHistory = async () => {
@@ -131,10 +117,11 @@ export function Reports() {
     window.print();
   };
 
-  const savePdf = async () => {
+  const exportPdf = async () => {
     const el = document.getElementById('report-preview-area');
     if (!el) return;
 
+    let clone: HTMLElement | null = null;
     try {
       setIsPdfGenerating(true);
       const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
@@ -146,16 +133,20 @@ export function Reports() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       
+      // Fix for html2canvas failing on CSS variables (var(--color-navy))
       const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
         foreignObjectRendering: false,
         imageTimeout: 0,
         logging: false,
-        backgroundColor: 'var(--color-white)',
+        backgroundColor: '#ffffff',
       });
 
       const imgData = canvas.toDataURL('image/png');
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error('Canvas rendering failed (zero width/height).');
+      }
       
       const imgProps = pdf.getImageProperties(imgData);
       const imgWidth = pdfWidth;
@@ -181,6 +172,9 @@ export function Reports() {
       console.error(err);
       showToast('Failed to generate PDF: ' + err.message, 'error');
     } finally {
+      if (clone && document.body.contains(clone)) {
+        document.body.removeChild(clone);
+      }
       setIsPdfGenerating(false);
     }
   };
@@ -242,7 +236,7 @@ export function Reports() {
     { name: 'Emails', value: reportData.total_emails },
     { name: 'Reservations', value: reportData.total_reservations }
   ] : [];
-  const COLORS = ['var(--color-blue)', 'var(--color-teal)'];
+  const COLORS = ['#2563eb', '#0d9488'];
 
   return (
     <>
@@ -387,8 +381,6 @@ export function Reports() {
           </div>
         )}
       </div>
-
-      <div id="report-preview-area" className="scroll-mt-6"></div>
       
       {reportData && (
         <div className="bg-white border border-gray-200 shadow-sm p-8 rounded-none md:rounded-2xl print:border-none print:shadow-none print:p-0 mb-8 animate-in slide-in-from-top-4 fade-in duration-300">
@@ -402,8 +394,8 @@ export function Reports() {
               <button onClick={handleExportCSV} className="admin-btn admin-btn--outline flex items-center gap-2">
                 <Download size={16} /> Export CSV
               </button>
-              <button onClick={savePdf} disabled={isPdfGenerating} className="admin-btn admin-btn--primary flex items-center gap-2 bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60">
-                {isPdfGenerating ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : 'Save as PDF'}
+              <button onClick={exportPdf} disabled={isPdfGenerating} className="admin-btn admin-btn--primary flex items-center gap-2 bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60">
+                {isPdfGenerating ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : 'Export as PDF'}
               </button>
               <button onClick={handlePrint} className="admin-btn admin-btn--primary flex items-center gap-2">
                 <Printer size={16} /> Print
@@ -452,7 +444,7 @@ export function Reports() {
                             <XAxis dataKey="name" fontSize={12} />
                             <YAxis domain={ya.domain} ticks={ya.ticks} allowDecimals={false} fontSize={12} />
                             <RechartsTooltip />
-                            <Bar dataKey="count" fill='var(--color-gold)' />
+                            <Bar dataKey="count" fill='#C9A84C' />
                           </BarChart>
                         </ResponsiveContainer>
                       );
@@ -470,7 +462,7 @@ export function Reports() {
                           cy="50%"
                           labelLine={false}
                           outerRadius={80}
-                          fill="var(--color-indigo)"
+                          fill="#4f46e5"
                           dataKey="value"
                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         >
@@ -544,6 +536,34 @@ export function Reports() {
               <p>Generated by JRMSU Library Admin System</p>
               <p>Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Undo Delete Toast */}
+      {undoState && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={cancelDelete}
+                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
+              >
+                Undo
+              </button>
+              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className="bg-gray-400 h-full transition-all ease-linear"
+              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
+            />
           </div>
         </div>
       )}

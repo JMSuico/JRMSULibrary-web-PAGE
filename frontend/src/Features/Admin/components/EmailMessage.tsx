@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Mail,
   Search,
@@ -356,7 +357,7 @@ export function EmailMessage() {
   }, [debouncedSearch, filterType, showArchived]);
 
   return (
-    <div className="w-full flex flex-col h-[calc(100vh-64px)] overflow-hidden relative">
+    <div className="w-full flex flex-col relative">
       {/* Background Sends Banner */}
       {backgroundSends.length > 0 && (
         <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
@@ -406,22 +407,23 @@ export function EmailMessage() {
         />
       </div>
 
-      <div className="admin-table-wrapper">
-        <div className="admin-table-toolbar">
-          <div className="admin-table-toolbar__search">
-            <Search size={16} style={{ color: 'var(--color-gray-400)', flexShrink: 0 }} />
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border-b border-gray-100 gap-4 bg-white overflow-x-auto">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg w-full md:w-64 shrink-0">
+            <Search size={16} className="text-gray-400 shrink-0" />
             <input
               type="text"
               placeholder="Search messages..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none outline-none text-sm w-full"
             />
           </div>
-          <div className="admin-table-toolbar__actions">
-            <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-1 bg-gray-50">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
+            <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-1 bg-gray-50 w-full sm:w-auto">
               <Filter size={16} className="text-gray-400 ml-2" />
               <select 
-                className="bg-transparent border-none text-sm outline-none px-2 py-1 text-gray-700"
+                className="bg-transparent border-none text-sm outline-none px-2 py-1 text-gray-700 w-full sm:w-auto"
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value as any)}
               >
@@ -431,14 +433,14 @@ export function EmailMessage() {
                 <option value="CREDENTIAL_REQUEST">Credential Requests</option>
               </select>
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer border border-gray-200 px-3 py-1.5 rounded-lg bg-white">
+            <label className="flex items-center justify-center gap-2 text-sm text-gray-600 cursor-pointer border border-gray-200 px-3 py-1.5 rounded-lg bg-white shrink-0">
               <input 
                 type="checkbox" 
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
               />
-              Show Archived
+              <span className="whitespace-nowrap">Show Archived</span>
             </label>
           </div>
         </div>
@@ -628,8 +630,8 @@ export function EmailMessage() {
       </div>
 
       {/* SMTP Reply Modal */}
-      {replyModal && (
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4" onClick={() => !isSendingReply && setReplyModal(null)}>
+      {replyModal && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 animate-modal-overlay" onClick={() => !isSendingReply && setReplyModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-green-600 to-emerald-500 p-5 flex justify-between items-start">
               <div>
@@ -754,11 +756,12 @@ export function EmailMessage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {bulkReplyModal && (
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4" onClick={() => !queueState.isActive && setBulkReplyModal(null)}>
+      {bulkReplyModal && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 animate-modal-overlay" onClick={() => !queueState.isActive && setBulkReplyModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-blue-600 to-indigo-500 p-5 flex justify-between items-start">
               <div>
@@ -839,7 +842,8 @@ export function EmailMessage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* Undo Delete Toast */}
       {undoState && (

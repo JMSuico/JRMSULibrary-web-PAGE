@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoints/eresourceApi';
 import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
@@ -345,7 +346,7 @@ export function EResourcesManager() {
                             </div>
                             <div className="flex items-center gap-2 mt-2">
                               <a
-                                href={file.file.startsWith('http') ? file.file : `http://127.0.0.1:8000${file.file}`}
+                                href={file.file.startsWith('http') ? file.file : `http://${window.location.hostname}:8000${file.file}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100"
@@ -375,8 +376,8 @@ export function EResourcesManager() {
       </div>
 
       {/* Dept Modal */}
-      {isDeptModalOpen && (
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
+      {isDeptModalOpen && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">{editingDept ? 'Edit Folder' : 'Add Folder'}</h2>
@@ -404,12 +405,13 @@ export function EResourcesManager() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* File Modal */}
-      {isFileModalOpen && (
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
+      {isFileModalOpen && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">Upload File to {selectedDept?.name}</h2>
@@ -446,32 +448,33 @@ export function EResourcesManager() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-        {/* Undo Delete Toast */}
+      {/* Undo Delete Toast */}
       {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium text-gray-700">{undoState.itemName}</span> has been moved to the recycle bin.</p>
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
             </div>
-            <button 
-              onClick={() => cancelDelete()}
-              className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
-            >
-              Undo
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={cancelDelete}
+                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
+              >
+                Undo
+              </button>
+              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
+                <X size={18} />
+              </button>
+            </div>
           </div>
-          
-          {/* Progress bar */}
-          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-red-500"
-              style={{ 
-                width: `${(undoState.timeLeft / 3000) * 100}%`,
-                transition: 'width 100ms linear'
-              }}
+              className="bg-gray-400 h-full transition-all ease-linear"
+              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
             />
           </div>
         </div>

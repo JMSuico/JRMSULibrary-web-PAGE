@@ -23,6 +23,7 @@ export function ContentManager() {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<ManagedLink | null>(null);
   const [isSavingLink, setIsSavingLink] = useState(false);
+  const [draggedLinkId, setDraggedLinkId] = useState<number | null>(null);
 
   // File State
   const [files, setFiles] = useState<ManagedFile[]>([]);
@@ -116,6 +117,46 @@ export function ContentManager() {
       }
     );
     setLinks(prev => prev.filter(l => l.id !== id));
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+    setDraggedLinkId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    if (draggedLinkId === null || draggedLinkId === targetId) return;
+
+    const sortedLinks = [...links].sort((a, b) => a.order - b.order);
+    const draggedIdx = sortedLinks.findIndex(l => l.id === draggedLinkId);
+    const targetIdx = sortedLinks.findIndex(l => l.id === targetId);
+    
+    if (draggedIdx === -1 || targetIdx === -1) return;
+
+    const newLinks = [...sortedLinks];
+    const [draggedItem] = newLinks.splice(draggedIdx, 1);
+    newLinks.splice(targetIdx, 0, draggedItem);
+
+    // Update orders sequentially
+    const updatedLinks = newLinks.map((l, idx) => ({ ...l, order: idx + 1 }));
+    setLinks(updatedLinks);
+
+    try {
+      await Promise.all(
+        updatedLinks.map(l => cmsApi.updateLink(l.id, { order: l.order }))
+      );
+      showToast('Sequence updated successfully', 'success');
+    } catch (err) {
+      showToast('Failed to update sequence', 'error');
+      loadData(); // Revert on failure
+    }
+    setDraggedLinkId(null);
   };
 
   // --- File Handlers ---
@@ -279,9 +320,22 @@ export function ContentManager() {
                     </tr>
                   </thead>
                   <tbody>
-                    {links.map((link) => (
-                      <tr key={link.id}>
-                        <td style={{ fontWeight: 500 }}>{link.name}</td>
+                    {[...links].sort((a,b) => a.order - b.order).map((link) => (
+                      <tr 
+                        key={link.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, link.id)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, link.id)}
+                        style={{ cursor: 'move', backgroundColor: draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined }}
+                        className={draggedLinkId === link.id ? 'opacity-50' : ''}
+                      >
+                        <td style={{ fontWeight: 500 }}>
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-gray-400" style={{ cursor: 'grab' }}>drag_indicator</span>
+                            {link.name}
+                          </div>
+                        </td>
                         <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>{link.url}</a></td>
                         <td><span className="admin-badge admin-badge--info">{link.category}</span></td>
                         <td>{link.order}</td>
@@ -306,10 +360,12 @@ export function ContentManager() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
                 <button 
-                  className="admin-btn admin-btn--primary flex items-center gap-2"
-                  onClick={() => setIsFileModalOpen(true)}
+                  className={`admin-btn flex items-center gap-2 ${files.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
+                  onClick={() => files.length < 1 && setIsFileModalOpen(true)}
+                  disabled={files.length >= 1}
+                  title={files.length >= 1 ? "Only 1 manual file allowed. Please delete the existing one first to upload a new one." : ""}
                 >
-                  <Plus size={16} /> Upload File
+                  <Plus size={16} /> {files.length >= 1 ? 'File Uploaded (Max 1)' : 'Upload File'}
                 </button>
               </div>
               <div className="admin-table-scroll">
@@ -438,27 +494,27 @@ export function ContentManager() {
       {/* Undo Delete Toast */}
       {undoState && (
         <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium text-gray-700">{undoState.itemName}</span> has been moved to the recycle bin.</p>
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
+              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
             </div>
-            <button 
-              onClick={() => cancelDelete()}
-              className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
-            >
-              Undo
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={cancelDelete}
+                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
+              >
+                Undo
+              </button>
+              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
+                <X size={18} />
+              </button>
+            </div>
           </div>
-          
-          {/* Progress bar */}
-          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-red-500"
-              style={{ 
-                width: `${(undoState.timeLeft / 3000) * 100}%`,
-                transition: 'width 100ms linear'
-              }}
+              className="bg-gray-400 h-full transition-all ease-linear"
+              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
             />
           </div>
         </div>

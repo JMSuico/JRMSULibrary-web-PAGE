@@ -1,4 +1,23 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+// Use relative API base url so Vite proxy (in dev) and Nginx (in prod) handles routing.
+// This ensures SameSite cookies work correctly across identical origins.
+const getApiBase = () => {
+  if (typeof window !== 'undefined') {
+    // Note: If you need to hit an external IP directly without a proxy,
+    // you would configure it here. But with Vite proxy and Nginx, relative is best.
+    return import.meta.env.VITE_API_BASE_URL || '/api';
+  }
+  return import.meta.env.VITE_API_BASE_URL || '/api';
+};
+
+const API_BASE = getApiBase();
+
+export const getImageUrl = (imagePath: string | null | undefined): string => {
+  if (!imagePath) return '';
+  if (imagePath.startsWith('http') || imagePath.startsWith('data:') || imagePath.startsWith('blob:')) return imagePath;
+  
+  // Use relative path for media so Vite proxy/Nginx handles it automatically.
+  return imagePath;
+};
 
 export function getCookie(name: string) {
   let cookieValue = null;

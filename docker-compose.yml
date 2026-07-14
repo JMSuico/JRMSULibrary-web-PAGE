@@ -1,5 +1,6 @@
 services:
 
+  # ─── Layer 4: Database ─────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -17,6 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── Layer 3: Backend ──────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -25,6 +27,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DB_ENGINE: postgresql
       DB_NAME: jrmsu_library
@@ -36,23 +40,54 @@ services:
       DEBUG: "False"
       DISABLE_SSL_REDIRECT: "True"
       ALLOWED_HOSTS: "*"
-      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://192.168.137.1:3000,http://192.168.137.1:3001,http://192.168.6.126:3000,http://192.168.6.126:3001"
+      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://192.168.15.194:3000,http://192.168.15.194:3001,http://192.168.6.126:3000,http://192.168.6.126:3001"
+      OLLAMA_URL: "http://host.docker.internal:11434/api/chat"
+      # SMTP — Gmail App Password
+      EMAIL_HOST: "smtp.gmail.com"
+      EMAIL_PORT: "587"
+      EMAIL_HOST_USER: "katipunan.library@jrmsu.edu.ph"
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      DEFAULT_FROM_EMAIL: "JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>"
+      # External library credentials
+      VITALSOURCE_EMAIL: ${VITALSOURCE_EMAIL}
+      VITALSOURCE_PASSWORD: ${VITALSOURCE_PASSWORD}
+      SCHOLAAR_USERNAME: ${SCHOLAAR_USERNAME}
+      SCHOLAAR_PASSWORD: ${SCHOLAAR_PASSWORD}
     ports:
       - "8000:8000"
     volumes:
       - ./backend/media:/app/media
 
-  frontend:
+  # ─── Layer 1: Frontend Webpage (Public Landing Page) ───────────────────
+  frontend-webpage:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: http://localhost:8000/api
+        VITE_API_BASE_URL: http://192.168.15.194:8000/api
     restart: unless-stopped
     depends_on:
       - backend
     ports:
       - "3000:80"
+
+  # ─── Layer 2: Frontend Admin Page ──────────────────────────────────────
+  frontend-admin:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://192.168.15.194:8000/api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3001:80"
+
+  # ─── Layer 5: Model AI is Ollama running on the host machine ───────────
+  # Ollama runs natively on the Windows host (not inside Docker).
+  # Start it with: $env:OLLAMA_HOST="0.0.0.0"; ollama serve
+  # The backend reaches it via http://host.docker.internal:11434/api/chat
 
 volumes:
   db_data:

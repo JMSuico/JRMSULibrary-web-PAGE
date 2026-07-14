@@ -63,14 +63,25 @@ class EResourceFileService(IEResourceFileService):
                 raise ValidationError({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'})
             MalwareScannerHelper.verify_file_safety(uploaded_file)
             data['file'] = uploaded_file
-            
+
+        # Resolve department ForeignKey: multipart forms send the ID as a string
+        department_val = data.pop('department', None)
+        if department_val is not None:
+            if not hasattr(department_val, 'pk'):
+                try:
+                    data['department_id'] = int(department_val)
+                except (ValueError, TypeError):
+                    raise ValidationError({'department': f'Invalid department id: {department_val}'})
+            else:
+                data['department'] = department_val
+
         if 'is_active' in data:
             val = data['is_active']
             if isinstance(val, str):
                 data['is_active'] = val.lower() in ('true', '1', 'on', 'yes')
         else:
             data['is_active'] = False
-            
+
         return self._repo.create(data)
 
     def update(self, id: int, data: dict):
@@ -83,7 +94,7 @@ class EResourceFileService(IEResourceFileService):
             self._recycle_repo.create(
                 original_id=id,
                 source_module='ERESOURCE_FILE',
-                item_name=item.title or f"E-Resource File {id}",
+                item_name=item.name or f"E-Resource File {id}",
                 data_snapshot=snapshot,
                 user_id=user_id
             )

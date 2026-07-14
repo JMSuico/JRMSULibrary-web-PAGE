@@ -98,7 +98,7 @@ export const publicApi = {
 
       let visitorId = localStorage.getItem('jrmsu_visitor_id');
       if (!visitorId) {
-        visitorId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+        visitorId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
         localStorage.setItem('jrmsu_visitor_id', visitorId);
       }
 

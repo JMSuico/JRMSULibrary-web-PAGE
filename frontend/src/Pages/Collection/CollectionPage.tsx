@@ -55,7 +55,7 @@ function mapDepartmentsToTree(departments: EResourceDepartment[]): TreeNodeData[
           name: f.name,
           type: 'file' as const,
           // API returns paths like "/media/e_resources/..." — prefix with backend base URL
-          path: f.file.startsWith('http') ? f.file : `http://127.0.0.1:8000${f.file}`
+          path: f.file.startsWith('http') ? f.file : `http://${window.location.hostname}:8000${f.file}`
         }))
     ]
   })).filter(node => node.children && node.children.length > 0);
@@ -166,7 +166,7 @@ export default function CollectionPage() {
       } else if (service === 'scholaar') {
         setExternalService({
           title: 'Scholaar',
-          url: 'https://scholaar.com/Login.aspx',
+          url: 'http://scholaar.com/University/HomePage.aspx',
           proxyUrl: '/api/external-proxy/scholaar/',
         });
       } else {
@@ -414,7 +414,15 @@ export default function CollectionPage() {
         )}
       </div>
 
-      {/* File Viewer Modal for Local Books - Removed (Files open in new tab) */}
+      {/* File Viewer Modal for Local Books */}
+      {selectedFile && (
+        <FileViewerModal
+          file={selectedFile}
+          fileList={allFiles}
+          onClose={() => setSelectedFile(null)}
+          onNavigate={(newFile) => setSelectedFile(newFile)}
+        />
+      )}
 
       {/* External Service iFrame Modal */}
       {externalService && (

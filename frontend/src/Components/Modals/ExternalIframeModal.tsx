@@ -49,7 +49,7 @@ export const ExternalIframeModal: React.FC<ExternalIframeModalProps> = ({
         setLoadError(true);
         setIsLoading(false);
       }
-    }, 20000);
+    }, 8000);
     return () => clearTimeout(timeout);
   }, [isLoading, iframeKey]);
 
@@ -160,9 +160,13 @@ export const ExternalIframeModal: React.FC<ExternalIframeModalProps> = ({
               <h3 className="text-xl font-bold text-gray-800 mb-2">
                 Unable to Load in Preview
               </h3>
-              <p className="text-gray-500 text-sm max-w-md mb-6">
-                This website requires authentication or does not allow embedded viewing.
-                Please open it in a new browser tab to access the content.
+              <p className="text-gray-500 text-sm max-w-md mb-2">
+                <strong>{title}</strong> may be temporarily unavailable, or blocks embedded viewing
+                due to browser security policies (X-Frame-Options / Content Security Policy).
+              </p>
+              <p className="text-gray-400 text-xs max-w-md mb-6">
+                Click the button below to open it directly in a new browser tab. If the site is down,
+                please try again later or contact the librarian.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <a

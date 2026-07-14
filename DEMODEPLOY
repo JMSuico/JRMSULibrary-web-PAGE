@@ -8,14 +8,16 @@ The `demo.md`, `implementationDockerandKubernates.md`, and `DEMODEPLOYMENT.md` d
 
 ---
 
-## 3-Layer Architecture Overview
-As documented in `DEMODEPLOYMENT.md`, the system is structured into 3 integrated layers:
+## 5-Layer Architecture Overview
+As documented in `DEMODEPLOYMENT.md`, the system is structured into 5 integrated layers:
 
 | Layer | URL | What It Is |
 |-------|-----|-----------|
-| **Layer 1 (Frontend)** | http://localhost:3000 | Serves BOTH the Public Library Webpage (`/`) and the Admin Panel (`/admin`) via React Router. |
-| **Layer 2 (Backend)** | http://localhost:8000/api | Django REST API |
-| **Layer 3 (Database)**| localhost:5432 | PostgreSQL (internal network, accessible via DBeaver/pgAdmin) |
+| **Layer 1 (Frontend Webpage)** | http://localhost:3000 | Serves the Public Library Webpage. |
+| **Layer 2 (Frontend Admin Page)** | http://localhost:3001/admin | Serves the Admin Panel. |
+| **Layer 3 (Backend)** | http://192.168.15.194:8000/api | Django REST API |
+| **Layer 4 (Database)**| localhost:5432 | PostgreSQL (internal network, accessible via DBeaver/pgAdmin) |
+| **Layer 5 (Model AI)**| localhost:11434 | Ollama running Qwen2.5:1.5b (65ec06548149, 986 MB) |
 
 ---
 
@@ -25,7 +27,7 @@ As documented in `DEMODEPLOYMENT.md`, the system is structured into 3 integrated
 - [x] VS Code Kubernetes extension installed
 - [x] `demo.md` written
 - [x] `implementationDockerandKubernates.md` written
-- [x] `DEMODEPLOYMENT.md` generated (Updated 3-layer instructions)
+- [x] `DEMODEPLOYMENT.md` generated (Updated 5-layer instructions)
 
 ---
 
@@ -33,16 +35,16 @@ As documented in `DEMODEPLOYMENT.md`, the system is structured into 3 integrated
 
 All required files have been created and configured. 
 
-### Layer 1 — Frontend Files
+### Layer 1 & 2 — Frontend Files
 - **`frontend/Dockerfile`**: Multi-stage build (Node 20 builds Vite app, Nginx serves dist).
 - **`frontend/nginx.conf`**: Configured for SPA fallback so React Router handles `/admin`.
 
-### Layer 2 — Backend Files
+### Layer 3 — Backend Files
 - **`backend/Dockerfile`**: Python 3.11-slim, sets up Gunicorn.
 - **`backend/requirements-docker.txt`**: Uses `psycopg2-binary` instead of heavy MSSQL drivers for the Docker environment.
 
 ### Root Level — Orchestration Files
-- **`docker-compose.yml`**: Wires the 3 layers together using updated `localhost` settings to prevent cross-origin session dropping.
+- **`docker-compose.yml`**: Wires the 5 layers together (2 frontend containers, 1 backend, 1 database, 1 host AI).
 - **`.env.docker`**: Environment variables for the Docker Compose run.
 - **`k8s/` directory**: All Kubernetes YAML manifests have been generated.
 
@@ -60,11 +62,13 @@ All required files have been created and configured.
 ## Phase 3 — Run the Demo (Ready)
 
 Follow the official `DEMODEPLOYMENT.md` instructions:
-1. Ensure `.env` is properly populated.
-2. Run `docker-compose up -d --build`.
-3. Apply migrations: `docker-compose exec backend python manage.py migrate`.
-4. Create admin: `docker-compose exec backend python manage.py createsuperuser`.
-5. Access http://localhost:3000 to verify.
+1. Start Ollama on the host: `$env:OLLAMA_HOST="0.0.0.0"; ollama serve`
+2. Ensure `.env` is properly populated.
+3. Run `docker-compose build --no-cache`.
+4. Run `docker-compose up -d --force-recreate`.
+5. Apply migrations: `docker-compose exec backend python manage.py migrate`.
+6. Create admin: `docker-compose exec backend python manage.py createsuperuser`.
+7. Access http://localhost:3000 (webpage) and http://localhost:3001/admin (admin) to verify.
 
 ---
 
@@ -85,7 +89,7 @@ Only after Docker Compose demo works successfully:
 | 2 | `frontend/nginx.conf` | **EXISTS** |
 | 3 | `backend/Dockerfile` | **EXISTS** |
 | 4 | `backend/requirements-docker.txt` | **EXISTS** |
-| 5 | `docker-compose.yml` (root) | **EXISTS** (Updated to 3-Layers) |
+| 5 | `docker-compose.yml` (root) | **EXISTS** (Updated to 5-Layers) |
 | 6 | `.env.docker` (root) | **EXISTS** |
 | 7 | `k8s/namespace.yaml` | **EXISTS** |
 | 8 | `k8s/secrets.yaml` | **EXISTS** |

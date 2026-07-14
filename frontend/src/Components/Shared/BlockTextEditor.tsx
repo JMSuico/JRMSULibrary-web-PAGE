@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
+import { Trash2, Plus, AlignLeft, AlignCenter, AlignRight, AlignJustify, GripVertical } from 'lucide-react';
 
 interface BlockTextEditorProps {
   value: string;
@@ -22,10 +22,9 @@ function generateId() {
 
 export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChange, id }) => {
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
 
   // Parse HTML value into blocks on first mount.
-  // Safe to use [] because the parent passes key={slug}, guaranteeing a fresh
-  // component instance every time a different content item is opened for editing.
   useEffect(() => {
     if (!value) {
       setBlocks([{ id: generateId(), type: 'p', content: '', align: 'justify' }]);
@@ -36,7 +35,6 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
     const nodes = Array.from(doc.querySelectorAll('p, li'));
 
     if (nodes.length === 0) {
-      // Fallback: plain text with no HTML tags
       setBlocks([{ id: generateId(), type: 'p', content: doc.body.textContent || '', align: 'justify' }]);
     } else {
       const parsedBlocks = nodes.map(node => {
@@ -54,10 +52,8 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
       });
       setBlocks(parsedBlocks);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // [] is intentional — key prop on the parent ensures fresh mount per item
+  }, [value]);
 
-  // Serialize blocks to HTML and trigger onChange
   const triggerChange = (newBlocks: Block[]) => {
     let html = '';
     let inList = false;
@@ -95,7 +91,7 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
   const removeBlock = (id: string) => {
     const newBlocks = blocks.filter(b => b.id !== id);
     if (newBlocks.length === 0) {
-      newBlocks.push({ id: generateId(), type: 'p', content: '', align: 'justify' as const }); // ensure at least one block exists
+      newBlocks.push({ id: generateId(), type: 'p', content: '', align: 'justify' as const });
     }
     setBlocks(newBlocks);
     triggerChange(newBlocks);
@@ -113,7 +109,37 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
     triggerChange(newBlocks);
   };
 
-  // Calculate numbers for list items
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    // Firefox requires some data to be set for drag to work
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Necessary to allow drop
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) return;
+    
+    const draggedIdx = blocks.findIndex(b => b.id === draggedId);
+    const targetIdx = blocks.findIndex(b => b.id === targetId);
+    
+    if (draggedIdx === -1 || targetIdx === -1) return;
+    
+    const newBlocks = [...blocks];
+    const [draggedItem] = newBlocks.splice(draggedIdx, 1);
+    newBlocks.splice(targetIdx, 0, draggedItem);
+    
+    setBlocks(newBlocks);
+    triggerChange(newBlocks);
+    setDraggedId(null);
+  };
+
   let currentListIndex = 1;
 
   return (
@@ -124,8 +150,21 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
           const listNumber = isListItem ? currentListIndex++ : null;
 
           return (
-            <div key={block.id} className="flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-lg shadow-sm group transition-all">
-              {/* Type Indicator (Untouchable) */}
+            <div 
+              key={block.id} 
+              draggable
+              onDragStart={(e) => handleDragStart(e, block.id)}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, block.id)}
+              onDragEnd={() => setDraggedId(null)}
+              className={`flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-lg shadow-sm group transition-all ${draggedId === block.id ? 'opacity-50 border-dashed border-navy scale-[0.98]' : ''}`}
+            >
+              {/* Drag Handle */}
+              <div className="shrink-0 mt-2 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-600 transition-colors" title="Drag to reorder">
+                <GripVertical size={16} />
+              </div>
+
+              {/* Type Indicator */}
               <div className="shrink-0 mt-1 select-none">
                 {isListItem ? (
                   <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold ring-2 ring-blue-50">

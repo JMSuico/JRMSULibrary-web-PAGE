@@ -18,6 +18,16 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Lightweight .env loader for local (non-Docker) deployment
+_env_file = BASE_DIR.parent / '.env'
+if _env_file.exists():
+    with open(_env_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, val = line.split('=', 1)
+                os.environ.setdefault(key.strip(), val.strip())
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -198,7 +208,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 AUTH_USER_MODEL = "Features.Account"
 
 # CORS settings
-_allowed_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000")
+_env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000")
+_allowed_origins = _env_origins + ",http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002"
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
@@ -212,18 +223,16 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
-    "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle"
-    ],
+    # NOTE: No DEFAULT_THROTTLE_CLASSES — throttling is applied per-view only (login, contact, feedback, chat)
+    # This prevents the '1999 seconds' error on collection browsing pages for anonymous users on Wi-Fi.
     "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "120/hour",
-        "user": "2000/hour",
-        "contact": "200/hour",
-        "login": "5/minute",
-        "chat": "100/hour",
-        "feedback": "10/hour"
+        "anon": "5000/hour",       # Anonymous browsing (Local Books, Online Access)
+        "user": "10000/hour",      # Authenticated admin users
+        "contact": "200/hour",     # Contact form submissions
+        "login": "10/minute",      # Login attempts
+        "chat": "200/hour",        # AI chat
+        "feedback": "30/hour"      # Feedback form
     }
 }
 
@@ -257,6 +266,25 @@ MEDIA_ROOT = BASE_DIR / "media"
 # File Upload Security Limits (Prevent DoS via disk exhaustion)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+
+# --- Python 3.14 Django Template Context Monkeypatch ---
+try:
+    import django.template.context
+    def _base_context_copy(self):
+        duplicate = self.__class__()
+        duplicate.dicts = self.dicts[:]
+        return duplicate
+    def _request_context_copy(self):
+        duplicate = _base_context_copy(self)
+        if hasattr(self, 'request'):
+            duplicate.request = self.request
+        return duplicate
+    django.template.context.BaseContext.__copy__ = _base_context_copy
+    if hasattr(django.template.context, 'RequestContext'):
+        django.template.context.RequestContext.__copy__ = _request_context_copy
+except Exception:
+    pass
+# -------------------------------------------------------
 
 # ============================================================
 # Email (SMTP via Gmail — JRMSU Library Account)

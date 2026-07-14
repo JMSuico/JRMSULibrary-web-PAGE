@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { BookCarousel } from '@/src/Features/Collection/components/BookCarousel';
 import { ClassicHorizontalCarousel } from '@/src/Components/Shared/ClassicHorizontalCarousel';
 import { BookListModal } from '@/src/Components/Modals/BookListModal';
 import { batchApi } from '@/src/Endpoints/batchApi';
 import { useCarouselStyle } from '@/src/Hooks/useCarouselStyle';
+import { getImageUrl } from '@/src/Libs/apiClient';
 
 export const NewlyAcquiredBooks: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
@@ -14,29 +16,33 @@ export const NewlyAcquiredBooks: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const carouselStyle = useCarouselStyle();
 
-  useEffect(() => {
-    const fetchBooks = async () => {
-      try {
-        const batch = await batchApi.getCurrentDisplayBatch();
-        if (batch && batch.books) {
-          setBatchName(`Newly Acquired Books – ${batch.name}`);
-          setBooks(batch.books.map(b => ({
-            title: b.title,
-            description: `${b.author ? `By ${b.author} ` : ''}(${b.category})`,
-            image: b.cover_image,
-            icon: !b.cover_image ? 'book' : undefined
-          })));
-        } else {
-          setBooks([]);
-        }
-      } catch (error) {
-        console.error('Error fetching batch', error);
-      } finally {
-        setLoading(false);
+  const fetchBooks = useCallback(async () => {
+    try {
+      const batch = await batchApi.getCurrentDisplayBatch();
+      if (batch && batch.books) {
+        setBatchName(`Newly Acquired Books – ${batch.name}`);
+        setBooks(batch.books.map(b => ({
+          title: b.title,
+          description: `${b.author ? `By ${b.author} ` : ''}(${b.category})`,
+          image: b.cover_image ? getImageUrl(b.cover_image) : undefined,
+          icon: !b.cover_image ? 'book' : undefined
+        })));
+      } else {
+        setBooks([]);
+        setBatchName('Newly Acquired Books');
       }
-    };
-    fetchBooks();
+    } catch (error) {
+      console.error('Error fetching batch', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchBooks();
+  }, [fetchBooks]);
+
+  useAutoRefresh(fetchBooks, 30000);
 
   return (
     <div id="new-books" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>

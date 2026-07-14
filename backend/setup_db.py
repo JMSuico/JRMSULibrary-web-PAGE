@@ -352,9 +352,7 @@ def print_next_steps(engine):
     print("  4. Create the first admin superuser:")
     print("       python manage.py createsuperuser_custom")
     print()
-    print("  5. Seed CMS data from asset files:")
-    print("       python manage.py seed_assets")
-    print()
+
     print("  6. Start the backend server:")
     print("       python manage.py runserver 8000")
     print()

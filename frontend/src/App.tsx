@@ -11,6 +11,7 @@ import { publicApi } from '@/src/Endpoints/cmsApi';
 import { InitialLoader } from '@/src/Components/Shared/InitialLoader';
 import { PrivacyConsentModal } from '@/src/Components/Shared/PrivacyConsentModal';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
+import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
 
 // Public Pages
 const HomePage = lazy(() => import('@/src/Pages/Home/HomePage'));
@@ -40,6 +41,9 @@ const LoginPage = lazy(() => import('@/src/Pages/Admin/LoginPage'));
 function PublicLayout() {
   const location = useLocation();
   const [isLoaderDone, setIsLoaderDone] = useState(false);
+
+  // Poll for global CMS changes every 15 seconds. If detected, reload the page.
+  useGlobalAutoRefresh(15000);
 
   // Track visitor on every public page navigation
   useEffect(() => {

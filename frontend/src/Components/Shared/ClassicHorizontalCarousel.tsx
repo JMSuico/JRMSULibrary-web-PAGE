@@ -113,6 +113,8 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
           userSelect: 'none',
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
+          scrollSnapType: 'x mandatory',
+          WebkitOverflowScrolling: 'touch'
         }}
         onMouseDown={onMouseDown}
         onMouseLeave={onMouseLeave}
@@ -130,6 +132,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
               key={i}
               onClick={() => !isDragging && onCardClick?.(item, i)}
               className="shrink-0 w-[220px] rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all bg-white group/card cursor-pointer"
+              style={{ scrollSnapAlign: 'start' }}
               draggable={false}
             >
               {/* Image */}

@@ -6,9 +6,9 @@ import { reportApi, ReportSummary } from "@/src/Endpoints/reportApi";
 import { useToast } from "@/src/Hooks/useToast";
 import { dynamicAxis, extractValues } from "@/src/Libs/chartUtils";
 
-const NAVY='var(--color-navy)',GOLD='var(--color-gold)',TEAL="var(--color-teal)",ROSE="var(--color-rose)",VIOLET="var(--color-violet)";
-const PIE_COLORS=[ROSE,"var(--color-orange)","var(--color-amber)",TEAL,NAVY];
-const TS={borderRadius:10,border:"none",boxShadow:`0 4px 12px var(--color-black-alpha-25)`};
+const NAVY='#002B7F',GOLD='#C9A84C',TEAL="#0d9488",ROSE="#e11d48",VIOLET="#7c3aed";
+const PIE_COLORS=[ROSE,"#f97316","#f59e0b",TEAL,NAVY];
+const TS={borderRadius:10,border:"none",boxShadow:`0 4px 12px rgba(0,0,0,0.25)`};
 
 function avgRating(dist:Record<number,number>):number{let s=0,c=0;for(let i=1;i<=5;i++){s+=(dist[i]??0)*i;c+=(dist[i]??0);}return c===0?0:Math.round(s/c*100)/100;}
 function engRate(e:number,r:number,v:number):string{return v===0?"0%":((e+r)/v*100).toFixed(1)+"%";}
@@ -44,39 +44,34 @@ export function Analytics(){
   const load=async()=>{try{const s=await reportApi.getSummary();setData(s);setLast(new Date());}catch(e:any){showToast(e.message||"Failed","error");}finally{setLoading(false);}};
   useEffect(()=>{load();ref.current=setInterval(load,30000);return()=>{if(ref.current)clearInterval(ref.current);};},[]);
 
-  const savePdf = useCallback(async () => {
+  const exportPdf = useCallback(async () => {
     if (isPdfGenerating) return;
-    setIsPdfGenerating(true);
     try {
+      setIsPdfGenerating(true);
       const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
         import('jspdf'),
-        import('html2canvas-pro'),
+        import('html2canvas-pro')
       ]);
 
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 12;
+      const margin = 10;
       const contentW = pageW - margin * 2;
 
       const sectionIds = [
-        'pdf-section-metrics',
         'pdf-section-visits',
         'pdf-section-books-timeline',
         'pdf-section-engagement',
         'pdf-section-ratings-dist',
-        'pdf-section-star-pie',
         'pdf-section-scatter',
         'pdf-section-combined',
       ];
-
       const titles = [
-        'Summary Metrics',
         'Site Visits Monthly',
         'Books Acquired Timeline',
         'Engagement Breakdown',
-        'Ratings Distribution',
-        'Star Breakdown',
+        'Ratings Distribution Curve',
         'Visits vs Books (Scatter)',
         'Combined Trend',
       ];
@@ -90,10 +85,9 @@ export function Analytics(){
 
         if (i > 0) pdf.addPage();
 
-        // Page header
-        pdf.setFillColor(0, 43, 127); // navy
+        pdf.setFillColor(0, 43, 127);
         pdf.rect(0, 0, pageW, 14, 'F');
-        pdf.setTextColor(201, 168, 76); // gold
+        pdf.setTextColor(201, 168, 76);
         pdf.setFontSize(9);
         pdf.setFont('helvetica', 'bold');
         pdf.text('JRMSU Katipunan Campus Library — Analytics Report', margin, 9);
@@ -101,21 +95,22 @@ export function Analytics(){
         pdf.setFontSize(7);
         pdf.text(dateStr, pageW - margin, 9, { align: 'right' });
 
-        // Section title
         pdf.setTextColor(30, 30, 30);
         pdf.setFontSize(12);
         pdf.setFont('helvetica', 'bold');
         pdf.text(titles[i], margin, 22);
 
-        // Capture chart
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: 'var(--color-white)' });
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+
         const imgData = canvas.toDataURL('image/png');
+        if (canvas.width === 0 || canvas.height === 0) {
+          throw new Error('Canvas rendering failed (zero width/height).');
+        }
         const imgH = (canvas.height / canvas.width) * contentW;
         const maxImgH = pageH - 30;
         const finalH = Math.min(imgH, maxImgH);
         pdf.addImage(imgData, 'PNG', margin, 26, contentW, finalH);
 
-        // Page footer
         pdf.setFontSize(7);
         pdf.setTextColor(160, 160, 160);
         pdf.setFont('helvetica', 'normal');
@@ -156,15 +151,11 @@ export function Analytics(){
           <button onClick={()=>window.print()} className="admin-btn admin-btn--secondary flex items-center gap-2 print:hidden" style={{ borderColor: 'var(--color-navy)', color: 'var(--color-navy)' }}>
             Print Report
           </button>
-          <button
-            onClick={savePdf}
-            disabled={isPdfGenerating}
-            className="admin-btn admin-btn--primary flex items-center gap-2 print:hidden bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60"
-          >
+          <button onClick={exportPdf} disabled={isPdfGenerating} className="admin-btn admin-btn--primary flex items-center gap-2 print:hidden bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60">
             {isPdfGenerating ? (
-              <><RefreshCw size={14} className="animate-spin"/> Generating PDF...</>
+              <><Loader2 size={14} className="animate-spin"/> Generating...</>
             ) : (
-              <><FileDown size={14}/> Save as PDF</>
+              <><FileDown size={14}/> Export as PDF</>
             )}
           </button>
         </div>
@@ -204,9 +195,9 @@ export function Analytics(){
             {(()=>{const ya=dynamicAxis(extractValues(trend,'visits'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <BarChart data={trend} margin={{top:8,right:8,left:-24,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
-                <XAxis dataKey="name" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
-                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='#f3f4f6'/>
+                <XAxis dataKey="name" tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} formatter={(v:number)=>[v,"Visits"]}/>
                 <Bar dataKey="visits" name="Visits" fill={NAVY} radius={[6,6,0,0]} barSize={28}/>
               </BarChart>
@@ -220,11 +211,11 @@ export function Analytics(){
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <AreaChart data={trend} margin={{top:8,right:8,left:-24,bottom:0}}>
                 <defs><linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={TEAL} stopOpacity={0.25}/><stop offset="95%" stopColor={TEAL} stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
-                <XAxis dataKey="name" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
-                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='#f3f4f6'/>
+                <XAxis dataKey="name" tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} formatter={(v:number)=>[v,"Books"]}/>
-                <Area type="monotone" dataKey="books" name="Books" stroke={TEAL} strokeWidth={3} fill="url(#bg1)" dot={{r:4,strokeWidth:2,fill:'var(--color-white)',stroke:TEAL}} activeDot={{r:6,fill:TEAL}}/>
+                <Area type="monotone" dataKey="books" name="Books" stroke={TEAL} strokeWidth={3} fill="url(#bg1)" dot={{r:4,strokeWidth:2,fill:'#ffffff',stroke:TEAL}} activeDot={{r:6,fill:TEAL}}/>
               </AreaChart>
             </ResponsiveContainer></div>);})()}
           </ChartCard>
@@ -235,7 +226,7 @@ export function Analytics(){
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <PieChart>
                 <Pie data={mp} cx="50%" cy="45%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
-                  <Cell fill="var(--color-orange)"/><Cell fill={VIOLET}/>
+                  <Cell fill="#f97316"/><Cell fill={VIOLET}/>
                 </Pie>
                 <Tooltip contentStyle={TS}/><Legend verticalAlign="bottom" height={30} iconType="circle"/>
               </PieChart>
@@ -249,11 +240,11 @@ export function Analytics(){
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <AreaChart data={rd} margin={{top:8,right:8,left:-24,bottom:0}}>
                 <defs><linearGradient id="rg1" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={GOLD} stopOpacity={0.4}/><stop offset="95%" stopColor={GOLD} stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
-                <XAxis dataKey="rating" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
-                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='#e5e7eb'/>
+                <XAxis dataKey="rating" tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} formatter={(v:number)=>[v,"Responses"]}/>
-                <Area type="monotone" dataKey="count" name="Responses" stroke={GOLD} strokeWidth={3} fill="url(#rg1)" dot={{r:5,strokeWidth:2,fill:'var(--color-white)',stroke:GOLD}} activeDot={{r:7,fill:GOLD}}/>
+                <Area type="monotone" dataKey="count" name="Responses" stroke={GOLD} strokeWidth={3} fill="url(#rg1)" dot={{r:5,strokeWidth:2,fill:'#ffffff',stroke:GOLD}} activeDot={{r:7,fill:GOLD}}/>
               </AreaChart>
             </ResponsiveContainer></div>);})()}
           </ChartCard>
@@ -277,9 +268,9 @@ export function Analytics(){
             {(()=>{const xa=dynamicAxis(extractValues(trend,'visits'));const ya=dynamicAxis(extractValues(trend,'books'));return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <ScatterChart margin={{top:8,right:8,left:-24,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke='var(--color-gray-100)'/>
-                <XAxis type="number" dataKey="visits" name="Visits" domain={xa.domain} ticks={xa.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
-                <YAxis type="number" dataKey="books" name="Books" domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" stroke='#e5e7eb'/>
+                <XAxis type="number" dataKey="visits" name="Visits" domain={xa.domain} ticks={xa.ticks} tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
+                <YAxis type="number" dataKey="books" name="Books" domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS} content={({payload})=>{if(!payload?.length)return null;const d=payload[0]?.payload;return(<div className="bg-white rounded-lg shadow p-3 text-xs"><p className="font-semibold mb-1">{d?.name}</p><p className="text-blue-600">Visits: <strong>{d?.visits}</strong></p><p className="text-teal-600">Books: <strong>{d?.books}</strong></p></div>);}}/>
                 <Scatter data={trend.map(d=>({...d}))}>{trend.map((_,i)=><Cell key={i} fill={i===trend.length-1?GOLD:NAVY}/>)}</Scatter>
               </ScatterChart>
@@ -293,12 +284,12 @@ export function Analytics(){
             {(()=>{const allVals=[...extractValues(trend,'visits'),...extractValues(trend,'books')];const ya=dynamicAxis(allVals);return(
             <div style={{width:"100%",height:240}}><ResponsiveContainer>
               <ComposedChart data={trend} margin={{top:8,right:8,left:-24,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-100)'/>
-                <XAxis dataKey="name" tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
-                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'var(--color-gray-500)'}} axisLine={false} tickLine={false}/>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='#e5e7eb'/>
+                <XAxis dataKey="name" tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
+                <YAxis domain={ya.domain} ticks={ya.ticks} tick={{fontSize:11,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TS}/><Legend verticalAlign="bottom" height={30} iconType="circle"/>
                 <Bar dataKey="visits" name="Visits" fill={NAVY+"44"} radius={[4,4,0,0]} barSize={24}/>
-                <Line type="monotone" dataKey="books" name="Books" stroke={GOLD} strokeWidth={2.5} dot={{r:4,strokeWidth:2,fill:'var(--color-white)',stroke:GOLD}} activeDot={{r:6,fill:GOLD}}/>
+                <Line type="monotone" dataKey="books" name="Books" stroke={GOLD} strokeWidth={2.5} dot={{r:4,strokeWidth:2,fill:'#ffffff',stroke:GOLD}} activeDot={{r:6,fill:GOLD}}/>
               </ComposedChart>
             </ResponsiveContainer></div>);})()}
           </ChartCard>

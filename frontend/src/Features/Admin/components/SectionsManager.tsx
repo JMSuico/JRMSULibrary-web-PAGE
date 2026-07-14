@@ -141,9 +141,15 @@ export function SectionsManager() {
 
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '';
-    if (imagePath.startsWith('http')) return imagePath;
-    if (imagePath.startsWith('/media/')) return imagePath;
-    return `/media/${imagePath}`;
+    if (imagePath.startsWith('http') || imagePath.startsWith('data:') || imagePath.startsWith('blob:')) return imagePath;
+    
+    // Dynamically compute the URL based on the current hostname to support Wi-Fi deployment
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+    const baseUrl = `http://${hostname}:8000`;
+    
+    if (imagePath.startsWith('/media/')) return `${baseUrl}${imagePath}`;
+    if (imagePath.startsWith('/')) return `${baseUrl}/media${imagePath}`;
+    return `${baseUrl}/media/${imagePath}`;
   };
 
   const debouncedSearch = useDebounce(searchQuery, 400);

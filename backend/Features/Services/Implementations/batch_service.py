@@ -101,10 +101,11 @@ class BatchService(IBatchService):
     def close_batch(self, batch_id: int, user_id: int) -> Optional[Any]:
         batch = self.batch_repo.update_batch(batch_id, {
             'status': BatchStatus.CLOSED,
-            'closed_at': timezone.now()
+            'closed_at': timezone.now(),
+            'is_display_batch': False
         })
         if batch:
-            self.batch_repo.record_history(batch_id, "Closed", "Batch closed for further additions", user_id)
+            self.batch_repo.record_history(batch_id, "Closed", "Batch closed for further additions and removed from display", user_id)
         return batch
 
     @transaction.atomic
@@ -152,7 +153,25 @@ class BatchService(IBatchService):
     def get_batch_history(self, batch_id: int) -> List[Any]:
         return self.batch_repo.get_batch_history(batch_id)
 
+    @transaction.atomic
     def update_batch(self, batch_id: int, data: dict, user_id: int) -> Optional[Any]:
+        # Intercept status changes to enforce business logic
+        if 'status' in data:
+            if data['status'] == BatchStatus.CLOSED or data['status'] == BatchStatus.ARCHIVED:
+                data['is_display_batch'] = False
+                if data['status'] == BatchStatus.CLOSED:
+                    data['closed_at'] = timezone.now()
+            elif data['status'] == BatchStatus.OPEN:
+                # If reopening, make it the active display batch
+                data['is_display_batch'] = True
+                data['closed_at'] = None
+                
+                # Archive the current active batch if it's different
+                current = self.batch_repo.get_current_display_batch()
+                if current and current.id != batch_id:
+                    self.batch_repo.update_batch(current.id, {'status': BatchStatus.ARCHIVED, 'is_display_batch': False})
+                    self.batch_repo.record_history(current.id, "Archived Automatically", "Replaced by reopened batch", user_id)
+        
         batch = self.batch_repo.update_batch(batch_id, data)
         if batch:
             self.batch_repo.record_history(batch_id, "Updated", "Batch metadata updated", user_id)

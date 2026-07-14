@@ -16,6 +16,7 @@ This file covers two deployment modes:
 | Python                        | 3.11+    | https://python.org                                 |
 | SQL Server (SSMS 19)          | Latest   | https://learn.microsoft.com/en-us/ssms/download    |
 | ODBC Driver 17 for SQL Server | Latest   | https://learn.microsoft.com/en-us/sql/connect/odbc |
+| Ollama (for AI Assistant)     | Latest   | https://ollama.com                                 |
 
 ### Mode B — Docker Demo
 
@@ -73,7 +74,18 @@ python manage.py runserver 8000
 
 Backend loads at: http://localhost:8000
 
-### 4. Frontend — React + Vite + Tailwind v4 Setup
+### 4. AI Assistant — Ollama Setup (Rizal AI)
+
+The Rizal AI Assistant requires Ollama to be running locally with the lightweight `qwen2.5:1.5b` model.
+
+Open a new terminal:
+```bash
+# Pull and run the model (this will download ~1GB the first time)
+ollama run qwen2.5:1.5b
+```
+Keep this running, or close it and Ollama will still run in the background.
+
+### 5. Frontend — React + Vite + Tailwind v4 Setup
 
 Open a second terminal:
 
@@ -89,12 +101,13 @@ npm run dev
 
 Frontend loads at: http://localhost:3000
 
-### 5. Run Both Together
+### 6. Run Everything Together
 
 | Terminal | Command                                                              | URL                    |
 |----------|----------------------------------------------------------------------|------------------------|
 | 1        | `cd backend && venv\Scripts\activate && python manage.py runserver 8000` | http://localhost:8000  |
 | 2        | `cd frontend && npm run dev`                                         | http://localhost:3000  |
+| 3        | `ollama run qwen2.5:1.5b`                                            | AI Engine (Background) |
 
 ---
 

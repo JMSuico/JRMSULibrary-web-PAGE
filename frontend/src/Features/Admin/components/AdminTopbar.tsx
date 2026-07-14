@@ -8,6 +8,7 @@ import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { notificationApi, Notification } from '@/src/Endpoints/notificationApi';
 import { NotificationDetailModal } from '@/src/Components/Modals/NotificationDetailModal';
 import { ProfileEditModal } from '@/src/Features/Admin/components/ProfileEditModal';
+import { useToast } from '@/src/Hooks/useToast';
 
 interface AdminTopbarProps {
   pageTitle: string;
@@ -55,6 +56,8 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
   const panelRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const previousUnread = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -62,6 +65,11 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
       const data = await notificationApi.getAll();
       setNotifications(data.notifications);
       setTotalVisits(data.total_visits);
+      
+      if (data.unread_count > previousUnread.current && previousUnread.current !== 0) {
+        showToast('You have new notifications!', 'info');
+      }
+      previousUnread.current = data.unread_count;
       setUnreadCount(data.unread_count);
     } catch (err) {
       console.error('Failed to load notifications', err);
@@ -70,12 +78,12 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
     }
   }, []);
 
-  // Fetch on mount, then poll every 60 seconds
+  // Fetch on mount, then poll every 10 seconds
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60_000);
+    const interval = setInterval(fetchNotifications, 10_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchNotifications]);
 
   // Close on outside click
   useEffect(() => {

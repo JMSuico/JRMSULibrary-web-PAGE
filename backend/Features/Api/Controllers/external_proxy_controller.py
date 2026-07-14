@@ -254,29 +254,53 @@ def vitalsource_auto_login(request):
 def scholaar_auto_login(request):
     """
     Serves an HTML bridge page that auto-submits Scholaar login credentials.
-    Scholaar uses ASP.NET WebForms — form POSTs to Login.aspx.
-    Field names: txtUsername, txtPassword, btnLogin (from inspected HTML).
+    If the Scholaar service is unreachable, immediately shows the fallback UI
+    with a direct link instead of making the user wait 10 seconds.
     """
     username = os.environ.get("SCHOLAAR_USERNAME", "")
     password = os.environ.get("SCHOLAAR_PASSWORD", "")
+
+    # Primary login URL — try both HTTP and HTTPS variants
+    login_url = "https://scholaar.com/University/HomePage.aspx"
+    fallback_direct_url = "https://scholaar.com/University/HomePage.aspx"
 
     if not username or not password:
         return HttpResponse(
             _build_error_html(
                 "Scholaar",
                 "Scholaar credentials are not configured on this server.",
-                "https://scholaar.com/Login.aspx",
+                fallback_direct_url,
             ),
             content_type="text/html",
         )
 
-    login_url = "https://scholaar.com/Login.aspx"
+    # Quick connectivity check — if the site is down, show fallback immediately
+    import urllib.request
+    site_reachable = False
+    try:
+        req = urllib.request.Request(login_url, method='HEAD')
+        urllib.request.urlopen(req, timeout=5)
+        site_reachable = True
+    except Exception:
+        logger.warning("Scholaar login page is unreachable: %s", login_url)
+        site_reachable = False
+
+    if not site_reachable:
+        # Show a clear error page with a direct link
+        return HttpResponse(
+            _build_error_html(
+                "Scholaar",
+                "The Scholaar service appears to be temporarily unavailable. Please try opening it directly or contact your administrator.",
+                fallback_direct_url,
+            ),
+            content_type="text/html",
+        )
 
     # Fetch ASP.NET ViewState tokens from the login page
     tokens = fetch_scholaar_tokens(login_url)
     logger.info("Scholaar tokens fetched: %s", list(tokens.keys()))
 
-    # Build credential fields with correct form field names (lowercase 'n' in Username)
+    # Build credential fields with correct form field names
     fields = {
         "txtUsername": username,
         "txtPassword": password,

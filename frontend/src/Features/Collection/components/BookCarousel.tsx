@@ -46,6 +46,25 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
     return 'hidden';
   };
 
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.TouchEvent | React.MouseEvent) => {
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    setTouchStart(clientX);
+  };
+
+  const handleDragEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    if (touchStart === null) return;
+    const clientX = 'changedTouches' in e ? e.changedTouches[0].clientX : (e as React.MouseEvent).clientX;
+    const diff = touchStart - clientX;
+    
+    if (Math.abs(diff) > 40) {
+      if (diff > 0) next();
+      else prev();
+    }
+    setTouchStart(null);
+  };
+
   if (items.length === 0) return null;
 
   const activeItem = items[activeIdx];
@@ -64,7 +83,14 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
           </button>
         )}
 
-        <div className="carousel-3d-stage relative min-h-[350px] md:min-h-[450px] w-full">
+        <div 
+          className="carousel-3d-stage relative min-h-[350px] md:min-h-[450px] w-full"
+          onTouchStart={handleDragStart}
+          onTouchEnd={handleDragEnd}
+          onMouseDown={handleDragStart}
+          onMouseUp={handleDragEnd}
+          style={{ cursor: 'grab' }}
+        >
           {items.map((item, idx) => {
             const pos = getPosition(idx);
             return (

@@ -45,7 +45,7 @@ class UserViewSet(viewsets.ViewSet):
             return Response({"error": "Not authenticated"}, status=401)
         return Response(self._serialize(request.user, request))
 
-    @action(detail=False, methods=["post"], throttle_classes=[LoginRateThrottle])
+    @action(detail=False, methods=["post"], throttle_classes=[LoginRateThrottle], authentication_classes=[])
     def login(self, request):
         from django.contrib.auth import authenticate, login
         from django.core.cache import cache
@@ -129,6 +129,10 @@ class UserViewSet(viewsets.ViewSet):
         ext = avatar_file.name.split('.')[-1].lower()
         if ext not in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
             return Response({"error": "Invalid image format. Allowed formats: jpg, jpeg, png, webp, gif"}, status=400)
+
+        # Rename file to UUID to avoid browser caching issues when updating
+        import uuid
+        avatar_file.name = f"{uuid.uuid4().hex}.{ext}"
 
         # Delete old avatar file if it exists
         if item.avatar:

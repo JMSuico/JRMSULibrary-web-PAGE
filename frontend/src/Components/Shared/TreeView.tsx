@@ -22,16 +22,17 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, onFileSelect }) => {
   if (node.type === 'file') {
     return (
       <div className="tree-node">
-        <a
-          className="tree-node-header file block"
-          href={node.path}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          className="tree-node-header file block w-full text-left cursor-pointer"
+          onClick={(e) => {
+            e.preventDefault();
+            onFileSelect(node);
+          }}
           style={{ paddingLeft: `${12 + depth * 20}px`, textDecoration: 'none', color: 'inherit' }}
         >
           <span className="tree-icon file-icon material-symbols-outlined text-sm">description</span>
           <span className="text-sm truncate">{node.name}</span>
-        </a>
+        </button>
       </div>
     );
   }
@@ -84,7 +85,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
     <div className="border border-outline-variant rounded-xl bg-white overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-outline-variant bg-surface-container-low">
-        <h3 className="font-headline-md font-bold text-primary">eBooks & Journals</h3>
+        <h3 className="font-headline-md font-bold text-primary">Local books</h3>
         <p className="text-xs text-on-surface-variant mt-1">Browse by department and course</p>
       </div>
 

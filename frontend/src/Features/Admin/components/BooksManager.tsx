@@ -40,6 +40,35 @@ export function BooksManager() {
   const { showToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
+  // Mouse Drag to Scroll for Recent Batches
+  const recentBatchesRef = useRef<HTMLDivElement>(null);
+  const [isDraggingBatches, setIsDraggingBatches] = useState(false);
+  const [startXBatches, setStartXBatches] = useState(0);
+  const [scrollLeftBatches, setScrollLeftBatches] = useState(0);
+
+  const onMouseDownBatches = (e: React.MouseEvent) => {
+    if (!recentBatchesRef.current) return;
+    setIsDraggingBatches(true);
+    setStartXBatches(e.pageX - recentBatchesRef.current.offsetLeft);
+    setScrollLeftBatches(recentBatchesRef.current.scrollLeft);
+    recentBatchesRef.current.style.cursor = 'grabbing';
+  };
+  const onMouseLeaveBatches = () => {
+    setIsDraggingBatches(false);
+    if (recentBatchesRef.current) recentBatchesRef.current.style.cursor = 'grab';
+  };
+  const onMouseUpBatches = () => {
+    setIsDraggingBatches(false);
+    if (recentBatchesRef.current) recentBatchesRef.current.style.cursor = 'grab';
+  };
+  const onMouseMoveBatches = (e: React.MouseEvent) => {
+    if (!isDraggingBatches || !recentBatchesRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - recentBatchesRef.current.offsetLeft;
+    const walk = (x - startXBatches) * 1.5;
+    recentBatchesRef.current.scrollLeft = scrollLeftBatches - walk;
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -175,6 +204,10 @@ export function BooksManager() {
 
   const handleViewBatchBooks = async (id: number) => {
     setLoading(true);
+    // Reset book-level filters so stale search/category doesn't carry over to a different batch
+    setSearchQuery('');
+    setSelectedCategory('All');
+    setCurrentPage(1);
     try {
       const fullBatch = await batchApi.getBatchById(id);
       setCurrentBatch(fullBatch);
@@ -331,13 +364,19 @@ export function BooksManager() {
           </button>
         </div>
         <div 
+          ref={recentBatchesRef}
+          onMouseDown={onMouseDownBatches}
+          onMouseLeave={onMouseLeaveBatches}
+          onMouseUp={onMouseUpBatches}
+          onMouseMove={onMouseMoveBatches}
           style={{ 
             display: 'flex', 
             overflowX: 'auto', 
             gap: 16,
             paddingBottom: 8,
             scrollSnapType: 'x mandatory',
-            WebkitOverflowScrolling: 'touch'
+            WebkitOverflowScrolling: 'touch',
+            cursor: 'grab'
           }}
           className="custom-scrollbar"
         >
