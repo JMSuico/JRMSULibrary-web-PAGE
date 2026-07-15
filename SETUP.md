@@ -2,7 +2,7 @@
 
 This file covers two deployment modes:
 - **Mode A — Local Development** (SSMS 19 + npm run dev)
-- **Mode B — Docker Demo** (All 4 layers containerized, no installs needed)
+- **Mode B — Docker Demo** (All 5 layers containerized, no installs needed)
 
 ---
 
@@ -68,6 +68,9 @@ python manage.py migrate
 # (Optional) Create admin superuser
 python manage.py createsuperuser
 
+# Import 4.8GB eBooks from media folder
+python manage.py import_ebooks
+
 # Start backend server on port 8000
 python manage.py runserver 8000
 ```
@@ -113,8 +116,8 @@ Frontend loads at: http://localhost:3000
 
 ## Mode B — Docker Demo (Recommended for Sharing / Demo)
 
-This runs all 4 layers (Webpage, Admin Panel, Backend, Database) in Docker
-containers without needing to install Python, Node.js, or SQL Server.
+This runs all 5 layers (Webpage, Admin Panel, Backend, Database, AI Engine) in Docker
+containers without needing to install Python, Node.js, SQL Server, or Ollama.
 
 ### 1. Start the System
 
@@ -127,6 +130,9 @@ docker-compose exec backend python manage.py migrate
 
 # First time: create admin account (skip if already created)
 docker-compose exec backend python manage.py createsuperuser
+
+# Import 4.8GB eBooks from media folder
+docker-compose exec backend python manage.py import_ebooks
 ```
 
 ### 2. Stop the System
@@ -140,10 +146,11 @@ docker-compose down
 | Layer   | What              | URL                            | Notes                          |
 |---------|-------------------|--------------------------------|--------------------------------|
 | Layer 1 | Public Webpage    | http://localhost:3000          | Student-facing library site    |
-| Layer 1 | Admin Panel       | http://localhost:3000/admin    | Login: admin / admin123        |
-| Layer 2 | Backend API       | http://localhost:8000/api      | JSON REST API                  |
-| Layer 2 | Django Admin      | http://localhost:8000/admin    | Raw Django admin panel         |
-| Layer 3 | PostgreSQL DB     | localhost:5432                 | Use DBeaver or pgAdmin to view |
+| Layer 2 | Admin Panel       | http://localhost:3001/admin    | Login: admin / admin123        |
+| Layer 3 | Backend API       | http://localhost:8000/api      | JSON REST API                  |
+| Layer 3 | Django Admin      | http://localhost:8000/admin    | Raw Django admin panel         |
+| Layer 4 | PostgreSQL DB     | localhost:5432                 | Use DBeaver or pgAdmin to view |
+| Layer 5 | Model AI Engine   | http://localhost:11434         | Fully automated Ollama API     |
 
 ### 4. Database Credentials (Docker / PostgreSQL)
 
@@ -206,6 +213,7 @@ docker-compose exec backend python manage.py migrate
 docker-compose exec backend python manage.py showmigrations
 docker-compose exec backend python manage.py shell
 docker-compose exec backend python manage.py createsuperuser
+docker-compose exec backend python manage.py import_ebooks
 
 # View live container logs
 docker-compose logs -f backend
@@ -248,32 +256,18 @@ Look for IPv4 Address under your Wi-Fi or Hotspot adapter
 
 ```
 Webpage:      http://YOUR_IP:3000
-Admin Panel:  http://YOUR_IP:3001
+Admin Panel:  http://YOUR_IP:3001/admin
 API:          http://YOUR_IP:8000/api
 ```
 
-**IMPORTANT — Fix the API URL for network sharing:**
-
-Edit `docker-compose.yml` and change `VITE_API_BASE_URL` to your real IP:
-
-```yaml
-args:
-  VITE_API_BASE_URL: http://192.168.137.1:8000/api    # replace with your IP
-```
-
-Then rebuild:
-
-```bash
-docker-compose build --no-cache
-docker-compose up -d
-```
+*(Note: Thanks to our built-in Nginx proxy, you do NOT need to hardcode your IP address in `docker-compose.yml`. Just build and run, and the frontend will automatically route API requests to the backend!)*
 
 **Sharing project files to classmates (for them to run on their own laptop):**
 1. Zip the project folder and share via USB / Google Drive / Telegram.
 2. They install Docker Desktop from https://www.docker.com/products/docker-desktop/
 3. They unzip and run:
    ```bash
-   docker-compose up -d --build
+   docker-compose up -d --build backend frontend-webpage frontend-admin redis db
    docker-compose exec backend python manage.py migrate
    ```
 4. They open http://localhost:3000 and it works on their machine!
@@ -288,6 +282,7 @@ docker-compose up -d
 | Generate new migrations      | `python manage.py makemigrations`                 | `docker-compose exec backend python manage.py makemigrations` |
 | Show migration status        | `python manage.py showmigrations`                 | `docker-compose exec backend python manage.py showmigrations` |
 | Create superuser             | `python manage.py createsuperuser`                | `docker-compose exec backend python manage.py createsuperuser`|
+| Import eBooks                | `python manage.py import_ebooks`                  | `docker-compose exec backend python manage.py import_ebooks`  |
 | Open Django shell            | `python manage.py shell`                          | `docker-compose exec backend python manage.py shell`          |
 
 ---
@@ -297,7 +292,7 @@ docker-compose up -d
 | Page              | Local (Mode A)                       | Docker (Mode B)               |
 |-------------------|--------------------------------------|-------------------------------|
 | Webpage           | http://localhost:3000                | http://localhost:3000         |
-| Admin Panel       | http://localhost:3000/admin          | http://localhost:3001         |
+| Admin Panel       | http://localhost:3000/admin          | http://localhost:3001/admin   |
 | Backend API       | http://localhost:8000/api            | http://localhost:8000/api     |
 | Django Admin      | http://localhost:8000/admin          | http://localhost:8000/admin   |
 | Books API         | http://localhost:8000/api/books      | Same                          |
@@ -360,7 +355,7 @@ JRMSU LIBRARY LANDING PAGE/           <- root
 │   ├── manage.py
 │   └── setup_db.py                   <- Interactive local DB setup
 ├── k8s/                              <- Kubernetes manifests (cloud deployment)
-├── docker-compose.yml                <- Orchestrates all 4 layers
+├── docker-compose.yml                <- Orchestrates all 5 layers
 ├── .env                              <- Docker environment variables (never commit!)
 ├── .env.docker                       <- Template for .env
 ├── Access.md                         <- How to access all layers + sharing guide
@@ -414,3 +409,25 @@ Incoming Request
   -> Repository Layer  (query, persist, filter)
   -> Database          (final state)
 ```
+
+### 3.7 Self-Healing & Auto-Scaling (HPA)
+
+Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
+
+To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
+
+To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
+```bash
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/hpa.yaml
+```
+
+Verify the HPA is running:
+```bash
+kubectl get hpa -n jrmsu-library
+```
+
+### 🚀 One-Click Kubernetes Start/Stop Scripts
+For convenience, two helper scripts have been added to the project root:
+- **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
+- **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.

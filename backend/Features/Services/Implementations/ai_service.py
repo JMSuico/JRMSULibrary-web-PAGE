@@ -90,7 +90,8 @@ DYNAMIC DATABASE KNOWLEDGE:
         }
 
         try:
-            response = requests.post(self.ollama_url, json=payload, timeout=30)
+            # Increased timeout to 120s because local AI models on CPU can take a long time to think and stream the response
+            response = requests.post(self.ollama_url, json=payload, timeout=120)
             response.raise_for_status()
             data = response.json()
             
@@ -107,3 +108,42 @@ DYNAMIC DATABASE KNOWLEDGE:
         except Exception as e:
             logger.error(f"Error communicating with Ollama: {str(e)}")
             return "I'm sorry, an internal error occurred while processing your request."
+
+    def generate_chat_stream(self, user_message: str, chat_history: list = None):
+        """
+        Sends the user message and dynamic context history to Ollama and yields the response as a stream.
+        """
+        messages = [{"role": "system", "content": self._build_dynamic_system_prompt()}]
+        
+        if chat_history:
+            for msg in chat_history[-6:]:
+                role = "assistant" if msg.get('sender') == 'rizal' else "user"
+                messages.append({"role": role, "content": msg.get('text', '')})
+                
+        messages.append({"role": "user", "content": user_message})
+
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": True
+        }
+
+        try:
+            response = requests.post(self.ollama_url, json=payload, stream=True, timeout=120)
+            response.raise_for_status()
+            
+            for line in response.iter_lines():
+                if line:
+                    data = json.loads(line)
+                    if 'message' in data and 'content' in data['message']:
+                        yield data['message']['content']
+                        
+        except requests.exceptions.ConnectionError:
+            logger.error(f"Failed to connect to Ollama at {self.ollama_url}")
+            yield "I'm currently offline because my AI engine (Ollama) is not reachable. Please ask the administrator to start it and set OLLAMA_HOST=0.0.0.0."
+        except requests.exceptions.Timeout:
+            logger.error("Ollama request timed out.")
+            yield "I'm thinking too hard and my response timed out. Please try asking again in a moment."
+        except Exception as e:
+            logger.error(f"Error communicating with Ollama: {str(e)}")
+            yield "I'm sorry, an internal error occurred while processing your request."

@@ -17,7 +17,7 @@ As documented in `DEMODEPLOYMENT.md`, the system is structured into 5 integrated
 | **Layer 2 (Frontend Admin Page)** | http://localhost:3001/admin | Serves the Admin Panel. |
 | **Layer 3 (Backend)** | http://192.168.15.194:8000/api | Django REST API |
 | **Layer 4 (Database)**| localhost:5432 | PostgreSQL (internal network, accessible via DBeaver/pgAdmin) |
-| **Layer 5 (Model AI)**| localhost:11434 | Ollama running Qwen2.5:1.5b (65ec06548149, 986 MB) |
+| **Layer 5 (Model AI)**| localhost:11434 | Ollama running in Docker. Needs Qwen2.5:1.5b pulled |
 
 ---
 
@@ -62,13 +62,14 @@ All required files have been created and configured.
 ## Phase 3 — Run the Demo (Ready)
 
 Follow the official `DEMODEPLOYMENT.md` instructions:
-1. Start Ollama on the host: `$env:OLLAMA_HOST="0.0.0.0"; ollama serve`
-2. Ensure `.env` is properly populated.
-3. Run `docker-compose build --no-cache`.
-4. Run `docker-compose up -d --force-recreate`.
-5. Apply migrations: `docker-compose exec backend python manage.py migrate`.
-6. Create admin: `docker-compose exec backend python manage.py createsuperuser`.
-7. Access http://localhost:3000 (webpage) and http://localhost:3001/admin (admin) to verify.
+1. Ensure `.env` is properly populated.
+2. Run `docker-compose build --no-cache`.
+3. Run `docker-compose up -d --force-recreate`.
+4. Apply migrations: `docker-compose exec backend python manage.py migrate`.
+5. Create admin: `docker-compose exec backend python manage.py createsuperuser`.
+6. Import eBooks: `docker-compose exec backend python manage.py import_ebooks`.
+7. Download the AI Model: `docker-compose exec ollama ollama run qwen2.5:1.5b`.
+8. Access http://localhost:3000 (webpage) and http://localhost:3001/admin (admin) to verify.
 
 ---
 
@@ -99,3 +100,25 @@ Only after Docker Compose demo works successfully:
 | 12 | `k8s/frontend-admin.yaml` | **EXISTS** |
 | 13 | `k8s/ingress.yaml` | **EXISTS** |
 | 14 | Fix `ALLOWED_HOSTS` in `settings.py` | **DONE** |
+
+### 3.7 Self-Healing & Auto-Scaling (HPA)
+
+Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
+
+To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
+
+To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
+```bash
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/hpa.yaml
+```
+
+Verify the HPA is running:
+```bash
+kubectl get hpa -n jrmsu-library
+```
+
+### 🚀 One-Click Kubernetes Start/Stop Scripts
+For convenience, two helper scripts have been added to the project root:
+- **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
+- **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.

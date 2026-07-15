@@ -91,11 +91,23 @@ class RecycleBinRepository(IRecycleBinRepository):
             elif item.source_module == 'ERESOURCE_DEPT':
                 snap = dict(item.data_snapshot)
                 snap.pop('id', None)
-                EResourceDepartment.objects.create(**snap)
+                snap.pop('children', None)
+                snap.pop('files', None)
+                
+                parent_id = snap.pop('parent', None)
+                if parent_id:
+                    # Verify parent still exists before attempting to link
+                    if not EResourceDepartment.objects.filter(id=parent_id).exists():
+                        parent_id = None
+                
+                EResourceDepartment.objects.create(parent_id=parent_id, **snap)
 
             elif item.source_module == 'ERESOURCE_FILE':
                 snap = dict(item.data_snapshot)
                 snap.pop('id', None)
+                snap.pop('children', None)
+                snap.pop('files', None)
+                
                 dept_id = snap.pop('department', None)
                 if dept_id:
                     dept = EResourceDepartment.objects.filter(id=dept_id).first()

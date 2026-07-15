@@ -292,11 +292,11 @@ export function SectionsManager() {
               <div className="admin-card-grid p-5">
                 {paginatedSections.map((img) => (
                   <div className="admin-grid-card" key={img.id}>
-                    <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: 'var(--color-gray-100)' }}>
+                    <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: 'var(--color-gray-100)', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
                       <img
                         src={getImageUrl(img.image)}
                         alt={img.title}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
                       />
                       {!img.is_active && (
                         <div style={{

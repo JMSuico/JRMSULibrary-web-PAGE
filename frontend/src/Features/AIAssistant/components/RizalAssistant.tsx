@@ -131,18 +131,41 @@ export const RizalAssistant: React.FC = () => {
     if (!chatInput.trim() || isTyping) return;
     
     const userMsg = chatInput.trim();
-    setChatMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
+    const currentHistory = chatMessages; // capture current state to send to backend
+
+    // Add user msg + empty rizal msg placeholders
+    setChatMessages(prev => [
+      ...prev, 
+      { sender: 'user', text: userMsg },
+      { sender: 'rizal', text: '' }
+    ]);
+    
     setChatInput('');
     setIsTyping(true);
     setChatFlowState('suggestions'); // Ensure forms are closed when chatting
 
     try {
-      // Send to backend which forwards to Ollama
-      const res = await aiApi.chat(userMsg, chatMessages);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: res.response }]);
+      // Send to backend which streams Ollama chunks
+      await aiApi.chatStream(userMsg, currentHistory, (chunk) => {
+        setChatMessages(prev => {
+          const newMessages = [...prev];
+          const lastMsg = newMessages[newMessages.length - 1];
+          if (lastMsg.sender === 'rizal') {
+            lastMsg.text += chunk;
+          }
+          return newMessages;
+        });
+      });
     } catch (err) {
       console.error(err);
-      setChatMessages(prev => [...prev, { sender: 'rizal', text: 'Sorry, I am having trouble connecting to my AI brain right now.' }]);
+      setChatMessages(prev => {
+        const newMessages = [...prev];
+        const lastMsg = newMessages[newMessages.length - 1];
+        if (lastMsg.sender === 'rizal' && lastMsg.text === '') {
+          lastMsg.text = 'Sorry, I am having trouble connecting to my AI brain right now.';
+        }
+        return newMessages;
+      });
     } finally {
       setIsTyping(false);
     }
@@ -441,15 +464,20 @@ export const RizalAssistant: React.FC = () => {
 
             {/* Chat messages */}
             <div className="relative z-10 flex flex-col gap-3">
-              {chatMessages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                  <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${msg.sender === 'user' ? 'bg-gold-light text-navy-dark rounded-br-none' : 'bg-white border border-gray-100 text-gray-700 rounded-bl-none'} whitespace-pre-wrap`}>
-                    {msg.text}
+              {chatMessages.map((msg, idx) => {
+                // Don't render empty AI message placeholders
+                if (msg.sender === 'rizal' && msg.text === '') return null;
+                
+                return (
+                  <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+                    <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${msg.sender === 'user' ? 'bg-gold-light text-navy-dark rounded-br-none' : 'bg-white border border-gray-100 text-gray-700 rounded-bl-none'} whitespace-pre-wrap`}>
+                      {msg.text}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               
-              {isTyping && (
+              {isTyping && chatMessages[chatMessages.length - 1]?.text === '' && (
                 <div className="flex justify-start animate-fade-in">
                   <div className="max-w-[85%] p-3 rounded-2xl text-sm shadow-sm bg-white border border-gray-100 rounded-bl-none flex gap-1 items-center">
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>

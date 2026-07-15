@@ -14,7 +14,7 @@ The system is structured into **5 distinct layers**:
 | **Layer 2** | Frontend Admin Page | Secure Admin Panel (Port 3000) React app |
 | **Layer 3** | Backend | Django + DRF API server (Gunicorn, Port 8000) |
 | **Layer 4** | Database | PostgreSQL / MariaDB data store (Port 5432) |
-| **Layer 5** | Model AI | Local AI Engine running Qwen2.5:1.5b (Port 11434) |
+| **Layer 5** | Model AI | Dockerized AI Engine running Qwen2.5:1.5b (Port 11434) |
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -169,9 +169,29 @@ services:
     ports:
       - "3001:80"
 
+  # ─── Layer 5: Model AI ─────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # ─── Layer 5 Init: Auto-pull Qwen Model ────────────────────────────────
+  ollama-init:
+    image: ollama/ollama:latest
+    restart: "no"
+    depends_on:
+      - ollama
+    entrypoint: ["sh", "-c", "sleep 10 && ollama pull qwen2.5:1.5b"]
+    environment:
+      - OLLAMA_HOST=ollama:11434
+
 volumes:
   db_data:
   media_data:
+  ollama_data:
 ```
 
 ---
@@ -464,78 +484,24 @@ stringData:
   DJANGO_SECRET_KEY: <CHANGE_ME>
 ```
 
----
+### 3.7 Self-Healing & Auto-Scaling (HPA)
 
-## Phase 4: Deployment Workflow
+Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
 
-### Step-by-Step Commands
+To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
 
+To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
 ```bash
-# ── Layer 4: Build & push Database (uses official image — no build needed) ──
-# No build step required; Postgres/MariaDB image is pulled directly.
-
-# ── Layer 3: Build & push Backend ──────────────────────────────────────────
-docker build -t jrmsu-library/backend:latest ./backend
-docker tag jrmsu-library/backend:latest registry.example.com/jrmsu/backend:v1.0
-docker push registry.example.com/jrmsu/backend:v1.0
-
-# ── Layer 1: Build & push Frontend — Webpage ───────────────────────────────
-docker build -t jrmsu-library/frontend-webpage:latest \
-  --build-arg VITE_API_BASE_URL=https://library.jrmsu.edu.ph/api \
-  --build-arg VITE_APP_MODE=webpage ./frontend
-docker tag jrmsu-library/frontend-webpage:latest registry.example.com/jrmsu/frontend-webpage:v1.0
-docker push registry.example.com/jrmsu/frontend-webpage:v1.0
-
-# ── Layer 2: Build & push Frontend — Admin Page ────────────────────────────
-docker build -t jrmsu-library/frontend-admin:latest \
-  --build-arg VITE_API_BASE_URL=https://library.jrmsu.edu.ph/api \
-  --build-arg VITE_APP_MODE=admin ./frontend
-docker tag jrmsu-library/frontend-admin:latest registry.example.com/jrmsu/frontend-admin:v1.0
-docker push registry.example.com/jrmsu/frontend-admin:v1.0
-
-# ── Test locally with docker-compose ───────────────────────────────────────
-docker-compose up -d
-docker-compose exec backend python manage.py migrate
-docker-compose exec backend python manage.py createsuperuser
-
-# ── Apply Kubernetes manifests (bottom-up: DB → Backend → Frontend) ────────
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/secrets.yaml
-kubectl apply -f k8s/database.yaml        # Layer 4
-kubectl apply -f k8s/backend.yaml         # Layer 3
-kubectl apply -f k8s/frontend-webpage.yaml  # Layer 1
-kubectl apply -f k8s/frontend-admin.yaml    # Layer 2
-kubectl apply -f k8s/ingress.yaml
-
-# ── Run database migrations inside the cluster ─────────────────────────────
-kubectl exec -n jrmsu-library deploy/backend -- python manage.py migrate
-
-# ── Verify all 4 layers are running ───────────────────────────────────────
-kubectl get pods -n jrmsu-library
-kubectl get svc -n jrmsu-library
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/hpa.yaml
 ```
 
----
+Verify the HPA is running:
+```bash
+kubectl get hpa -n jrmsu-library
+```
 
-## Phase 5: Production Checklist
-
-| Item | Status |
-|------|--------|
-| Environment variables via Secrets/ConfigMaps | Required |
-| HTTPS via cert-manager + Let's Encrypt | Required |
-| Health checks (readiness/liveness probes) | Included |
-| Resource limits (CPU/Memory) | Included |
-| Persistent volume for DB and media uploads | Included |
-| Rolling update strategy | Default (K8s) |
-| Horizontal Pod Autoscaler (HPA) | Optional |
-| Centralized logging (EFK/Loki) | Optional |
-| Monitoring (Prometheus + Grafana) | Optional |
-
----
-
-## Notes
-
-- **Database choice:** The manifests above use PostgreSQL. If you prefer MariaDB/MySQL (as mentioned in AGENTS.md), swap the image to `mariadb:11` and adjust the environment variables and connection string accordingly.
-- **Media files:** Django media uploads should be stored on a shared PersistentVolume or an object storage service (e.g., S3-compatible) in production.
-- **CORS:** Ensure Django's `CORS_ALLOWED_ORIGINS` is configured to match the frontend's production domain.
-- **No SQLite:** Per project rules, SQLite is never used. The Docker setup enforces PostgreSQL/MariaDB from the start.
+### 🚀 One-Click Kubernetes Start/Stop Scripts
+For convenience, two helper scripts have been added to the project root:
+- **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
+- **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.

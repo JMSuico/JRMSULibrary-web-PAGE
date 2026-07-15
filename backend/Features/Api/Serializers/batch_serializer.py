@@ -14,9 +14,7 @@ class BatchBookSerializer(serializers.ModelSerializer):
 
     def get_cover_image(self, obj):
         if obj.cover_image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.cover_image.url)
+            # Always return relative URL so frontend proxy handles it, fixing cross-device broken images
             return obj.cover_image.url
         return None
 

@@ -261,8 +261,8 @@ def scholaar_auto_login(request):
     password = os.environ.get("SCHOLAAR_PASSWORD", "")
 
     # Primary login URL — try both HTTP and HTTPS variants
-    login_url = "https://scholaar.com/University/HomePage.aspx"
-    fallback_direct_url = "https://scholaar.com/University/HomePage.aspx"
+    login_url = "http://scholaar.com/University/HomePage.aspx"
+    fallback_direct_url = "http://scholaar.com/University/HomePage.aspx"
 
     if not username or not password:
         return HttpResponse(
@@ -312,7 +312,7 @@ def scholaar_auto_login(request):
     html = _build_bridge_html(
         title="Scholaar Database",
         login_url=login_url,
-        target_url="https://scholaar.com/University/HomePage.aspx",
+        target_url="http://scholaar.com/University/HomePage.aspx",
         fields=fields,
         brand_color="#C9A84C",
     )

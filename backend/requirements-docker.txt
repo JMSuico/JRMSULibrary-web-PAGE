@@ -16,3 +16,8 @@ requests==2.34.2
 
 # PostgreSQL driver (replaces mssql-django + pyodbc for Docker/Linux)
 psycopg2-binary==2.9.10
+
+# WebSockets
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.1.2

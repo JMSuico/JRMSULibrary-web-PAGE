@@ -4,6 +4,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.http import StreamingHttpResponse
 from rest_framework.throttling import ScopedRateThrottle
 from Features.Services.Implementations.ai_service import AIService
 
@@ -38,9 +39,13 @@ class AIViewSet(viewsets.ViewSet):
         if not user_message:
             return Response({'error': 'Message cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Generate response from Ollama
-        response_text = self.service.generate_chat_response(user_message, chat_history)
+        # Return stream response
+        def event_stream():
+            try:
+                for chunk in self.service.generate_chat_stream(user_message, chat_history):
+                    yield chunk
+            except Exception as e:
+                print(f"Ollama AI Error: {e}")
+                yield "I'm currently experiencing high load or connection issues. Please try asking again in a few moments."
 
-        return Response({
-            'response': response_text
-        }, status=status.HTTP_200_OK)
+        return StreamingHttpResponse(event_stream(), content_type='text/plain')

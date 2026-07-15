@@ -8,6 +8,7 @@ import {
   Trash2,
   Pencil,
   CheckCircle,
+  LogOut,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { userApi, User } from '@/src/Endpoints/userApi';
@@ -189,6 +190,7 @@ export function UserManagement() {
                   <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
+                  <th>Connection</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -209,6 +211,11 @@ export function UserManagement() {
                     <td>
                       <span className={`admin-badge ${user.is_active ? 'admin-badge--success' : 'admin-badge--danger'}`}>
                         {user.is_active ? 'Active' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`admin-badge ${user.is_online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {user.is_online ? 'Online' : 'Offline'}
                       </span>
                     </td>
                     <td>
@@ -238,6 +245,28 @@ export function UserManagement() {
                           }}
                         >
                           <ShieldAlert size={15} className={user.is_active ? 'text-orange-500' : 'text-green-500'} />
+                        </button>
+                        <button 
+                          className="admin-btn admin-btn--icon" 
+                          aria-label="Force Logout"
+                          title="Force Logout User"
+                          onClick={() => {
+                            setConfirmModal({
+                              isOpen: true,
+                              title: 'Force Logout',
+                              message: `Are you sure you want to force logout ${user.first_name}? They will be immediately disconnected.`,
+                              onConfirm: async () => {
+                                try {
+                                  await userApi.forceLogout(user.id);
+                                  showToast('User has been forced logged out', 'success');
+                                } catch (e: any) {
+                                  showToast(e.message || 'Failed to force logout', 'error');
+                                }
+                              }
+                            });
+                          }}
+                        >
+                          <LogOut size={15} className="text-gray-600 hover:text-red-600" />
                         </button>
                         <button 
                           className="admin-btn admin-btn--icon" 

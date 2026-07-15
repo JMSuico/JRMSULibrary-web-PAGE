@@ -234,3 +234,25 @@ If a classmate wants to run the project on their OWN laptop:
    ```
 
 4. They open http://localhost:3000 and it works on their machine too!
+
+### 3.7 Self-Healing & Auto-Scaling (HPA)
+
+Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
+
+To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
+
+To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
+```bash
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/hpa.yaml
+```
+
+Verify the HPA is running:
+```bash
+kubectl get hpa -n jrmsu-library
+```
+
+### 🚀 One-Click Kubernetes Start/Stop Scripts
+For convenience, two helper scripts have been added to the project root:
+- **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
+- **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.

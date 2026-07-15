@@ -1,4 +1,4 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 WORKDIR /app
 
 # System dependencies for psycopg2 and other packages
@@ -21,9 +21,4 @@ RUN python manage.py collectstatic --noinput || true
 
 EXPOSE 8000
 
-CMD ["gunicorn", "core.wsgi:application", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "3", \
-     "--timeout", "120", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "core.asgi:application"]

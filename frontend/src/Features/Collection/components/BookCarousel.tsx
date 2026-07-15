@@ -84,7 +84,7 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
         )}
 
         <div 
-          className="carousel-3d-stage relative min-h-[350px] md:min-h-[450px] w-full"
+          className="carousel-3d-stage relative min-h-[500px] md:min-h-[600px] w-full"
           onTouchStart={handleDragStart}
           onTouchEnd={handleDragEnd}
           onMouseDown={handleDragStart}
@@ -98,7 +98,7 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
                 key={idx}
                 className={`carousel-3d-card ${pos}`}
                 style={{
-                  width: pos === 'active' ? '240px' : pos === 'right' || pos === 'left' ? '180px' : '140px',
+                  width: pos === 'active' ? 'min(75vw, 400px)' : pos === 'right' || pos === 'left' ? 'min(60vw, 300px)' : 'min(45vw, 200px)',
                   // Book covers are typically taller than they are wide (e.g. 2:3 or 3:4 ratio)
                   aspectRatio: '2 / 3',
                 }}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Eye, Pencil, Trash2, X, ChevronRight, ListOrdered, MoreVertical } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
@@ -29,6 +29,7 @@ export function BooksManager() {
   const [editBatch, setEditBatch] = useState<AcquisitionBatch | null>(null);
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
+  const [activeBookDropdown, setActiveBookDropdown] = useState<number | null>(null);
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -46,7 +47,7 @@ export function BooksManager() {
   const [startXBatches, setStartXBatches] = useState(0);
   const [scrollLeftBatches, setScrollLeftBatches] = useState(0);
 
-  const onMouseDownBatches = (e: React.MouseEvent) => {
+  const onMouseDownBatches = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!recentBatchesRef.current) return;
     setIsDraggingBatches(true);
     setStartXBatches(e.pageX - recentBatchesRef.current.offsetLeft);
@@ -61,7 +62,7 @@ export function BooksManager() {
     setIsDraggingBatches(false);
     if (recentBatchesRef.current) recentBatchesRef.current.style.cursor = 'grab';
   };
-  const onMouseMoveBatches = (e: React.MouseEvent) => {
+  const onMouseMoveBatches = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDraggingBatches || !recentBatchesRef.current) return;
     e.preventDefault();
     const x = e.pageX - recentBatchesRef.current.offsetLeft;
@@ -492,10 +493,43 @@ export function BooksManager() {
           {viewMode === 'grid' && (
             <div className="admin-card-grid" style={{ padding: 20 }}>
               {paginatedBooks.map((book) => (
-                <div className="admin-grid-card" key={book.id}>
-                  <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="admin-grid-card relative" key={book.id}>
+                  {/* Kebab Menu */}
+                  <div className="absolute top-2 right-2 z-10">
+                    <div className="relative inline-block text-left">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(activeBookDropdown === book.id ? null : book.id); }}
+                        className="p-1.5 rounded-full bg-white/90 hover:bg-white text-gray-600 shadow-sm transition-colors border border-gray-100 cursor-pointer"
+                        aria-label="Book actions"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                      
+                      {activeBookDropdown === book.id && (
+                        <>
+                          <div className="fixed inset-0 z-[9999] animate-modal-overlay" onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(null); }}></div>
+                          <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1 animate-modal-card" onClick={e => e.stopPropagation()}>
+                            <button 
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
+                              onClick={() => { setEditingBook(book); setIsBookFormOpen(true); setActiveBookDropdown(null); }}
+                            >
+                              <Pencil size={14} /> Edit
+                            </button>
+                            <button 
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
+                              onClick={() => { handleDeleteBook(book.id); setActiveBookDropdown(null); }}
+                            >
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
                     {book.cover_image ? (
-                      <img src={book.cover_image} alt={book.title} style={{ height: '100%', objectFit: 'contain' }} />
+                      <img src={book.cover_image} alt={book.title} style={{ height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }} />
                     ) : (
                       <BookOpen size={40} color='var(--color-gray-400)' />
                     )}

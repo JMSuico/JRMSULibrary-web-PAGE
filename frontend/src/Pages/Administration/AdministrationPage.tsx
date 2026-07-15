@@ -203,8 +203,8 @@ export default function AdministrationPage() {
           id: String(file.id),
           name: file.name,
           path: fileUrl,
-          type: fileUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : fileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? 'image' : 'file',
-        };
+          type: (fileUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : fileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? 'image' : 'file') as any,
+        } as any;
 
         const fileList: TreeNodeData[] = allFiles.map(f => {
           const fUrl = getFileUrl(f.file);
@@ -212,8 +212,8 @@ export default function AdministrationPage() {
             id: String(f.id),
             name: f.name,
             path: fUrl,
-            type: fUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : fUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? 'image' : 'file',
-          };
+            type: (fUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : fUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? 'image' : 'file') as any,
+          } as any;
         });
 
         return (

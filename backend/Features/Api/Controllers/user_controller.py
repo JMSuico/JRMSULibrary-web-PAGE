@@ -71,6 +71,22 @@ class UserViewSet(viewsets.ViewSet):
         if user is not None:
             cache.delete(cache_key)
             cache.delete(cache_key_ts)
+            
+            from django.utils import timezone
+            # Enforce single device login: Strict Lockout if currently online
+            if user.last_active and (timezone.now() - user.last_active).total_seconds() < 60:
+                return Response({"error": "Account already online cant be Login!"}, status=403)
+            
+            user.last_active = timezone.now()
+            user.save(update_fields=['last_active'])
+            
+            # Clear old sessions just to be clean
+            from django.contrib.sessions.models import Session
+            for session in Session.objects.filter(expire_date__gte=timezone.now()):
+                session_data = session.get_decoded()
+                if str(user.pk) == str(session_data.get('_auth_user_id')):
+                    session.delete()
+            
             login(request, user)
             return Response(self._serialize(user, request))
             
@@ -89,8 +105,44 @@ class UserViewSet(viewsets.ViewSet):
         if request.user.is_authenticated:
             cache.delete(f"login_attempts_{request.user.username}")
             cache.delete(f"login_lockout_ts_{request.user.username}")
+            request.user.last_active = None
+            request.user.save(update_fields=['last_active'])
         logout(request)
         return Response({"message": "Successfully logged out."})
+
+    @action(detail=True, methods=["post"])
+    def force_logout(self, request, pk=None):
+        user = self.service.get_by_id(pk)
+        if not user:
+            return Response(status=404)
+        
+        # Clear their last active timestamp
+        user.last_active = None
+        user.save(update_fields=['last_active'])
+        
+        # Clear their sessions from the database
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone
+        for session in Session.objects.filter(expire_date__gte=timezone.now()):
+            session_data = session.get_decoded()
+            if str(user.pk) == str(session_data.get('_auth_user_id')):
+                session.delete()
+                
+        # Also clear any cache locks
+        from django.core.cache import cache
+        cache.delete(f"login_attempts_{user.username}")
+        cache.delete(f"login_lockout_ts_{user.username}")
+        
+        return Response({"message": f"User {user.username} was forced to log out."})
+
+    @action(detail=False, methods=["post"])
+    def heartbeat(self, request):
+        if not request.user.is_authenticated:
+            return Response(status=401)
+        from django.utils import timezone
+        request.user.last_active = timezone.now()
+        request.user.save(update_fields=['last_active'])
+        return Response({"status": "ok"})
 
     def create(self, request):
         ser = UserCreateUpdateSerializer(data=request.data)

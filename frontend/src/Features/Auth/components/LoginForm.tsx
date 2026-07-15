@@ -60,8 +60,10 @@ export function LoginForm() {
       }
 
       showToast('Login successful', 'success');
-      // Redirect to admin dashboard
-      navigate('/admin');
+      
+      // Force a full page reload to flush any stale SPA state or chunk hashes,
+      // especially if the server was recently restarted.
+      window.location.href = '/admin';
     } catch (err: any) {
       showToast(err.message || 'Invalid credentials', 'error');
     } finally {

@@ -1,4 +1,4 @@
-# Layer 3 — Backend (Django + Gunicorn)
+ï»¿# Layer 3 - Backend (Django + Gunicorn)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,6 +28,13 @@ spec:
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
           resources:
             requests:
               cpu: 100m

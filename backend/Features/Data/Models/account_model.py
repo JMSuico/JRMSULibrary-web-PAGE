@@ -6,6 +6,7 @@ from django.db import models
 class Account(AbstractUser):
     is_librarian = models.BooleanField(default=False)
     is_guest = models.BooleanField(default=True)
+    last_active = models.DateTimeField(null=True, blank=True)
     avatar = models.ImageField(
         upload_to='avatars/',
         null=True,

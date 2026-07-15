@@ -16,7 +16,7 @@ The system runs completely containerized in **5 distinct layers**:
 
 > **Note on Frontend:** The public webpage and the admin panel are served by two separate Docker containers of the same React application. The webpage is on Port 3000 and the admin panel is on Port 3001. React Router handles the `/admin` routes internally.
 
-> **Note on Model AI (Layer 5):** Ollama runs natively on the Windows host machine (not inside Docker). The backend container reaches it via `host.docker.internal:11434`.
+> **Note on Model AI (Layer 5):** Ollama now runs fully containerized alongside the other services. The backend container reaches it directly via the internal Docker network.
 
 ### Ports and Links to Open
 When the system is running, here are the links you will need to open:
@@ -56,35 +56,26 @@ If you are experiencing build errors, stale caches, or unfinished states, it is 
 
 Open your terminal (PowerShell or Command Prompt) in the project root directory and run these commands in order:
 
-**1. Start the local AI Engine (Layer 5 — Required on Windows Host):**
-Open a separate PowerShell terminal and run:
-```bash
-$env:OLLAMA_HOST="0.0.0.0"
-ollama serve
-```
-*(Leave this terminal window open in the background so the Docker containers can reach the AI).*
-
-**2. Wipe all existing containers, volumes, and orphaned networks:**
+**1. Wipe all existing containers, volumes, and orphaned networks:**
 ```bash
 docker-compose down -v --remove-orphans
 ```
 
-**3. Build completely fresh (ignoring all caches):**
+**2. Build completely fresh (ignoring all caches):**
 ```bash
 docker-compose build --no-cache
 ```
 
-**4. Start the containers in detached mode:**
+**3. Start the containers in detached mode:**
 ```bash
 docker-compose up -d --force-recreate
 ```
 
 **Boot Sequence:**
-1. **Database (Layer 4)** starts first.
+1. **Database (Layer 4)** and **Model AI (Layer 5)** start first.
 2. **Backend (Layer 3)** waits for the database to be healthy before starting.
 3. **Frontend Webpage (Layer 1)** waits for the backend, served on Port 3000.
 4. **Frontend Admin (Layer 2)** waits for the backend, served on Port 3001.
-5. **Model AI (Layer 5)** runs on the host via Ollama, reached by backend via `host.docker.internal:11434`.
 
 ---
 
@@ -101,7 +92,17 @@ docker-compose exec backend python manage.py migrate
 ```bash
 docker-compose exec backend python manage.py createsuperuser
 ```
-*(Follow the interactive terminal prompts to define an admin username, email, and password).*
+**3. Import 4.8GB eBooks into Database:**
+```bash
+docker-compose exec backend python manage.py import_ebooks
+```
+*(Make sure you have moved the eBooks folder to backend/media/e_resources/ on your host first!)*
+
+**4. Download the AI Model (First time only):**
+```bash
+docker-compose exec ollama ollama run qwen2.5:1.5b
+```
+*(This will download the 986 MB model directly into the Ollama container's volume. Once it finishes downloading and starts an interactive prompt, you can type `/bye` or press `Ctrl+D` to exit.)*
 
 ---
 
@@ -161,10 +162,12 @@ Here is a quick reference guide for what commands to use and when:
 - **Start the system**: `docker-compose up -d`
 - **Stop the system safely**: `docker-compose down`
 - **View all logs**: `docker-compose logs -f`
-- **Start the AI Engine (Host)**: `$env:OLLAMA_HOST="0.0.0.0"; ollama serve`
 
 ### Occasionally Used Commands (Updates or minor fixes)
-- **Rebuild after making code changes**: `docker-compose up -d --build`
+- **Rebuild after making code changes**: 
+  To rebuild everything: `docker-compose up -d --build`
+  To build only the core layers (skipping AI models):
+  `docker-compose up -d --build backend frontend-webpage frontend-admin redis db`
 - **Apply new database migrations**: `docker-compose exec backend python manage.py migrate`
 - **View backend errors only**: `docker-compose logs -f backend`
 
@@ -173,3 +176,25 @@ Here is a quick reference guide for what commands to use and when:
 - **Complete fresh rebuild without cache**: `docker-compose build --no-cache`
 - **Create a new admin user**: `docker-compose exec backend python manage.py createsuperuser`
 - **Access the backend terminal shell**: `docker-compose exec backend bash`
+
+### 3.7 Self-Healing & Auto-Scaling (HPA)
+
+Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
+
+To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
+
+To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
+```bash
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/hpa.yaml
+```
+
+Verify the HPA is running:
+```bash
+kubectl get hpa -n jrmsu-library
+```
+
+### 🚀 One-Click Kubernetes Start/Stop Scripts
+For convenience, two helper scripts have been added to the project root:
+- **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
+- **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.

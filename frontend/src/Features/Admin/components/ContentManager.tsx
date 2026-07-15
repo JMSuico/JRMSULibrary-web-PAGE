@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
-import { Save, Plus, Trash2, Edit2 } from 'lucide-react';
+import { Save, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, RefreshCw, GripVertical, Check, X } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';

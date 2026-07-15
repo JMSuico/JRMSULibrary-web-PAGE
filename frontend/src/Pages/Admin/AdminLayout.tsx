@@ -7,6 +7,7 @@ import { ToastProvider } from '@/src/Hooks/useToast';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { Loader2 } from 'lucide-react';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
+import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
 
 import bgImage from '@/src/Assets/assets/JRMSU library lib.jpg';
 
@@ -88,6 +89,9 @@ export default function AdminLayout() {
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'Admin Panel';
 
+  // Monitor server connection: if server drops and reconnects, force reload. (Ignores normal CMS updates)
+  useGlobalAutoRefresh(15000, true);
+
   const handleAutoLogout = useCallback(async () => {
     try {
       await userApi.logout();
@@ -113,6 +117,19 @@ export default function AdminLayout() {
   const handleCloseMobile = useCallback(() => {
     setMobileOpen(false);
   }, []);
+
+  // Heartbeat to keep account online
+  useEffect(() => {
+    if (isAuthenticated) {
+      userApi.heartbeat(); // Initial ping
+      const interval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          userApi.heartbeat();
+        }
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   // Wait for auth check
   if (isAuthenticated === null) {

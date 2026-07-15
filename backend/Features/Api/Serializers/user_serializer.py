@@ -7,17 +7,25 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
+    is_online = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ["id", "username", "email", "first_name", "last_name",
-                  "is_active", "is_staff", "date_joined", "avatar_url"]
+                  "is_active", "is_staff", "date_joined", "avatar_url", "is_online"]
         read_only_fields = ["id", "date_joined"]
+
+    def get_is_online(self, obj):
+        from django.utils import timezone
+        if obj.last_active and (timezone.now() - obj.last_active).total_seconds() < 60:
+            return True
+        return False
 
     def get_avatar_url(self, obj):
         request = self.context.get("request")
         if obj.avatar and hasattr(obj.avatar, "url"):
-            return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
+            # Always return relative URL so frontend proxy handles it, fixing cross-device broken images
+            return obj.avatar.url
         return None
 
 class UserCreateUpdateSerializer(serializers.ModelSerializer):

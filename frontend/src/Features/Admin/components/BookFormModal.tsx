@@ -17,8 +17,41 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [accessionNumber, setAccessionNumber] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [category, setCategory] = useState('');
   const [coverImage, setCoverImage] = useState<File | null>(null);
+
+  const [savedCategories, setSavedCategories] = useState<string[]>([]);
+  const [newCategory, setNewCategory] = useState('');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('jrmsu_book_categories');
+    if (stored) {
+      setSavedCategories(JSON.parse(stored));
+    } else {
+      setSavedCategories(CATEGORIES);
+    }
+  }, []);
+
+  const handleAddCategory = () => {
+    if (newCategory.trim() && !savedCategories.includes(newCategory.trim())) {
+      const updated = [...savedCategories, newCategory.trim()];
+      setSavedCategories(updated);
+      localStorage.setItem('jrmsu_book_categories', JSON.stringify(updated));
+      setCategory(newCategory.trim());
+      setNewCategory('');
+      setIsAddingCategory(false);
+    }
+  };
+
+  const handleRemoveCategory = (catToRemove: string) => {
+    const updated = savedCategories.filter(c => c !== catToRemove);
+    setSavedCategories(updated);
+    localStorage.setItem('jrmsu_book_categories', JSON.stringify(updated));
+    if (category === catToRemove) {
+      setCategory(updated[0] || '');
+    }
+  };
 
   // Reset form fields whenever the modal opens or the book being edited changes
   useEffect(() => {
@@ -26,8 +59,18 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
       setTitle(initialData?.title || '');
       setAuthor(initialData?.author || '');
       setAccessionNumber(initialData?.accession_number || '');
-      setCategory(initialData?.category || CATEGORIES[0]);
+      
+      let fallbackCat = CATEGORIES[0];
+      const stored = localStorage.getItem('jrmsu_book_categories');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.length > 0) fallbackCat = parsed[0];
+      }
+      setCategory(initialData?.category || fallbackCat);
+      
       setCoverImage(null);
+      setIsAddingCategory(false);
+      setNewCategory('');
     }
   }, [isOpen, initialData]);
 
@@ -94,13 +137,65 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <select
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              {!isAddingCategory ? (
+                <div className="flex gap-2 items-start">
+                  <div className="flex-1">
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                    >
+                      {savedCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {category && (
+                      <button 
+                        type="button" 
+                        onClick={() => handleRemoveCategory(category)}
+                        className="text-xs text-red-500 mt-1 hover:underline text-left"
+                      >
+                        Remove this category
+                      </button>
+                    )}
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsAddingCategory(true)}
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 whitespace-nowrap"
+                  >
+                    + Add
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    placeholder="New category name"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCategory();
+                      }
+                    }}
+                  />
+                  <button 
+                    type="button" 
+                    onClick={handleAddCategory}
+                    className="px-3 py-2 bg-navy text-white rounded hover:bg-blue-800"
+                  >
+                    Save
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => { setIsAddingCategory(false); setNewCategory(''); }}
+                    className="p-2 text-gray-500 hover:text-gray-700 rounded"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

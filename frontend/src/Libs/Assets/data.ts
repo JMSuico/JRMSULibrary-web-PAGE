@@ -210,5 +210,5 @@ export const resourcesLinks = [
 
 export const acquiredELinks = [
   { name: 'Bookshelf (VitalSource)', url: 'https://www.vitalsource.com/' },
-  { name: 'Scholaar', url: 'https://scholaar.com/University/HomePage.aspx' },
+  { name: 'Scholaar', url: 'http://scholaar.com/University/HomePage.aspx' },
 ];

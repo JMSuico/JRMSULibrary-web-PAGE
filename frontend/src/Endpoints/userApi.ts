@@ -9,6 +9,7 @@ export interface User {
   is_active: boolean;
   date_joined: string;
   avatar_url?: string | null;
+  is_online?: boolean;
 }
 
 export const userApi = {
@@ -21,6 +22,18 @@ export const userApi = {
 
   logout: async (): Promise<void> => {
     return apiClient(`/users/logout/`, { method: 'POST' });
+  },
+
+  forceLogout: async (id: number): Promise<void> => {
+    return apiClient(`/users/${id}/force_logout/`, { method: 'POST' });
+  },
+
+  heartbeat: async (): Promise<void> => {
+    try {
+      await apiClient(`/users/heartbeat/`, { method: 'POST' });
+    } catch (e) {
+      // ignore
+    }
   },
 
   me: async (): Promise<User> => {

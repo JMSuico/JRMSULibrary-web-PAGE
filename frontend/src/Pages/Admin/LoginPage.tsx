@@ -2,10 +2,14 @@ import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { LoginForm } from '@/src/Features/Auth/components/LoginForm';
 import { useToast } from '@/src/Hooks/useToast';
+import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
 
 export default function LoginPage() {
   const location = useLocation();
   const { showToast } = useToast();
+
+  // Monitor server connection: if server drops and reconnects, force reload. (Ignores normal CMS updates)
+  useGlobalAutoRefresh(15000, true);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

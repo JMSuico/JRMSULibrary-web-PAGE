@@ -19,3 +19,19 @@ def update_global_timestamp(sender, **kwargs):
     rows_updated = SiteSettings.objects.all().update(updated_at=timezone.now())
     if rows_updated == 0:
         SiteSettings.objects.create()
+
+    # Broadcast via WebSockets
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "admin_updates",
+            {
+                "type": "admin_update",
+                "message": "database_updated"
+            }
+        )
+    except Exception as e:
+        # Silently fail if redis/channels is not configured yet
+        pass

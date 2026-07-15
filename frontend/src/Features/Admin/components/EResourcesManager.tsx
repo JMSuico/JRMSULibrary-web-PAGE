@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoints/eresourceApi';
-import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
+import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
@@ -104,8 +104,18 @@ export function EResourcesManager() {
       }
     );
 
+    // Check if the selected dept is the one being deleted, or a descendant of it
+    const isDescendant = (parentId: number, childId: number): boolean => {
+      const parent = findDeptById(departments, parentId);
+      if (!parent) return false;
+      return !!findDeptById([parent], childId);
+    };
+
     // Optimistic delete
-    if (selectedDeptId === id) setSelectedDeptId(null);
+    if (selectedDeptId && isDescendant(id, selectedDeptId)) {
+      setSelectedDeptId(null);
+    }
+    
     const filterDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
       return depts.filter(d => d.id !== id).map(d => ({
         ...d,
