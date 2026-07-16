@@ -90,7 +90,7 @@ export default function AdminLayout() {
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'Admin Panel';
 
   // Monitor server connection: if server drops and reconnects, force reload. (Ignores normal CMS updates)
-  useGlobalAutoRefresh(15000, true);
+  useGlobalAutoRefresh(15000, false);
 
   const handleAutoLogout = useCallback(async () => {
     try {

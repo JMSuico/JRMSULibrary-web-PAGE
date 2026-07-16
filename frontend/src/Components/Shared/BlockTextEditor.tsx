@@ -23,9 +23,15 @@ function generateId() {
 export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChange, id }) => {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const isInternalChange = React.useRef(false);
 
-  // Parse HTML value into blocks on first mount.
+  // Parse HTML value into blocks on first mount or when parent changes it externally.
   useEffect(() => {
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
+
     if (!value) {
       setBlocks([{ id: generateId(), type: 'p', content: '', align: 'justify' }]);
       return;
@@ -79,6 +85,7 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
       html += '</ul>\n';
     }
 
+    isInternalChange.current = true;
     onChange(html);
   };
 
@@ -140,6 +147,8 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
     setDraggedId(null);
   };
 
+  const [dragEnabledId, setDragEnabledId] = useState<string | null>(null);
+
   let currentListIndex = 1;
 
   return (
@@ -152,15 +161,20 @@ export const BlockTextEditor: React.FC<BlockTextEditorProps> = ({ value, onChang
           return (
             <div 
               key={block.id} 
-              draggable
+              draggable={dragEnabledId === block.id}
               onDragStart={(e) => handleDragStart(e, block.id)}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, block.id)}
-              onDragEnd={() => setDraggedId(null)}
+              onDragEnd={() => { setDraggedId(null); setDragEnabledId(null); }}
               className={`flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-lg shadow-sm group transition-all ${draggedId === block.id ? 'opacity-50 border-dashed border-navy scale-[0.98]' : ''}`}
             >
               {/* Drag Handle */}
-              <div className="shrink-0 mt-2 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-600 transition-colors" title="Drag to reorder">
+              <div 
+                className="shrink-0 mt-2 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-600 transition-colors" 
+                title="Drag to reorder"
+                onMouseEnter={() => setDragEnabledId(block.id)}
+                onMouseLeave={() => setDragEnabledId(null)}
+              >
                 <GripVertical size={16} />
               </div>
 

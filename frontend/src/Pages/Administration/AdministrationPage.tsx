@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
+import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
 import { cmsApi, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { Loader2, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
@@ -10,14 +11,10 @@ import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 const getFileUrl = (filePath: string) => {
   if (!filePath) return '';
   if (filePath.startsWith('http')) return filePath;
-  
-  // Dynamically compute the URL based on the current hostname to support Wi-Fi deployment
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
-  const baseUrl = `http://${hostname}:8000`;
-  
-  if (filePath.startsWith('/media/')) return `${baseUrl}${filePath}`;
-  if (filePath.startsWith('/')) return `${baseUrl}/media${filePath}`;
-  return `${baseUrl}/media/${filePath}`;
+  // Use relative path for media so Vite proxy or Nginx handles it
+  if (filePath.startsWith('/media/')) return filePath;
+  if (filePath.startsWith('/')) return `/media${filePath}`;
+  return `/media/${filePath}`;
 };
 
 const tabs = [
@@ -45,25 +42,27 @@ export default function AdministrationPage() {
     }
   }, [location.hash]);
 
-  useEffect(() => {
-    const fetchAssets = async () => {
-      try {
-        const files = await cmsApi.getAllFiles();
-        // Fallbacks included if CMS doesn't have the files yet
-        const orgChart = files.find(f => f.name.toLowerCase().includes('org') || f.name.toLowerCase().includes('structure'));
-        const manual = files.find(f => f.name.toLowerCase().includes('manual') || f.name.toLowerCase().includes('policy'));
+  const fetchAssets = async () => {
+    try {
+      const files = await cmsApi.getAllFiles();
+      const orgChart = files.find(f => f.name.toLowerCase().includes('org') || f.name.toLowerCase().includes('structure'));
+      const manual = files.find(f => f.name.toLowerCase().includes('manual') || f.name.toLowerCase().includes('policy'));
 
-        if (orgChart) setOrgChartUrl(getFileUrl(orgChart.file));
-        if (manual) setManualUrl(getFileUrl(manual.file));
-        setAllFiles(files.filter(f => f.is_active));
-      } catch (e) {
-        console.error('Failed to load administration assets from CMS', e);
-      } finally {
-        setLoading(false);
-      }
-    };
+      if (orgChart) setOrgChartUrl(getFileUrl(orgChart.file));
+      if (manual) setManualUrl(getFileUrl(manual.file));
+      setAllFiles(files.filter(f => f.is_active));
+    } catch (e) {
+      console.error('Failed to load administration assets from CMS', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchAssets();
   }, []);
+
+  useCmsUpdated(fetchAssets);
 
   return (
     <section id="administration" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>

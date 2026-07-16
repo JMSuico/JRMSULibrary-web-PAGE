@@ -195,57 +195,84 @@ def _build_bridge_html(
 @csrf_exempt
 def vitalsource_auto_login(request):
     """
-    Serves an HTML bridge page that auto-submits VitalSource login credentials.
-    Uses the exact login URL and field names from the VitalSource login form.
-    Field names: user[username], user[password] (Ruby on Rails convention).
+    Serves an HTML bridge page that provides VitalSource login credentials.
+    We cannot auto-submit to VitalSource because modern SPAs block 
+    cross-origin form POSTs (HTTP 405 Method Not Allowed).
     """
-    email = os.environ.get("VITALSOURCE_EMAIL", "")
-    password = os.environ.get("VITALSOURCE_PASSWORD", "")
+    email = os.environ.get("VITALSOURCE_EMAIL", "Not Configured")
+    password = os.environ.get("VITALSOURCE_PASSWORD", "Not Configured")
+    login_url = "https://bookshelf.vitalsource.com/signin"
 
-    if not email or not password:
-        return HttpResponse(
-            _build_error_html(
-                "VitalSource",
-                "VitalSource credentials are not configured on this server.",
-                "https://bookshelf.vitalsource.com/signin",
-            ),
-            content_type="text/html",
-        )
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VitalSource Access</title>
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #334155;
+    }}
+    .container {{ 
+      text-align: center; 
+      padding: 2.5rem; 
+      max-width: 420px; 
+      background: white; 
+      border-radius: 12px; 
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }}
+    h2 {{ font-size: 1.25rem; font-weight: 700; color: #0073C6; margin-bottom: 0.5rem; }}
+    p {{ font-size: 0.875rem; color: #64748b; margin-bottom: 1.5rem; line-height: 1.5; }}
+    .credentials {{ 
+      background: #f1f5f9; 
+      padding: 1rem; 
+      border-radius: 8px; 
+      margin-bottom: 1.5rem; 
+      text-align: left;
+      border: 1px solid #e2e8f0;
+    }}
+    .credentials div {{ font-family: monospace; font-size: 0.95rem; }}
+    .credentials strong {{ display: inline-block; width: 85px; color: #475569; font-family: 'Inter', sans-serif; font-size: 0.875rem; }}
+    .btn {{
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: #0073C6;
+      color: #fff;
+      border: none;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      width: 100%;
+    }}
+    .btn:hover {{ background: #005a9e; transform: translateY(-1px); }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Access VitalSource Bookshelf</h2>
+    <p>Due to security constraints on external libraries, automatic login is disabled. Please use the institutional credentials below:</p>
+    
+    <div class="credentials">
+      <div><strong>Email:</strong> {email}</div>
+      <div style="margin-top: 8px;"><strong>Password:</strong> {password}</div>
+    </div>
 
-    # The exact login URL provided by the user (JWT-based auth endpoint)
-    login_url = (
-        "https://login.vitalsource.com/"
-        "?context=store"
-        "&redirect_uri=https%3A%2F%2Fwww.vitalsource.com%2F"
-        "&locale=en-US"
-        "&brand=www.vitalsource.com"
-        "&method=jwt"
-        "&marketing=true"
-        "&role=learner"
-        "&auth_host=www.vitalsource.com"
-        "&auth_protocol=https%3A"
-        "&ux_mode=popup"
-    )
-
-    # Fetch CSRF tokens from the login page (Rails authenticity_token)
-    tokens = fetch_vitalsource_tokens(login_url)
-    logger.info("VitalSource tokens fetched: %s", list(tokens.keys()))
-
-    # Build credential fields with correct form field names
-    fields = {
-        "user[username]": email,
-        "user[password]": password,
-    }
-    # Merge server-fetched tokens (authenticity_token, utf8, etc.)
-    fields.update(tokens)
-
-    html = _build_bridge_html(
-        title="VitalSource Bookshelf",
-        login_url=login_url,
-        target_url="https://bookshelf.vitalsource.com/home/my-library",
-        fields=fields,
-        brand_color="#0073C6",
-    )
+    <a class="btn" href="{login_url}" target="_blank" rel="noopener noreferrer">
+      Open VitalSource in New Tab
+    </a>
+  </div>
+</body>
+</html>"""
     return HttpResponse(html, content_type="text/html")
 
 
@@ -253,69 +280,89 @@ def vitalsource_auto_login(request):
 @csrf_exempt
 def scholaar_auto_login(request):
     """
-    Serves an HTML bridge page that auto-submits Scholaar login credentials.
-    If the Scholaar service is unreachable, immediately shows the fallback UI
-    with a direct link instead of making the user wait 10 seconds.
+    Serves an HTML bridge page that provides Scholaar login credentials.
+    We cannot auto-submit to Scholaar because it is an ASP.NET WebForms app.
+    Cross-origin POSTs without the original ASP.NET_SessionId cookie cause
+    NullReferenceExceptions in their Master Page (e.g., Session["plogo"]).
     """
-    username = os.environ.get("SCHOLAAR_USERNAME", "")
-    password = os.environ.get("SCHOLAAR_PASSWORD", "")
-
-    # Primary login URL — try both HTTP and HTTPS variants
+    username = os.environ.get("SCHOLAAR_USERNAME", "Not Configured")
+    password = os.environ.get("SCHOLAAR_PASSWORD", "Not Configured")
     login_url = "http://scholaar.com/University/HomePage.aspx"
-    fallback_direct_url = "http://scholaar.com/University/HomePage.aspx"
 
-    if not username or not password:
-        return HttpResponse(
-            _build_error_html(
-                "Scholaar",
-                "Scholaar credentials are not configured on this server.",
-                fallback_direct_url,
-            ),
-            content_type="text/html",
-        )
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scholaar Access</title>
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #334155;
+    }}
+    .container {{ 
+      text-align: center; 
+      padding: 2.5rem; 
+      max-width: 420px; 
+      background: white; 
+      border-radius: 12px; 
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }}
+    h2 {{ font-size: 1.25rem; font-weight: 700; color: #C9A84C; margin-bottom: 0.5rem; }}
+    p {{ font-size: 0.875rem; color: #64748b; margin-bottom: 1.5rem; line-height: 1.5; }}
+    .credentials {{ 
+      background: #f1f5f9; 
+      padding: 1rem; 
+      border-radius: 8px; 
+      margin-bottom: 1.5rem; 
+      text-align: left;
+      border: 1px solid #e2e8f0;
+    }}
+    .credentials div {{ font-family: monospace; font-size: 0.95rem; }}
+    .credentials strong {{ display: inline-block; width: 85px; color: #475569; font-family: 'Inter', sans-serif; font-size: 0.875rem; }}
+    .btn {{
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: #C9A84C;
+      color: #fff;
+      border: none;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      width: 100%;
+    }}
+    .btn:hover {{ background: #b59540; transform: translateY(-1px); }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Access Scholaar Database</h2>
+    <p>Scholaar requires manual sign-in due to their strict security policies. Please use the institutional credentials below:</p>
+    
+    <div class="credentials">
+      <div><strong>Username:</strong> {username}</div>
+      <div style="margin-top: 8px;"><strong>Password:</strong> {password}</div>
+    </div>
 
-    # Quick connectivity check — if the site is down, show fallback immediately
-    import urllib.request
-    site_reachable = False
-    try:
-        req = urllib.request.Request(login_url, method='HEAD')
-        urllib.request.urlopen(req, timeout=5)
-        site_reachable = True
-    except Exception:
-        logger.warning("Scholaar login page is unreachable: %s", login_url)
-        site_reachable = False
+    <div style="background: #fffbeb; border: 1px solid #fcd34d; color: #b45309; padding: 12px; border-radius: 8px; font-size: 0.8125rem; text-align: left; margin-bottom: 1.5rem; line-height: 1.4;">
+      <strong>Note about security warning:</strong> Scholaar's security certificate has expired. When you open the link below, you may see a "Your connection is not private" error. To access the site, click <strong>"Advanced"</strong> and then click <strong>"Proceed to scholaar.com (unsafe)"</strong>.
+    </div>
 
-    if not site_reachable:
-        # Show a clear error page with a direct link
-        return HttpResponse(
-            _build_error_html(
-                "Scholaar",
-                "The Scholaar service appears to be temporarily unavailable. Please try opening it directly or contact your administrator.",
-                fallback_direct_url,
-            ),
-            content_type="text/html",
-        )
-
-    # Fetch ASP.NET ViewState tokens from the login page
-    tokens = fetch_scholaar_tokens(login_url)
-    logger.info("Scholaar tokens fetched: %s", list(tokens.keys()))
-
-    # Build credential fields with correct form field names
-    fields = {
-        "txtUsername": username,
-        "txtPassword": password,
-        "btnLogin": "Login",
-    }
-    # Merge server-fetched tokens (__VIEWSTATE, __EVENTVALIDATION, etc.)
-    fields.update(tokens)
-
-    html = _build_bridge_html(
-        title="Scholaar Database",
-        login_url=login_url,
-        target_url="http://scholaar.com/University/HomePage.aspx",
-        fields=fields,
-        brand_color="#C9A84C",
-    )
+    <a class="btn" href="{login_url}" target="_blank" rel="noopener noreferrer">
+      Open Scholaar in New Tab
+    </a>
+  </div>
+</body>
+</html>"""
     return HttpResponse(html, content_type="text/html")
 
 

@@ -11,8 +11,9 @@ def update_global_timestamp(sender, **kwargs):
     if sender._meta.app_label != 'Features':
         return
     
-    # Don't track SiteSettings itself to prevent loops if we ever trigger save signals
-    if sender == SiteSettings:
+    # Don't track SiteSettings itself to prevent loops, and exclude analytics models
+    excluded_models = {'SiteSettings', 'SiteVisit', 'ContactMessage', 'Feedback', 'GeneratedReport'}
+    if sender.__name__ in excluded_models:
         return
 
     # Update the timestamp

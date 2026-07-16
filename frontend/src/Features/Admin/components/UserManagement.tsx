@@ -9,6 +9,8 @@ import {
   Pencil,
   CheckCircle,
   LogOut,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { userApi, User } from '@/src/Endpoints/userApi';
@@ -30,8 +32,14 @@ export function UserManagement() {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
   const { showToast } = useToast();
+
+  // Reset showPassword when modal closes or opens
+  useEffect(() => {
+    if (!isModalOpen) setShowPassword(false);
+  }, [isModalOpen]);
 
   const fetchUsers = async () => {
     try {
@@ -377,13 +385,22 @@ export function UserManagement() {
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Password {editingUser && '(Leave blank to keep current)'}
                   </label>
-                  <input 
-                    required={!editingUser} 
-                    name="password" 
-                    type="password" 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" 
-                    placeholder={editingUser ? '••••••••' : ''}
-                  />
+                  <div className="relative">
+                    <input 
+                      required={!editingUser} 
+                      name="password" 
+                      type={showPassword ? "text" : "password"}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy pr-10" 
+                      placeholder={editingUser ? '••••••••' : ''}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                   <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-xs font-semibold text-blue-800 mb-1">Password Requirements:</p>
                     <ul className="text-xs text-blue-700 space-y-0.5 list-disc list-inside">

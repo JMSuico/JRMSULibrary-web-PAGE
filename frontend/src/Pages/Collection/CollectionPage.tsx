@@ -54,8 +54,8 @@ function mapDepartmentsToTree(departments: EResourceDepartment[]): TreeNodeData[
         .map(f => ({
           name: f.name,
           type: 'file' as const,
-          // API returns paths like "/media/e_resources/..." — prefix with backend base URL
-          path: f.file.startsWith('http') ? f.file : `http://${window.location.hostname}:8000${f.file}`
+          // Use relative path so Vite proxy or Nginx handles it
+          path: f.file.startsWith('http') ? f.file : f.file
         }))
     ]
   })).filter(node => node.children && node.children.length > 0);

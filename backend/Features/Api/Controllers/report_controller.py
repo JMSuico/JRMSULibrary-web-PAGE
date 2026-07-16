@@ -65,11 +65,17 @@ class ReportViewSet(viewsets.ViewSet):
         # --- Optimized Database Queries (no more in-memory list comprehensions) ---
         total_visits = self.visit_service.get_count_by_date_range(cutoff_date, end_date)
         total_books = self.book_service.get_count_by_date_range(cutoff_date, end_date)
-        total_emails = self.contact_service.get_count_by_type_and_date('EMAIL', cutoff_date, end_date)
+        
+        # Total Emails now counts everything in the "Email & Reservation" tab
+        total_emails = (
+            self.contact_service.get_count_by_type_and_date('EMAIL', cutoff_date, end_date) +
+            self.contact_service.get_count_by_type_and_date('RESERVATION', cutoff_date, end_date) +
+            self.contact_service.get_count_by_type_and_date('CREDENTIAL_REQUEST', cutoff_date, end_date)
+        )
         total_reservations = self.contact_service.get_count_by_type_and_date('RESERVATION', cutoff_date, end_date)
 
-        # Recent activities (DB-limited to 10 rows for performance)
-        recent_books = self.book_service.get_recent(limit=10)
+        # Recent activities (DB-limited to 10 rows for emails, 100 for books for modal pagination)
+        recent_books = self.book_service.get_recent(limit=100)
         recent_emails = self.contact_service.get_recent(limit=10)
 
         # 6-month trends using optimized per-month COUNT aggregations

@@ -89,18 +89,35 @@ class RecycleBinRepository(IRecycleBinRepository):
                 ManagedFile.objects.create(**snap)
 
             elif item.source_module == 'ERESOURCE_DEPT':
-                snap = dict(item.data_snapshot)
-                snap.pop('id', None)
-                snap.pop('children', None)
-                snap.pop('files', None)
-                
-                parent_id = snap.pop('parent', None)
-                if parent_id:
-                    # Verify parent still exists before attempting to link
-                    if not EResourceDepartment.objects.filter(id=parent_id).exists():
-                        parent_id = None
-                
-                EResourceDepartment.objects.create(parent_id=parent_id, **snap)
+                def restore_dept(dept_snap, parent_id=None):
+                    snap = dict(dept_snap)
+                    snap.pop('id', None)
+                    children_data = snap.pop('children', [])
+                    files_data = snap.pop('files', [])
+                    
+                    if parent_id is None:
+                        p_id = snap.pop('parent', None)
+                        if p_id and EResourceDepartment.objects.filter(id=p_id).exists():
+                            parent_id = p_id
+                    else:
+                        snap.pop('parent', None)
+                    
+                    dept = EResourceDepartment.objects.create(parent_id=parent_id, **snap)
+                    
+                    # Restore files
+                    for file_snap in files_data:
+                        f_snap = dict(file_snap)
+                        f_snap.pop('id', None)
+                        f_snap.pop('department', None)
+                        EResourceFile.objects.create(department=dept, **f_snap)
+                        
+                    # Restore sub-departments recursively
+                    for child_snap in children_data:
+                        restore_dept(child_snap, parent_id=dept.id)
+                        
+                    return dept
+
+                restore_dept(item.data_snapshot)
 
             elif item.source_module == 'ERESOURCE_FILE':
                 snap = dict(item.data_snapshot)

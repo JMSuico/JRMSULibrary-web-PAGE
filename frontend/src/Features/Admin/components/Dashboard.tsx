@@ -9,6 +9,7 @@ import {
   X,
   Search,
 } from 'lucide-react';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 import {
   BarChart,
   Bar,
@@ -34,6 +35,7 @@ export function Dashboard() {
   const [showAllBooksModal, setShowAllBooksModal] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
   const debouncedBookSearch = useDebounce(bookSearch, 400);
+  const [currentPage, setCurrentPage] = useState(1);
   const { showToast } = useToast();
 
   const loadData = async () => {
@@ -50,6 +52,11 @@ export function Dashboard() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedBookSearch]);
 
   useAutoRefresh(loadData, 30000);
 
@@ -202,20 +209,41 @@ export function Dashboard() {
                 </td>
               </tr>
             ) : (
-              data.recent_books.map((book) => (
-                <tr key={book.id}>
-                  <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>{book.title}</td>
-                  <td>{book.author}</td>
-                  <td>
-                    <span className="admin-badge admin-badge--info">{book.category}</span>
-                  </td>
-                  <td style={{ color: 'var(--color-gray-500)' }}>{book.dateAdded}</td>
-                </tr>
-              ))
+              (() => {
+                // Ensure sorting is newest first (descending)
+                const sortedBooks = data.recent_books.slice().sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
+                const itemsPerPage = 10;
+                // We use currentPage for both main table and modal to keep it simple, or introduce a separate state.
+                // Let's just paginate based on a local state if needed, or re-use currentPage since modal is overlay.
+                const paginatedBooks = sortedBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+                return paginatedBooks.map((book) => (
+                  <tr key={book.id}>
+                    <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>{book.title}</td>
+                    <td>{book.author}</td>
+                    <td>
+                      <span className="admin-badge admin-badge--info">{book.category}</span>
+                    </td>
+                    <td style={{ color: 'var(--color-gray-500)' }}>{book.dateAdded}</td>
+                  </tr>
+                ));
+              })()
             )}
           </tbody>
         </table>
         </div>
+        
+        {/* Main Table Pagination */}
+        {data.recent_books.length > 10 && (
+          <div style={{ padding: '0 20px 20px 20px' }}>
+            <Pagination 
+              currentPage={currentPage}
+              totalPages={Math.ceil(data.recent_books.length / 10)}
+              onPageChange={setCurrentPage}
+              totalItems={data.recent_books.length}
+              itemsPerPage={10}
+            />
+          </div>
+        )}
       </div>
 
       {/* All Books Modal */}
@@ -255,31 +283,70 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.recent_books
-                    .slice()
-                    .sort((a, b) => a.dateAdded.localeCompare(b.dateAdded))
-                    .filter(b =>
-                      !debouncedBookSearch ||
-                      b.title.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
-                      b.author.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
-                      b.category.toLowerCase().includes(debouncedBookSearch.toLowerCase())
-                    )
-                    .map((book, idx) => (
-                      <tr key={book.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{book.title}</td>
-                        <td className="px-4 py-3 text-gray-600">{book.author}</td>
-                        <td className="px-4 py-3"><span className="admin-badge admin-badge--info">{book.category}</span></td>
-                        <td className="px-4 py-3 text-gray-500">{book.dateAdded}</td>
-                      </tr>
-                    ))
-                  }
-                  {data.recent_books.length === 0 && (
-                    <tr><td colSpan={5} className="text-center py-12 text-gray-400">No books found.</td></tr>
-                  )}
+                  {(() => {
+                    const filteredBooks = data.recent_books
+                      .slice()
+                      .sort((a, b) => a.dateAdded.localeCompare(b.dateAdded))
+                      .filter(b =>
+                        !debouncedBookSearch ||
+                        b.title.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
+                        b.author.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
+                        b.category.toLowerCase().includes(debouncedBookSearch.toLowerCase())
+                      );
+                    
+                    const itemsPerPage = 10;
+                    const totalPages = Math.ceil(filteredBooks.length / itemsPerPage);
+                    const paginatedBooks = filteredBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+                    if (filteredBooks.length === 0) {
+                      return (
+                        <tr><td colSpan={5} className="text-center py-12 text-gray-400">No books found.</td></tr>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {paginatedBooks.map((book, idx) => (
+                          <tr key={book.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-400 text-xs">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                            <td className="px-4 py-3 font-medium text-gray-900">{book.title}</td>
+                            <td className="px-4 py-3 text-gray-600">{book.author}</td>
+                            <td className="px-4 py-3"><span className="admin-badge admin-badge--info">{book.category}</span></td>
+                            <td className="px-4 py-3 text-gray-500">{book.dateAdded}</td>
+                          </tr>
+                        ))}
+                      </>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {(() => {
+              const filteredBooks = data.recent_books.filter(b =>
+                !debouncedBookSearch ||
+                b.title.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
+                b.author.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
+                b.category.toLowerCase().includes(debouncedBookSearch.toLowerCase())
+              );
+              const itemsPerPage = 10;
+              const totalPages = Math.ceil(filteredBooks.length / itemsPerPage);
+              
+              if (totalPages > 1) {
+                return (
+                  <Pagination 
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    totalItems={filteredBooks.length}
+                    itemsPerPage={itemsPerPage}
+                  />
+                );
+              }
+              return null;
+            })()}
+
             <div className="px-6 py-3 border-t border-gray-100 text-right">
               <button onClick={() => setShowAllBooksModal(false)} className="admin-btn admin-btn--primary cursor-pointer">Close</button>
             </div>

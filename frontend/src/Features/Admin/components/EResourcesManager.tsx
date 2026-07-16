@@ -356,7 +356,7 @@ export function EResourcesManager() {
                             </div>
                             <div className="flex items-center gap-2 mt-2">
                               <a
-                                href={file.file.startsWith('http') ? file.file : `http://${window.location.hostname}:8000${file.file}`}
+                                href={file.file}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100"

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { publicApi } from '@/src/Endpoints/cmsApi';
+import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
 
 export const HeroSection: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver();
@@ -20,19 +21,16 @@ export const HeroSection: React.FC = () => {
   const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number } | null>(null);
   const [rawOpenHours, setRawOpenHours] = useState<string>('Working days MONDAY TO FRIDAY | 7AM TO 7PM');
 
-  useEffect(() => {
+  const loadData = () => {
     publicApi.getVisitorCount()
       .then(data => setVisitorCount(data.total_visits))
       .catch(() => setVisitorCount(null));
     
-    // Fetch settings for dynamic opening hours
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
-    fetch(`http://${hostname}:8000/api/settings/`)
+    fetch('/api/settings/')
       .then(r => r.json())
       .then((s: any) => {
         const raw: string = s?.opening_hours_mon_fri || '7:00 AM - 7:00 PM';
         setRawOpenHours(`Working days MONDAY TO FRIDAY | ${raw}`);
-        // Parse format "H:MM AM - H:MM PM" or "HH:MM AM - HH:MM PM"
         const match = raw.match(/(\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)/i);
         if (match) {
           let openH = parseInt(match[1]);
@@ -49,7 +47,13 @@ export const HeroSection: React.FC = () => {
         }
       })
       .catch(() => null);
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
+
+  useCmsUpdated(loadData);
 
   useEffect(() => {
     const updateClock = () => {

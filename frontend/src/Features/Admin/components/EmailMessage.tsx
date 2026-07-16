@@ -651,7 +651,35 @@ export function EmailMessage() {
                 <p className="text-gray-600 text-xs mt-1 line-clamp-3">{replyModal.message.message}</p>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Your Reply</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700">Your Reply</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const vitalText = `Here are the institutional credentials for VitalSource Bookshelf:\n\nEmail: jrmsukclibrary@gmail.com\nPassword: Jrmsukclibrary@19\n\nPlease visit https://bookshelf.vitalsource.com/signin to login.`;
+                        setReplyModal({ ...replyModal, body: replyModal.body ? replyModal.body + '\n\n' + vitalText : vitalText });
+                      }}
+                      className="text-[10px] sm:text-xs px-2 py-1 bg-blue-50 text-blue-700 font-medium rounded hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1"
+                      title="Insert VitalSource Credentials"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">menu_book</span>
+                      VitalSource
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const scholaarText = `Here are the institutional credentials for Scholaar:\n\nUsername: jrmsukc\nPassword: scholaar\n\nPlease visit http://scholaar.com/University/HomePage.aspx to login.`;
+                        setReplyModal({ ...replyModal, body: replyModal.body ? replyModal.body + '\n\n' + scholaarText : scholaarText });
+                      }}
+                      className="text-[10px] sm:text-xs px-2 py-1 bg-amber-50 text-amber-700 font-medium rounded hover:bg-amber-100 border border-amber-200 transition-colors flex items-center gap-1"
+                      title="Insert Scholaar Credentials"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">school</span>
+                      Scholaar
+                    </button>
+                  </div>
+                </div>
                 <textarea
                   rows={6}
                   disabled={isSendingReply}

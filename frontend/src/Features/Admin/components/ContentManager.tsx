@@ -7,6 +7,8 @@ import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
+import { Pagination } from '@/src/Components/Shared/Pagination';
+import { LayoutGrid, List } from 'lucide-react';
 
 export function ContentManager() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files'>('content');
@@ -24,6 +26,9 @@ export function ContentManager() {
   const [editingLink, setEditingLink] = useState<ManagedLink | null>(null);
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [draggedLinkId, setDraggedLinkId] = useState<number | null>(null);
+  const [linksPage, setLinksPage] = useState(1);
+  const [linksViewMode, setLinksViewMode] = useState<'table' | 'card'>('table');
+  const linksPerPage = 10;
 
   // File State
   const [files, setFiles] = useState<ManagedFile[]>([]);
@@ -297,64 +302,147 @@ export function ContentManager() {
             </div>
           )}
 
-          {activeTab === 'links' && (
+          {activeTab === 'links' && (() => {
+            const sortedLinks = [...links].sort((a,b) => a.order - b.order);
+            const totalPages = Math.ceil(sortedLinks.length / linksPerPage) || 1;
+            const currentLinksPage = Math.min(linksPage, totalPages);
+            const currentLinks = sortedLinks.slice((currentLinksPage - 1) * linksPerPage, currentLinksPage * linksPerPage);
+
+            return (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+                  <button 
+                    onClick={() => setLinksViewMode('table')}
+                    className={`p-1.5 rounded flex items-center justify-center transition-colors ${linksViewMode === 'table' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    title="Table View"
+                  >
+                    <List size={18} />
+                  </button>
+                  <button 
+                    onClick={() => setLinksViewMode('card')}
+                    className={`p-1.5 rounded flex items-center justify-center transition-colors ${linksViewMode === 'card' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    title="Card View"
+                  >
+                    <LayoutGrid size={18} />
+                  </button>
+                </div>
                 <button 
-                  className="admin-btn admin-btn--primary flex items-center gap-2"
+                  className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
                   onClick={() => { setEditingLink(null); setIsLinkModalOpen(true); }}
                 >
                   <Plus size={16} /> Add Link
                 </button>
               </div>
-              <div className="admin-table-scroll">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>URL</th>
-                      <th>Category</th>
-                      <th>Order</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...links].sort((a,b) => a.order - b.order).map((link) => (
-                      <tr 
-                        key={link.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, link.id)}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, link.id)}
-                        style={{ cursor: 'move', backgroundColor: draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined }}
-                        className={draggedLinkId === link.id ? 'opacity-50' : ''}
-                      >
-                        <td style={{ fontWeight: 500 }}>
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-gray-400" style={{ cursor: 'grab' }}>drag_indicator</span>
-                            {link.name}
-                          </div>
-                        </td>
-                        <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>{link.url}</a></td>
-                        <td><span className="admin-badge admin-badge--info">{link.category}</span></td>
-                        <td>{link.order}</td>
-                        <td>
-                          <span className={`admin-badge ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                            {link.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} style={{ padding: '6px', backgroundColor: 'color-mix(in srgb, var(--color-blue) 10%, transparent)', color: 'var(--color-blue)', borderRadius: '4px' }}><Edit2 size={16}/></button>
-                          <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
-                        </td>
+
+              {linksViewMode === 'table' ? (
+                <div className="admin-table-scroll">
+                  <table className="admin-table min-w-full">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>URL</th>
+                        <th>Category</th>
+                        <th>Order</th>
+                        <th>Status</th>
+                        <th>Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {currentLinks.map((link) => (
+                        <tr 
+                          key={link.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, link.id)}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, link.id)}
+                          style={{ cursor: 'move', backgroundColor: draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined }}
+                          className={draggedLinkId === link.id ? 'opacity-50' : ''}
+                        >
+                          <td style={{ fontWeight: 500 }}>
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-gray-400" style={{ cursor: 'grab' }}>drag_indicator</span>
+                              {link.name}
+                            </div>
+                          </td>
+                          <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }} className="break-all line-clamp-1">{link.url}</a></td>
+                          <td><span className="admin-badge admin-badge--info">{link.category}</span></td>
+                          <td>{link.order}</td>
+                          <td>
+                            <span className={`admin-badge ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                              {link.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} style={{ padding: '6px', backgroundColor: 'color-mix(in srgb, var(--color-blue) 10%, transparent)', color: 'var(--color-blue)', borderRadius: '4px' }}><Edit2 size={16}/></button>
+                            <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {currentLinks.map((link) => (
+                    <div 
+                      key={link.id} 
+                      className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all hover:shadow-md hover:border-blue-100 group"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, link.id)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, link.id)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-gray-300 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity absolute -left-2 bg-white rounded-full shadow-sm" title="Drag to reorder">drag_indicator</span>
+                          <h3 className="font-bold text-gray-900 text-lg line-clamp-1 pl-2">{link.name}</h3>
+                        </div>
+                        <span className={`admin-badge text-[10px] px-2 py-0.5 ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                          {link.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      
+                      <div className="text-sm text-gray-500 flex items-center gap-1">
+                        <span className="font-medium text-gray-700 w-16">Category:</span>
+                        <span className="truncate">{link.category}</span>
+                      </div>
+                      <div className="text-sm text-gray-500 flex items-center gap-1">
+                        <span className="font-medium text-gray-700 w-16">Order:</span>
+                        <span>{link.order}</span>
+                      </div>
+                      <div className="text-sm text-gray-500 flex flex-col gap-1 mt-1">
+                        <span className="font-medium text-gray-700">URL:</span>
+                        <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all bg-gray-50 p-2 rounded text-xs">{link.url}</a>
+                      </div>
+                      
+                      <div className="flex gap-2 mt-auto pt-4 border-t border-gray-100">
+                        <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} className="flex-1 flex items-center justify-center gap-2 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors text-sm font-medium">
+                          <Edit2 size={14}/> Edit
+                        </button>
+                        <button onClick={() => handleDeleteLink(link.id)} className="flex-1 flex items-center justify-center gap-2 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors text-sm font-medium">
+                          <Trash2 size={14}/> Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {totalPages > 1 && (
+                <div className="mt-6 flex justify-center sm:justify-end border-t border-gray-100 pt-4">
+                  <Pagination 
+                    currentPage={currentLinksPage} 
+                    totalPages={totalPages} 
+                    onPageChange={setLinksPage}
+                    totalItems={sortedLinks.length}
+                    itemsPerPage={linksPerPage}
+                  />
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {activeTab === 'files' && (
             <div>

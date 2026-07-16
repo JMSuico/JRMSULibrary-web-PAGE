@@ -31,7 +31,7 @@ function resolveImageSrc(img: GalleryImage): string {
   if (!img.image) return '';
   if (img.image.startsWith('http')) return img.image;
   // Media files served from Django backend
-  return `http://localhost:8000${img.image.startsWith('/') ? '' : '/'}${img.image}`;
+  return img.image;
 }
 
 const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; onClose: () => void }> = ({ images, isOpen, onClose }) => {

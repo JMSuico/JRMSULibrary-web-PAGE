@@ -7,8 +7,7 @@ from rest_framework.response import Response
 from Features.Api.Serializers.settings_serializer import SiteSettingsSerializer
 from Features.Services.Implementations.settings_service import SettingsService
 
-import uuid
-SERVER_BOOT_ID = str(uuid.uuid4())
+
 
 class SettingsViewSet(viewsets.ViewSet):
     # Only authenticated admins can modify settings, anyone can read them
@@ -38,5 +37,4 @@ class SettingsViewSet(viewsets.ViewSet):
         settings = self.service.get_settings()
         return Response({
             'last_updated': settings.updated_at,
-            'server_boot_id': SERVER_BOOT_ID
         })

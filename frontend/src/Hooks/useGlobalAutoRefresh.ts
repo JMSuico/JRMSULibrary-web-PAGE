@@ -9,71 +9,101 @@ import { apiClient } from '@/src/Libs/apiClient';
  * @param intervalMs - The polling interval in milliseconds (default: 2 seconds)
  * @param onlyOnReconnect - If true, ignores CMS timestamp changes and only reloads on server reconnect
  */
-export function useGlobalAutoRefresh(intervalMs: number = 2000, onlyOnReconnect: boolean = false) {
+export function useGlobalAutoRefresh(intervalMs: number = 10000, onlyOnReconnect: boolean = false) {
   const initialTimestampRef = useRef<string | null>(null);
-  const initialBootIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     let isActive = true;
     let wasDisconnected = false;
+    let ws: WebSocket | null = null;
+    let isWsConnected = false;
 
+    // --- 1. Instant Real-Time WebSocket Logic ---
+    const connectWs = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/admin/`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('[GlobalAutoRefresh] WebSocket connected! Instant updates active.');
+        isWsConnected = true;
+        
+        // If we were previously disconnected, trigger a refresh immediately upon reconnecting!
+        if (wasDisconnected) {
+          console.log('[GlobalAutoRefresh] Server is back online (WS)! Silently refreshing data...');
+          wasDisconnected = false;
+          window.dispatchEvent(new CustomEvent('cms_updated'));
+        }
+      };
+
+      ws.onmessage = (event) => {
+        if (!isActive) return;
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'admin_update') {
+            // Instant 0-delay notification for UI components to silently fetch new data!
+            console.log('[GlobalAutoRefresh] Instant update event received via WS, dispatching cms_updated...');
+            window.dispatchEvent(new CustomEvent('cms_updated'));
+          }
+        } catch (e) {
+          console.error('[GlobalAutoRefresh] WS parse error:', e);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log('[GlobalAutoRefresh] WebSocket disconnected, falling back to HTTP polling.');
+        isWsConnected = false;
+        wasDisconnected = true; // Mark as disconnected so we refresh when it comes back
+        if (isActive) setTimeout(connectWs, 2000); // Fast 2-second reconnect attempts
+      };
+      
+      ws.onerror = () => ws?.close();
+    };
+
+    connectWs();
+
+    // --- 2. Fallback HTTP Polling Logic (Low frequency to save battery) ---
     const checkUpdate = async () => {
       if (!isActive) return;
 
-      // Only check if document is visible to save battery/network
-      if (document.visibilityState === 'visible') {
+      // Only check HTTP if WS is broken AND document is visible to save battery/network
+      if (!isWsConnected && document.visibilityState === 'visible') {
         try {
           const res = await apiClient('/settings/last_update/');
           if (res) {
-            // 1. Check for literal connection drop recovery
+            // Check for literal connection drop recovery
             if (wasDisconnected) {
-              console.log('[AutoRefresh] Server is back online! Reloading page...');
-              window.location.reload();
-              return;
+              console.log('[GlobalAutoRefresh] Server is back online! Silently refreshing data...');
+              wasDisconnected = false;
+              window.dispatchEvent(new CustomEvent('cms_updated'));
             }
 
-            // 2. Check if the server process itself restarted (even if we didn't catch it down)
-            if (res.server_boot_id) {
-              if (!initialBootIdRef.current) {
-                initialBootIdRef.current = res.server_boot_id;
-              } else if (initialBootIdRef.current !== res.server_boot_id) {
-                console.log('[AutoRefresh] Server restart detected! Reloading page...');
-                window.location.reload();
-                return;
-              }
-            }
-
-            // 3. Check for CMS content updates
+            // Check for CMS content updates
             if (res.last_updated) {
               if (!initialTimestampRef.current) {
-                // Set the baseline timestamp on first successful fetch
                 initialTimestampRef.current = res.last_updated;
               } else if (initialTimestampRef.current !== res.last_updated && !onlyOnReconnect) {
-                // If the timestamp changed, reload the page to get the latest UI and data
-                console.log('[AutoRefresh] New data detected! Reloading page...');
-                window.location.reload();
-                return; // Stop polling since page is reloading
+                console.log('[GlobalAutoRefresh] New data detected via HTTP! Dispatching cms_updated...');
+                initialTimestampRef.current = res.last_updated;
+                window.dispatchEvent(new CustomEvent('cms_updated'));
               }
             }
           }
         } catch (e) {
-          console.warn('[AutoRefresh] Server appears offline or unreachable:', e);
+          console.warn('[GlobalAutoRefresh] Server appears offline or unreachable:', e);
           wasDisconnected = true;
         }
       }
 
-      if (isActive) {
-        timeoutId = setTimeout(checkUpdate, intervalMs);
-      }
+      if (isActive) timeoutId = setTimeout(checkUpdate, intervalMs);
     };
 
-    // Start the polling cycle
     timeoutId = setTimeout(checkUpdate, intervalMs);
 
-    // Handle visibility changes (check immediately when returning to tab)
+    // Handle visibility changes
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !isWsConnected) {
         clearTimeout(timeoutId);
         checkUpdate();
       }
@@ -85,6 +115,7 @@ export function useGlobalAutoRefresh(intervalMs: number = 2000, onlyOnReconnect:
       isActive = false;
       clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (ws) ws.close();
     };
-  }, [intervalMs]);
+  }, [intervalMs, onlyOnReconnect]);
 }

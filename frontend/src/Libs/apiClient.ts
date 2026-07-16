@@ -52,6 +52,7 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
     ...options,
     headers,
     credentials: 'include', // Ensure session cookies are sent for authentication
+    cache: 'no-store', // Fix: Prevent browser from caching API responses (which causes stale UI on edits)
   });
 
   if (!response.ok) {

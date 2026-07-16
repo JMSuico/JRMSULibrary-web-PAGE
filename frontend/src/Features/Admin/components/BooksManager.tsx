@@ -8,6 +8,7 @@ import { CreateBatchModal } from '@/src/Features/Admin/components/CreateBatchMod
 import { EditBatchModal } from '@/src/Features/Admin/components/EditBatchModal';
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
 import { useToast } from '@/src/Hooks/useToast';
+import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
@@ -98,6 +99,8 @@ export function BooksManager() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useCmsUpdated(loadData);
 
   // Mutation guard — prevents auto-refresh from overwriting optimistic UI
   const isMutating = useRef(false);
