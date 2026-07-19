@@ -1,9 +1,9 @@
-# Stage 1 — Build the Vite/React app
+ï»¿# Stage 1 â€” Build the Vite/React app
 FROM node:20-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 
@@ -15,7 +15,7 @@ ENV VITE_APP_MODE=$VITE_APP_MODE
 
 RUN npm run build
 
-# Stage 2 — Serve with Nginx
+# Stage 2 â€” Serve with Nginx
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

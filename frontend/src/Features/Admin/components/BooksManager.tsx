@@ -19,6 +19,7 @@ type ViewMode = 'table' | 'grid';
 export function BooksManager() {
   const [batches, setBatches] = useState<AcquisitionBatch[]>([]);
   const [currentBatch, setCurrentBatch] = useState<AcquisitionBatch | null>(null);
+  const currentBatchIdRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(true);
   
   // Modals
@@ -71,17 +72,25 @@ export function BooksManager() {
     recentBatchesRef.current.scrollLeft = scrollLeftBatches - walk;
   };
 
+  useEffect(() => {
+    if (currentBatch) {
+      currentBatchIdRef.current = currentBatch.id;
+    }
+  }, [currentBatch]);
+
   const loadData = async () => {
     setLoading(true);
     try {
-      // For the manager page, we typically want to see the active display batch OR the latest open batch
       const allBatches = await batchApi.getAllBatches();
       setBatches(allBatches);
       
-      const displayBatch = allBatches.find(b => b.is_display_batch);
-      const openBatch = allBatches.find(b => b.status === 'open');
+      let targetBatchId = currentBatchIdRef.current;
       
-      const targetBatchId = openBatch?.id || displayBatch?.id || (allBatches.length > 0 ? allBatches[0].id : null);
+      if (!targetBatchId || !allBatches.some(b => b.id === targetBatchId)) {
+        const displayBatch = allBatches.find(b => b.is_display_batch);
+        const openBatch = allBatches.find(b => b.status === 'open');
+        targetBatchId = openBatch?.id || displayBatch?.id || (allBatches.length > 0 ? allBatches[0].id : null);
+      }
       
       if (targetBatchId) {
         const fullBatch = await batchApi.getBatchById(targetBatchId);
@@ -105,10 +114,12 @@ export function BooksManager() {
   // Mutation guard — prevents auto-refresh from overwriting optimistic UI
   const isMutating = useRef(false);
 
+  // We omit dependency array for useAutoRefresh callback so it captures the latest loadData 
+  // (which in turn uses the ref for targetBatchId, so we are safe)
   useAutoRefresh(useCallback(async () => {
     if (isMutating.current) return; // Skip if a CRUD op is in flight
     await loadData();
-  }, []), 30000);
+  }, [loadData]), 30000);
   const handleCreateBatch = async (data: Partial<AcquisitionBatch>) => {
     try {
       await batchApi.createBatch(data);
@@ -208,6 +219,8 @@ export function BooksManager() {
 
   const handleViewBatchBooks = async (id: number) => {
     setLoading(true);
+    // Immediately set ref to prevent auto-refresh race conditions
+    currentBatchIdRef.current = id;
     // Reset book-level filters so stale search/category doesn't carry over to a different batch
     setSearchQuery('');
     setSelectedCategory('All');

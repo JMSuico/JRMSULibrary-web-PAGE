@@ -226,7 +226,7 @@ export default function AdministrationPage() {
       })()}
       {orgImageOpen && createPortal(
         <div
-          className="modal-overlay"
+          className="fixed backdrop-blur-sm inset-0 flex items-center justify-center bg-black/80 p-4 z-[9999] animate-modal-overlay"
           role="dialog"
           aria-modal="true"
           onClick={() => setOrgImageOpen(false)}
@@ -241,7 +241,7 @@ export default function AdministrationPage() {
           <img
             src={orgChartUrl || "/assets/organizational structure library.png"}
             alt="JRMSU Library Organizational Structure Chart"
-            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white animate-modal-card"
             onClick={(e) => e.stopPropagation()}
           />
         </div>,

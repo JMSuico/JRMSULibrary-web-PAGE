@@ -35,7 +35,7 @@ export const RizalAssistant: React.FC = () => {
     } catch (e) {
       console.error('Failed to parse chat cache', e);
     }
-    return [{ sender: 'rizal', text: 'Hi! I am Rizal. How can I help you today?' }];
+    return [{ sender: 'rizal', text: 'Hi! I am RIZAL. How can I help you today?' }];
   });
   const [chatFlowState, setChatFlowState] = useState<ChatFlowState>('suggestions');
   const [chatInput, setChatInput] = useState('');

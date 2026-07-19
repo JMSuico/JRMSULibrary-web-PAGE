@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 export interface ClassicCarouselItem {
   title?: string;
@@ -22,6 +23,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
   const [scrollLeft, setScrollLeft] = useState(0);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const [selectedItem, setSelectedItem] = useState<ClassicCarouselItem | null>(null);
 
   const CARD_WIDTH = 240; // px including gap
   const CARD_GAP = 16;
@@ -130,7 +132,12 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
           return (
             <div
               key={i}
-              onClick={() => !isDragging && onCardClick?.(item, i)}
+              onClick={() => {
+                if (!isDragging) {
+                  if (onCardClick) onCardClick(item, i);
+                  else setSelectedItem(item);
+                }
+              }}
               className="shrink-0 w-[220px] rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all bg-white group/card cursor-pointer"
               style={{ scrollSnapAlign: 'start' }}
               draggable={false}
@@ -175,6 +182,52 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
         >
           <ChevronRight size={20} />
         </button>
+      )}
+
+      {/* Floating Modal for Picture Expansion */}
+      {selectedItem && createPortal(
+        <div 
+          className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 z-[9999] animate-modal-overlay" 
+          onClick={() => setSelectedItem(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors cursor-pointer z-50"
+            onClick={() => setSelectedItem(null)}
+            aria-label="Close enlarged view"
+          >
+            <X size={40} />
+          </button>
+          <div 
+            className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-4xl w-full text-center flex flex-col items-center animate-modal-card overflow-y-auto max-h-[90vh]" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(selectedItem.image || selectedItem.src) ? (
+              <div className="w-full max-h-[60vh] rounded-xl overflow-hidden shadow-lg mx-auto flex items-center justify-center bg-gray-50 border border-gray-200 relative group">
+                <img 
+                  src={selectedItem.image || selectedItem.src} 
+                  alt={selectedItem.title || selectedItem.label} 
+                  className="max-w-full max-h-[60vh] object-contain transition-transform duration-500 hover:scale-105 cursor-zoom-in" 
+                  onClick={() => window.open(selectedItem.image || selectedItem.src, '_blank')}
+                  title="Click to view full screen"
+                />
+              </div>
+            ) : selectedItem.icon ? (
+              <span className="material-symbols-outlined text-[120px] text-navy/40 mb-6 block w-full">{selectedItem.icon}</span>
+            ) : null}
+            
+            {(selectedItem.title || selectedItem.label) && (
+              <h3 className="font-headline-lg font-bold text-2xl sm:text-3xl text-navy mt-8 mb-4">
+                {selectedItem.title || selectedItem.label}
+              </h3>
+            )}
+            {selectedItem.description && (
+              <p className="text-gray-600 text-lg max-w-2xl mx-auto leading-relaxed">
+                {selectedItem.description}
+              </p>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

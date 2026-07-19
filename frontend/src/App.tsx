@@ -51,7 +51,7 @@ function PublicLayout() {
   }, [location.pathname]);
 
   return (
-    <>
+    <div className="flex flex-col min-h-screen">
       {!isLoaderDone && (
         <InitialLoader onComplete={() => setIsLoaderDone(true)} />
       )}
@@ -60,7 +60,7 @@ function PublicLayout() {
       <FacebookBubble />
       <FeedbackStickyCard />
       <RizalAssistant />
-      <main>
+      <main className="flex-1 relative z-0 flex flex-col">
         <Suspense fallback={<PageSkeleton />}>
           <PageTransition>
             <Outlet />
@@ -68,7 +68,7 @@ function PublicLayout() {
         </Suspense>
       </main>
       <Footer />
-    </>
+    </div>
   );
 }
 

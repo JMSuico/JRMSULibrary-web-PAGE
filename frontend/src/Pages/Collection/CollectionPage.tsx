@@ -107,6 +107,7 @@ const tabOptions = [
   { id: 'local-books', label: 'Local Books' },
   { id: 'online', label: 'Online Access' },
   { id: 'external-libraries', label: 'External Libraries' },
+  { id: 'union-opac', label: 'Union OPAC' },
 ];
 
 export default function CollectionPage() {
@@ -149,7 +150,7 @@ export default function CollectionPage() {
     load();
   }, []);
 
-  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries'];
+  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries', 'union-opac'];
   const activeTab = validTabs.includes(tab as string) ? (tab as string) : 'newly-acquired';
 
   // Auto-open modal if search param specifies a service
@@ -161,13 +162,13 @@ export default function CollectionPage() {
         setExternalService({
           title: 'VitalBooks',
           url: 'https://bookshelf.vitalsource.com/home/my-library',
-          proxyUrl: '/api/external-proxy/vitalsource/',
+          proxyUrl: '', // Unused
         });
       } else if (service === 'scholaar') {
         setExternalService({
           title: 'Scholaar',
-          url: 'http://scholaar.com/University/HomePage.aspx',
-          proxyUrl: '/api/external-proxy/scholaar/',
+          url: 'https://scholaar.com/Login.aspx',
+          proxyUrl: '', // Unused
         });
       } else {
         setExternalService(null);
@@ -263,6 +264,39 @@ export default function CollectionPage() {
                 <button className="btn mt-auto w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold shadow-md text-navy-dark bg-gold hover:bg-gold-hover hover:text-white transition-colors">
                   Open Scholaar
                   <span className="material-symbols-outlined text-xl">school</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Union OPAC — New Page Module */}
+        {activeTab === 'union-opac' && (
+          <div className="max-w-4xl mx-auto mb-12 animate-fade-in">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-1.5 h-8 rounded-full bg-navy-mid" />
+              <h3 className="font-headline-md font-bold text-2xl text-navy-mid" style={{ textShadow: 'none' }}>
+                Union OPAC
+              </h3>
+            </div>
+            <p className="text-navy-mid/80 mb-8 max-w-2xl">
+              Access the University's centralized Online Public Access Catalog to search for physical books, journals, and resources across all JRMSU campuses.
+            </p>
+            <div className="grid md:grid-cols-1 gap-6 max-w-md mx-auto">
+              <div 
+                className="bg-white rounded-2xl p-8 border border-gray-200 flex flex-col items-center text-center shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group"
+                onClick={() => {
+                  window.open('https://library.jrmsu.edu.ph/opac/', '_blank', 'noopener,noreferrer');
+                }}
+              >
+                <div className="w-20 h-20 bg-navy/5 group-hover:bg-navy/10 text-navy rounded-full flex items-center justify-center mb-6 transition-colors">
+                  <span className="material-symbols-outlined text-[40px]">library_books</span>
+                </div>
+                <h4 className="font-bold text-2xl text-navy mb-2">Library Catalog (OPAC)</h4>
+                <p className="text-gray-500 text-sm mb-8">Launch the centralized OPAC portal to browse our extensive print collections.</p>
+                <button className="btn btn-primary mt-auto w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold shadow-md">
+                  Launch OPAC
+                  <span className="material-symbols-outlined text-xl">open_in_new</span>
                 </button>
               </div>
             </div>
@@ -432,8 +466,10 @@ export default function CollectionPage() {
           proxyUrl={externalService.proxyUrl}
           onClose={() => {
             setExternalService(null);
-            // Clear search param so it doesn't re-open on refresh
-            navigate('/collection/external-libraries', { replace: true });
+            if (activeTab === 'external-libraries') {
+              // Clear search param so it doesn't re-open on refresh
+              navigate('/collection/external-libraries', { replace: true });
+            }
           }}
         />
       )}

@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 
 interface CarouselItem {
   title: string;
@@ -19,6 +21,7 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
   autoSlideInterval = 5000 
 }) => {
   const [activeIdx, setActiveIdx] = useState(0);
+  const [expandedItem, setExpandedItem] = useState<CarouselItem | null>(null);
 
   const goTo = useCallback((idx: number) => {
     const len = items.length;
@@ -98,17 +101,20 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
                 key={idx}
                 className={`carousel-3d-card ${pos}`}
                 style={{
-                  width: pos === 'active' ? 'min(75vw, 400px)' : pos === 'right' || pos === 'left' ? 'min(60vw, 300px)' : 'min(45vw, 200px)',
-                  // Book covers are typically taller than they are wide (e.g. 2:3 or 3:4 ratio)
-                  aspectRatio: '2 / 3',
+                  width: pos === 'active' ? '100%' : pos === 'right' || pos === 'left' ? '85%' : '70%',
+                  maxWidth: pos === 'active' ? '500px' : pos === 'right' || pos === 'left' ? '400px' : '300px',
+                  // Book covers are typically taller than they are wide
+                  aspectRatio: '3 / 4',
                 }}
                 onClick={() => {
                   if (pos !== 'active') {
                     goTo(idx);
+                  } else {
+                    setExpandedItem(item);
                   }
                 }}
               >
-                <div className="w-full h-full rounded-xl overflow-hidden shadow-2xl border border-gold-light/20 bg-primary">
+                <div className={`w-full h-full rounded-xl overflow-hidden shadow-2xl border border-gold-light/20 bg-primary relative ${pos === 'active' ? 'cursor-zoom-in' : ''}`}>
                   {item.image ? (
                     <img
                       src={item.image}
@@ -121,6 +127,20 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
                     <div className="w-full h-full flex items-center justify-center bg-navy-mid">
                       <span className="material-symbols-outlined text-6xl text-gold-light opacity-50">
                         {item.icon || 'book'}
+                      </span>
+                    </div>
+                  )}
+                  {pos === 'active' && (
+                    <div 
+                      className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity cursor-zoom-in"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedItem(item);
+                      }}
+                    >
+                      <span className="text-white font-medium flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm shadow-lg border border-white/20">
+                        <span className="material-symbols-outlined text-sm">fullscreen</span>
+                        Click to expand
                       </span>
                     </div>
                   )}
@@ -164,6 +184,44 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
           {activeItem.description}
         </p>
       </div>
+
+      {/* Floating Modal for Picture Expansion */}
+      {expandedItem && createPortal(
+        <div 
+          className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 z-[9999] animate-modal-overlay" 
+          onClick={() => setExpandedItem(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors z-[210] cursor-pointer"
+            onClick={() => setExpandedItem(null)}
+            aria-label="Close enlarged view"
+          >
+            <span className="material-symbols-outlined text-4xl">close</span>
+          </button>
+          <div className="flex flex-col items-center animate-modal-card" onClick={(e) => e.stopPropagation()}>
+            {expandedItem.image ? (
+              <img 
+                src={expandedItem.image} 
+                alt={expandedItem.title} 
+                className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
+              />
+            ) : expandedItem.icon ? (
+              <span className="material-symbols-outlined text-[120px] text-white/50 mb-6 block w-full text-center">{expandedItem.icon}</span>
+            ) : null}
+            <div className="text-center mt-6">
+              <p className="text-white font-headline-md font-bold text-2xl tracking-wide drop-shadow-md">
+                {expandedItem.title}
+              </p>
+              {expandedItem.description && (
+                <p className="text-white/80 text-lg mt-2 drop-shadow-md">
+                  {expandedItem.description}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

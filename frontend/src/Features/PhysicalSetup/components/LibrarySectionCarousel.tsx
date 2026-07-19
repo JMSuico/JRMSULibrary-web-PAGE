@@ -171,6 +171,7 @@ export const LibrarySectionCarousel: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [activeIdx, setActiveIdx] = useState(0);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<GalleryModalItem | null>(null);
   const carouselStyle = useCarouselStyle();
 
   // Dynamic images from backend — falls back to static if DB is empty
@@ -237,7 +238,6 @@ export const LibrarySectionCarousel: React.FC = () => {
             <>
               <ClassicHorizontalCarousel
                 items={sectionImages.map(img => ({ src: img.src, label: img.label }))}
-                onCardClick={(_, idx) => setGalleryOpen(true)}
               />
               <div className="flex justify-center mt-6 relative z-40">
                 <button
@@ -269,7 +269,7 @@ export const LibrarySectionCarousel: React.FC = () => {
                     }}
                     onClick={() => {
                       if (pos === 'active') {
-                        setGalleryOpen(true);
+                        setExpandedImage(img);
                       } else {
                         goTo(idx);
                       }
@@ -285,7 +285,13 @@ export const LibrarySectionCarousel: React.FC = () => {
                       />
                     </div>
                     {pos === 'active' && (
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity">
+                      <div 
+                        className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity cursor-zoom-in"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedImage(img);
+                        }}
+                      >
                         <span className="text-white font-medium flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
                           <span className="material-symbols-outlined text-sm">fullscreen</span>
                           Click to expand
@@ -332,6 +338,33 @@ export const LibrarySectionCarousel: React.FC = () => {
         </div>
       </div>
       <GalleryViewModal images={sectionImages} isOpen={galleryOpen} onClose={() => setGalleryOpen(false)} />
+      
+      {/* Floating Modal for Picture Expansion */}
+      {expandedImage && createPortal(
+        <div 
+          className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 z-[9999] animate-modal-overlay" 
+          onClick={() => setExpandedImage(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors z-[210] cursor-pointer"
+            onClick={() => setExpandedImage(null)}
+            aria-label="Close enlarged image"
+          >
+            <span className="material-symbols-outlined text-4xl">close</span>
+          </button>
+          <div className="flex flex-col items-center animate-modal-card" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={expandedImage.src} 
+              alt={expandedImage.label} 
+              className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
+            />
+            <p className="text-white font-headline-md font-bold text-2xl mt-6 tracking-wide drop-shadow-md">
+              {expandedImage.label}
+            </p>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

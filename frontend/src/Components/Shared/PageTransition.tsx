@@ -22,7 +22,7 @@ export const PageTransition: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [location, displayLocation]);
 
   return (
-    <div className={`w-full h-full `} style={{ animationFillMode: 'both' }}>
+    <div className={`page-transition-wrapper w-full flex-1 flex flex-col ${transitionClass}`} style={{ animationFillMode: 'both' }}>
       {children}
     </div>
   );

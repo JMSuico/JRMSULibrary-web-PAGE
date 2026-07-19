@@ -75,25 +75,25 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
 
         <div className="flex-1 overflow-y-auto p-6 relative">
           {viewMode === 'card' ? (
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {pageItems.map((book, idx) => (
                 <div
                   key={currentPage * ITEMS_PER_PAGE + idx}
-                  className="flex items-start gap-3 p-4 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors group"
+                  className="flex flex-col items-center text-center gap-4 p-6 rounded-2xl bg-white border border-gray-200 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group"
                   onClick={() => setSelectedBook(book)}
                 >
                   {book.image ? (
-                    <div className="w-12 h-12 flex-shrink-0 mt-0.5 rounded-lg overflow-hidden">
-                      <img src={book.image} alt={book.title} className="w-full h-full object-cover" />
+                    <div className="w-32 h-40 rounded-lg overflow-hidden shadow-md">
+                      <img src={book.image} alt={book.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                     </div>
                   ) : book.icon ? (
-                    <span className="material-symbols-outlined text-2xl text-primary flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                    <span className="material-symbols-outlined text-[64px] text-primary group-hover:scale-110 transition-transform duration-500">
                       {book.icon}
                     </span>
                   ) : null}
                   <div>
-                    <h3 className="font-headline-md font-bold text-sm text-primary group-hover:text-gold-dark transition-colors">{book.title}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{book.description}</p>
+                    <h3 className="font-headline-md font-bold text-lg text-primary group-hover:text-gold-dark transition-colors line-clamp-2">{book.title}</h3>
+                    <p className="text-sm text-gray-500 mt-2 line-clamp-3">{book.description}</p>
                   </div>
                 </div>
               ))}

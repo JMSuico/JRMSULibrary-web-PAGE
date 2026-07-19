@@ -26,7 +26,7 @@ export const FacebookBubble: React.FC = () => {
         >
           <div
             className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-[480px] flex flex-col animate-modal-card"
-            style={{ height: 'min(85vh, 680px)' }}
+            style={{ maxHeight: '90vh' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -42,12 +42,12 @@ export const FacebookBubble: React.FC = () => {
             </div>
 
             {/* Responsive iframe wrapper */}
-            <div className="flex-1 overflow-hidden relative">
+            <div className="w-full relative overflow-y-auto bg-white" style={{ maxHeight: 'calc(90vh - 50px)' }}>
               <iframe
                 src="https://www.facebook.com/plugins/page.php?href=https%3A%2F%2Fwww.facebook.com%2FJRMSUkatipunanlibrary&tabs=timeline&width=480&height=600&small_header=true&adapt_container_width=true&hide_cover=false&show_facepile=false&appId"
                 style={{
                   width: '100%',
-                  height: '100%',
+                  height: '600px',
                   border: 'none',
                   display: 'block',
                 }}

@@ -40,6 +40,9 @@ export function Analytics(){
   const [last,setLast]=useState<Date>(new Date());
   const ref=useRef<ReturnType<typeof setInterval>|null>(null);
   const{showToast}=useToast();
+  
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [feedbackView, setFeedbackView] = useState<'card' | 'table'>('card');
 
   const load=async()=>{try{const s=await reportApi.getSummary();setData(s);setLast(new Date());}catch(e:any){showToast(e.message||"Failed","error");}finally{setLoading(false);}};
   useEffect(()=>{load();ref.current=setInterval(load,30000);return()=>{if(ref.current)clearInterval(ref.current);};},[]);
@@ -333,23 +336,117 @@ export function Analytics(){
         )}
       </div>
 
-        {data.ratings_summary.recent_feedback.length>0&&(
-          <div className="admin-table-wrapper mt-6 p-6">
-            <div className="flex items-center gap-3 mb-6"><Mail size={24} className="text-navy"/><h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2></div>
-            <div className="space-y-3">
-              {data.ratings_summary.recent_feedback.map(fb=>(
-                <div key={fb.id} className="flex items-start justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100/60 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1"><p className="font-semibold text-gray-800">{fb.name}</p><span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">{fb.category}</span></div>
-                    <div className="flex items-center gap-1 mb-1">{stars(fb.rating)}</div>
-                    <p className="text-sm text-gray-600 truncate">{fb.message}</p>
-                    <p className="text-xs text-gray-400 mt-1">{fb.created_at}</p>
-                  </div>
+        {(() => {
+          if (!data.ratings_summary.recent_feedback) return null;
+          
+          const now = new Date();
+          const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+          
+          const processedFeedback = data.ratings_summary.recent_feedback
+            .filter(fb => new Date(fb.created_at) >= fifteenDaysAgo)
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            
+          const FEEDBACK_PER_PAGE = 10;
+          const totalFeedbackPages = Math.ceil(processedFeedback.length / FEEDBACK_PER_PAGE) || 1;
+          const currentFeedbackPage = Math.min(feedbackPage, totalFeedbackPages);
+          const startIndex = (currentFeedbackPage - 1) * FEEDBACK_PER_PAGE;
+          const paginatedFeedback = processedFeedback.slice(startIndex, startIndex + FEEDBACK_PER_PAGE);
+          
+          return (
+            <div className="admin-table-wrapper mt-6 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                <div className="flex items-center gap-3">
+                  <Mail size={24} className="text-navy"/>
+                  <h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setFeedbackView('card')} className={`p-2 flex items-center justify-center rounded-lg transition-colors border cursor-pointer ${feedbackView === 'card' ? 'bg-navy text-white border-navy shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`} title="Card View"><span className="material-symbols-outlined text-[18px]">grid_view</span></button>
+                  <button onClick={() => setFeedbackView('table')} className={`p-2 flex items-center justify-center rounded-lg transition-colors border cursor-pointer ${feedbackView === 'table' ? 'bg-navy text-white border-navy shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`} title="Table View"><span className="material-symbols-outlined text-[18px]">table_rows</span></button>
+                </div>
+              </div>
+
+              {processedFeedback.length === 0 ? (
+                <div className="py-8 text-center bg-gray-50 rounded-xl border border-gray-100">
+                  <p className="text-gray-500 italic">No feedback received in the last 15 days.</p>
+                </div>
+              ) : (
+                <>
+                  {feedbackView === 'card' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      {paginatedFeedback.map(fb=>(
+                        <div key={fb.id} className="flex flex-col p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100/60 transition-colors shadow-sm">
+                          <div className="flex items-center justify-between mb-2 gap-2">
+                            <p className="font-semibold text-gray-800 truncate">{fb.name}</p>
+                            <span className="text-xs font-medium text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-200 shrink-0">{fb.category}</span>
+                          </div>
+                          <div className="flex items-center gap-1 mb-3">{stars(fb.rating)}</div>
+                          <p className="text-sm text-gray-600 line-clamp-3 mb-4 flex-1 leading-relaxed">{fb.message}</p>
+                          <p className="text-xs font-medium text-gray-400 mt-auto">{fb.created_at}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto mb-4 border border-gray-200 rounded-xl shadow-sm">
+                      <table className="admin-table w-full text-left bg-white">
+                        <thead className="bg-gray-50/80 border-b border-gray-200">
+                          <tr>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Category</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Rating</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-1/2">Message</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {paginatedFeedback.map(fb => (
+                            <tr key={fb.id} className="hover:bg-gray-50/80 transition-colors">
+                              <td className="p-4 text-sm font-medium text-gray-800 whitespace-nowrap">{fb.name}</td>
+                              <td className="p-4 text-sm whitespace-nowrap"><span className="text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full">{fb.category}</span></td>
+                              <td className="p-4 whitespace-nowrap"><div className="flex gap-0.5">{stars(fb.rating)}</div></td>
+                              <td className="p-4 text-sm text-gray-600 leading-relaxed">{fb.message}</td>
+                              <td className="p-4 text-xs font-medium text-gray-400 whitespace-nowrap text-right">{fb.created_at}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-gray-100 gap-4 mt-2">
+                    <span className="text-sm font-medium text-gray-500">
+                      Showing {processedFeedback.length === 0 ? 0 : startIndex + 1} to {Math.min(startIndex + FEEDBACK_PER_PAGE, processedFeedback.length)} of {processedFeedback.length} entries
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button 
+                        onClick={() => setFeedbackPage(p => Math.max(1, p - 1))}
+                        disabled={currentFeedbackPage <= 1}
+                        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 disabled:opacity-40 disabled:bg-gray-50 hover:bg-gray-100 cursor-pointer text-gray-700 transition-colors"
+                      >
+                        Prev
+                      </button>
+                      {Array.from({length: totalFeedbackPages}, (_, i) => i + 1).map(page => (
+                        <button
+                          key={page}
+                          onClick={() => setFeedbackPage(page)}
+                          className={`min-w-[32px] h-[32px] flex items-center justify-center text-sm font-bold rounded-lg border cursor-pointer transition-colors ${currentFeedbackPage === page ? 'bg-navy text-white border-navy shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                      <button 
+                        onClick={() => setFeedbackPage(p => Math.min(totalFeedbackPages, p + 1))}
+                        disabled={currentFeedbackPage >= totalFeedbackPages}
+                        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 disabled:opacity-40 disabled:bg-gray-50 hover:bg-gray-100 cursor-pointer text-gray-700 transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
       </>
   );
 }

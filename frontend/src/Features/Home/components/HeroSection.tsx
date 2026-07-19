@@ -156,7 +156,7 @@ export const HeroSection: React.FC = () => {
                   The Gateway to Academic Excellence
                 </h2>
                 <p className="text-white/90 text-sm max-w-lg leading-relaxed">
-                  Empowering the JRMSU Katipunan community through accessible resources, expert guidance, and a modern digital research environment.
+                  Empowering the JRMSU Katipunan Campus community through accessible resources, expert guidance, and a modern digital research environment.
                 </p>
               </div>
             </div>

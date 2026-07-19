@@ -73,9 +73,16 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
   }
 
   // Handle empty responses (like 204 No Content)
-  if (response.status === 204) {
-    return null;
+  let result = null;
+  if (response.status !== 204) {
+    result = await response.json();
   }
 
-  return response.json();
+  // If this was a mutation (POST, PUT, PATCH, DELETE), instantly tell all components to refresh!
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET' && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cms_updated'));
+  }
+
+  return result;
 };

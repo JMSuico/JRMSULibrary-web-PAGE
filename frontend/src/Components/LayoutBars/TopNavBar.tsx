@@ -60,6 +60,7 @@ export const TopNavBar: React.FC = () => {
     { label: 'Local Books', path: '/collection/local-books' },
     { label: 'Online Access', path: '/collection/online' },
     { label: 'External Libraries', path: '/collection/external-libraries' },
+    { label: 'Union OPAC', path: '/collection/union-opac' },
   ];
 
   const navLinks: NavLink[] = [
@@ -118,7 +119,7 @@ export const TopNavBar: React.FC = () => {
             />
             <div className="text-left max-w-[200px] sm:max-w-[250px]">
               <span className="font-headline-md font-bold text-primary block leading-tight text-[13px] sm:text-base truncate">
-                {libraryName.replace(/ Library$/i, '')}
+                {libraryName.replace(/ Library$/i, '').replace(/ Campus$/i, '')} Campus
               </span>
               <span className="font-label-caps text-primary/70 tracking-[0.1em] uppercase text-[10px] sm:text-[11px]">
                 Library

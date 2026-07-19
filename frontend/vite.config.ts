@@ -32,3 +32,12 @@ export default defineConfig(() => {
     },
   };
 });
+
+// ==========================================
+// LIBRARY WIFI SERVERS (Saved for reference)
+// http://192.168.15.194:3000/ 
+// http://192.168.15.194:3001
+// 
+// CURRENT PESO WIFI (Dynamic IP)
+// http://10.0.0.102:3000/
+// ==========================================
