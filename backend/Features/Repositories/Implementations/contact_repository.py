@@ -55,3 +55,10 @@ class ContactRepository(ContactRepositoryInterface):
             created_at__gte=time_threshold
         ).order_by('-created_at').first()
 
+    def get_replies_by_email(self, email: str):
+        # Only return messages that have a reply
+        return ContactMessage.objects.filter(
+            email=email, 
+            status='REPLIED'
+        ).exclude(reply_text__isnull=True).order_by('-replied_at')
+

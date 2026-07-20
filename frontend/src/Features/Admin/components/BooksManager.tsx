@@ -600,7 +600,16 @@ export function BooksManager() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden animate-modal-card" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><BookOpen size={20} className="text-navy" /> All Batches ({batches.length})</h2>
-              <button onClick={() => setViewAllOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={20} /></button>
+              <div className="flex items-center gap-4">
+                <button
+                  className="admin-btn admin-btn--primary flex items-center gap-1.5"
+                  onClick={() => { setViewAllOpen(false); setIsCreateBatchOpen(true); }}
+                  style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                >
+                  <Plus size={16} /> New Batch
+                </button>
+                <button onClick={() => setViewAllOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={20} /></button>
+              </div>
             </div>
             
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex gap-2 items-center">

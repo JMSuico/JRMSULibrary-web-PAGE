@@ -35,26 +35,26 @@ const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({ file, onComplet
 
   useEffect(() => {
     let isCancelled = false;
-    
+
     const startUpload = async () => {
       setStatus('uploading');
       try {
         const res = await contactApi.uploadAttachment(file, (p) => {
-           if (!isCancelled) setProgress(p);
+          if (!isCancelled) setProgress(p);
         });
         if (!isCancelled) {
-           setProgress(100);
-           setStatus('completed');
-           onComplete(res.file_id);
+          setProgress(100);
+          setStatus('completed');
+          onComplete(res.file_id);
         }
       } catch (err: any) {
         if (!isCancelled) {
-           setStatus('error');
-           onError(err.message);
+          setStatus('error');
+          onError(err.message);
         }
       }
     };
-    
+
     if (navigator.onLine) {
       startUpload();
     } else {
@@ -63,21 +63,21 @@ const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({ file, onComplet
 
     const handleOffline = () => setStatus('paused');
     const handleOnline = () => {
-       setStatus(prev => {
-         if (prev === 'paused' || prev === 'error') {
-           startUpload();
-           return 'uploading';
-         }
-         return prev;
-       });
+      setStatus(prev => {
+        if (prev === 'paused' || prev === 'error') {
+          startUpload();
+          return 'uploading';
+        }
+        return prev;
+      });
     };
-    
+
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
     return () => {
-       isCancelled = true;
-       window.removeEventListener('offline', handleOffline);
-       window.removeEventListener('online', handleOnline);
+      isCancelled = true;
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
     };
   }, [file]);
 
@@ -105,16 +105,18 @@ export function EmailMessage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
+
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File, id?: string }[] } | null>(null);
   const [bulkReplyModal, setBulkReplyModal] = useState<{ body: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<{ id: number, action: string } | null>(null);
   const [isSendingReply, setIsSendingReply] = useState(false);
-  
+
   // Background Sends UI State
-  const [backgroundSends, setBackgroundSends] = useState<{id: string, email: string, isError?: boolean, errorMessage?: string}[]>([]);
-  
+  const [backgroundSends, setBackgroundSends] = useState<{ id: string, email: string, isError?: boolean, errorMessage?: string }[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number; message: string } | null>(null);
+
   // Advanced Queue State for Bulk Sending
   const [queueState, setQueueState] = useState<{
     isActive: boolean;
@@ -148,10 +150,10 @@ export function EmailMessage() {
     let mounted = true;
     const processQueue = async () => {
       if (!queueState.isActive || queueState.isPaused || queueState.currentId !== null || queueState.pendingIds.length === 0) return;
-      
+
       const nextId = queueState.pendingIds[0];
       setQueueState(prev => ({ ...prev, currentId: nextId }));
-      
+
       try {
         const result = await contactApi.replyToMessage(nextId, bulkReplyModal?.body || '');
         if (mounted) {
@@ -185,10 +187,10 @@ export function EmailMessage() {
       setSelectedIds(new Set());
       fetchMessages();
     }
-    
+
     return () => { mounted = false; };
   }, [queueState, bulkReplyModal]);
-  
+
   const { showToast } = useToast();
 
   const fetchMessages = async () => {
@@ -208,6 +210,15 @@ export function EmailMessage() {
 
   // Auto-refresh messages every 15 seconds
   useAutoRefresh(fetchMessages, 15000);
+
+  // Auto-expand groups that have unread messages or just expand all initially
+  useEffect(() => {
+    if (messages.length > 0 && expandedGroups.size === 0) {
+      setExpandedGroups(new Set(messages.map(m => m.email)));
+    }
+  }, [messages]);
+
+
 
   const updateStatus = async (id: number, newStatus: ContactMessage['status']) => {
     setActionLoading({ id, action: newStatus });
@@ -258,7 +269,7 @@ export function EmailMessage() {
 
   const handleBulkAction = async (action: ContactMessage['status'] | 'DELETE') => {
     if (selectedIds.size === 0) return;
-    
+
     if (action === 'DELETE') {
       const msgsToDelete = messages.filter(m => selectedIds.has(m.id));
       if (msgsToDelete.length === 0) return;
@@ -327,10 +338,10 @@ export function EmailMessage() {
       m.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       m.email.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       (m.subject && m.subject.toLowerCase().includes(debouncedSearch.toLowerCase()));
-    
+
     const matchesType = filterType === 'ALL' || m.message_type === filterType;
     const matchesArchive = showArchived ? m.status === 'ARCHIVED' : m.status !== 'ARCHIVED';
-    
+
     return matchesSearch && matchesType && matchesArchive;
   });
 
@@ -345,7 +356,7 @@ export function EmailMessage() {
     if (msg.status === 'UNREAD') acc[key].unreadCount += 1;
     return acc;
   }, {} as Record<string, { name: string, email: string, messages: ContactMessage[], unreadCount: number, totalCount: number }>);
-  
+
   const groupedArray = (Object.values(groupedMessages) as Array<{ name: string, email: string, messages: ContactMessage[], unreadCount: number, totalCount: number }>)
     .sort((a, b) => b.unreadCount - a.unreadCount);
 
@@ -382,9 +393,31 @@ export function EmailMessage() {
 
       {/* Header Panel */}
       <div className="admin-content__header">
-        <h1>Email & Reservations</h1>
-        <p>Manage incoming messages from the Rizal AI Assistant. Messages from the same user are batched together.</p>
+        <div>
+          <h1>Email &amp; Reservations</h1>
+          <p>Manage incoming messages from the Rizal AI Assistant. Messages from the same user are batched together.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setFilterType('EMAIL')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${filterType === 'EMAIL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          >
+            Emails
+          </button>
+          <button
+            onClick={() => setFilterType('RESERVATION')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${filterType === 'RESERVATION' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          >
+            Reservations
+          </button>
+        </div>
       </div>
+      {syncResult && (
+        <div className="mb-3 flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 font-medium">
+          <CheckCircle size={15} />
+          {syncResult.message}
+        </div>
+      )}
 
       <div className="admin-metrics">
         <MetricCard
@@ -422,7 +455,7 @@ export function EmailMessage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
             <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-1 bg-gray-50 w-full sm:w-auto">
               <Filter size={16} className="text-gray-400 ml-2" />
-              <select 
+              <select
                 className="bg-transparent border-none text-sm outline-none px-2 py-1 text-gray-700 w-full sm:w-auto"
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value as any)}
@@ -434,8 +467,8 @@ export function EmailMessage() {
               </select>
             </div>
             <label className="flex items-center justify-center gap-2 text-sm text-gray-600 cursor-pointer border border-gray-200 px-3 py-1.5 rounded-lg bg-white shrink-0">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
@@ -466,8 +499,8 @@ export function EmailMessage() {
         )}
 
         <div className="bg-gray-50 border-b border-gray-200 p-3 flex items-center gap-3">
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             checked={filtered.length > 0 && selectedIds.size === filtered.length}
             onChange={toggleSelectAll}
             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -483,8 +516,8 @@ export function EmailMessage() {
           <div className="flex flex-col p-4 gap-4 bg-gray-50/50 flex-1 overflow-y-auto">
             {paginatedGroups.map((group) => (
               <div key={group.email} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden shrink-0">
-                <div 
-                  className="bg-gray-50 p-4 flex justify-between items-center border-b border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors" 
+                <div
+                  className="bg-gray-50 p-4 flex justify-between items-center border-b border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => toggleExpandedGroup(group.email)}
                 >
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -502,17 +535,17 @@ export function EmailMessage() {
                     {expandedGroups.has(group.email) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                   </button>
                 </div>
-                
+
                 {expandedGroups.has(group.email) && (
                   <div className="flex flex-col">
                     {group.messages.map((msg) => (
-                      <div 
-                        key={msg.id} 
+                      <div
+                        key={msg.id}
                         className={`p-4 border-b border-gray-100 flex flex-col md:flex-row gap-4 transition-colors last:border-b-0 ${msg.status === 'UNREAD' ? 'bg-blue-50/30' : 'bg-white hover:bg-gray-50'}`}
                       >
                         <div className="flex items-start pt-1">
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={selectedIds.has(msg.id)}
                             onChange={() => toggleSelection(msg.id)}
                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-1"
@@ -521,43 +554,63 @@ export function EmailMessage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             {msg.message_type === 'RESERVATION' ? (
-                                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 text-amber-500 rounded-full text-xs font-bold font-mono">
-                                      <Clock size={14} />
-                                      RESERVATION
-                                    </span>
-                                  ) : msg.message_type === 'CREDENTIAL_REQUEST' ? (
-                                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/20 text-purple-500 rounded-full text-xs font-bold font-mono">
-                                      <span className="material-symbols-outlined text-[14px]">key</span>
-                                      CREDENTIAL REQ
-                                    </span>
-                                  ) : (
-                                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 text-blue-500 rounded-full text-xs font-bold font-mono">
-                                      <Mail size={14} />
-                                      EMAIL
-                                    </span>
-                                  )}
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 text-amber-500 rounded-full text-xs font-bold font-mono">
+                                <Clock size={14} />
+                                RESERVATION
+                              </span>
+                            ) : msg.message_type === 'CREDENTIAL_REQUEST' ? (
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/20 text-purple-500 rounded-full text-xs font-bold font-mono">
+                                <span className="material-symbols-outlined text-[14px]">key</span>
+                                CREDENTIAL REQ
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 text-blue-500 rounded-full text-xs font-bold font-mono">
+                                <Mail size={14} />
+                                EMAIL
+                              </span>
+                            )}
                             <h3 className={`text-sm break-words ${msg.status === 'UNREAD' ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>
                               {msg.subject || 'No Subject'}
                             </h3>
                           </div>
                           <p className="text-xs text-gray-500 mb-2">{new Date(msg.created_at).toLocaleString()}</p>
                           <p className="text-sm text-gray-700 whitespace-pre-wrap break-words bg-white border border-gray-100 p-3 rounded-lg shadow-sm">{msg.message}</p>
+                          {msg.attachments && msg.attachments.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Attachments</p>
+                              <div className="flex flex-wrap gap-2">
+                                {msg.attachments.map(att => (
+                                  <a
+                                    key={att.id}
+                                    href={att.file}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 rounded-lg text-xs transition-colors"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216ZM136,120v40H96a8,8,0,0,0,0,16h40v40a8,8,0,0,0,16,0V176h40a8,8,0,0,0,0-16H152V120a8,8,0,0,0-16,0Z"></path></svg>
+                                    <span className="truncate max-w-[150px] font-medium">{att.original_filename}</span>
+                                    <span className="text-blue-400">({(att.file_size / 1024 / 1024).toFixed(2)} MB)</span>
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        
+
                         <div className="flex flex-col justify-start md:items-end gap-2 md:w-36 shrink-0">
                           <span className={`text-xs font-semibold px-2 py-1 rounded-md text-center
-                            ${msg.status === 'UNREAD' ? 'bg-orange-100 text-orange-700' : 
+                            ${msg.status === 'UNREAD' ? 'bg-orange-100 text-orange-700' :
                               msg.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                              msg.status === 'DECLINED' ? 'bg-red-100 text-red-700' :
-                              msg.status === 'ARCHIVED' ? 'bg-gray-200 text-gray-700' :
-                              msg.status === 'READ' ? 'bg-gray-100 text-gray-700' : 
-                              'bg-green-100 text-green-700'}`}
+                                msg.status === 'DECLINED' ? 'bg-red-100 text-red-700' :
+                                  msg.status === 'ARCHIVED' ? 'bg-gray-200 text-gray-700' :
+                                    msg.status === 'READ' ? 'bg-gray-100 text-gray-700' :
+                                      'bg-green-100 text-green-700'}`}
                           >
                             {msg.status}
                           </span>
-                          
+
                           {msg.status === 'UNREAD' && (
-                            <button 
+                            <button
                               onClick={() => updateStatus(msg.id, 'READ')}
                               className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 justify-center md:justify-end cursor-pointer"
                             >
@@ -566,14 +619,14 @@ export function EmailMessage() {
                           )}
                           {msg.message_type === 'RESERVATION' && !['APPROVED', 'DECLINED', 'ARCHIVED'].includes(msg.status) && (
                             <div className="flex items-center gap-2 justify-center md:justify-end">
-                              <button 
+                              <button
                                 onClick={() => updateStatus(msg.id, 'APPROVED')}
                                 disabled={actionLoading?.id === msg.id}
                                 className={`text-xs px-2 py-1 rounded transition-colors ${actionLoading?.id === msg.id && actionLoading?.action === 'APPROVED' ? 'bg-green-50 text-green-700/50 border border-green-200/50 cursor-not-allowed flex items-center gap-1' : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 cursor-pointer'} ${(actionLoading?.id === msg.id && actionLoading?.action !== 'APPROVED') ? 'opacity-50 pointer-events-none' : ''}`}
                               >
                                 {actionLoading?.id === msg.id && actionLoading?.action === 'APPROVED' ? <><div className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div> Approving...</> : 'Approve'}
                               </button>
-                              <button 
+                              <button
                                 onClick={() => updateStatus(msg.id, 'DECLINED')}
                                 disabled={actionLoading?.id === msg.id}
                                 className={`text-xs px-2 py-1 rounded transition-colors ${actionLoading?.id === msg.id && actionLoading?.action === 'DECLINED' ? 'bg-red-50 text-red-700/50 border border-red-200/50 cursor-not-allowed flex items-center gap-1' : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 cursor-pointer'} ${(actionLoading?.id === msg.id && actionLoading?.action !== 'DECLINED') ? 'opacity-50 pointer-events-none' : ''}`}
@@ -583,7 +636,7 @@ export function EmailMessage() {
                             </div>
                           )}
                           {msg.status !== 'REPLIED' && !['ARCHIVED'].includes(msg.status) && (
-                            <button 
+                            <button
                               onClick={() => setReplyModal({ message: msg, body: '', attachments: [] })}
                               className="text-xs text-green-600 hover:text-green-800 flex items-center gap-1 justify-center md:justify-end cursor-pointer"
                             >
@@ -591,7 +644,7 @@ export function EmailMessage() {
                             </button>
                           )}
                           {msg.status !== 'ARCHIVED' && (
-                            <button 
+                            <button
                               onClick={() => updateStatus(msg.id, 'ARCHIVED')}
                               className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 justify-center md:justify-end cursor-pointer mt-1"
                             >
@@ -599,7 +652,7 @@ export function EmailMessage() {
                             </button>
                           )}
                           {msg.status === 'ARCHIVED' && (
-                            <button 
+                            <button
                               onClick={() => deleteMessage(msg.id)}
                               className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 justify-center md:justify-end cursor-pointer mt-1"
                             >
@@ -613,10 +666,10 @@ export function EmailMessage() {
                 )}
               </div>
             ))}
-            
+
             {groupedArray.length > itemsPerPage && (
               <div className="mt-4 shrink-0">
-                <Pagination 
+                <Pagination
                   currentPage={currentPage}
                   totalPages={totalPages}
                   onPageChange={setCurrentPage}
@@ -691,7 +744,7 @@ export function EmailMessage() {
               </div>
 
 
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2 mt-3">Attachments (Max 10MB each)</label>
                 <DragDropFileUpload
@@ -707,11 +760,11 @@ export function EmailMessage() {
                 />
                 <div className="mt-2 max-h-[150px] overflow-y-auto pr-1">
                   {replyModal.attachments.map((att: { file: File; id?: string }, idx: number) => (
-                <AttachmentUploader 
-                  key={`${att.file.name}-${idx}`} 
-                  file={att.file} 
-                  onComplete={(id) => {
-                    setReplyModal(prev => {
+                    <AttachmentUploader
+                      key={`${att.file.name}-${idx}`}
+                      file={att.file}
+                      onComplete={(id) => {
+                        setReplyModal(prev => {
                           if (!prev) return prev;
                           const updated = [...prev.attachments];
                           updated[idx] = { ...updated[idx], id };
@@ -746,19 +799,19 @@ export function EmailMessage() {
                 className={`admin-btn admin-btn--primary flex items-center gap-2 ${(!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)) ? 'opacity-50 cursor-not-allowed bg-gray-400 border-gray-400' : ''}`}
                 onClick={async () => {
                   if (!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)) return;
-                  
+
                   const emailPayload = {
                     id: replyModal.message.id,
                     email: replyModal.message.email,
                     body: replyModal.body,
                     attachments: [...replyModal.attachments]
                   };
-                  
+
                   setReplyModal(null);
-                  
+
                   const sendId = Math.random().toString(36).substring(7);
                   setBackgroundSends(prev => [...prev, { id: sendId, email: emailPayload.email }]);
-                  
+
                   try {
                     let result;
                     if (emailPayload.attachments.length > 0) {
@@ -767,11 +820,11 @@ export function EmailMessage() {
                     } else {
                       result = await contactApi.replyToMessage(emailPayload.id, emailPayload.body, false);
                     }
-                    
+
                     if (result.success) {
                       showToast(`Reply sent to ${emailPayload.email}`, 'success');
                       setBackgroundSends(prev => prev.filter(s => s.id !== sendId));
-                      fetchMessages(); 
+                      fetchMessages();
                     } else {
                       setBackgroundSends(prev => prev.map(s => s.id === sendId ? { ...s, isError: true, errorMessage: result.detail || 'Failed to send' } : s));
                     }
@@ -881,19 +934,29 @@ export function EmailMessage() {
               <p className="text-sm font-semibold text-gray-900">Item deleted</p>
               <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium text-gray-700">{undoState.itemName}</span> has been moved to the recycle bin.</p>
             </div>
-            <button 
-              onClick={() => cancelDelete()}
-              className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
-            >
-              Undo
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={fetchMessages}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm"
+                aria-label="Refresh messages"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+              <button
+                onClick={() => cancelDelete()}
+                className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
+              >
+                Undo
+              </button>
+            </div>
           </div>
-          
+
           {/* Progress bar */}
           <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-red-500"
-              style={{ 
+              style={{
                 width: `${(undoState.timeLeft / 3000) * 100}%`,
                 transition: 'width 100ms linear'
               }}

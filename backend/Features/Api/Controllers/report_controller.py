@@ -122,31 +122,53 @@ class ReportViewSet(viewsets.ViewSet):
         }
 
     def _get_ratings_summary(self, cutoff_date=None, end_date=None):
-        """Compute ratings analytics from Feedback model."""
-        all_feedback = self.feedback_service.get_all_feedback()
-        
-        if cutoff_date:
-            all_feedback = [f for f in all_feedback if f.created_at.date() >= cutoff_date]
-            if end_date:
-                all_feedback = [f for f in all_feedback if f.created_at.date() < end_date]
+        """
+        Compute ratings analytics from Feedback model.
+        - Stats (total, avg, distribution) are filtered by the selected date range.
+        - recent_feedback always shows the latest 50 entries from all-time so new
+          ratings always appear in the admin panel feed regardless of date filter.
+        """
+        all_feedback = list(self.feedback_service.get_all_feedback())
 
-        total_ratings = len([f for f in all_feedback if f.rating is not None])
+        # Filter for stats only
+        stats_feedback = all_feedback
+        if cutoff_date:
+            stats_feedback = [f for f in all_feedback if f.created_at.date() >= cutoff_date]
+            if end_date:
+                stats_feedback = [f for f in stats_feedback if f.created_at.date() < end_date]
+
+        total_ratings = len([f for f in stats_feedback if f.rating is not None])
         if total_ratings == 0:
+            # Still return recent_feedback from all-time even if selected range has none
+            recent_all = sorted(
+                [f for f in all_feedback if f.rating is not None],
+                key=lambda x: x.created_at, reverse=True
+            )[:50]
             return {
                 'total_ratings': 0,
                 'average_rating': 0,
                 'distribution': {1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
-                'recent_feedback': []
+                'recent_feedback': [
+                    {
+                        'id': f.id,
+                        'name': f.name,
+                        'rating': f.rating,
+                        'category': f.category,
+                        'message': f.message,
+                        'created_at': f.created_at.isoformat() if hasattr(f.created_at, 'isoformat') else str(f.created_at)
+                    } for f in recent_all
+                ]
             }
 
-        ratings_list = [f.rating for f in all_feedback if f.rating is not None]
+        ratings_list = [f.rating for f in stats_feedback if f.rating is not None]
         average_rating = round(sum(ratings_list) / len(ratings_list), 2)
         distribution = {i: ratings_list.count(i) for i in range(1, 6)}
 
+        # recent_feedback is ALWAYS latest 50 from all-time (not filtered by date)
         recent_feedback = sorted(
             [f for f in all_feedback if f.rating is not None],
             key=lambda x: x.created_at, reverse=True
-        )
+        )[:50]
 
         return {
             'total_ratings': total_ratings,
@@ -159,7 +181,7 @@ class ReportViewSet(viewsets.ViewSet):
                     'rating': f.rating,
                     'category': f.category,
                     'message': f.message,
-                    'created_at': f.created_at.strftime('%Y-%m-%d %H:%M')
+                    'created_at': f.created_at.isoformat() if hasattr(f.created_at, 'isoformat') else str(f.created_at)
                 } for f in recent_feedback
             ]
         }

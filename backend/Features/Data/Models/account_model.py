@@ -13,6 +13,10 @@ class Account(AbstractUser):
         blank=True,
         help_text='Profile picture for this admin user'
     )
+    is_terminal_created = models.BooleanField(
+        default=False,
+        help_text='Indicates if this admin was created via the terminal. Such admins cannot be deleted by UI-created admins.'
+    )
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.email})"

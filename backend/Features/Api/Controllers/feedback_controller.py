@@ -9,7 +9,8 @@ from Features.Services.Implementations.feedback_service import FeedbackService
 
 
 class FeedbackViewSet(viewsets.ViewSet):
-    throttle_scope = 'feedback'
+    # NOTE: No DRF throttle_scope here — we use our own custom IP+UserAgent+date check
+    # in FeedbackService.submit_feedback() which is more precise than DRF's per-hour count.
 
     def get_permissions(self):
         if self.action == 'create':
@@ -28,11 +29,27 @@ class FeedbackViewSet(viewsets.ViewSet):
     def create(self, request):
         serializer = FeedbackSerializer(data=request.data)
         if serializer.is_valid():
-            feedback = self.service.submit_feedback(serializer.validated_data)
-            return Response(
-                FeedbackSerializer(feedback).data,
-                status=status.HTTP_201_CREATED
-            )
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0].strip()
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+
+            user_agent = request.META.get('HTTP_USER_AGENT', '')
+
+            try:
+                feedback = self.service.submit_feedback(
+                    serializer.validated_data, 
+                    ip_address=ip_address, 
+                    user_agent=user_agent
+                )
+                return Response(
+                    FeedbackSerializer(feedback).data,
+                    status=status.HTTP_201_CREATED
+                )
+            except Exception as e:
+                # Re-raise so DRF handles APIException (Throttled) automatically
+                raise
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def retrieve(self, request, pk=None):

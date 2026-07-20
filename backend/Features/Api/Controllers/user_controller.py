@@ -81,11 +81,8 @@ class UserViewSet(viewsets.ViewSet):
             user.save(update_fields=['last_active'])
             
             # Clear old sessions just to be clean
-            from django.contrib.sessions.models import Session
-            for session in Session.objects.filter(expire_date__gte=timezone.now()):
-                session_data = session.get_decoded()
-                if str(user.pk) == str(session_data.get('_auth_user_id')):
-                    session.delete()
+            # current_session_key = request.session.session_key
+            # self.service.clear_user_sessions(user.pk, current_session_key)
             
             login(request, user)
             return Response(self._serialize(user, request))
@@ -115,18 +112,16 @@ class UserViewSet(viewsets.ViewSet):
         user = self.service.get_by_id(pk)
         if not user:
             return Response(status=404)
+            
+        if getattr(user, 'is_terminal_created', False) and not getattr(request.user, 'is_terminal_created', False):
+            return Response({"error": "Terminal-created admins cannot be modified or forced out by UI-created admins."}, status=403)
         
         # Clear their last active timestamp
         user.last_active = None
         user.save(update_fields=['last_active'])
         
         # Clear their sessions from the database
-        from django.contrib.sessions.models import Session
-        from django.utils import timezone
-        for session in Session.objects.filter(expire_date__gte=timezone.now()):
-            session_data = session.get_decoded()
-            if str(user.pk) == str(session_data.get('_auth_user_id')):
-                session.delete()
+        self.service.clear_user_sessions(user.pk)
                 
         # Also clear any cache locks
         from django.core.cache import cache
@@ -155,6 +150,10 @@ class UserViewSet(viewsets.ViewSet):
         item = self.service.get_by_id(pk)
         if not item:
             return Response(status=404)
+            
+        if getattr(item, 'is_terminal_created', False) and not getattr(request.user, 'is_terminal_created', False):
+            return Response({"error": "Terminal-created admins cannot be modified by UI-created admins."}, status=403)
+
         ser = UserCreateUpdateSerializer(item, data=request.data, partial=True)
         if ser.is_valid():
             updated = ser.save()
@@ -165,6 +164,13 @@ class UserViewSet(viewsets.ViewSet):
         return self.update(request, pk)
 
     def destroy(self, request, pk=None):
+        item = self.service.get_by_id(pk)
+        if not item:
+            return Response(status=404)
+            
+        if getattr(item, 'is_terminal_created', False) and not getattr(request.user, 'is_terminal_created', False):
+            return Response({"error": "Terminal-created admins cannot be deleted by UI-created admins."}, status=403)
+            
         return Response(status=204) if self.service.delete(pk) else Response(status=404)
 
     @action(detail=True, methods=["post"], parser_classes=[parsers.MultiPartParser, parsers.FormParser])
@@ -173,6 +179,9 @@ class UserViewSet(viewsets.ViewSet):
         item = self.service.get_by_id(pk)
         if not item:
             return Response(status=404)
+            
+        if getattr(item, 'is_terminal_created', False) and not getattr(request.user, 'is_terminal_created', False):
+            return Response({"error": "Terminal-created admins cannot be modified by UI-created admins."}, status=403)
         avatar_file = request.FILES.get("avatar")
         if not avatar_file:
             return Response({"error": "No avatar file provided"}, status=400)
@@ -247,15 +256,11 @@ class UserViewSet(viewsets.ViewSet):
             if value is not None and value != getattr(user, field):
                 # Validate username uniqueness
                 if field == "username":
-                    from django.contrib.auth import get_user_model
-                    User = get_user_model()
-                    if User.objects.filter(username=value).exclude(pk=user.pk).exists():
+                    if self.service.username_exists_exclude_user(value, user.pk):
                         return Response({"error": "Username already taken"}, status=400)
                 # Validate email uniqueness
                 if field == "email":
-                    from django.contrib.auth import get_user_model
-                    User = get_user_model()
-                    if User.objects.filter(email=value).exclude(pk=user.pk).exists():
+                    if self.service.email_exists_exclude_user(value, user.pk):
                         return Response({"error": "Email already in use"}, status=400)
                 setattr(user, field, value)
                 updated = True
@@ -284,9 +289,7 @@ class UserViewSet(viewsets.ViewSet):
             remaining_sec = remaining % 60
             return Response({"error": f"Too many reset requests. Try again in {remaining_min}m {remaining_sec}s."}, status=429)
             
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        user = User.objects.filter(email=email).first()
+        user = self.service.get_by_email(email)
         
         if not user:
             # Return 200 anyway to prevent email enumeration
@@ -337,9 +340,7 @@ class UserViewSet(viewsets.ViewSet):
         if not cached_code or cached_code != code:
             return Response({"error": "Invalid or expired reset code"}, status=400)
             
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        user = User.objects.filter(email=email).first()
+        user = self.service.get_by_email(email)
         
         if not user:
             return Response({"error": "User not found"}, status=404)

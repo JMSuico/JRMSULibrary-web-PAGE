@@ -339,11 +339,7 @@ export function Analytics(){
         {(() => {
           if (!data.ratings_summary.recent_feedback) return null;
           
-          const now = new Date();
-          const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
-          
-          const processedFeedback = data.ratings_summary.recent_feedback
-            .filter(fb => new Date(fb.created_at) >= fifteenDaysAgo)
+          const processedFeedback = [...data.ratings_summary.recent_feedback]
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             
           const FEEDBACK_PER_PAGE = 10;
@@ -367,7 +363,7 @@ export function Analytics(){
 
               {processedFeedback.length === 0 ? (
                 <div className="py-8 text-center bg-gray-50 rounded-xl border border-gray-100">
-                  <p className="text-gray-500 italic">No feedback received in the last 15 days.</p>
+                  <p className="text-gray-500 italic">No feedback received in the last 30 days.</p>
                 </div>
               ) : (
                 <>
@@ -381,7 +377,7 @@ export function Analytics(){
                           </div>
                           <div className="flex items-center gap-1 mb-3">{stars(fb.rating)}</div>
                           <p className="text-sm text-gray-600 line-clamp-3 mb-4 flex-1 leading-relaxed">{fb.message}</p>
-                          <p className="text-xs font-medium text-gray-400 mt-auto">{fb.created_at}</p>
+                          <p className="text-xs font-medium text-gray-400 mt-auto">{new Date(fb.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                       ))}
                     </div>
@@ -404,7 +400,7 @@ export function Analytics(){
                               <td className="p-4 text-sm whitespace-nowrap"><span className="text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full">{fb.category}</span></td>
                               <td className="p-4 whitespace-nowrap"><div className="flex gap-0.5">{stars(fb.rating)}</div></td>
                               <td className="p-4 text-sm text-gray-600 leading-relaxed">{fb.message}</td>
-                              <td className="p-4 text-xs font-medium text-gray-400 whitespace-nowrap text-right">{fb.created_at}</td>
+                              <td className="p-4 text-xs font-medium text-gray-400 whitespace-nowrap text-right">{new Date(fb.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                             </tr>
                           ))}
                         </tbody>

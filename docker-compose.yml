@@ -29,6 +29,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       db:
@@ -48,7 +49,7 @@ services:
       DEBUG: "False"
       DISABLE_SSL_REDIRECT: "True"
       ALLOWED_HOSTS: "*"
-      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://192.168.15.194:3000,http://192.168.15.194:3001,http://192.168.6.126:3000,http://192.168.6.126:3001"
+      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://192.168.15.194:3000,http://192.168.15.194:3001,http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001,http://192.168.1.111:3000,http://192.168.1.111:3001"
       OLLAMA_URL: "http://ollama:11434/api/chat"
       # SMTP — Gmail App Password
       EMAIL_HOST: "smtp.gmail.com"
@@ -64,6 +65,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./backend:/app
       - ./backend/media:/app/media
       - ./frontend/src/Assets/assets:/app/frontend_assets:ro
 

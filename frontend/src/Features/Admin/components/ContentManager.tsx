@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
-import { Save, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, RefreshCw, GripVertical, Check, X } from 'lucide-react';
+import { personnelApi } from '@/src/Endpoints/personnelApi';
+import { Save, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, RefreshCw, GripVertical, Check, X, Search } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
@@ -11,7 +12,7 @@ import { Pagination } from '@/src/Components/Shared/Pagination';
 import { LayoutGrid, List } from 'lucide-react';
 
 export function ContentManager() {
-  const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence'>('content');
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
 
@@ -34,6 +35,14 @@ export function ContentManager() {
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileUploadCategory, setFileUploadCategory] = useState<'Manual' | 'OrgStructure'>('Manual');
+
+  const [personnelList, setPersonnelList] = useState<any[]>([]);
+  const [isPersonnelModalOpen, setIsPersonnelModalOpen] = useState(false);
+  const [personnelPhoto, setPersonnelPhoto] = useState<File | null>(null);
+  const [personnelPhotoPreview, setPersonnelPhotoPreview] = useState<string | null>(null);
+  const [editingPersonnelId, setEditingPersonnelId] = useState<number | null>(null);
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
@@ -45,16 +54,18 @@ export function ContentManager() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [c, l, f] = await Promise.all([
+      const [c, l, f, p] = await Promise.all([
         cmsApi.getAllContent(),
         cmsApi.getAllLinks(),
-        cmsApi.getAllFiles()
+        cmsApi.getAllFiles(),
+        personnelApi.getPersonnel()
       ]);
       setContents(c);
       setLinks(l);
       setFiles(f);
+      setPersonnelList(p);
     } catch (err: any) {
-      showToast(err.message || 'Failed to load content', 'error');
+      showToast(err.message || 'Failed to load data', 'error');
     } finally {
       setLoading(false);
     }
@@ -172,6 +183,19 @@ export function ContentManager() {
       return;
     }
     const fd = new FormData(e.currentTarget);
+    const cat = fd.get('category') as string;
+    
+    if (cat === 'OrgStructure' || cat === 'Excellence') {
+      const existingFiles = files.filter(f => f.category === cat);
+      for (const f of existingFiles) {
+        try {
+          await cmsApi.deleteFile(f.id);
+        } catch (e) {
+          console.error('Failed to delete existing file', e);
+        }
+      }
+    }
+
     fd.append('file', selectedFile);
     try {
       await cmsApi.createFile(fd);
@@ -210,6 +234,50 @@ export function ContentManager() {
     return <div className="p-8 text-center text-gray-500">Loading CMS...</div>;
   }
 
+  const handleDeletePersonnel = async (id: number) => {
+    try {
+      await personnelApi.deletePersonnel(id);
+      setPersonnelList(prev => prev.filter(p => p.id !== id));
+      showToast('Personnel deleted successfully', 'success');
+    } catch (e: any) {
+      showToast(e.message || 'Failed to delete personnel', 'error');
+    }
+  };
+
+  const handlePersonnelSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    try {
+      if (personnelPhoto) {
+        formData.append('photo', personnelPhoto);
+      }
+
+      if (editingPersonnelId) {
+        const updated = await personnelApi.updatePersonnel(editingPersonnelId, formData);
+        setPersonnelList(prev => prev.map(p => p.id === editingPersonnelId ? updated : p));
+        showToast('Personnel updated successfully', 'success');
+      } else {
+        const created = await personnelApi.createPersonnel(formData);
+        setPersonnelList(prev => [...prev, created].sort((a, b) => a.order - b.order));
+        showToast('Personnel created successfully', 'success');
+      }
+      setIsPersonnelModalOpen(false);
+      setEditingPersonnelId(null);
+      setPersonnelPhoto(null);
+      setPersonnelPhotoPreview(null);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save personnel', 'error');
+    }
+  };
+
+  const openEditPersonnel = (person: any) => {
+    setEditingPersonnelId(person.id);
+    setPersonnelPhoto(null);
+    setPersonnelPhotoPreview(person.photo ? (person.photo.startsWith('http') || person.photo.startsWith('blob:') || person.photo.startsWith('/media') ? person.photo : `/media/${person.photo}`) : null);
+    setIsPersonnelModalOpen(true);
+  };
+
   return (
     <>
       <div className="admin-content__header">
@@ -237,6 +305,24 @@ export function ContentManager() {
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'files' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'files' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Manual Files
+          </button>
+          <button 
+            onClick={() => setActiveTab('org_structure')}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'org_structure' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'org_structure' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
+          >
+            Org Structure
+          </button>
+          <button 
+            onClick={() => setActiveTab('personnel')}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'personnel' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'personnel' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
+          >
+            Library Personnel
+          </button>
+          <button 
+            onClick={() => setActiveTab('excellence')}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'excellence' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'excellence' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
+          >
+            Excellence in Information
           </button>
         </div>
 
@@ -444,16 +530,23 @@ export function ContentManager() {
             );
           })()}
 
-          {activeTab === 'files' && (
+          {activeTab === 'files' && (() => {
+            const manualFiles = files.filter(f => f.category !== 'OrgStructure');
+            return (
             <div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
                 <button 
-                  className={`admin-btn flex items-center gap-2 ${files.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
-                  onClick={() => files.length < 1 && setIsFileModalOpen(true)}
-                  disabled={files.length >= 1}
-                  title={files.length >= 1 ? "Only 1 manual file allowed. Please delete the existing one first to upload a new one." : ""}
+                  className={`admin-btn flex items-center gap-2 ${manualFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
+                  onClick={() => {
+                    if (manualFiles.length < 1) {
+                      setFileUploadCategory('Manual');
+                      setIsFileModalOpen(true);
+                    }
+                  }}
+                  disabled={manualFiles.length >= 1}
+                  title={manualFiles.length >= 1 ? "Only 1 manual file allowed. Please delete the existing one first to upload a new one." : ""}
                 >
-                  <Plus size={16} /> {files.length >= 1 ? 'File Uploaded (Max 1)' : 'Upload File'}
+                  {manualFiles.length >= 1 ? 'Maximum 1 file reached' : <><Plus size={16} /> Upload Picture</>}
                 </button>
               </div>
               <div className="admin-table-scroll">
@@ -467,7 +560,7 @@ export function ContentManager() {
                     </tr>
                   </thead>
                   <tbody>
-                    {files.map((file) => (
+                    {manualFiles.map((file) => (
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>Download</a></td>
@@ -485,6 +578,303 @@ export function ContentManager() {
                 </table>
               </div>
             </div>
+            );
+          })()}
+
+          {activeTab === 'org_structure' && (() => {
+            const orgFiles = files.filter(f => f.category === 'OrgStructure');
+            return (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                <button 
+                  className={`admin-btn flex items-center gap-2 ${orgFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
+                  onClick={() => {
+                    if (orgFiles.length < 1) {
+                      setFileUploadCategory('OrgStructure');
+                      setIsFileModalOpen(true);
+                    }
+                  }}
+                  disabled={orgFiles.length >= 1}
+                  title={orgFiles.length >= 1 ? "Maximum 1 image reached. Please delete the current image to upload a new one." : "Upload Image"}
+                >
+                  <Plus size={16} /> Add Image (Max 1)
+                </button>
+              </div>
+              <div className="admin-table-scroll">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Preview</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orgFiles.map((file) => (
+                      <tr key={file.id}>
+                        <td style={{ fontWeight: 500 }}>{file.name}</td>
+                        <td>
+                          <img src={file.file} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                        </td>
+                        <td>
+                          <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                            {file.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            );
+          })()}
+
+          {activeTab === 'excellence' && (() => {
+            const excellenceFiles = files.filter(f => f.category === 'Excellence');
+            return (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                <button 
+                  className="admin-btn flex items-center gap-2 admin-btn--primary"
+                  onClick={() => {
+                    setFileUploadCategory('Excellence');
+                    setIsFileModalOpen(true);
+                  }}
+                  title={excellenceFiles.length >= 1 ? "Uploading a new image will replace the existing one." : ""}
+                >
+                  <Plus size={16} /> {excellenceFiles.length >= 1 ? 'Replace Image (Max 1)' : 'Upload Image'}
+                </button>
+              </div>
+              <div className="admin-table-scroll">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Preview</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {excellenceFiles.map((file) => (
+                      <tr key={file.id}>
+                        <td style={{ fontWeight: 500 }}>{file.name}</td>
+                        <td>
+                          <img src={file.file} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                        </td>
+                        <td>
+                          <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                            {file.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            );
+          })()}
+
+          {activeTab === 'personnel' && (() => {
+            const chiefLibrarian = personnelList.find(p => p.order === 1) || { name: 'Kiara Keren M. Alavanza', title: 'Campus Librarian', photo: null };
+            const staffList = personnelList.filter(p => p.order > 1).sort((a,b) => a.order - b.order);
+
+            const renderConnectors = () => {
+              const n = Math.min(staffList.length, 5);
+              if (n === 0) return null;
+
+              const points: number[] = [];
+              const viewBoxWidth = 1000;
+              const centerLine = viewBoxWidth / 2;
+              
+              const step = viewBoxWidth / n;
+              const startX = step / 2;
+
+              for (let i = 0; i < n; i++) {
+                points.push(startX + (i * step));
+              }
+
+              const minX = Math.min(...points, centerLine);
+              const maxX = Math.max(...points, centerLine);
+
+              return (
+                <div className="hidden lg:block w-full h-16 md:h-20 fade-up-entrance">
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${viewBoxWidth} 80`} preserveAspectRatio="none">
+                    <defs>
+                      <marker id="arrowhead-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill='var(--color-gold)' />
+                      </marker>
+                    </defs>
+                    <path d={`M ${centerLine} 0 L ${centerLine} 20`} stroke='var(--color-gold)' strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
+                    
+                    {n > 1 && (
+                      <path d={`M ${minX} 20 L ${maxX} 20`} stroke='var(--color-gold)' strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
+                    )}
+                    
+                    {points.map((x, idx) => (
+                      <path key={idx} d={`M ${x} 20 L ${x} 45`} stroke='var(--color-gold)' strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" vectorEffect="non-scaling-stroke" />
+                    ))}
+                  </svg>
+                </div>
+              );
+            };
+
+            const getGridColsClass = (n: number) => {
+              if (n === 1) return 'lg:grid-cols-1 max-w-sm';
+              if (n === 2) return 'lg:grid-cols-2 max-w-2xl';
+              if (n === 3) return 'lg:grid-cols-3 max-w-4xl';
+              if (n === 4) return 'lg:grid-cols-4 max-w-6xl';
+              if (n >= 5) return 'lg:grid-cols-5 max-w-7xl';
+              return 'lg:grid-cols-3 max-w-4xl';
+            };
+
+            return (
+              <div className="w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 relative">
+                
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px', position: 'absolute', top: '16px', right: '16px' }}>
+                  <button 
+                    className={`admin-btn flex items-center gap-2 ${staffList.length >= 5 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
+                    onClick={() => {
+                      if (staffList.length < 5) {
+                        setEditingPersonnelId(null);
+                        setPersonnelPhoto(null);
+                        setPersonnelPhotoPreview(null);
+                        setIsPersonnelModalOpen(true);
+                      }
+                    }}
+                    disabled={staffList.length >= 5}
+                    title={staffList.length >= 5 ? "Maximum 5 modals reached. Cannot add more." : `Add personnel modal (${5 - staffList.length} limit left)`}
+                  >
+                    <Plus size={16} /> Add personnel modal
+                  </button>
+                </div>
+
+                <div className="flex flex-col items-center mt-12">
+                  <div className="w-full mb-6 md:mb-10 max-w-5xl mx-auto">
+                    <div className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20 hover-3d-tilt" style={{ background: 'var(--color-navy)', backdropFilter: 'blur(8px)' }}>
+                      <div className="flex flex-col items-center text-center">
+                        <h3 className="text-2xl font-bold font-headline-lg mb-6 text-white drop-shadow-sm">Campus Librarian</h3>
+                        
+                        <div className="w-40 h-40 rounded-full border-4 border-gold-light/40 overflow-hidden shadow-2xl mx-auto mb-4 relative group">
+                          {chiefLibrarian.photo ? (
+                            <img
+                              alt={chiefLibrarian.name}
+                              className="w-full h-full object-cover"
+                              src={chiefLibrarian.photo.startsWith('http') || chiefLibrarian.photo.startsWith('/media') ? chiefLibrarian.photo : `/media/${chiefLibrarian.photo}`}
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">No Photo</div>
+                          )}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white font-semibold rounded-full gap-2">
+                            <button className="flex items-center gap-1 hover:text-gold-light transition-colors" onClick={(e) => { e.stopPropagation(); setViewingPhoto(chiefLibrarian.photo.startsWith('http') || chiefLibrarian.photo.startsWith('/media') ? chiefLibrarian.photo : `/media/${chiefLibrarian.photo}`); }}>
+                              <Search size={16} /> View
+                            </button>
+                            <button className="flex items-center gap-1 hover:text-gold-light transition-colors" onClick={(e) => { e.stopPropagation(); openEditPersonnel(chiefLibrarian); }}>
+                              <Edit2 size={16} /> Edit
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-navy-dark px-4 py-3 rounded-xl border border-gold-light/20 shadow-lg min-w-[250px]">
+                          <h3 className="font-headline-md font-bold text-lg mb-1" style={{ color: 'var(--color-gold-light)' }}>{chiefLibrarian.name}</h3>
+                          <div className="h-0.5 w-12 bg-gold-light/50 mx-auto mb-2"></div>
+                          <p className="text-white/90 font-bold tracking-widest text-xs uppercase">{chiefLibrarian.title}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {renderConnectors()}
+
+                  {staffList.length > 0 && (
+                    <div className="flex flex-col items-center lg:hidden my-2 text-gold-light">
+                      <div className="w-0.5 h-6 bg-gold-light"></div>
+                      <span className="material-symbols-outlined text-lg leading-none -mt-1">arrow_downward</span>
+                    </div>
+                  )}
+
+                  <div className={`grid grid-cols-1 ${getGridColsClass(staffList.length)} gap-4 w-full justify-items-center`}>
+                    {staffList.map((person, idx) => (
+                      <React.Fragment key={person.id || idx}>
+                        {idx > 0 && (
+                          <div className="flex flex-col items-center lg:hidden my-2 text-gold-light">
+                            <div className="w-0.5 h-6 bg-gold-light"></div>
+                            <span className="material-symbols-outlined text-lg leading-none -mt-1">arrow_downward</span>
+                          </div>
+                        )}
+                        <div className="flex flex-col items-center w-full min-w-[200px]">
+                          <div
+                            className="border-2 border-gold-light/30 rounded-2xl p-4 text-center w-full shadow-md hover-3d-tilt flex-1 flex flex-col items-center justify-center relative overflow-hidden"
+                            style={{ background: 'var(--color-navy)', backdropFilter: 'blur(8px)', paddingTop: '40px' }}
+                          >
+                            {/* View / Edit Action Bar at Top */}
+                            <div className="absolute top-0 left-0 w-full border-b border-gold-light/20 bg-black/20 p-2 flex justify-start gap-3 z-10">
+                                <button className="flex items-center gap-1 text-white hover:text-gold-light text-xs transition-colors font-medium bg-black/30 px-2 py-1 rounded" onClick={() => setViewingPhoto(person.photo ? (person.photo.startsWith('http') || person.photo.startsWith('/media') ? person.photo : `/media/${person.photo}`) : null)}>
+                                  <Search size={12} /> View
+                                </button>
+                                <button className="flex items-center gap-1 text-white hover:text-gold-light text-xs transition-colors font-medium bg-black/30 px-2 py-1 rounded" onClick={() => openEditPersonnel(person)}>
+                                  <Edit2 size={12} /> Edit
+                                </button>
+                                
+                                {/* Delete Button (Top Right) */}
+                                <button 
+                                  onClick={() => handleDeletePersonnel(person.id)} 
+                                  className="ml-auto text-red-400 hover:text-red-500 hover:scale-110 transition-transform"
+                                  title="Delete Personnel"
+                                >
+                                  <Trash2 size={14}/>
+                                </button>
+                            </div>
+
+                            {/* Card Content */}
+                            {person.photo ? (
+                              <div className="w-24 h-24 rounded-full border-2 border-gold-light/40 overflow-hidden shadow-lg mx-auto mb-3 mt-2">
+                                <img src={person.photo.startsWith('http') || person.photo.startsWith('/media') ? person.photo : `/media/${person.photo}`} alt={person.name} className="w-full h-full object-cover relative z-0" />
+                              </div>
+                            ) : (
+                              <div className="w-24 h-24 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 mt-2 shadow-lg border-2 border-gold-light/20 relative z-0">
+                                {person.name.substring(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <h3 className="font-headline-md font-bold mb-1 text-base leading-tight uppercase relative z-0" style={{ color: 'var(--color-gold-light)' }}>
+                              {person.name}
+                            </h3>
+                            <p className="font-label-caps font-semibold text-[10px] relative z-0 mb-2" style={{ color: 'var(--color-white-alpha-80)' }}>{person.title}</p>
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Viewing Photo Modal */}
+          {viewingPhoto && createPortal(
+            <div className="fixed backdrop-blur-sm inset-0 bg-black/80 flex items-center justify-center p-4 z-[9999] animate-modal-overlay" onClick={() => setViewingPhoto(null)}>
+              <div className="bg-navy-dark rounded-xl shadow-2xl overflow-hidden max-w-3xl max-h-[90vh] relative border border-gold-light/20 animate-modal-card" onClick={e => e.stopPropagation()}>
+                <button 
+                  onClick={() => setViewingPhoto(null)} 
+                  className="absolute top-4 right-4 text-white hover:text-gold-light transition-colors z-10 bg-black/50 p-1 rounded-full"
+                >
+                  <X size={24} />
+                </button>
+                <div className="p-4 flex items-center justify-center">
+                   <img src={viewingPhoto} alt="Expanded View" className="max-w-full max-h-[80vh] object-contain rounded" />
+                </div>
+              </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>
@@ -548,21 +938,25 @@ export function ContentManager() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Name</label>
                 <input required type="text" name="name" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
-              <input type="hidden" name="category" value="Manual" />
+              <input type="hidden" name="category" value={fileUploadCategory} />
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">File</label>
                 <DragDropFileUpload
-                  accept="*/*"
+                  accept={['OrgStructure', 'Excellence', 'Manual'].includes(fileUploadCategory) ? 'image/*' : '*/*'}
                   multiple={false}
-                  maxSizeMB={25}
+                  maxSizeMB={10}
                   onFilesSelected={(files) => setSelectedFile(files[0])}
                   label="Click to upload file or drag and drop"
-                  subLabel="Maximum file size: 25MB"
+                  subLabel="Maximum file size: 10MB"
                 />
                 {selectedFile && (
-                  <p className="text-sm font-medium text-green-600 mt-2">
-                    Selected: {selectedFile.name}
-                  </p>
+                  <div className="mt-3 flex flex-col items-center">
+                    {selectedFile.type.startsWith('image/') ? (
+                      <img src={URL.createObjectURL(selectedFile)} alt="Preview" className="h-32 w-auto object-contain rounded border border-gray-200 shadow-sm animate-modal-card" />
+                    ) : (
+                       <p className="text-sm font-medium text-green-600">Selected: {selectedFile.name}</p>
+                    )}
+                  </div>
                 )}
               </div>
               <label className="flex items-center gap-2 cursor-pointer mt-2">
@@ -571,7 +965,58 @@ export function ContentManager() {
               </label>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
                 <button type="button" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg" disabled={!selectedFile}>Upload</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg" disabled={!selectedFile}>Save</button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Personnel Modal */}
+      {isPersonnelModalOpen && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999] animate-modal-overlay">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900">{editingPersonnelId ? 'Edit Personnel' : 'Add Personnel'}</h2>
+              <button onClick={() => { setIsPersonnelModalOpen(false); setPersonnelPhoto(null); setPersonnelPhotoPreview(null); }} className="text-gray-400 hover:text-gray-600">×</button>
+            </div>
+            <form onSubmit={handlePersonnelSubmit} className="p-4 flex flex-col gap-4 overflow-y-auto">
+              {editingPersonnelId ? (
+                 <input type="hidden" name="order" value={personnelList.find(p => p.id === editingPersonnelId)?.order || 2} />
+              ) : (
+                 <input type="hidden" name="order" value={personnelList.length ? Math.max(...personnelList.map(s => s.order)) + 1 : 2} />
+              )}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+                <input required type="text" name="name" defaultValue={editingPersonnelId ? personnelList.find(p => p.id === editingPersonnelId)?.name : ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Role (e.g. Staff, Library)</label>
+                <input required type="text" name="title" defaultValue={editingPersonnelId ? personnelList.find(p => p.id === editingPersonnelId)?.title : ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Photo (Max 10MB)</label>
+                <DragDropFileUpload
+                  accept="image/*"
+                  multiple={false}
+                  maxSizeMB={10}
+                  onFilesSelected={(files) => {
+                    setPersonnelPhoto(files[0]);
+                    setPersonnelPhotoPreview(URL.createObjectURL(files[0]));
+                  }}
+                  label="Click to upload picture or drag and drop"
+                  subLabel="Maximum file size: 10MB"
+                />
+                {personnelPhotoPreview && (
+                  <div className="mt-4 flex flex-col items-center">
+                    <img src={personnelPhotoPreview} alt="Preview" className="w-32 h-32 object-cover rounded-full border-4 border-gray-200 shadow-md animate-modal-card" />
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+                <button type="button" onClick={() => { setIsPersonnelModalOpen(false); setPersonnelPhoto(null); setPersonnelPhotoPreview(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg">Save</button>
               </div>
             </form>
           </div>

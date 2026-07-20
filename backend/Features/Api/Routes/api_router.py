@@ -20,6 +20,7 @@ from Features.Api.Controllers.external_proxy_controller import (
     scholaar_auto_login,
 )
 from Features.Api.Controllers.ai_controller import AIViewSet
+from Features.Api.Controllers.csrf_controller import get_csrf_token
 
 
 from Features.Api.Controllers.health_controller import HealthCheckViewSet
@@ -55,6 +56,8 @@ router.register(r'site-visits', SiteVisitViewSet, basename='site-visit')
 
 urlpatterns = [
     path('', include(router.urls)),
+    # Public CSRF cookie endpoint — must be called by landing page before any form submission
+    path('csrf/', get_csrf_token, name='csrf-token'),
     # External library proxy (auto-login bridge pages)
     path('external-proxy/vitalsource/', vitalsource_auto_login, name='vitalsource-proxy'),
     path('external-proxy/scholaar/', scholaar_auto_login, name='scholaar-proxy'),

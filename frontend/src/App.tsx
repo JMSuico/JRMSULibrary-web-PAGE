@@ -8,10 +8,22 @@ import { Footer } from '@/src/Components/LayoutBars/Footer';
 import { PageSkeleton } from '@/src/Components/Shared/SkeletonLoader';
 import { ToastProvider } from '@/src/Hooks/useToast';
 import { publicApi } from '@/src/Endpoints/cmsApi';
+import { settingsApi } from '@/src/Endpoints/settingsApi';
 import { InitialLoader } from '@/src/Components/Shared/InitialLoader';
 import { PrivacyConsentModal } from '@/src/Components/Shared/PrivacyConsentModal';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
+
+// Resolves a Django media path to a full browser-usable URL.
+// Django ImageFields return relative paths like `settings/bg.jpg`.
+// The /media/ prefix is served by Django's media URL route or Nginx proxy.
+function resolveMediaUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('data:')) return path;
+  if (path.startsWith('/media/')) return path;
+  return `/media/${path}`;
+}
+
 
 // Public Pages
 const HomePage = lazy(() => import('@/src/Pages/Home/HomePage'));
@@ -42,6 +54,7 @@ function PublicLayout() {
   const location = useLocation();
   const [isLoaderDone, setIsLoaderDone] = useState(false);
 
+
   // Poll for global CMS changes every 15 seconds. If detected, reload the page.
   useGlobalAutoRefresh(15000);
 
@@ -50,8 +63,34 @@ function PublicLayout() {
     publicApi.trackVisit(location.pathname);
   }, [location.pathname]);
 
+  // Fetch background image and keep it in sync with CMS changes
+  useEffect(() => {
+    const applyBackground = (bgPath: string | null | undefined) => {
+      if (bgPath) {
+        document.body.style.backgroundImage = `url(${resolveMediaUrl(bgPath)})`;
+      } else {
+        document.body.style.backgroundImage = '';
+      }
+    };
+
+    settingsApi.getSettings().then(settings => {
+      applyBackground(settings.background_image);
+    }).catch(console.error);
+
+    // Refresh background immediately whenever the admin saves a CMS change
+    const handleCmsUpdate = () => {
+      settingsApi.getSettings().then(settings => {
+        applyBackground(settings.background_image);
+      }).catch(console.error);
+    };
+    window.addEventListener('cms_updated', handleCmsUpdate);
+    return () => window.removeEventListener('cms_updated', handleCmsUpdate);
+  }, []);
+
   return (
-    <div className="flex flex-col min-h-screen">
+    <div 
+      className="flex flex-col min-h-screen transition-all duration-700 ease-in-out bg-transparent relative"
+    >
       {!isLoaderDone && (
         <InitialLoader onComplete={() => setIsLoaderDone(true)} />
       )}

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
-import { ForgotPasswordModal } from './ForgotPasswordModal';
+import { ForgotPasswordModal } from '@/src/Features/Auth/components/ForgotPasswordModal';
 
 export function LoginForm() {
   const navigate = useNavigate();

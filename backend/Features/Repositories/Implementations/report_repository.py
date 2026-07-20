@@ -57,3 +57,16 @@ class ReportRepository(IReportRepository):
             return True
         except GeneratedReport.DoesNotExist:
             return False
+
+    def create_report_from_snapshot(self, data: dict) -> Any:
+        from Features.Data.Models.account_model import Account
+        user_id = data.pop('generated_by_id', None)
+        user = Account.objects.get(pk=user_id) if user_id else None
+        
+        return GeneratedReport.objects.create(
+            title=data.get('title'),
+            report_type=data.get('report_type'),
+            date_range=data.get('date_range'),
+            report_data=data.get('report_data'),
+            generated_by=user
+        )

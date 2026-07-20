@@ -45,7 +45,8 @@ class ContactMessageViewSet(viewsets.ViewSet):
         serializer = ContactMessageSerializer(data=request.data)
         if serializer.is_valid():
             try:
-                message = self.service.submit_contact(serializer.validated_data)
+                files = request.FILES.getlist('files')
+                message = self.service.submit_contact(serializer.validated_data, files=files)
                 return Response(
                     ContactMessageSerializer(message).data,
                     status=status.HTTP_201_CREATED
@@ -138,25 +139,11 @@ class ContactMessageViewSet(viewsets.ViewSet):
         if not file:
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
             
-        import os
-        import uuid
-        from django.core.files.storage import FileSystemStorage
-        from django.conf import settings
-        
-        ext = file.name.split('.')[-1].lower()
-        allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
-        
-        if ext not in allowed_extensions:
-            return Response({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'temp_attachments'))
-        filename = f"{uuid.uuid4()}.{ext}"
-        saved_name = fs.save(filename, file)
-        
-        return Response({
-            'file_id': saved_name,
-            'filename': file.name
-        })
+        try:
+            result = self.service.upload_attachment(file)
+            return Response(result)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], url_path='reply-with-files')
     def reply_with_files(self, request, pk=None):
@@ -198,3 +185,4 @@ class ContactMessageViewSet(viewsets.ViewSet):
             'is_disposable': is_disposable_email(email),
             'is_domain_valid': is_email_domain_valid(email),
         })
+

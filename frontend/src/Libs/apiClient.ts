@@ -34,6 +34,23 @@ export function getCookie(name: string) {
   return cookieValue;
 }
 
+/**
+ * Ensures the CSRF cookie is set before making state-changing requests.
+ * The public landing page does not have a session, so the csrftoken cookie
+ * may not be present. This fetches /api/csrf/ to set it if missing.
+ * Safe to call multiple times — only makes a network request when needed.
+ */
+let _csrfFetchPromise: Promise<void> | null = null;
+export const ensureCsrfToken = async (): Promise<void> => {
+  if (getCookie('csrftoken')) return; // Already have it
+  if (_csrfFetchPromise) return _csrfFetchPromise; // Deduplicate concurrent calls
+  _csrfFetchPromise = fetch('/api/csrf/', { credentials: 'include' })
+    .then(() => { /* cookie is now set by Django */ })
+    .catch(() => { /* silently fail — form will retry */ })
+    .finally(() => { _csrfFetchPromise = null; });
+  return _csrfFetchPromise;
+};
+
 export const apiClient = async (endpoint: string, options: RequestInit = {}) => {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
   

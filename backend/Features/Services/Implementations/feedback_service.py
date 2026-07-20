@@ -12,13 +12,20 @@ class FeedbackService(FeedbackServiceInterface):
     def __init__(self):
         self.repository = FeedbackRepository()
 
-    def submit_feedback(self, data: dict):
+    def submit_feedback(self, data: dict, ip_address: str = None, user_agent: str = None):
+        if ip_address and user_agent:
+            if self.repository.has_submitted_today(ip_address, user_agent):
+                from rest_framework.exceptions import Throttled
+                raise Throttled(detail="You have already submitted a rating today. Please try again tomorrow.")
+
         sanitized = {
             'name': sanitize_input(data.get('name', '')),
             'email': sanitize_input(data.get('email', '')),
             'message': sanitize_input(data.get('message', '')),
             'category': data.get('category', ''),
             'rating': data.get('rating', 5),
+            'ip_address': ip_address,
+            'user_agent': user_agent,
         }
         return self.repository.create(sanitized)
 

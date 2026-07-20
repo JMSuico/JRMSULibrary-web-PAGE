@@ -22,14 +22,10 @@ class FeaturesConfig(AppConfig):
             
         if is_server:
             try:
-                from django.contrib.auth import get_user_model
-                from django.contrib.sessions.models import Session
-                User = get_user_model()
-                # 1. Wipe all online status timestamps
-                User.objects.all().update(last_active=None)
-                # 2. Shred all active sessions so everyone is logged out on server restart
-                Session.objects.all().delete()
+                from Features.Repositories.Implementations.user_repository import UserRepository
+                repo = UserRepository()
+                repo.clear_all_sessions_and_status()
                 print("Server starting: Successfully cleared all active sessions and online statuses.")
             except Exception as e:
-                # Catch exception in case the database isn't fully migrated yet during first boot
+                print(f"Exception in apps.py ready(): {e}")
                 pass

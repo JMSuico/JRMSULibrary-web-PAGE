@@ -43,3 +43,27 @@ class UserRepository(IUserRepository):
             user.delete()
             return True
         return False
+
+    def get_by_email(self, email: str):
+        return User.objects.filter(email=email).first()
+
+    def username_exists_exclude_user(self, username: str, exclude_user_id: int) -> bool:
+        return User.objects.filter(username=username).exclude(pk=exclude_user_id).exists()
+
+    def email_exists_exclude_user(self, email: str, exclude_user_id: int) -> bool:
+        return User.objects.filter(email=email).exclude(pk=exclude_user_id).exists()
+
+    def clear_user_sessions(self, user_id: int, current_session_key: str = None):
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone
+        for session in Session.objects.filter(expire_date__gte=timezone.now()):
+            if current_session_key and session.session_key == current_session_key:
+                continue
+            session_data = session.get_decoded()
+            if str(user_id) == str(session_data.get('_auth_user_id')):
+                session.delete()
+
+    def clear_all_sessions_and_status(self):
+        from django.contrib.sessions.models import Session
+        User.objects.all().update(last_active=None)
+        Session.objects.all().delete()

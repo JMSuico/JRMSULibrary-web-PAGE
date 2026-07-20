@@ -218,8 +218,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 AUTH_USER_MODEL = "Features.Account"
 
 # CORS settings
-_env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000")
-_allowed_origins = _env_origins + ",http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002"
+_env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001")
+_allowed_origins = _env_origins + ",http://192.168.1.111:3000,http://192.168.1.111:3001,http://localhost:3000,http://localhost:3001,http://localhost:5173"
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
@@ -307,6 +307,9 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'katipunan.library@jrmsu.edu
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '') # Must be set in .env
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>')
 EMAIL_TIMEOUT = 60  # Increased to handle large 25MB attachments
+
+# IMAP — for syncing inbound Gmail messages into the Admin Panel inbox
+IMAP_HOST = os.environ.get('IMAP_HOST', 'imap.gmail.com')
 
 # ============================================================
 # Throttle Cache — use file-based to survive restarts

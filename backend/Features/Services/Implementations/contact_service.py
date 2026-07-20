@@ -28,7 +28,7 @@ class ContactService(ContactServiceInterface):
         self.repository = ContactRepository()
         self.recycle_repository = RecycleBinRepository()
 
-    def submit_contact(self, data: dict):
+    def submit_contact(self, data: dict, files: list = None):
         sanitized = {
             'name': sanitize_input(data.get('name', '')),
             'email': sanitize_input(data.get('email', '')),
@@ -66,6 +66,24 @@ class ContactService(ContactServiceInterface):
         else:
             message = self.repository.create(sanitized)
 
+        # Handle file attachments
+        if files:
+            from Features.Data.Models.contact_attachment_model import ContactAttachment
+            for f in files:
+                ext = f.name.split('.')[-1].lower() if '.' in f.name else ''
+                allowed_extensions = {'png', 'jpeg', 'jpg', 'gif', 'docx', 'xls', 'xlsx', 'pdf', 'ppt', 'pptx', 'pub'}
+                if ext not in allowed_extensions:
+                    raise ValueError(f"Invalid file type for {f.name}. Allowed types: {', '.join(allowed_extensions)}")
+                if f.size > 10 * 1024 * 1024:
+                    raise ValueError(f"File {f.name} is too large. Maximum size is 10MB.")
+                
+                ContactAttachment.objects.create(
+                    contact_message=message,
+                    file=f,
+                    original_filename=f.name,
+                    file_size=f.size
+                )
+
         # Fire-and-forget: notify library staff via email (non-blocking)
         threading.Thread(
             target=send_notification_to_library,
@@ -92,7 +110,8 @@ class ContactService(ContactServiceInterface):
             message.replied_at = timezone.now()
             message.save()
 
-        self.repository.update_status(message_id, 'REPLIED')
+        if message.status not in ['APPROVED', 'DECLINED', 'ARCHIVED']:
+            self.repository.update_status(message_id, 'REPLIED')
 
         # Send email
         success = send_reply_email(
@@ -137,7 +156,8 @@ class ContactService(ContactServiceInterface):
             message.replied_at = timezone.now()
             message.save()
 
-        self.repository.update_status(message_id, 'REPLIED')
+        if message.status not in ['APPROVED', 'DECLINED', 'ARCHIVED']:
+            self.repository.update_status(message_id, 'REPLIED')
 
         # Send email with attachments
         success = send_reply_with_attachments(
@@ -175,11 +195,7 @@ class ContactService(ContactServiceInterface):
         return self.repository.mark_as_read(message_id)
 
     def get_replies_by_email(self, email: str):
-        # Only return messages that have a reply
-        return self.repository.model.objects.filter(
-            email=email, 
-            status='REPLIED'
-        ).exclude(reply_text__isnull=True).order_by('-replied_at')
+        return self.repository.get_replies_by_email(email)
 
     def delete_message(self, message_id: int, user_id: int = None) -> bool:
         message = self.repository.get_by_id(message_id)
@@ -195,3 +211,27 @@ class ContactService(ContactServiceInterface):
             message.delete()
             return True
         return False
+
+    def upload_attachment(self, file) -> dict:
+        import os
+        import uuid
+        from django.core.files.storage import FileSystemStorage
+        from django.conf import settings
+        
+        ext = file.name.split('.')[-1].lower() if '.' in file.name else ''
+        allowed_extensions = {'png', 'jpeg', 'jpg', 'gif', 'docx', 'xls', 'xlsx', 'pdf', 'ppt', 'pptx', 'pub'}
+        
+        if ext not in allowed_extensions:
+            raise ValueError(f'Invalid file type. Allowed: {", ".join(allowed_extensions)}')
+            
+        if file.size > 10 * 1024 * 1024:
+            raise ValueError(f"File {file.name} is too large. Maximum size is 10MB.")
+        
+        fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'temp_attachments'))
+        filename = f"{uuid.uuid4()}.{ext}" if ext else str(uuid.uuid4())
+        saved_name = fs.save(filename, file)
+        
+        return {
+            'file_id': saved_name,
+            'filename': file.name
+        }

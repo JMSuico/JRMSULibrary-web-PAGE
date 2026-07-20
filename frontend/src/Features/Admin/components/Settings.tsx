@@ -95,8 +95,12 @@ export function Settings() {
     opening_hours_mon_fri: '',
     opening_hours_sat: '',
     opening_hours_sun: '',
-    carousel_style: 'default'
-  });
+    carousel_style: 'default',
+    background_image: ''
+  } as any); // using as any since background_image might not be in the initial type yet
+
+  const [bgImageFile, setBgImageFile] = useState<File | null>(null);
+  const [bgImagePreview, setBgImagePreview] = useState<string | null>(null);
 
   const [passwords, setPasswords] = useState({
     current: '',
@@ -113,7 +117,10 @@ export function Settings() {
     const fetchSettings = async () => {
       try {
         const data = await settingsApi.getSettings();
-        setFormData(data);
+        setFormData(data as any);
+        if ((data as any).background_image) {
+          setBgImagePreview((data as any).background_image);
+        }
       } catch (err: any) {
         showToast(err.message || 'Failed to load settings', 'error');
       } finally {
@@ -138,6 +145,13 @@ export function Settings() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleBgImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBgImageFile(file);
+    setBgImagePreview(URL.createObjectURL(file));
+  };
+
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setPasswords(prev => ({ ...prev, [name]: value }));
@@ -150,8 +164,26 @@ export function Settings() {
     
     if (activeTab === 'general' || activeTab === 'carousel') {
       try {
-        const updated = await settingsApi.updateSettings(formData);
-        setFormData(updated);
+        let payload: any = formData;
+        
+        // If there's a background image file, we must use FormData
+        if (bgImageFile) {
+          const formDataObj = new FormData();
+          Object.keys(formData).forEach(key => {
+            if (key !== 'background_image' && (formData as any)[key] !== undefined && (formData as any)[key] !== null) {
+              formDataObj.append(key, (formData as any)[key]);
+            }
+          });
+          formDataObj.append('background_image', bgImageFile);
+          payload = formDataObj;
+        }
+
+        const updated = await settingsApi.updateSettings(payload);
+        setFormData(updated as any);
+        setBgImageFile(null);
+        if ((updated as any).background_image) {
+          setBgImagePreview((updated as any).background_image);
+        }
         
         // Instantly update the cache so the landing page reflects it immediately
         if (updated.carousel_style) {
@@ -254,10 +286,10 @@ export function Settings() {
         </div>
 
         {/* Settings Content */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {activeTab === 'archives' ? (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in">
-              <div className="p-6 md:p-8 border-b border-gray-100 flex justify-between items-start">
+              <div className="p-6 md:p-8 border-b border-gray-100 flex flex-col xl:flex-row justify-between xl:items-center gap-4 items-start">
                 <div>
                   <h2 className="text-xl font-bold text-gray-800 mb-1 flex items-center gap-2"><Archive size={22} className="text-gray-500" /> Archives</h2>
                   <p className="text-sm text-gray-500">Manage archived batches and reports. Use Reopen to return items to active status.</p>
@@ -515,6 +547,34 @@ export function Settings() {
                       <div>
                         <label className={labelClass}>Sunday</label>
                         <input type="text" name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required disabled={!isEditing} />
+                      </div>
+                    </div>
+
+                    <hr className="border-gray-100 my-6" />
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Camera size={18} className="text-navy" /> Website Background
+                    </h3>
+                    <div className="flex items-center gap-6">
+                      <div className="w-48 h-28 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden">
+                        {bgImagePreview ? (
+                          <img
+                            src={
+                              !bgImagePreview ? '' :
+                              (bgImagePreview.startsWith('http') || bgImagePreview.startsWith('blob:') || bgImagePreview.startsWith('data:') || bgImagePreview.startsWith('/media/'))
+                                ? bgImagePreview
+                                : `/media/${bgImagePreview}`
+                            }
+                            alt="Background Preview"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-sm text-gray-400 font-medium">No Image</span>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Upload New Background</label>
+                        <input type="file" accept="image/*" onChange={handleBgImageChange} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-navy hover:file:bg-blue-100 transition-colors" disabled={!isEditing} />
+                        <p className="text-xs text-gray-500 mt-2">Recommended resolution: 1920x1080. Max size: 5MB.</p>
                       </div>
                     </div>
 

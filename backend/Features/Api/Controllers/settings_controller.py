@@ -25,11 +25,21 @@ class SettingsViewSet(viewsets.ViewSet):
 
     def create(self, request):
         """Update the global site settings. We use create (POST) or put to act as an update since it's a singleton."""
-        serializer = SiteSettingsSerializer(data=request.data, partial=True)
+        # Get the existing settings instance to update in-place (singleton pattern).
+        # Passing the instance to the serializer ensures UPDATE behavior, not CREATE,
+        # so the ImageField correctly replaces the old file instead of failing validation.
+        # request.data in DRF with MultiPartParser already merges text fields AND files.
+        existing_settings = self.service.get_settings()
+        serializer = SiteSettingsSerializer(
+            existing_settings,
+            data=request.data,
+            partial=True
+        )
         if serializer.is_valid():
-            settings = self.service.update_settings(serializer.validated_data)
+            settings = serializer.save()
             return Response(SiteSettingsSerializer(settings).data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
     def last_update(self, request):

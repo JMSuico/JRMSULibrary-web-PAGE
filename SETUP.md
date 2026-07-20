@@ -68,8 +68,8 @@ python manage.py migrate
 # (Optional) Create admin superuser
 python manage.py createsuperuser
 
-# Import 4.8GB eBooks from media folder
-python manage.py import_ebooks
+# Import eBooks, Library Gallery, and Base Assets (Background, Org Structure, Personnel)
+python manage.py imports_assets
 
 # Start backend server on port 8000
 python manage.py runserver 8000
@@ -131,8 +131,8 @@ docker-compose exec backend python manage.py migrate
 # First time: create admin account (skip if already created)
 docker-compose exec backend python manage.py createsuperuser
 
-# Import 4.8GB eBooks from media folder
-docker-compose exec backend python manage.py import_ebooks
+# Import eBooks, Library Gallery, and Base Assets (Background, Org Structure, Personnel)
+docker-compose exec backend python manage.py imports_assets
 ```
 
 ### 2. Stop the System
@@ -213,7 +213,7 @@ docker-compose exec backend python manage.py migrate
 docker-compose exec backend python manage.py showmigrations
 docker-compose exec backend python manage.py shell
 docker-compose exec backend python manage.py createsuperuser
-docker-compose exec backend python manage.py import_ebooks
+docker-compose exec backend python manage.py imports_assets
 
 # View live container logs
 docker-compose logs -f backend
@@ -282,7 +282,7 @@ API:          http://YOUR_IP:8000/api
 | Generate new migrations      | `python manage.py makemigrations`                 | `docker-compose exec backend python manage.py makemigrations` |
 | Show migration status        | `python manage.py showmigrations`                 | `docker-compose exec backend python manage.py showmigrations` |
 | Create superuser             | `python manage.py createsuperuser`                | `docker-compose exec backend python manage.py createsuperuser`|
-| Import eBooks                | `python manage.py import_ebooks`                  | `docker-compose exec backend python manage.py import_ebooks`  |
+| Import Assets (eBooks+Base)  | `python manage.py imports_assets`                  | `docker-compose exec backend python manage.py imports_assets`  |
 | Open Django shell            | `python manage.py shell`                          | `docker-compose exec backend python manage.py shell`          |
 
 ---
@@ -431,3 +431,28 @@ kubectl get hpa -n jrmsu-library
 For convenience, two helper scripts have been added to the project root:
 - **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
 - **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.
+
+---
+
+## What's New: Terminal Admin Protection & Management
+*Feature Update (July 2026)*
+
+**1. Protection for Terminal-Created Admins:**
+If an admin is created via the terminal using either `python manage.py createsuperuser` or `python manage.py createsuperuser_custom`, they are permanently flagged as a **Terminal-Created Admin**.
+- **Security Rule:** Any admin created via the system's Admin Panel UI is strictly prohibited from modifying, suspending, or deleting Terminal-Created Admins.
+- This ensures developers/sysadmins cannot be locked out by UI staff.
+
+**2. The `deletespecificsuperuser` Command:**
+To manage Terminal-Created Admins, a dedicated terminal command is now available:
+- It exclusively targets admins created via the terminal (UI-created admins are ignored).
+- It provides a safe, interactive menu to list, delete a specific admin, or bulk-delete all terminal-created admins.
+
+**Usage:**
+- **No Docker (Local):** 
+  ```bash
+  python manage.py deletespecificsuperuser
+  ```
+- **Docker Mode:** 
+  ```bash
+  docker-compose exec backend python manage.py deletespecificsuperuser
+  ```

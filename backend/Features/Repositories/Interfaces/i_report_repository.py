@@ -30,3 +30,7 @@ class IReportRepository(ABC):
     @abstractmethod
     def delete_report(self, report_id: int) -> bool:
         pass
+
+    @abstractmethod
+    def create_report_from_snapshot(self, data: dict) -> Any:
+        pass

@@ -67,6 +67,7 @@ class Command(BaseCommand):
         )
         user.is_librarian = True
         user.is_guest = False
+        user.is_terminal_created = True
         user.save()
 
         self.stdout.write(self.style.SUCCESS(
@@ -120,6 +121,7 @@ class Command(BaseCommand):
         )
         user.is_librarian = True
         user.is_guest = False
+        user.is_terminal_created = True
         user.save()
 
         self.stdout.write(self.style.SUCCESS(

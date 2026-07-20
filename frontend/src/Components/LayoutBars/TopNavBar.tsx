@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { assets } from '@/src/Libs/Assets/data';
+import { settingsApi } from '@/src/Endpoints/settingsApi';
 
 export const TopNavBar: React.FC = () => {
   const navigate = useNavigate();
@@ -23,8 +24,7 @@ export const TopNavBar: React.FC = () => {
     window.addEventListener('scroll', handleScroll);
     
     // Fetch settings
-    fetch('/api/settings/')
-      .then(res => res.json())
+    settingsApi.getSettings()
       .then(data => {
         if (data && data.library_name) {
           setLibraryName(data.library_name);

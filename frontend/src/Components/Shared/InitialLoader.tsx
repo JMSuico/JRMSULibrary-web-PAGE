@@ -20,7 +20,7 @@ export const InitialLoader: React.FC<InitialLoaderProps> = ({ onComplete }) => {
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-navy-dark/60 backdrop-blur-md transition-opacity duration-500 ease-in-out ${
+      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-navy-dark/60 backdrop-blur-md transition-opacity duration-500 ease-in-out ${
         isFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >

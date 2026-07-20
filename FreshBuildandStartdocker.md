@@ -127,7 +127,7 @@ Use these occasionally, mostly when modifying the database structure or adding n
 | **Apply DB Migrations** | `docker-compose exec backend python manage.py migrate` |
 | **Create DB Migrations**| `docker-compose exec backend python manage.py makemigrations` |
 | **Create Admin Account**| `docker-compose exec backend python manage.py createsuperuser` |
-| **Import eBooks**       | `docker-compose exec backend python manage.py import_ebooks` |
+| **Import eBooks**       | `docker-compose exec backend python manage.py imports_assets` |
 | **Open Django Console** | `docker-compose exec backend python manage.py shell` |
 | **Rebuild one service** | `docker-compose build --no-cache backend` |
 
@@ -163,3 +163,28 @@ kubectl get hpa -n jrmsu-library
 For convenience, two helper scripts have been added to the project root:
 - **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
 - **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.
+
+---
+
+## What's New: Terminal Admin Protection & Management
+*Feature Update (July 2026)*
+
+**1. Protection for Terminal-Created Admins:**
+If an admin is created via the terminal using either `python manage.py createsuperuser` or `python manage.py createsuperuser_custom`, they are permanently flagged as a **Terminal-Created Admin**.
+- **Security Rule:** Any admin created via the system's Admin Panel UI is strictly prohibited from modifying, suspending, or deleting Terminal-Created Admins.
+- This ensures developers/sysadmins cannot be locked out by UI staff.
+
+**2. The `deletespecificsuperuser` Command:**
+To manage Terminal-Created Admins, a dedicated terminal command is now available:
+- It exclusively targets admins created via the terminal (UI-created admins are ignored).
+- It provides a safe, interactive menu to list, delete a specific admin, or bulk-delete all terminal-created admins.
+
+**Usage:**
+- **No Docker (Local):** 
+  ```bash
+  python manage.py deletespecificsuperuser
+  ```
+- **Docker Mode:** 
+  ```bash
+  docker-compose exec backend python manage.py deletespecificsuperuser
+  ```

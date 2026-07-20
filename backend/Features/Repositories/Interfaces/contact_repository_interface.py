@@ -39,3 +39,11 @@ class ContactRepositoryInterface(ABC):
     def update_status(self, message_id: int, status: str):
         """Update the status of a contact message."""
         pass
+
+    @abstractmethod
+    def get_recent_by_email_and_type(self, email: str, message_type: str, hours: int = 1):
+        pass
+
+    @abstractmethod
+    def get_replies_by_email(self, email: str):
+        pass

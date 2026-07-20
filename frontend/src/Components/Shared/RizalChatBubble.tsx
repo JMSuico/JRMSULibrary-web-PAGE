@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { contactApi } from '@/src/Endpoints/contactApi';
 import { feedbackApi } from '@/src/Endpoints/feedbackApi';
-import { StarRating } from './StarRating';
+import { StarRating } from '@/src/Components/Shared/StarRating';
 import { X, Send, MessageCircle } from 'lucide-react';
 
 type ChatState = 'idle' | 'email' | 'reservation' | 'rating' | 'success';

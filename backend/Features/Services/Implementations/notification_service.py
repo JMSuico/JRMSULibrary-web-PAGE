@@ -41,6 +41,7 @@ class NotificationService(INotificationService):
                 'time': None,
                 'time_ago': '',
                 'read': True,
+                'db_id': None,
             })
             nid += 1
 
@@ -60,6 +61,7 @@ class NotificationService(INotificationService):
                 'time': None,
                 'time_ago': '',
                 'read': True,
+                'db_id': None,
             })
             nid += 1
 
@@ -77,6 +79,7 @@ class NotificationService(INotificationService):
                 'time': msg.created_at.isoformat(),
                 'time_ago': time_ago(msg.created_at),
                 'read': False,
+                'db_id': msg.id,
             })
             nid += 1
 
@@ -94,6 +97,7 @@ class NotificationService(INotificationService):
                 'time': msg.created_at.isoformat(),
                 'time_ago': time_ago(msg.created_at),
                 'read': True,
+                'db_id': msg.id,
             })
             nid += 1
 
@@ -111,6 +115,7 @@ class NotificationService(INotificationService):
                 'time': msg.created_at.isoformat(),
                 'time_ago': time_ago(msg.created_at),
                 'read': False,
+                'db_id': msg.id,
             })
             nid += 1
 
@@ -128,6 +133,7 @@ class NotificationService(INotificationService):
                 'time': msg.created_at.isoformat(),
                 'time_ago': time_ago(msg.created_at),
                 'read': False,
+                'db_id': msg.id,
             })
             nid += 1
 

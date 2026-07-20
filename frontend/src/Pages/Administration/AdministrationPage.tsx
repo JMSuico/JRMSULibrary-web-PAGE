@@ -45,12 +45,12 @@ export default function AdministrationPage() {
   const fetchAssets = async () => {
     try {
       const files = await cmsApi.getAllFiles();
-      const orgChart = files.find(f => f.name.toLowerCase().includes('org') || f.name.toLowerCase().includes('structure'));
-      const manual = files.find(f => f.name.toLowerCase().includes('manual') || f.name.toLowerCase().includes('policy'));
+      const orgChart = files.find(f => f.category === 'OrgStructure') || files.find(f => f.name.toLowerCase().includes('org') || f.name.toLowerCase().includes('structure'));
+      const manual = files.find(f => f.category !== 'OrgStructure' && (f.name.toLowerCase().includes('manual') || f.name.toLowerCase().includes('policy')));
 
       if (orgChart) setOrgChartUrl(getFileUrl(orgChart.file));
       if (manual) setManualUrl(getFileUrl(manual.file));
-      setAllFiles(files.filter(f => f.is_active));
+      setAllFiles(files.filter(f => f.is_active && f.category !== 'OrgStructure'));
     } catch (e) {
       console.error('Failed to load administration assets from CMS', e);
     } finally {

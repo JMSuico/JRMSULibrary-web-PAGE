@@ -1,5 +1,6 @@
 from .account_model import Account
 from .contact_message_model import ContactMessage
+from .contact_attachment_model import ContactAttachment
 from .feedback_model import Feedback
 from .personnel_model import Personnel
 from .newly_acquired_book_model import NewlyAcquiredBook
@@ -19,6 +20,7 @@ from .generated_report_model import GeneratedReport
 __all__ = [
     'Account',
     'ContactMessage',
+    'ContactAttachment',
     'Feedback',
     'Personnel',
     'NewlyAcquiredBook',

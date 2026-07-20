@@ -20,3 +20,15 @@ class UserService(IUserService):
 
     def delete(self, user_id: int) -> bool:
         return self._repo.delete(user_id)
+
+    def get_by_email(self, email: str):
+        return self._repo.get_by_email(email)
+
+    def username_exists_exclude_user(self, username: str, exclude_user_id: int) -> bool:
+        return self._repo.username_exists_exclude_user(username, exclude_user_id)
+
+    def email_exists_exclude_user(self, email: str, exclude_user_id: int) -> bool:
+        return self._repo.email_exists_exclude_user(email, exclude_user_id)
+
+    def clear_user_sessions(self, user_id: int, current_session_key: str = None):
+        self._repo.clear_user_sessions(user_id, current_session_key)

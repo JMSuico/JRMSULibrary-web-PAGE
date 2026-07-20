@@ -9,6 +9,7 @@ export interface SiteSettings {
   opening_hours_sat: string;
   opening_hours_sun: string;
   carousel_style: 'default' | 'classic';
+  background_image?: string | null;
   updated_at?: string;
 }
 
@@ -17,10 +18,10 @@ export const settingsApi = {
     return apiClient(`/settings/`);
   },
   
-  updateSettings: async (data: Partial<SiteSettings>): Promise<SiteSettings> => {
+  updateSettings: async (data: Partial<SiteSettings> | FormData): Promise<SiteSettings> => {
     return apiClient(`/settings/`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: data instanceof FormData ? data : JSON.stringify(data),
     });
   }
 };

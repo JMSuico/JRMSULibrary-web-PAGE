@@ -17,6 +17,7 @@ class SiteSettings(models.Model):
 
     # UI Settings
     carousel_style = models.CharField(max_length=20, default='default', choices=[('default', 'Default (3D)'), ('classic', 'Classic (Horizontal)')])
+    background_image = models.ImageField(upload_to='settings/', null=True, blank=True)
 
     # The singleton pattern is enforced at the repository/service layer
     updated_at = models.DateTimeField(auto_now=True)

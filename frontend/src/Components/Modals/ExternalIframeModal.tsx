@@ -124,16 +124,16 @@ export const ExternalIframeModal: React.FC<ExternalIframeModalProps> = ({
           
           {/* Banner for Request Credentials */}
           {(title.includes('Vital') || title.includes('Bookshelf') || title === 'Scholaar') && (
-            <div className="bg-[#001655] text-white px-4 py-3 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#002B7F]">
+            <div className="bg-navy-dark text-white px-4 py-3 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-navy">
               <div className="flex items-center gap-2">
-                <AlertTriangle size={18} className="text-[#C9A84C] shrink-0" />
+                <AlertTriangle size={18} className="text-gold shrink-0" />
                 <p className="text-sm">
-                  <span className="font-bold text-[#C9A84C]">Note:</span> You need to request a credential to access {title}.
+                  <span className="font-bold text-gold">Note:</span> You need to request a credential to access {title}.
                 </p>
               </div>
               <button
                 onClick={handleRequestCredentials}
-                className="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2 rounded-lg bg-[#C9A84C] text-[#001655] text-sm font-bold hover:bg-[#D5B861] transition-colors cursor-pointer shadow-md"
+                className="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2 rounded-lg bg-gold text-navy-dark text-sm font-bold hover:bg-gold-light transition-colors cursor-pointer shadow-md"
               >
                 <Mail size={16} /> Request
               </button>

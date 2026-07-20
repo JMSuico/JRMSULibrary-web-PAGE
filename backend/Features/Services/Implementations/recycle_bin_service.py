@@ -42,21 +42,9 @@ class RecycleBinService(IRecycleBinService):
             elif item.source_module == 'GALLERY' and self._gallery_repo:
                 self._gallery_repo.create(item.data_snapshot)
                 
-            elif item.source_module == 'REPORT':
-                from Features.Data.Models.generated_report_model import GeneratedReport
-                from Features.Data.Models.account_model import Account
-                
+            elif item.source_module == 'REPORT' and self._report_repo:
                 data = dict(item.data_snapshot)
-                user_id = data.pop('generated_by_id', None)
-                user = Account.objects.get(pk=user_id) if user_id else None
-                
-                GeneratedReport.objects.create(
-                    title=data.get('title'),
-                    report_type=data.get('report_type'),
-                    date_range=data.get('date_range'),
-                    report_data=data.get('report_data'),
-                    generated_by=user
-                )
+                self._report_repo.create_report_from_snapshot(data)
 
             else:
                 success = getattr(self._repo, 'restore_entity', lambda x: False)(item)

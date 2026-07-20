@@ -34,3 +34,8 @@ class ContactServiceInterface(ABC):
     def update_message_status(self, message_id: int, status: str):
         """Update the status of a contact message."""
         pass
+
+    @abstractmethod
+    def upload_attachment(self, file) -> dict:
+        """Uploads an attachment file and returns file info."""
+        pass

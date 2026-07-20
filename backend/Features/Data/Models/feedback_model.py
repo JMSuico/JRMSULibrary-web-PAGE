@@ -8,6 +8,8 @@ class Feedback(models.Model):
     category = models.CharField(max_length=100)
     message = models.TextField()
     rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)], null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

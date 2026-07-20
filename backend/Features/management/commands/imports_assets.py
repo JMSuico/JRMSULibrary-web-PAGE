@@ -11,7 +11,7 @@ IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.jfif', '.webp', '.gif', '.bmp'}
 
 class Command(BaseCommand):
     help = (
-        'Imports eBooks and images from frontend assets into the media directory and database.'
+        'Imports eBooks, images, and base assets from frontend assets into the media directory and database.'
     )
 
     def add_arguments(self, parser):
@@ -93,6 +93,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 f"Newly Arrived Books directory not found at {new_source}. Skipping."
             ))
+
+        # --- 5. Base Assets (Background, Org Structure, Personnel, Excellence) ---
+        self.stdout.write(self.style.SUCCESS(f"Scanning base assets in: {source_base}"))
+        self._import_background(source_base)
+        self._import_org_structure(source_base)
+        self._import_personnel(source_base)
+        self._import_excellence(source_base)
 
         self.stdout.write(self.style.SUCCESS("Import completed successfully!"))
 
@@ -254,3 +261,91 @@ class Command(BaseCommand):
                 count += 1
                 self.stdout.write(f"    + Newly Acquired Books Image: {item}")
         self.stdout.write(self.style.SUCCESS(f"  Imported {count} newly arrived books into {batch_name}."))
+
+    # ---------------------------------------------------------------
+    # Base Assets: Background, Org Structure, Personnel
+    # ---------------------------------------------------------------
+    def _import_background(self, source_base):
+        from Features.Data.Models.site_settings_model import SiteSettings
+        from django.core.files import File
+        img_path = os.path.join(source_base, "JRMSU library lib.jpg")
+        if not os.path.exists(img_path):
+            self.stdout.write(self.style.WARNING(f"    Background image not found: {img_path}"))
+            return
+        site_settings, created = SiteSettings.objects.get_or_create(id=1)
+        if site_settings.background_image:
+            self.stdout.write("    Background image already seeded. Skipping.")
+            return
+        with open(img_path, 'rb') as f:
+            site_settings.background_image.save("JRMSU_library_lib.jpg", File(f), save=True)
+        self.stdout.write(self.style.SUCCESS("    + Background migrated successfully!"))
+
+    def _import_org_structure(self, source_base):
+        from Features.Data.Models.managed_file_model import ManagedFile
+        from django.core.files import File
+        img_path = os.path.join(source_base, "organizational structure library.png")
+        if not os.path.exists(img_path):
+            self.stdout.write(self.style.WARNING(f"    Org structure image not found: {img_path}"))
+            return
+        if ManagedFile.objects.filter(category='OrgStructure').exists():
+            self.stdout.write("    Org structure already seeded. Skipping.")
+            return
+        with open(img_path, 'rb') as f:
+            mf = ManagedFile(category='OrgStructure', name='Organizational Structure', is_active=True)
+            mf.file.save("organizational_structure_library.png", File(f), save=True)
+        self.stdout.write(self.style.SUCCESS("    + Org structure migrated successfully!"))
+
+    def _import_personnel(self, source_base):
+        from Features.Data.Models.personnel_model import Personnel
+        from django.core.files import File
+        
+        # 1. Chief Librarian (Maam Kiara)
+        img_path = os.path.join(source_base, "maam kiaras.png")
+        kiara = Personnel.objects.filter(name__icontains="Kiara").first()
+        if not kiara:
+            kiara = Personnel(
+                name="Kiara Keren M. Alavanza",
+                title="Campus Librarian",
+                order=1
+            )
+            if os.path.exists(img_path):
+                with open(img_path, 'rb') as f:
+                    kiara.photo.save("maam_kiaras.png", File(f), save=True)
+                self.stdout.write(self.style.SUCCESS("    + Personnel (Maam Kiara) migrated successfully!"))
+            else:
+                kiara.save()
+                self.stdout.write(self.style.WARNING(f"    Personnel image not found: {img_path}. Saved Kiara without photo."))
+
+        # 2. Staff Members
+        staff_data = [
+            {"name": "Marquita P. Morata", "title": "Staff, Library", "order": 2},
+            {"name": "Bernie Rey L. Palon", "title": "Staff, Library", "order": 3},
+            {"name": "Reizel C. Rosauro", "title": "Staff, Library", "order": 4},
+        ]
+        
+        for staff in staff_data:
+            person, created = Personnel.objects.get_or_create(
+                name=staff["name"],
+                defaults={
+                    "title": staff["title"],
+                    "order": staff["order"]
+                }
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f"    + Personnel ({staff['name']}) seeded successfully!"))
+
+    def _import_excellence(self, source_base):
+        """Seeds the Excellence in Information image into ManagedFile (category='Excellence')."""
+        from Features.Data.Models.managed_file_model import ManagedFile
+        from django.core.files import File
+        img_path = os.path.join(source_base, "JRMSU library lib.jpg")
+        if not os.path.exists(img_path):
+            self.stdout.write(self.style.WARNING(f"    Excellence image not found: {img_path}"))
+            return
+        if ManagedFile.objects.filter(category='Excellence').exists():
+            self.stdout.write("    Excellence image already seeded. Skipping.")
+            return
+        with open(img_path, 'rb') as f:
+            mf = ManagedFile(category='Excellence', name='Excellence in Information', is_active=True)
+            mf.file.save("JRMSU_library_lib.jpg", File(f), save=True)
+        self.stdout.write(self.style.SUCCESS("    + Excellence in Information image migrated successfully!"))

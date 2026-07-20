@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
-import { publicApi } from '@/src/Endpoints/cmsApi';
+import { publicApi, cmsApi } from '@/src/Endpoints/cmsApi';
+import { settingsApi } from '@/src/Endpoints/settingsApi';
 import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
 
 export const HeroSection: React.FC = () => {
@@ -21,13 +22,14 @@ export const HeroSection: React.FC = () => {
   const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number } | null>(null);
   const [rawOpenHours, setRawOpenHours] = useState<string>('Working days MONDAY TO FRIDAY | 7AM TO 7PM');
 
+  const [excellenceImage, setExcellenceImage] = useState<string>('/assets/JRMSU library lib.jpg');
+
   const loadData = () => {
     publicApi.getVisitorCount()
       .then(data => setVisitorCount(data.total_visits))
       .catch(() => setVisitorCount(null));
     
-    fetch('/api/settings/')
-      .then(r => r.json())
+    settingsApi.getSettings()
       .then((s: any) => {
         const raw: string = s?.opening_hours_mon_fri || '7:00 AM - 7:00 PM';
         setRawOpenHours(`Working days MONDAY TO FRIDAY | ${raw}`);
@@ -44,6 +46,17 @@ export const HeroSection: React.FC = () => {
           if (closeAmpm === 'PM' && closeH !== 12) closeH += 12;
           if (closeAmpm === 'AM' && closeH === 12) closeH = 0;
           setOpenHours({ openH, openM, closeH, closeM });
+        }
+      })
+      .catch(() => null);
+
+    cmsApi.getAllFiles()
+      .then(files => {
+        const excellenceFile = files.find(f => f.category === 'Excellence' && f.is_active);
+        if (excellenceFile) {
+          setExcellenceImage(excellenceFile.file);
+        } else {
+          setExcellenceImage('/assets/JRMSU library lib.jpg');
         }
       })
       .catch(() => null);
@@ -138,8 +151,8 @@ export const HeroSection: React.FC = () => {
           >
             <div className="relative rounded-3xl overflow-hidden shadow-2xl min-h-[300px] md:min-h-[380px]">
               <img
-                src="/assets/JRMSU library lib.jpg"
-                alt="JRMSU Library Building"
+                src={excellenceImage}
+                alt="JRMSU Library Excellence"
                 className="w-full h-full object-cover block absolute inset-0"
                 loading="lazy"
               />

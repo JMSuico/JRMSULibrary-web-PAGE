@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { X } from 'lucide-react';
 import { assets } from '@/src/Libs/Assets/data';
+import { settingsApi } from '@/src/Endpoints/settingsApi';
 
 export const Footer: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
@@ -13,8 +14,7 @@ export const Footer: React.FC = () => {
   });
 
   React.useEffect(() => {
-    fetch('/api/settings/')
-      .then(res => res.json())
+    settingsApi.getSettings()
       .then(data => {
         if (data && data.library_name) {
           setSettings(data);

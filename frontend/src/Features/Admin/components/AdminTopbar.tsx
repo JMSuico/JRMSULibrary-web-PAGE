@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Bell, Menu, X, LogOut, Users, TrendingUp, Mail, Send, Calendar, Loader2
+  Bell, Menu, X, LogOut, Users, TrendingUp, Mail, Send, Calendar, Loader2, Key
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { notificationApi, Notification } from '@/src/Endpoints/notificationApi';
+import { contactApi } from '@/src/Endpoints/contactApi';
 import { NotificationDetailModal } from '@/src/Components/Modals/NotificationDetailModal';
 import { ProfileEditModal } from '@/src/Features/Admin/components/ProfileEditModal';
 import { useToast } from '@/src/Hooks/useToast';
@@ -23,6 +24,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   mail: <Mail size={14} />,
   send: <Send size={14} />,
   calendar: <Calendar size={14} />,
+  key: <Key size={14} />,
 };
 
 const COLOR_MAP: Record<string, string> = {
@@ -216,11 +218,20 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
                     return (
                       <div
                         key={n.id}
-                        onClick={() => {
+                        onClick={async () => {
                           setSelectedNotification(n);
                           if (!isRead) {
+                            // Immediately update local state for snappy UI
                             setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
                             setUnreadCount(prev => Math.max(0, prev - 1));
+                            // Persist to DB so the badge doesn't reappear after refresh / polling
+                            if (n.db_id) {
+                              try {
+                                await contactApi.updateMessageStatus(n.db_id, 'READ');
+                              } catch (err) {
+                                console.error('Failed to mark notification as read in DB', err);
+                              }
+                            }
                           }
                         }}
                         className={`flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer ${isRead ? 'bg-white' : 'bg-blue-50/40'} hover:bg-gray-50`}

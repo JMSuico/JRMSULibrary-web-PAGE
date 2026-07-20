@@ -12,6 +12,7 @@ export interface ContactMessage {
   created_at: string;
   reply_text?: string;
   replied_at?: string;
+  attachments?: { id: number; file: string; original_filename: string; file_size: number; uploaded_at: string }[];
 }
 
 export interface EmailValidation {
@@ -40,7 +41,23 @@ export const contactApi = {
     return apiClient(`/contact/${id}/`, { method: 'DELETE' });
   },
 
-  submitContactMessage: async (data: Partial<ContactMessage>): Promise<ContactMessage> => {
+  submitContactMessage: async (data: Partial<ContactMessage>, files?: File[]): Promise<ContactMessage> => {
+    if (files && files.length > 0) {
+      const formData = new FormData();
+      Object.keys(data).forEach(key => {
+        if ((data as any)[key] !== undefined && (data as any)[key] !== null) {
+          formData.append(key, (data as any)[key]);
+        }
+      });
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+      return apiClient(`/contact/`, {
+        method: 'POST',
+        body: formData,
+      });
+    }
+
     return apiClient(`/contact/`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -83,12 +100,12 @@ export const contactApi = {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/contact/upload-attachment/', true);
-      
+
       const csrfToken = getCookie('csrftoken') || '';
       if (csrfToken) {
         xhr.setRequestHeader('X-CSRFToken', csrfToken);
       }
-      
+
       // Send credentials for auth
       xhr.withCredentials = true;
 
@@ -130,7 +147,7 @@ export const contactApi = {
   /**
    * Reply with pre-uploaded attachments.
    */
-  replyWithFiles: async (id: number, replyBody: string, fileEntries: {id: string, name: string}[], sendToChatbot: boolean = false) => {
+  replyWithFiles: async (id: number, replyBody: string, fileEntries: { id: string, name: string }[], sendToChatbot: boolean = false) => {
     return apiClient(`/contact/${id}/reply-with-files/`, {
       method: 'POST',
       body: JSON.stringify({ reply_body: replyBody, file_entries: fileEntries, send_to_chatbot: sendToChatbot }),
