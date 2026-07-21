@@ -197,17 +197,15 @@ export function BatchHistory() {
               )}
             </tbody>
           </table>
-          {filteredBatches.length > itemsPerPage && (
-            <div className="p-4 border-t border-gray-100 flex justify-center bg-gray-50">
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                totalItems={filteredBatches.length}
-                itemsPerPage={itemsPerPage}
-              />
-            </div>
-          )}
+          <div className="p-4 border-t border-gray-100 flex justify-center bg-gray-50">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={filteredBatches.length}
+              itemsPerPage={itemsPerPage}
+            />
+          </div>
         </div>
       </div>
 

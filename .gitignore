@@ -49,3 +49,10 @@ frontend/src/Assets/
 
 # Temp & scratch
 objects.txt
+
+# Ignore markdown files except specific ones
+*.md
+*.MD
+!README.md
+!readme.md
+!FreshBuildandStartdocker.md

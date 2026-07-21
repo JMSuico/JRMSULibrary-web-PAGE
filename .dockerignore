@@ -7,3 +7,10 @@ __pycache__
 media
 .git
 .vite
+
+# Ignore markdown files except specific ones
+*.md
+*.MD
+!README.md
+!readme.md
+!FreshBuildandStartdocker.md
