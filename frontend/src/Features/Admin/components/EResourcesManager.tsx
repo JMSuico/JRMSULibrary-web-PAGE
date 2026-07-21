@@ -5,6 +5,7 @@ import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronD
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 
 export function EResourcesManager() {
@@ -387,8 +388,8 @@ export function EResourcesManager() {
 
       {/* Dept Modal */}
       {isDeptModalOpen && createPortal(
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 animate-modal-overlay" onClick={() => setIsDeptModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-modal-card max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">{editingDept ? 'Edit Folder' : 'Add Folder'}</h2>
               <button onClick={() => setIsDeptModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">×</button>
@@ -421,8 +422,8 @@ export function EResourcesManager() {
 
       {/* File Modal */}
       {isFileModalOpen && createPortal(
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 animate-modal-overlay" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">Upload File to {selectedDept?.name}</h2>
               <button onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">×</button>
@@ -461,34 +462,11 @@ export function EResourcesManager() {
         </div>,
         document.body
       )}
-      {/* Undo Delete Toast */}
-      {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={cancelDelete}
-                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
-              >
-                Undo
-              </button>
-              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className="bg-gray-400 h-full transition-all ease-linear"
-              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
-            />
-          </div>
-        </div>
-      )}
+      <UndoDeleteToast 
+        undoState={undoState} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
+      />
     </>
   );
 }

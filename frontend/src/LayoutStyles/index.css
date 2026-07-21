@@ -180,8 +180,16 @@ section::before {
     animation: modalOverlayIn 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
   }
 
+  .animate-modal-overlay-slow {
+    animation: modalOverlayIn 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  }
+
   .animate-modal-card {
     animation: modalCardIn 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  }
+
+  .animate-modal-card-slow {
+    animation: modalCardIn 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
   }
 
   @keyframes pageIn {

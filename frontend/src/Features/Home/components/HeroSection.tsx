@@ -19,7 +19,7 @@ export const HeroSection: React.FC = () => {
   });
 
   // Opening hours state from backend Settings API
-  const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number } | null>(null);
+  const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number; satOpen: boolean; sunOpen: boolean } | null>(null);
   const [rawOpenHours, setRawOpenHours] = useState<string>('Working days MONDAY TO FRIDAY | 7AM TO 7PM');
 
   const [excellenceImage, setExcellenceImage] = useState<string>('/assets/JRMSU library lib.jpg');
@@ -45,7 +45,14 @@ export const HeroSection: React.FC = () => {
           if (openAmpm === 'AM' && openH === 12) openH = 0;
           if (closeAmpm === 'PM' && closeH !== 12) closeH += 12;
           if (closeAmpm === 'AM' && closeH === 12) closeH = 0;
-          setOpenHours({ openH, openM, closeH, closeM });
+          setOpenHours({ 
+            openH, 
+            openM, 
+            closeH, 
+            closeM,
+            satOpen: s?.opening_hours_sat === 'Open',
+            sunOpen: s?.opening_hours_sun === 'Open'
+          });
         }
       })
       .catch(() => null);
@@ -92,7 +99,9 @@ export const HeroSection: React.FC = () => {
         const nowMins = hour * 60 + minute;
         const openMins = openHours.openH * 60 + openHours.openM;
         const closeMins = openHours.closeH * 60 + openHours.closeM;
-        isOpen = (day >= 1 && day <= 5) && nowMins >= openMins && nowMins < closeMins;
+        
+        const isDayOpen = (day >= 1 && day <= 5) || (day === 6 && openHours.satOpen) || (day === 0 && openHours.sunOpen);
+        isOpen = isDayOpen && nowMins >= openMins && nowMins < closeMins;
       } else {
         // Fallback: Mon-Fri 7AM-7PM
         isOpen = (day >= 1 && day <= 5) && (hour >= 7 && hour < 19);

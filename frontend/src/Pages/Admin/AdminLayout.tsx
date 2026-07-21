@@ -49,30 +49,42 @@ const useAuth = () => {
 
 const useInactivityTimer = (timeoutMs: number, onTimeout: () => void) => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
 
-  const resetTimer = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
+  const checkActivity = useCallback(() => {
+    const storedLastActivity = localStorage.getItem('admin_last_activity');
+    const lastActivity = storedLastActivity ? parseInt(storedLastActivity, 10) : lastActivityRef.current;
+    
+    if (Date.now() - lastActivity >= timeoutMs) {
+      if (timerRef.current) clearInterval(timerRef.current);
       onTimeout();
-    }, timeoutMs);
+    }
   }, [timeoutMs, onTimeout]);
+
+  const updateActivity = useCallback(() => {
+    const now = Date.now();
+    // Throttle localStorage writes to once every 2 seconds to avoid performance issues
+    if (now - lastActivityRef.current > 2000) {
+      lastActivityRef.current = now;
+      localStorage.setItem('admin_last_activity', now.toString());
+    }
+  }, []);
 
   useEffect(() => {
     const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
     
-    const handleActivity = () => resetTimer();
-    
-    // Set initial timer
-    resetTimer();
+    // Initial setup
+    updateActivity();
+    timerRef.current = setInterval(checkActivity, 5000); // Check every 5 seconds
 
     // Attach listeners
-    events.forEach(event => document.addEventListener(event, handleActivity));
+    events.forEach(event => document.addEventListener(event, updateActivity, { passive: true }));
     
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      events.forEach(event => document.removeEventListener(event, handleActivity));
+      if (timerRef.current) clearInterval(timerRef.current);
+      events.forEach(event => document.removeEventListener(event, updateActivity));
     };
-  }, [resetTimer]);
+  }, [updateActivity, checkActivity]);
 };
 
 export interface AdminOutletContext {
@@ -102,8 +114,8 @@ export default function AdminLayout() {
     window.location.href = '/admin/login?timeout=1';
   }, []);
 
-  // 5 minutes = 300000 ms
-  useInactivityTimer(300000, handleAutoLogout);
+  // 10 minutes = 600000 ms
+  useInactivityTimer(600000, handleAutoLogout);
 
   const handleToggleSidebar = useCallback(() => {
     // Under 1024px (lg breakpoint), toggle the mobile overlay; on desktop, collapse/expand

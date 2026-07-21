@@ -6,6 +6,7 @@ import { Save, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, RefreshCw, GripVe
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
 import { Pagination } from '@/src/Components/Shared/Pagination';
@@ -43,6 +44,7 @@ export function ContentManager() {
   const [personnelPhotoPreview, setPersonnelPhotoPreview] = useState<string | null>(null);
   const [editingPersonnelId, setEditingPersonnelId] = useState<number | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  const [viewingManualFile, setViewingManualFile] = useState<ManagedFile | null>(null);
   
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
@@ -531,7 +533,7 @@ export function ContentManager() {
           })()}
 
           {activeTab === 'files' && (() => {
-            const manualFiles = files.filter(f => f.category !== 'OrgStructure');
+            const manualFiles = files.filter(f => f.category === 'Manual');
             return (
             <div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
@@ -546,7 +548,7 @@ export function ContentManager() {
                   disabled={manualFiles.length >= 1}
                   title={manualFiles.length >= 1 ? "Only 1 manual file allowed. Please delete the existing one first to upload a new one." : ""}
                 >
-                  {manualFiles.length >= 1 ? 'Maximum 1 file reached' : <><Plus size={16} /> Upload Picture</>}
+                  {manualFiles.length >= 1 ? 'Maximum 1 file reached' : <><Plus size={16} /> Upload File</>}
                 </button>
               </div>
               <div className="admin-table-scroll">
@@ -570,7 +572,10 @@ export function ContentManager() {
                           </span>
                         </td>
                         <td>
-                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
+                            <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -615,7 +620,7 @@ export function ContentManager() {
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td>
-                          <img src={file.file} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                          <img src={file.file.startsWith('http') || file.file.startsWith('/media') ? file.file : `/media/${file.file}`} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
                         </td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -623,7 +628,10 @@ export function ContentManager() {
                           </span>
                         </td>
                         <td>
-                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
+                            <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -640,14 +648,17 @@ export function ContentManager() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
                 <button 
-                  className="admin-btn flex items-center gap-2 admin-btn--primary"
+                  className={`admin-btn flex items-center gap-2 ${excellenceFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
                   onClick={() => {
-                    setFileUploadCategory('Excellence');
-                    setIsFileModalOpen(true);
+                    if (excellenceFiles.length < 1) {
+                      setFileUploadCategory('Excellence');
+                      setIsFileModalOpen(true);
+                    }
                   }}
-                  title={excellenceFiles.length >= 1 ? "Uploading a new image will replace the existing one." : ""}
+                  disabled={excellenceFiles.length >= 1}
+                  title={excellenceFiles.length >= 1 ? "Maximum 1 image reached. Please delete the existing one first to upload a new one." : "Upload Image"}
                 >
-                  <Plus size={16} /> {excellenceFiles.length >= 1 ? 'Replace Image (Max 1)' : 'Upload Image'}
+                  {excellenceFiles.length >= 1 ? 'Maximum 1 image reached' : <><Plus size={16} /> Upload Image</>}
                 </button>
               </div>
               <div className="admin-table-scroll">
@@ -665,7 +676,7 @@ export function ContentManager() {
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td>
-                          <img src={file.file} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                          <img src={file.file.startsWith('http') || file.file.startsWith('/media') ? file.file : `/media/${file.file}`} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
                         </td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -673,7 +684,10 @@ export function ContentManager() {
                           </span>
                         </td>
                         <td>
-                          <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
+                            <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -692,49 +706,97 @@ export function ContentManager() {
               const n = Math.min(staffList.length, 5);
               if (n === 0) return null;
 
-              const points: number[] = [];
-              const viewBoxWidth = 1000;
-              const centerLine = viewBoxWidth / 2;
-              
-              const step = viewBoxWidth / n;
-              const startX = step / 2;
-
-              for (let i = 0; i < n; i++) {
-                points.push(startX + (i * step));
-              }
-
-              const minX = Math.min(...points, centerLine);
-              const maxX = Math.max(...points, centerLine);
-
               return (
-                <div className="hidden lg:block w-full h-16 md:h-20 fade-up-entrance">
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${viewBoxWidth} 80`} preserveAspectRatio="none">
-                    <defs>
-                      <marker id="arrowhead-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                        <polygon points="0 0, 10 3.5, 0 7" fill='var(--color-gold)' />
-                      </marker>
-                    </defs>
-                    <path d={`M ${centerLine} 0 L ${centerLine} 20`} stroke='var(--color-gold)' strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
-                    
-                    {n > 1 && (
-                      <path d={`M ${minX} 20 L ${maxX} 20`} stroke='var(--color-gold)' strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
-                    )}
-                    
-                    {points.map((x, idx) => (
-                      <path key={idx} d={`M ${x} 20 L ${x} 45`} stroke='var(--color-gold)' strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" vectorEffect="non-scaling-stroke" />
+                <div className="hidden lg:block w-full relative z-10 fade-up-entrance h-16 mb-4">
+                  {/* Top center global vertical line */}
+                  {n > 1 && (
+                    <div className="absolute top-0 left-[calc(50%-1px)] w-[2px] h-[24px] bg-gold-light"></div>
+                  )}
+                  
+                  <div className={`grid ${getGridColsClass(n)} gap-4 w-full h-full`}>
+                    {Array.from({ length: n }).map((_, idx) => (
+                      <div key={idx} className="relative w-full h-full">
+                        
+                        {n === 1 ? (
+                          // Single item: straight line down
+                          <div className="absolute top-0 left-[calc(50%-1px)] w-[2px] h-full bg-gold-light"></div>
+                        ) : (
+                          <>
+                            {/* Leftmost item: line comes from right, curves down */}
+                            {idx === 0 && (
+                              <div 
+                                className="absolute border-t-2 border-l-2 border-gold-light"
+                                style={{
+                                  top: '24px',
+                                  right: '-24px',
+                                  left: 'calc(50% - 1px)',
+                                  height: '24px',
+                                  borderTopLeftRadius: '12px'
+                                }}
+                              ></div>
+                            )}
+
+                            {/* Rightmost item: line comes from left, curves down */}
+                            {idx === n - 1 && (
+                              <div 
+                                className="absolute border-t-2 border-r-2 border-gold-light"
+                                style={{
+                                  top: '24px',
+                                  left: '-24px',
+                                  right: 'calc(50% - 1px)',
+                                  height: '24px',
+                                  borderTopRightRadius: '12px'
+                                }}
+                              ></div>
+                            )}
+
+                            {/* Middle items: horizontal line crosses entirely, vertical line drops down */}
+                            {idx > 0 && idx < n - 1 && (
+                              <>
+                                <div 
+                                  className="absolute bg-gold-light"
+                                  style={{
+                                    top: '24px',
+                                    left: '-24px',
+                                    right: '-24px',
+                                    height: '2px'
+                                  }}
+                                ></div>
+                                <div 
+                                  className="absolute bg-gold-light"
+                                  style={{
+                                    top: '24px',
+                                    left: 'calc(50% - 1px)',
+                                    width: '2px',
+                                    height: '24px'
+                                  }}
+                                ></div>
+                              </>
+                            )}
+                          </>
+                        )}
+                        
+                        {/* Arrow head */}
+                        <span 
+                          className="material-symbols-outlined text-gold-light text-xl absolute left-1/2 -translate-x-1/2 leading-none bg-transparent rounded-full z-10 font-bold"
+                          style={{ top: '44px' }}
+                        >
+                          arrow_downward
+                        </span>
+                      </div>
                     ))}
-                  </svg>
+                  </div>
                 </div>
               );
             };
 
             const getGridColsClass = (n: number) => {
-              if (n === 1) return 'lg:grid-cols-1 max-w-sm';
-              if (n === 2) return 'lg:grid-cols-2 max-w-2xl';
-              if (n === 3) return 'lg:grid-cols-3 max-w-4xl';
-              if (n === 4) return 'lg:grid-cols-4 max-w-6xl';
-              if (n >= 5) return 'lg:grid-cols-5 max-w-7xl';
-              return 'lg:grid-cols-3 max-w-4xl';
+              if (n === 1) return 'grid-cols-1 lg:grid-cols-1 max-w-sm mx-auto';
+              if (n === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2 max-w-2xl mx-auto';
+              if (n === 3) return 'grid-cols-1 md:grid-cols-3 lg:grid-cols-3 max-w-4xl mx-auto';
+              if (n === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto';
+              if (n >= 5) return 'grid-cols-1 md:grid-cols-3 lg:grid-cols-5 max-w-7xl mx-auto';
+              return 'grid-cols-1 md:grid-cols-3 lg:grid-cols-3 max-w-4xl mx-auto';
             };
 
             return (
@@ -802,7 +864,7 @@ export function ContentManager() {
                     </div>
                   )}
 
-                  <div className={`grid grid-cols-1 ${getGridColsClass(staffList.length)} gap-4 w-full justify-items-center`}>
+                  <div className={`grid ${getGridColsClass(staffList.length)} gap-4 w-full justify-items-center`}>
                     {staffList.map((person, idx) => (
                       <React.Fragment key={person.id || idx}>
                         {idx > 0 && (
@@ -925,6 +987,35 @@ export function ContentManager() {
         document.body
       )}
 
+      {viewingManualFile && createPortal(
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999] animate-modal-overlay" onClick={() => setViewingManualFile(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col animate-modal-card" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <h2 className="text-lg font-bold text-gray-900 truncate">Preview: {viewingManualFile.name}</h2>
+              <button onClick={() => setViewingManualFile(null)} className="text-gray-400 hover:text-gray-600 bg-white p-1.5 rounded shadow-sm border border-gray-200 cursor-pointer transition-colors hover:bg-gray-100">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 bg-gray-100 overflow-hidden relative">
+              {viewingManualFile.file.toLowerCase().endsWith('.pdf') ? (
+                <iframe src={viewingManualFile.file.startsWith('http') || viewingManualFile.file.startsWith('/media') ? viewingManualFile.file : `/media/${viewingManualFile.file}`} className="w-full h-full border-none bg-white" title="PDF Preview" />
+              ) : viewingManualFile.file.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) ? (
+                <div className="w-full h-full flex items-center justify-center p-4 bg-gray-200">
+                  <img src={viewingManualFile.file.startsWith('http') || viewingManualFile.file.startsWith('/media') ? viewingManualFile.file : `/media/${viewingManualFile.file}`} alt="Preview" className="max-w-full max-h-full object-contain shadow-lg rounded" />
+                </div>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-gray-500">
+                  <span className="material-symbols-outlined text-6xl opacity-30">description</span>
+                  <p className="text-lg">Browser preview is not available for this file type.</p>
+                  <a href={viewingManualFile.file.startsWith('http') || viewingManualFile.file.startsWith('/media') ? viewingManualFile.file : `/media/${viewingManualFile.file}`} target="_blank" rel="noreferrer" className="admin-btn admin-btn--primary px-6 py-2">Download File</a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* File Modal */}
       {isFileModalOpen && createPortal(
         <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center ] p-4 z-[9999] animate-modal-overlay">
@@ -942,12 +1033,18 @@ export function ContentManager() {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">File</label>
                 <DragDropFileUpload
-                  accept={['OrgStructure', 'Excellence', 'Manual'].includes(fileUploadCategory) ? 'image/*' : '*/*'}
+                  accept={
+                    fileUploadCategory === 'Manual'
+                      ? '.doc,.docx,.pdf,.ppt,.pptx,.pub,.xls,.xlsx'
+                      : ['OrgStructure', 'Excellence'].includes(fileUploadCategory)
+                        ? 'image/*'
+                        : '*/*'
+                  }
                   multiple={false}
-                  maxSizeMB={10}
+                  maxSizeMB={fileUploadCategory === 'Manual' ? 20 : 10}
                   onFilesSelected={(files) => setSelectedFile(files[0])}
                   label="Click to upload file or drag and drop"
-                  subLabel="Maximum file size: 10MB"
+                  subLabel={`Maximum file size: ${fileUploadCategory === 'Manual' ? '20MB' : '10MB'}`}
                 />
                 {selectedFile && (
                   <div className="mt-3 flex flex-col items-center">
@@ -1000,13 +1097,13 @@ export function ContentManager() {
                 <DragDropFileUpload
                   accept="image/*"
                   multiple={false}
-                  maxSizeMB={10}
+                  maxSizeMB={fileUploadCategory === 'Manual' ? 20 : 10}
                   onFilesSelected={(files) => {
                     setPersonnelPhoto(files[0]);
                     setPersonnelPhotoPreview(URL.createObjectURL(files[0]));
                   }}
                   label="Click to upload picture or drag and drop"
-                  subLabel="Maximum file size: 10MB"
+                  subLabel={`Maximum file size: ${fileUploadCategory === 'Manual' ? '20MB' : '10MB'}`}
                 />
                 {personnelPhotoPreview && (
                   <div className="mt-4 flex flex-col items-center">
@@ -1023,36 +1120,15 @@ export function ContentManager() {
         </div>,
         document.body
       )}
-
-      {/* Undo Delete Toast */}
-      {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={cancelDelete}
-                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
-              >
-                Undo
-              </button>
-              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className="bg-gray-400 h-full transition-all ease-linear"
-              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
-            />
-          </div>
-        </div>
-      )}
+      <UndoDeleteToast 
+        undoState={undoState} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
+      />
     </>
   );
 }
+
+
+
 

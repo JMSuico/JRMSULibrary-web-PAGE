@@ -261,7 +261,7 @@ class UserViewSet(viewsets.ViewSet):
                 # Validate email uniqueness
                 if field == "email":
                     if self.service.email_exists_exclude_user(value, user.pk):
-                        return Response({"error": "Email already in use"}, status=400)
+                        return Response({"error": "this email is already exist try another email."}, status=400)
                 setattr(user, field, value)
                 updated = True
 

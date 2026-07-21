@@ -37,6 +37,22 @@ This document outlines the underlying logic, variables, and formulas used across
   1. Database ping successful = "Operational"
   2. If exception = "Degraded" or "Offline"
 
+### 1.5 Advanced Analytics Trends & Metrics
+- **Location/Codebase:** `frontend/src/Features/Admin/components/Analytics.tsx`
+- **Logic & Algorithms (Database Connected via `report_controller.py`):**
+  1. **Engagement Rate:** 
+     - **Formula:** `(Total Emails + Total Reservations) / Total Site Visits * 100`
+     - **Database Link:** Pulls `total_emails`, `total_reservations`, and `total_visits` from the API which aggregates SQL `COUNT` queries over the filtered date range.
+  2. **Books Growth (M-o-M):** 
+     - **Formula:** `(Current Month Books - Previous Month Books) / Previous Month Books * 100`
+     - **Database Link:** Iterates over the `trend_data` 6-month array returned by the DB aggregations. Uses the last and second-to-last months.
+  3. **Satisfaction Score:** 
+     - **Formula:** `(4-star + 5-star ratings) / Total Ratings * 100`
+     - **Database Link:** Aggregates all feedback submitted and calculates the percentage of positive ratings.
+  4. **Weighted Average Rating:** 
+     - **Formula:** `Sum(Star Level * Count) / Sum(Count)`
+     - **Database Link:** Pulls exact distribution counts from `SiteRating`/`Feedback` table via the `ratings_summary` API endpoint.
+
 ---
 
 ## 2. Reports Generator Module

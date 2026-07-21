@@ -18,7 +18,8 @@ interface Props {
 
 export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick }) => {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isMouseDown, setIsMouseDown] = useState(false);
+  const [hasDragged, setHasDragged] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -46,44 +47,41 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
   // ── Mouse drag-to-scroll ──────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
     if (!trackRef.current) return;
-    setIsDragging(true);
+    setIsMouseDown(true);
+    setHasDragged(false);
     setStartX(e.pageX - trackRef.current.offsetLeft);
     setScrollLeft(trackRef.current.scrollLeft);
     trackRef.current.style.cursor = 'grabbing';
+    trackRef.current.style.scrollSnapType = 'none'; // disable snap while dragging
   };
 
   const onMouseLeave = () => {
-    setIsDragging(false);
-    if (trackRef.current) trackRef.current.style.cursor = 'grab';
+    setIsMouseDown(false);
+    if (trackRef.current) {
+      trackRef.current.style.cursor = 'grab';
+      trackRef.current.style.scrollSnapType = 'x mandatory';
+    }
   };
 
   const onMouseUp = () => {
-    setIsDragging(false);
-    if (trackRef.current) trackRef.current.style.cursor = 'grab';
+    setIsMouseDown(false);
+    if (trackRef.current) {
+      trackRef.current.style.cursor = 'grab';
+      trackRef.current.style.scrollSnapType = 'x mandatory';
+    }
+    // Allow onClick to read the state before resetting
+    setTimeout(() => setHasDragged(false), 50);
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !trackRef.current) return;
+    if (!isMouseDown || !trackRef.current) return;
     e.preventDefault();
     const x = e.pageX - trackRef.current.offsetLeft;
     const walk = (x - startX) * 1.5;
+    if (Math.abs(walk) > 5) {
+      setHasDragged(true);
+    }
     trackRef.current.scrollLeft = scrollLeft - walk;
-  };
-
-  // ── Touch drag-to-scroll ──────────────────────────────────────
-  const touchStartX = useRef(0);
-  const touchScrollLeft = useRef(0);
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].pageX;
-    touchScrollLeft.current = trackRef.current?.scrollLeft ?? 0;
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (!trackRef.current) return;
-    const x = e.touches[0].pageX;
-    const walk = (touchStartX.current - x) * 1.2;
-    trackRef.current.scrollLeft = touchScrollLeft.current + walk;
   };
 
   // ── Arrow nav ─────────────────────────────────────────────────
@@ -122,8 +120,6 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
         onMouseLeave={onMouseLeave}
         onMouseUp={onMouseUp}
         onMouseMove={onMouseMove}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
       >
         {items.map((item, i) => {
           const imgSrc = item.image || item.src;
@@ -133,7 +129,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
             <div
               key={i}
               onClick={() => {
-                if (!isDragging) {
+                if (!hasDragged) {
                   if (onCardClick) onCardClick(item, i);
                   else setSelectedItem(item);
                 }

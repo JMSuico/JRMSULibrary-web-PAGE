@@ -2,12 +2,13 @@
 from typing import List, Optional, Any, Tuple
 from Features.Services.Interfaces.i_report_service import IReportService
 from Features.Repositories.Interfaces.i_report_repository import IReportRepository
+from Features.Services.Implementations.recycle_bin_service import RecycleBinService
 from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
 
 class ReportService(IReportService):
     def __init__(self, repo: IReportRepository):
         self._repo = repo
-        self._recycle_repo = RecycleBinRepository()
+        self._recycle_service = RecycleBinService(RecycleBinRepository())
 
     def generate_and_save_report(self, title: str, report_type: str, date_range: str, generated_by: Any, report_data: dict) -> Any:
         return self._repo.create_report(title, report_type, date_range, generated_by, report_data)
@@ -40,7 +41,7 @@ class ReportService(IReportService):
             "generated_by_id": report.generated_by.id if report.generated_by else None
         }
 
-        self._recycle_repo.create(
+        self._recycle_service.move_to_bin(
             original_id=report.id,
             source_module='REPORT',
             item_name=f"{report.title} ({report.date_range})",

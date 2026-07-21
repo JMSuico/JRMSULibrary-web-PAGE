@@ -12,11 +12,13 @@ import {
   ChevronUp,
   RefreshCw,
   Loader2,
+  X,
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { contactApi, ContactMessage } from '@/src/Endpoints/contactApi';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
@@ -104,11 +106,13 @@ export function EmailMessage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [emailSortDir, setEmailSortDir] = useState<'desc' | 'asc'>('desc');
   const itemsPerPage = 10;
 
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File, id?: string }[] } | null>(null);
   const [bulkReplyModal, setBulkReplyModal] = useState<{ body: string } | null>(null);
+  const [viewMessageModal, setViewMessageModal] = useState<ContactMessage | null>(null);
   const [actionLoading, setActionLoading] = useState<{ id: number, action: string } | null>(null);
   const [isSendingReply, setIsSendingReply] = useState(false);
 
@@ -124,8 +128,9 @@ export function EmailMessage() {
     pendingIds: number[];
     successIds: number[];
     failedIds: number[];
-    currentId: number | null;
-  }>({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentId: null });
+    currentIds: number[];
+    body: string;
+  }>({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentIds: [], body: '' });
 
   // Listen for online/offline events to pause/resume queue
   useEffect(() => {
@@ -149,40 +154,55 @@ export function EmailMessage() {
   useEffect(() => {
     let mounted = true;
     const processQueue = async () => {
-      if (!queueState.isActive || queueState.isPaused || queueState.currentId !== null || queueState.pendingIds.length === 0) return;
+      if (!queueState.isActive || queueState.isPaused || queueState.currentIds.length > 0 || queueState.pendingIds.length === 0) return;
 
-      const nextId = queueState.pendingIds[0];
-      setQueueState(prev => ({ ...prev, currentId: nextId }));
+      // Take up to 5 emails for sequential backend processing per HTTP request
+      const batchSize = 5;
+      const nextIds = queueState.pendingIds.slice(0, batchSize);
+      
+      setQueueState(prev => ({ ...prev, currentIds: nextIds }));
 
       try {
-        const result = await contactApi.replyToMessage(nextId, bulkReplyModal?.body || '');
-        if (mounted) {
-          setQueueState(prev => ({
-            ...prev,
-            currentId: null,
-            pendingIds: prev.pendingIds.slice(1),
-            successIds: result.success ? [...prev.successIds, nextId] : prev.successIds,
-            failedIds: result.success ? prev.failedIds : [...prev.failedIds, nextId]
-          }));
-        }
+        const res = await contactApi.bulkReply(nextIds, queueState.body || '');
+        
+        const newSuccessIds = res.results.filter((r: any) => r.success).map((r: any) => r.id);
+        const newFailedIds = res.results.filter((r: any) => !r.success).map((r: any) => r.id);
+        
+        // Show success toasts for each individual email sent
+        res.results.filter((r: any) => r.success).forEach((r: any) => {
+          const msg = messages.find(m => m.id === r.id);
+          if (msg) showToast(`Reply successfully sent to ${msg.email}`, 'success');
+        });
+
+        // Show error toasts for each failure
+        res.results.filter((r: any) => !r.success).forEach((r: any) => {
+          const msg = messages.find(m => m.id === r.id);
+          if (msg) showToast(`Failed to send to ${msg.email}: ${r.detail}`, 'error');
+        });
+        
+        setQueueState(prev => ({
+          ...prev,
+          currentIds: [],
+          pendingIds: prev.pendingIds.slice(nextIds.length),
+          successIds: [...prev.successIds, ...newSuccessIds],
+          failedIds: [...prev.failedIds, ...newFailedIds]
+        }));
       } catch (e) {
-        if (mounted) {
-          setQueueState(prev => ({
-            ...prev,
-            currentId: null,
-            pendingIds: prev.pendingIds.slice(1),
-            failedIds: [...prev.failedIds, nextId]
-          }));
-        }
+        setQueueState(prev => ({
+          ...prev,
+          currentIds: [],
+          pendingIds: prev.pendingIds.slice(nextIds.length),
+          failedIds: [...prev.failedIds, ...nextIds]
+        }));
       }
     };
 
-    if (queueState.isActive && !queueState.isPaused && queueState.pendingIds.length > 0 && queueState.currentId === null) {
+    if (queueState.isActive && !queueState.isPaused && queueState.pendingIds.length > 0 && queueState.currentIds.length === 0) {
       processQueue();
-    } else if (queueState.isActive && queueState.pendingIds.length === 0 && queueState.currentId === null) {
+    } else if (queueState.isActive && queueState.pendingIds.length === 0 && queueState.currentIds.length === 0) {
       // Queue finished
       showToast(`Bulk reply completed. ${queueState.successIds.length} sent, ${queueState.failedIds.length} failed.`, 'success');
-      setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentId: null });
+      setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentIds: [] });
       setBulkReplyModal(null);
       setSelectedIds(new Set());
       fetchMessages();
@@ -357,15 +377,31 @@ export function EmailMessage() {
     return acc;
   }, {} as Record<string, { name: string, email: string, messages: ContactMessage[], unreadCount: number, totalCount: number }>);
 
-  const groupedArray = (Object.values(groupedMessages) as Array<{ name: string, email: string, messages: ContactMessage[], unreadCount: number, totalCount: number }>)
-    .sort((a, b) => b.unreadCount - a.unreadCount);
+  type MsgGroup = { name: string; email: string; messages: ContactMessage[]; unreadCount: number; totalCount: number };
+
+  // Sort each group's messages by created_at per selected direction
+  (Object.values(groupedMessages) as MsgGroup[]).forEach(group => {
+    group.messages.sort((a, b) =>
+      emailSortDir === 'desc'
+        ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        : new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+  });
+
+  // Sort groups by the latest message in the group per selected direction
+  const groupedArray = (Object.values(groupedMessages) as MsgGroup[])
+    .sort((a, b) => {
+      const latestA = Math.max(...a.messages.map(m => new Date(m.created_at).getTime()));
+      const latestB = Math.max(...b.messages.map(m => new Date(m.created_at).getTime()));
+      return emailSortDir === 'desc' ? latestB - latestA : latestA - latestB;
+    });
 
   const totalPages = Math.ceil(groupedArray.length / itemsPerPage);
   const paginatedGroups = groupedArray.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, filterType, showArchived]);
+  }, [debouncedSearch, filterType, showArchived, emailSortDir]);
 
   return (
     <div className="w-full flex flex-col relative">
@@ -383,8 +419,9 @@ export function EmailMessage() {
               ) : (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin text-blue-600 shrink-0" />
+                  {queueState.currentIds.includes(send.id) && (
                   <div className="text-sm font-medium">Sending reply to {send.email}...</div>
-                </>
+                )}</>
               )}
             </div>
           ))}
@@ -396,20 +433,6 @@ export function EmailMessage() {
         <div>
           <h1>Email &amp; Reservations</h1>
           <p>Manage incoming messages from the Rizal AI Assistant. Messages from the same user are batched together.</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setFilterType('EMAIL')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${filterType === 'EMAIL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-          >
-            Emails
-          </button>
-          <button
-            onClick={() => setFilterType('RESERVATION')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${filterType === 'RESERVATION' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-          >
-            Reservations
-          </button>
         </div>
       </div>
       {syncResult && (
@@ -441,32 +464,53 @@ export function EmailMessage() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border-b border-gray-100 gap-4 bg-white overflow-x-auto">
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg w-full md:w-64 shrink-0">
+        <div className="flex flex-col gap-3 p-4 border-b border-gray-100 bg-white">
+          {/* Row 1: Search */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg w-full">
             <Search size={16} className="text-gray-400 shrink-0" />
             <input
               type="text"
-              placeholder="Search messages..."
+              placeholder="Search by name, email or subject..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent border-none outline-none text-sm w-full"
             />
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
-            <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-1 bg-gray-50 w-full sm:w-auto">
-              <Filter size={16} className="text-gray-400 ml-2" />
+
+          {/* Row 2: Sort + Type filters + Archived toggle */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Sort direction dropdown */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Sort:</label>
               <select
-                className="bg-transparent border-none text-sm outline-none px-2 py-1 text-gray-700 w-full sm:w-auto"
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as any)}
+                value={emailSortDir}
+                onChange={e => { setEmailSortDir(e.target.value as 'desc' | 'asc'); setCurrentPage(1); }}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
               >
-                <option value="ALL">All Types</option>
-                <option value="EMAIL">Emails</option>
-                <option value="RESERVATION">Reservations</option>
-                <option value="CREDENTIAL_REQUEST">Credential Requests</option>
+                <option value="desc">Latest to Oldest</option>
+                <option value="asc">Oldest to Latest</option>
               </select>
             </div>
-            <label className="flex items-center justify-center gap-2 text-sm text-gray-600 cursor-pointer border border-gray-200 px-3 py-1.5 rounded-lg bg-white shrink-0">
+
+            {/* Message type dropdown */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Type:</label>
+              <select
+                value={filterType}
+                onChange={e => setFilterType(e.target.value as any)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
+              >
+                <option value="ALL">All Types</option>
+                <option value="EMAIL">Email Only</option>
+                <option value="RESERVATION">Reservation Only</option>
+              </select>
+            </div>
+
+            {/* Vertical divider */}
+            <div className="h-6 w-px bg-gray-200 shrink-0" />
+
+            {/* Show Archived */}
+            <label className="flex items-center justify-center gap-2 text-xs text-gray-600 cursor-pointer border border-gray-200 px-3 py-1.5 rounded-lg bg-white shrink-0 font-medium hover:border-navy transition-colors">
               <input
                 type="checkbox"
                 checked={showArchived}
@@ -574,7 +618,20 @@ export function EmailMessage() {
                             </h3>
                           </div>
                           <p className="text-xs text-gray-500 mb-2">{new Date(msg.created_at).toLocaleString()}</p>
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap break-words bg-white border border-gray-100 p-3 rounded-lg shadow-sm">{msg.message}</p>
+                          <div 
+                            onClick={() => {
+                              setViewMessageModal(msg);
+                              if (msg.status === 'UNREAD') {
+                                updateStatus(msg.id, 'READ');
+                              }
+                            }}
+                            className="bg-white border border-gray-100 p-3 rounded-lg shadow-sm cursor-pointer hover:shadow-md hover:border-blue-200 active:scale-[0.98] transition-all duration-300 group relative overflow-hidden"
+                          >
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap break-words group-hover:text-gray-900 transition-colors line-clamp-4 md:line-clamp-none">{msg.message}</p>
+                            <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2 pointer-events-none md:hidden">
+                               <span className="text-xs font-medium text-blue-600 bg-white px-3 py-1 rounded-full shadow-sm">View full message</span>
+                            </div>
+                          </div>
                           {msg.attachments && msg.attachments.length > 0 && (
                             <div className="mt-3">
                               <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Attachments</p>
@@ -652,12 +709,20 @@ export function EmailMessage() {
                             </button>
                           )}
                           {msg.status === 'ARCHIVED' && (
-                            <button
-                              onClick={() => deleteMessage(msg.id)}
-                              className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 justify-center md:justify-end cursor-pointer mt-1"
-                            >
-                              Delete Forever
-                            </button>
+                            <div className="flex items-center gap-2 justify-center md:justify-end mt-1">
+                              <button
+                                onClick={() => updateStatus(msg.id, 'READ')}
+                                className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Inbox size={14} /> Unarchive
+                              </button>
+                              <button
+                                onClick={() => deleteMessage(msg.id)}
+                                className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -890,15 +955,11 @@ export function EmailMessage() {
             <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
               <button
                 onClick={() => {
-                  if (queueState.isActive) {
-                    setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentId: null });
-                  }
                   setBulkReplyModal(null);
                 }}
-                disabled={queueState.isActive}
-                className="admin-btn admin-btn--secondary disabled:opacity-50"
+                className="admin-btn admin-btn--secondary"
               >
-                Cancel
+                {queueState.isActive ? 'Run in Background' : 'Cancel'}
               </button>
               <button
                 disabled={queueState.isActive || !bulkReplyModal.body.trim()}
@@ -911,7 +972,8 @@ export function EmailMessage() {
                     pendingIds: Array.from(selectedIds),
                     successIds: [],
                     failedIds: [],
-                    currentId: null
+                    currentIds: [],
+                    body: bulkReplyModal.body
                   });
                 }}
               >
@@ -926,44 +988,100 @@ export function EmailMessage() {
         </div>,
         document.body
       )}
-      {/* Undo Delete Toast */}
-      {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 animate-in slide-in-from-bottom-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium text-gray-700">{undoState.itemName}</span> has been moved to the recycle bin.</p>
+      {/* View Message Modal */}
+      {viewMessageModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-modal-overlay" onClick={() => setViewMessageModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/50">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">{viewMessageModal.subject || 'No Subject'}</h2>
+                <p className="text-sm text-gray-500 mt-1">From: <span className="font-medium text-gray-700">{viewMessageModal.name}</span> ({viewMessageModal.email})</p>
+              </div>
+              <button onClick={() => setViewMessageModal(null)} className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition-colors shrink-0">
+                <X size={20} />
+              </button>
             </div>
-            <div className="flex gap-2">
+            <div className="p-6 overflow-y-auto bg-gray-50/30 flex-1">
+              <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+                <p className="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed font-inter">{viewMessageModal.message}</p>
+              </div>
+              
+              {viewMessageModal.attachments && viewMessageModal.attachments.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Attachments</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {viewMessageModal.attachments.map(att => (
+                      <a
+                        key={att.id}
+                        href={att.file}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white text-blue-700 hover:bg-blue-50 border border-blue-100 rounded-xl text-sm transition-all shadow-sm hover:shadow-md"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216ZM136,120v40H96a8,8,0,0,0,0,16h40v40a8,8,0,0,0,16,0V176h40a8,8,0,0,0,0-16H152V120a8,8,0,0,0-16,0Z"></path></svg>
+                        <span className="truncate max-w-[200px] font-medium">{att.original_filename}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-white flex justify-end gap-3 shrink-0">
               <button
-                onClick={fetchMessages}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm"
-                aria-label="Refresh messages"
+                onClick={() => setViewMessageModal(null)}
+                className="admin-btn admin-btn--secondary"
               >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
+                Close
               </button>
               <button
-                onClick={() => cancelDelete()}
-                className="text-sm font-bold text-navy hover:text-navy-dark px-2 py-1 bg-blue-50 rounded"
+                onClick={() => {
+                  setViewMessageModal(null);
+                  setReplyModal({ message: viewMessageModal, body: '', attachments: [] });
+                }}
+                className="admin-btn admin-btn--primary flex items-center gap-2"
               >
-                Undo
+                <Reply size={16} /> Reply
               </button>
             </div>
           </div>
-
-          {/* Progress bar */}
-          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-red-500"
-              style={{
-                width: `${(undoState.timeLeft / 3000) * 100}%`,
-                transition: 'width 100ms linear'
-              }}
-            />
+        </div>,
+        document.body
+      )}
+      {/* Background Bulk Send Toast */}
+      {queueState.isActive && !bulkReplyModal && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-blue-100 p-4 w-80 flex flex-col gap-3 animate-modal-overlay">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                Sending Bulk Replies...
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Processing {queueState.successIds.length + queueState.failedIds.length} of {queueState.currentIds.length + queueState.pendingIds.length + queueState.successIds.length + queueState.failedIds.length} emails
+              </p>
+            </div>
+            <button
+              onClick={() => setBulkReplyModal({ body: queueState.body })}
+              className="text-xs font-bold text-blue-700 hover:text-blue-900 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 transition-colors rounded-lg"
+            >
+              Open
+            </button>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1 overflow-hidden">
+            <div 
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" 
+              style={{ width: `${((queueState.successIds.length + queueState.failedIds.length) / (queueState.currentIds.length + queueState.pendingIds.length + queueState.successIds.length + queueState.failedIds.length)) * 100}%` }}
+            ></div>
           </div>
         </div>
       )}
+
+      {/* Undo Delete Toast */}
+      <UndoDeleteToast 
+        undoState={undoState as any} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
+      />
     </div>
   );
 }

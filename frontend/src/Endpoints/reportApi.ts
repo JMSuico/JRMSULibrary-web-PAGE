@@ -11,6 +11,7 @@ export interface RatingsSummary {
     category: string;
     message: string;
     created_at: string;
+    days_old?: number;
   }[];
 }
 

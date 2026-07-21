@@ -13,10 +13,20 @@ class FeedbackService(FeedbackServiceInterface):
         self.repository = FeedbackRepository()
 
     def submit_feedback(self, data: dict, ip_address: str = None, user_agent: str = None):
-        if ip_address and user_agent:
-            if self.repository.has_submitted_today(ip_address, user_agent):
-                from rest_framework.exceptions import Throttled
-                raise Throttled(detail="You have already submitted a rating today. Please try again tomorrow.")
+        # =====================================================================
+        # [RATE LIMIT — TEMPORARILY DISABLED FOR TESTING]
+        # Original rule: 1 submission per day per IP Address + Browser/Device.
+        # This block checks if the same IP + User-Agent combo has already
+        # submitted a rating today. If yes, it raises a Throttled exception
+        # and blocks the submission.
+        #
+        # TO RESTORE: un-comment the 3 lines below and remove this comment block.
+        # =====================================================================
+        # if ip_address and user_agent:
+        #     if self.repository.has_submitted_today(ip_address, user_agent):
+        #         from rest_framework.exceptions import Throttled
+        #         raise Throttled(detail="You have already submitted a rating today. Please try again tomorrow.")
+
 
         sanitized = {
             'name': sanitize_input(data.get('name', '')),

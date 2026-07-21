@@ -60,6 +60,9 @@ class RecycleBinService(IRecycleBinService):
     def delete_permanently(self, id: int) -> bool:
         return self._repo.delete_permanently(id)
 
+    def move_to_bin(self, original_id: int, source_module: str, item_name: str, data_snapshot: dict, user_id: int = None) -> Any:
+        return self._repo.create(original_id, source_module, item_name, data_snapshot, user_id)
+
     def auto_cleanup(self) -> int:
         # Cleanup items older than 30 days
         return self._repo.delete_older_than(30)

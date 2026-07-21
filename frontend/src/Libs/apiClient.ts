@@ -82,7 +82,20 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
     let errorMsg = 'An error occurred';
     try {
       const errorData = await response.json();
-      errorMsg = errorData.detail || errorData.error || errorData.message || JSON.stringify(errorData);
+      if (errorData.detail) errorMsg = errorData.detail;
+      else if (errorData.error) errorMsg = errorData.error;
+      else if (errorData.message) errorMsg = errorData.message;
+      else if (typeof errorData === 'object' && errorData !== null) {
+        // Handle DRF serializer errors like {"email": ["Email already in use"]}
+        const firstKey = Object.keys(errorData)[0];
+        if (firstKey && Array.isArray(errorData[firstKey]) && errorData[firstKey].length > 0) {
+          errorMsg = errorData[firstKey][0];
+        } else {
+          errorMsg = JSON.stringify(errorData);
+        }
+      } else {
+        errorMsg = String(errorData);
+      }
     } catch {
       errorMsg = response.statusText || `HTTP Error ${response.status}`;
     }

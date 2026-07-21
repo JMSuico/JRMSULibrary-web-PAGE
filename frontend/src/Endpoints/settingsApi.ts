@@ -4,6 +4,7 @@ export interface SiteSettings {
   library_name: string;
   address: string;
   contact_email: string;
+  alternate_email?: string;
   phone_number: string;
   opening_hours_mon_fri: string;
   opening_hours_sat: string;

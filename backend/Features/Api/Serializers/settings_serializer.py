@@ -11,6 +11,7 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
             'library_name',
             'address',
             'contact_email',
+            'alternate_email',
             'phone_number',
             'opening_hours_mon_fri',
             'opening_hours_sat',

@@ -91,6 +91,7 @@ export function Settings() {
     library_name: '',
     address: '',
     contact_email: '',
+    alternate_email: '',
     phone_number: '',
     opening_hours_mon_fri: '',
     opening_hours_sat: '',
@@ -176,6 +177,11 @@ export function Settings() {
           });
           formDataObj.append('background_image', bgImageFile);
           payload = formDataObj;
+        } else {
+          payload = { ...formData };
+          if (typeof payload.background_image === 'string') {
+            delete payload.background_image;
+          }
         }
 
         const updated = await settingsApi.updateSettings(payload);
@@ -522,6 +528,10 @@ export function Settings() {
                         <label className={labelClass}>Contact Email</label>
                         <input type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
                       </div>
+                      <div>
+                        <label className={labelClass}>Alternate Email</label>
+                        <input type="email" name="alternate_email" value={formData.alternate_email || ''} onChange={handleChange} className={inputClass} disabled={!isEditing} />
+                      </div>
                       <div className="md:col-span-2">
                         <label className={labelClass}>Address</label>
                         <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
@@ -542,11 +552,17 @@ export function Settings() {
                       </div>
                       <div>
                         <label className={labelClass}>Saturday</label>
-                        <input type="text" name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required disabled={!isEditing} />
+                        <select name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange as any} className={inputClass} required disabled={!isEditing}>
+                          <option value="Open">Open</option>
+                          <option value="Closed">Closed</option>
+                        </select>
                       </div>
                       <div>
                         <label className={labelClass}>Sunday</label>
-                        <input type="text" name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} placeholder="e.g. Closed" required disabled={!isEditing} />
+                        <select name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange as any} className={inputClass} required disabled={!isEditing}>
+                          <option value="Open">Open</option>
+                          <option value="Closed">Closed</option>
+                        </select>
                       </div>
                     </div>
 

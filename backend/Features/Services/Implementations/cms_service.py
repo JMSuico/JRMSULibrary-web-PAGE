@@ -80,11 +80,24 @@ class ManagedFileService(IManagedFileService):
         return self._repo.get_by_id(id)
 
     def create(self, data: dict, uploaded_file=None):
+        from rest_framework.exceptions import ValidationError
+        category = data.get('category')
+        if category in ['Manual', 'OrgStructure', 'Excellence']:
+            all_files = self._repo.get_all()
+            for f in all_files:
+                if getattr(f, 'category', '') == category:
+                    self.delete(f.id)
+
         if uploaded_file:
             ext = uploaded_file.name.split('.')[-1].lower()
-            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv', 'xlsx', 'pptx', 'zip'}
+            allowed_extensions = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv', 'xlsx', 'xls', 'ppt', 'pptx', 'pub', 'zip'}
+            if category == 'Manual':
+                allowed_extensions = {'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'pub'}
+            elif category in ['OrgStructure', 'Excellence']:
+                allowed_extensions = {'png', 'jpg', 'jpeg', 'webp', 'svg'}
+
             if ext not in allowed_extensions:
-                raise ValidationError({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'})
+                raise ValidationError({'error': f'Invalid file type for category {category}. Allowed: {", ".join(allowed_extensions)}'})
             MalwareScannerHelper.verify_file_safety(uploaded_file)
             data['file'] = uploaded_file
             
@@ -109,3 +122,6 @@ class ManagedFileService(IManagedFileService):
                 user_id=user_id
             )
         return self._repo.delete(id)
+
+
+

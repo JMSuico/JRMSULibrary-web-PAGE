@@ -181,7 +181,7 @@ export const RizalAssistant: React.FC = () => {
     setIsSubmitting(true);
     try {
       await ensureCsrfToken();
-      const validation = await contactApi.validateEmail(formEmail);
+      // const validation = await contactApi.validateEmail(formEmail);
       // TODO(Temporary): Commented out for testing fake emails per user request
       // if (validation.is_disposable || !validation.is_domain_valid) {
       //   throw new Error('Temporary or disposable email addresses are not accepted, or domain is invalid.');
@@ -526,7 +526,7 @@ export const RizalAssistant: React.FC = () => {
             </div>
 
             {/* Chat messages scroll area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 relative" style={{ minHeight: '200px' }}>
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 bg-gray-50 relative" style={{ minHeight: '200px' }}>
 
               {/* Watermark — RIZAL intro (visible only when no user messages yet) */}
               {chatMessages.length <= 1 && chatFlowState === 'suggestions' && (

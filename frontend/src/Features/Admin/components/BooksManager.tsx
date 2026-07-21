@@ -6,6 +6,7 @@ import { batchApi, AcquisitionBatch, BatchBook } from '@/src/Endpoints/batchApi'
 import { BatchCard } from '@/src/Features/Admin/components/BatchCard';
 import { CreateBatchModal } from '@/src/Features/Admin/components/CreateBatchModal';
 import { EditBatchModal } from '@/src/Features/Admin/components/EditBatchModal';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
 import { useToast } from '@/src/Hooks/useToast';
 import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
@@ -338,14 +339,14 @@ export function BooksManager() {
 
   return (
     <>
-      <div className="admin-content__header">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <h1>Newly Acquired Books</h1>
-            <p className="text-sm text-gray-500 mt-1">Manage batches of new acquisitions. Only one batch can be actively displayed to the public at a time.</p>
-          </div>
+      <div className="w-full relative mb-6">
+        <div className="pr-36">
+          <h1 className="text-2xl font-bold font-playfair text-navy mb-1">Newly Acquired Books</h1>
+          <p className="text-gray-500 text-sm m-0">Manage batches of new acquisitions. Only one batch can be actively displayed to the public at a time.</p>
+        </div>
+        <div className="absolute top-0 right-0">
           <button
-            className="admin-btn admin-btn--primary self-start sm:self-center flex items-center justify-center gap-2"
+            className="admin-btn admin-btn--primary whitespace-nowrap"
             onClick={() => setIsCreateBatchOpen(true)}
           >
             <Plus size={16} /> New Batch
@@ -812,36 +813,11 @@ document.body
         document.body
       )}
 
-      {/* Undo Delete Toast */}
-      {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={cancelDelete}
-                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
-              >
-                Undo
-              </button>
-              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className="bg-gray-400 h-full transition-all ease-linear"
-              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
-            />
-          </div>
-        </div>
-      )}
+      <UndoDeleteToast 
+        undoState={undoState} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
+      />
     </>
   );
 }
-
-

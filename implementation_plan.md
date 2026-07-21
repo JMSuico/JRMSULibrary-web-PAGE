@@ -30,9 +30,46 @@ Comprehensive redesign of the JRMSU Katipunan Campus Library Landing Page based 
 
 ---
 
+# Comprehensive Bug Fix Plan
+
+This document outlines the systematic plan to resolve the 4 reported issues while strictly adhering to the project's architecture and flowchains.
+
+## User Review Required
+Please review the plan below. Note that I will proceed with implementation immediately upon your approval.
+
 ## Proposed Changes
 
-The changes are organized into **7 major phases** grouped by feature area.
+### [Backend: Services Layer]
+Fix the `Reports Generator` deletion bug. The crash is caused by a missing method (`move_to_bin`) in the `RecycleBinService` which causes the backend to fail with a 500/400 error when deleting reports.
+#### [MODIFY] [i_recycle_bin_service.py](file:///c:/Users/provu/Desktop/JRMSU%20LIBRARY%20LANDING%20PAGE/backend/Features/Services/Interfaces/i_recycle_bin_service.py)
+- Add the `move_to_bin` interface method.
+#### [MODIFY] [recycle_bin_service.py](file:///c:/Users/provu/Desktop/JRMSU%20LIBRARY%20LANDING%20PAGE/backend/Features/Services/Implementations/recycle_bin_service.py)
+- Implement `move_to_bin` which delegates to the `create` method of the repository.
+
+### [Frontend: Features/Admin]
+Fix the `Carousel Customize` image upload bug where the backend rejects string URLs for the `background_image` field.
+#### [MODIFY] [Settings.tsx](file:///c:/Users/provu/Desktop/JRMSU%20LIBRARY%20LANDING%20PAGE/frontend/src/Features/Admin/components/Settings.tsx)
+- Strip the `background_image` string property from the JSON payload when a new file is not selected, ensuring the backend retains the existing image.
+
+Fix the `Email & Reservation` bulk sending performance issue.
+#### [MODIFY] [EmailMessage.tsx](file:///c:/Users/provu/Desktop/JRMSU%20LIBRARY%20LANDING%20PAGE/frontend/src/Features/Admin/components/EmailMessage.tsx)
+- Rewrite the `processQueue` logic to process batches of 3 emails concurrently using `Promise.all`, speeding up bulk replies significantly.
+
+### [Frontend: Features/AIAssistant]
+Fix the `AI Rizal Assistant` scroll focus issue.
+#### [MODIFY] [RizalAssistant.tsx](file:///c:/Users/provu/Desktop/JRMSU%20LIBRARY%20LANDING%20PAGE/frontend/src/Features/AIAssistant/components/RizalAssistant.tsx)
+- Add `overscroll-contain` to the main scroll area to trap scroll events and prevent the browser from shifting scroll focus to the `<body>`.
+
+## Verification Plan
+
+### Automated Tests
+- None required, we will verify manually.
+
+### Manual Verification
+- **Phase 1 (Reports)**: Create a report and delete it. Ensure it moves to the recycle bin without errors.
+- **Phase 2 (Carousel)**: Save carousel settings without changing the image to verify it doesn't throw a validation error.
+- **Phase 3 (Emails)**: Select 4+ emails and initiate a bulk reply to observe the 3-by-3 concurrent execution.
+- **Phase 4 (Rizal Assistant)**: Open the chat, scroll, move the mouse out, scroll the page, move the mouse back in, and verify the chat scrolls properly.
 
 ---
 

@@ -92,6 +92,7 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
           onTouchEnd={handleDragEnd}
           onMouseDown={handleDragStart}
           onMouseUp={handleDragEnd}
+          onMouseLeave={handleDragEnd}
           style={{ cursor: 'grab' }}
         >
           {items.map((item, idx) => {

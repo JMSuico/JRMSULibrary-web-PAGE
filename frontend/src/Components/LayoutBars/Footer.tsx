@@ -10,6 +10,8 @@ export const Footer: React.FC = () => {
   const [settings, setSettings] = useState<any>({
     library_name: 'JRMSU Katipunan Campus Library',
     contact_email: 'katipunan.library@jrmsu.edu.ph',
+    alternate_email: 'jrmsukclibrary@gmail.com',
+    phone_number: '',
     address: 'Katipunan, Zamboanga del Norte'
   });
 
@@ -72,10 +74,18 @@ export const Footer: React.FC = () => {
             </li>
             <li>
               <span className="block text-gold-light/60 text-[10px] uppercase tracking-wider">Alternate Email</span>
-              <a href="mailto:jrmsukclibrary@gmail.com" className="text-on-primary-container hover:text-gold-pale transition-colors">
-                jrmsukclibrary@gmail.com
+              <a href={`mailto:${settings.alternate_email || 'jrmsukclibrary@gmail.com'}`} className="text-on-primary-container hover:text-gold-pale transition-colors">
+                {settings.alternate_email || 'jrmsukclibrary@gmail.com'}
               </a>
             </li>
+            {settings.phone_number && (
+              <li>
+                <span className="block text-gold-light/60 text-[10px] uppercase tracking-wider">Phone</span>
+                <span className="text-on-primary-container">
+                  {settings.phone_number}
+                </span>
+              </li>
+            )}
             <li>
               <span className="block text-gold-light/60 text-[10px] uppercase tracking-wider">Social</span>
               <a href="https://www.facebook.com/JRMSUkatipunanlibrary" target="_blank" rel="noopener noreferrer" className="text-on-primary-container hover:text-gold-pale transition-colors">

@@ -19,6 +19,8 @@ import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 
 export function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
@@ -35,6 +37,7 @@ export function UserManagement() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
   const { showToast } = useToast();
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   // Reset showPassword when modal closes or opens
   useEffect(() => {
@@ -63,21 +66,25 @@ export function UserManagement() {
 
   useAutoRefresh(fetchUsers, 30000);
 
-  const handleDelete = (id: number) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Remove Admin User',
-      message: 'Are you sure you want to remove this admin user? This action cannot be undone.',
-      onConfirm: async () => {
+  const handleDelete = (userToDelete: User) => {
+    triggerDelete(
+      `${userToDelete.first_name} ${userToDelete.last_name}`,
+      async () => {
         try {
-          await userApi.deleteUser(id);
+          await userApi.deleteUser(userToDelete.id);
           showToast('User deleted successfully', 'success');
-          fetchUsers();
         } catch (err: any) {
           showToast(err.message || 'Failed to delete user', 'error');
+          fetchUsers(); // Revert on failure
         }
+      },
+      () => {
+        setUsers(prev => [...prev, userToDelete].sort((a, b) => a.id - b.id));
+        showToast('User deletion undone', 'success');
       }
-    });
+    );
+    // Optimistic removal
+    setUsers(prev => prev.filter(u => u.id !== userToDelete.id));
   };
 
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -289,7 +296,7 @@ export function UserManagement() {
                           aria-label="Delete" 
                           title="Delete User"
                           style={{ color: 'var(--color-red-600)' }}
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => handleDelete(user)}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -445,6 +452,12 @@ export function UserManagement() {
         </div>,
         document.body
       )}
+
+      <UndoDeleteToast 
+        undoState={undoState} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
+      />
 
       <ConfirmModal 
         isOpen={!!confirmModal} 

@@ -5,16 +5,22 @@ import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 export function BatchHistory() {
   const [batches, setBatches] = useState<AcquisitionBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
   const [auditBatch, setAuditBatch] = useState<AcquisitionBatch | null>(null);
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
   const { showToast } = useToast();
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   const loadBatches = async () => {
     try {
@@ -35,20 +41,24 @@ export function BatchHistory() {
   useAutoRefresh(loadBatches, 30000);
 
   const handleArchive = (batch: AcquisitionBatch) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Archive Batch',
-      message: `Are you sure you want to archive "${batch.name}"? This will move it to the archived state.`,
-      onConfirm: async () => {
+    triggerDelete(
+      batch.name,
+      async () => {
         try {
           await batchApi.archiveBatch(batch.id);
           showToast('Batch archived successfully', 'success');
-          loadBatches();
         } catch (err: any) {
           showToast(err.message || 'Failed to archive batch', 'error');
+          loadBatches(); // Revert on failure
         }
+      },
+      () => {
+        setBatches(prev => [...prev, batch].sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime()));
+        showToast('Batch archive undone', 'success');
       }
-    });
+    );
+    // Optimistic removal
+    setBatches(prev => prev.filter(b => b.id !== batch.id));
   };
 
   const years = ['All', ...new Set(batches.map(b => new Date(b.opened_at).getFullYear().toString()))];
@@ -61,6 +71,14 @@ export function BatchHistory() {
     const matchesYear = selectedYear === 'All' || year === selectedYear;
     return matchesSearch && matchesYear;
   });
+
+  const totalPages = Math.ceil(filteredBatches.length / itemsPerPage);
+  const paginatedBatches = filteredBatches.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Reset to page 1 if filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedYear]);
 
   return (
     <>
@@ -106,8 +124,8 @@ export function BatchHistory() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
-              ) : filteredBatches.length > 0 ? (
-                filteredBatches.map((batch) => (
+              ) : paginatedBatches.length > 0 ? (
+                paginatedBatches.map((batch) => (
                   <tr key={batch.id}>
                     <td style={{ fontWeight: 500 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -179,6 +197,17 @@ export function BatchHistory() {
               )}
             </tbody>
           </table>
+          {filteredBatches.length > itemsPerPage && (
+            <div className="p-4 border-t border-gray-100 flex justify-center bg-gray-50">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredBatches.length}
+                itemsPerPage={itemsPerPage}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -304,6 +333,12 @@ export function BatchHistory() {
         message={confirmModal?.message || ''}
         onConfirm={() => confirmModal?.onConfirm()}
         onCancel={() => setConfirmModal(null)}
+      />
+
+      <UndoDeleteToast 
+        undoState={undoState} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
       />
     </>
   );

@@ -43,6 +43,8 @@ export function Analytics(){
   
   const [feedbackPage, setFeedbackPage] = useState(1);
   const [feedbackView, setFeedbackView] = useState<'card' | 'table'>('card');
+  const [feedbackSort, setFeedbackSort] = useState<'desc' | 'asc'>('desc');
+  const [feedbackStarFilter, setFeedbackStarFilter] = useState<'all' | 1 | 2 | 3 | 4 | 5>('all');
 
   const load=async()=>{try{const s=await reportApi.getSummary();setData(s);setLast(new Date());}catch(e:any){showToast(e.message||"Failed","error");}finally{setLoading(false);}};
   useEffect(()=>{load();ref.current=setInterval(load,30000);return()=>{if(ref.current)clearInterval(ref.current);};},[]);
@@ -78,6 +80,14 @@ export function Analytics(){
         'Visits vs Books (Scatter)',
         'Combined Trend',
       ];
+      const descriptions = [
+        'Monthly trend of unique site visits over the last 6 months.',
+        'Timeline of newly acquired books encoded into the system per month.',
+        'Proportion of direct emails versus book reservations out of total user engagement.',
+        'Distribution of user satisfaction ratings from 1 to 5 stars.',
+        'Correlation between monthly site visits and books acquired (latest month in gold).',
+        'Combined view comparing site visits (bar) against books acquired (line) across 6 months.',
+      ];
 
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -103,6 +113,12 @@ export function Analytics(){
         pdf.setFont('helvetica', 'bold');
         pdf.text(titles[i], margin, 22);
 
+        // Add Description
+        pdf.setTextColor(100, 100, 100);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(descriptions[i], margin, 27);
+
         const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
 
         const imgData = canvas.toDataURL('image/png');
@@ -110,9 +126,9 @@ export function Analytics(){
           throw new Error('Canvas rendering failed (zero width/height).');
         }
         const imgH = (canvas.height / canvas.width) * contentW;
-        const maxImgH = pageH - 30;
+        const maxImgH = pageH - 40;
         const finalH = Math.min(imgH, maxImgH);
-        pdf.addImage(imgData, 'PNG', margin, 26, contentW, finalH);
+        pdf.addImage(imgData, 'PNG', margin, 32, contentW, finalH);
 
         pdf.setFontSize(7);
         pdf.setTextColor(160, 160, 160);
@@ -231,7 +247,7 @@ export function Analytics(){
                 <Pie data={mp} cx="50%" cy="45%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
                   <Cell fill="#f97316"/><Cell fill={VIOLET}/>
                 </Pie>
-                <Tooltip contentStyle={TS}/><Legend verticalAlign="bottom" height={30} iconType="circle"/>
+                <Tooltip contentStyle={TS}/>
               </PieChart>
             </ResponsiveContainer></div>
           </ChartCard>
@@ -338,48 +354,111 @@ export function Analytics(){
 
         {(() => {
           if (!data.ratings_summary.recent_feedback) return null;
-          
-          const processedFeedback = [...data.ratings_summary.recent_feedback]
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            
+
+          // Apply star filter first
+          const starFiltered = feedbackStarFilter === 'all'
+            ? [...data.ratings_summary.recent_feedback]
+            : data.ratings_summary.recent_feedback.filter(f => f.rating === feedbackStarFilter);
+
+          // Apply sort direction
+          const processedFeedback = starFiltered.sort((a, b) =>
+            feedbackSort === 'desc'
+              ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              : new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+
+          // Compute fade opacity based on days_old (0 days = 1.0, 30 days = 0.35)
+          const getFadeOpacity = (daysOld: number): number => {
+            if (daysOld <= 0) return 1.0;
+            if (daysOld >= 30) return 0.35;
+            return 1.0 - (daysOld / 30) * 0.65;
+          };
+
           const FEEDBACK_PER_PAGE = 10;
           const totalFeedbackPages = Math.ceil(processedFeedback.length / FEEDBACK_PER_PAGE) || 1;
           const currentFeedbackPage = Math.min(feedbackPage, totalFeedbackPages);
           const startIndex = (currentFeedbackPage - 1) * FEEDBACK_PER_PAGE;
           const paginatedFeedback = processedFeedback.slice(startIndex, startIndex + FEEDBACK_PER_PAGE);
-          
+
           return (
             <div className="admin-table-wrapper mt-6 p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-                <div className="flex items-center gap-3">
-                  <Mail size={24} className="text-navy"/>
-                  <h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2>
+              {/* Header row */}
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Mail size={24} className="text-navy"/>
+                    <h2 className="text-xl font-bold text-gray-800">Recent Feedback</h2>
+                    <span className="text-xs font-semibold bg-navy/10 text-navy px-2 py-0.5 rounded-full">
+                      {processedFeedback.length} entries
+                    </span>
+                  </div>
+                  {/* Card / Table view toggle */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setFeedbackView('card')} className={`p-2 flex items-center justify-center rounded-lg transition-colors border cursor-pointer ${feedbackView === 'card' ? 'bg-navy text-white border-navy shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`} title="Card View"><span className="material-symbols-outlined text-[18px]">grid_view</span></button>
+                    <button onClick={() => setFeedbackView('table')} className={`p-2 flex items-center justify-center rounded-lg transition-colors border cursor-pointer ${feedbackView === 'table' ? 'bg-navy text-white border-navy shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`} title="Table View"><span className="material-symbols-outlined text-[18px]">table_rows</span></button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setFeedbackView('card')} className={`p-2 flex items-center justify-center rounded-lg transition-colors border cursor-pointer ${feedbackView === 'card' ? 'bg-navy text-white border-navy shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`} title="Card View"><span className="material-symbols-outlined text-[18px]">grid_view</span></button>
-                  <button onClick={() => setFeedbackView('table')} className={`p-2 flex items-center justify-center rounded-lg transition-colors border cursor-pointer ${feedbackView === 'table' ? 'bg-navy text-white border-navy shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`} title="Table View"><span className="material-symbols-outlined text-[18px]">table_rows</span></button>
+
+                {/* Filter bar — dropdowns */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Sort direction dropdown */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Sort:</label>
+                    <select
+                      value={feedbackSort}
+                      onChange={e => { setFeedbackSort(e.target.value as 'desc' | 'asc'); setFeedbackPage(1); }}
+                      className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
+                    >
+                      <option value="desc">Latest to Oldest</option>
+                      <option value="asc">Oldest to Latest</option>
+                    </select>
+                  </div>
+
+                  {/* Star filter dropdown */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Rating:</label>
+                    <select
+                      value={feedbackStarFilter}
+                      onChange={e => { const v = e.target.value; setFeedbackStarFilter(v === 'all' ? 'all' : Number(v) as 1|2|3|4|5); setFeedbackPage(1); }}
+                      className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
+                    >
+                      <option value="all">All Stars</option>
+                      <option value="1">1 Star</option>
+                      <option value="2">2 Stars</option>
+                      <option value="3">3 Stars</option>
+                      <option value="4">4 Stars</option>
+                      <option value="5">5 Stars</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
               {processedFeedback.length === 0 ? (
                 <div className="py-8 text-center bg-gray-50 rounded-xl border border-gray-100">
-                  <p className="text-gray-500 italic">No feedback received in the last 30 days.</p>
+                  <p className="text-gray-500 italic">No feedback received yet.</p>
                 </div>
               ) : (
                 <>
                   {feedbackView === 'card' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      {paginatedFeedback.map(fb=>(
-                        <div key={fb.id} className="flex flex-col p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100/60 transition-colors shadow-sm">
+                      {paginatedFeedback.map(fb=>{
+                        const daysOld = fb.days_old ?? Math.floor((Date.now() - new Date(fb.created_at).getTime()) / 86400000);
+                        const opacity = getFadeOpacity(daysOld);
+                        const isFading = daysOld >= 20;
+                        return (
+                        <div key={fb.id} style={{ opacity }} className={`flex flex-col p-4 bg-gray-50 rounded-xl border transition-all shadow-sm ${isFading ? 'border-amber-200' : 'border-gray-100 hover:bg-gray-100/60'}`}>
                           <div className="flex items-center justify-between mb-2 gap-2">
                             <p className="font-semibold text-gray-800 truncate">{fb.name}</p>
-                            <span className="text-xs font-medium text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-200 shrink-0">{fb.category}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isFading && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">{daysOld}d — fading</span>}
+                              <span className="text-xs font-medium text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-200">{fb.category}</span>
+                            </div>
                           </div>
                           <div className="flex items-center gap-1 mb-3">{stars(fb.rating)}</div>
                           <p className="text-sm text-gray-600 line-clamp-3 mb-4 flex-1 leading-relaxed">{fb.message}</p>
                           <p className="text-xs font-medium text-gray-400 mt-auto">{new Date(fb.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
-                      ))}
+                      )})}
                     </div>
                   ) : (
                     <div className="overflow-x-auto mb-4 border border-gray-200 rounded-xl shadow-sm">
@@ -390,19 +469,26 @@ export function Analytics(){
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Category</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Rating</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-1/2">Message</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Date</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Date / Age</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {paginatedFeedback.map(fb => (
-                            <tr key={fb.id} className="hover:bg-gray-50/80 transition-colors">
+                          {paginatedFeedback.map(fb => {
+                            const daysOld = fb.days_old ?? Math.floor((Date.now() - new Date(fb.created_at).getTime()) / 86400000);
+                            const opacity = getFadeOpacity(daysOld);
+                            const isFading = daysOld >= 20;
+                            return (
+                            <tr key={fb.id} style={{ opacity }} className={`transition-all ${isFading ? 'bg-amber-50/40' : 'hover:bg-gray-50/80'}`}>
                               <td className="p-4 text-sm font-medium text-gray-800 whitespace-nowrap">{fb.name}</td>
                               <td className="p-4 text-sm whitespace-nowrap"><span className="text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full">{fb.category}</span></td>
                               <td className="p-4 whitespace-nowrap"><div className="flex gap-0.5">{stars(fb.rating)}</div></td>
                               <td className="p-4 text-sm text-gray-600 leading-relaxed">{fb.message}</td>
-                              <td className="p-4 text-xs font-medium text-gray-400 whitespace-nowrap text-right">{new Date(fb.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                              <td className="p-4 text-xs font-medium text-gray-400 whitespace-nowrap text-right">
+                                <div>{new Date(fb.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                                {isFading && <div className="text-amber-500 font-bold mt-0.5">{daysOld}d old — fading</div>}
+                              </td>
                             </tr>
-                          ))}
+                          )})}
                         </tbody>
                       </table>
                     </div>

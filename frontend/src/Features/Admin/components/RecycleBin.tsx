@@ -11,6 +11,7 @@ export function RecycleBin() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [moduleFilter, setModuleFilter] = useState<string>('ALL');
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -33,6 +34,55 @@ export function RecycleBin() {
   useEffect(() => {
     fetchItems();
   }, []);
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedIds(paginatedItems.map(item => item.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      setLoading(true);
+      await Promise.all(selectedIds.map(id => recycleApi.restore(id)));
+      showToast(`${selectedIds.length} items restored successfully`, 'success');
+      setSelectedIds([]);
+      fetchItems();
+    } catch (err: any) {
+      showToast('Failed to restore some items', 'error');
+      fetchItems();
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Permanently',
+      message: `Are you sure you want to permanently delete ${selectedIds.length} items? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          setLoading(true);
+          await Promise.all(selectedIds.map(id => recycleApi.deletePermanently(id)));
+          showToast(`${selectedIds.length} items deleted permanently`, 'success');
+          setSelectedIds([]);
+          fetchItems();
+        } catch (err: any) {
+          showToast('Failed to delete some items', 'error');
+          fetchItems();
+        }
+      }
+    });
+  };
 
   const handleRestore = async (id: number) => {
     try {
@@ -108,6 +158,28 @@ export function RecycleBin() {
           </div>
         </div>
 
+        {selectedIds.length > 0 && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex justify-between items-center animate-in slide-in-from-top-2">
+            <span className="text-sm font-medium text-blue-800">
+              {selectedIds.length} item{selectedIds.length > 1 ? 's' : ''} selected
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={handleBulkRestore}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-white border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+              >
+                <RotateCcw size={16} /> Restore All
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-white border border-red-200 rounded hover:bg-red-50 transition-colors"
+              >
+                <Trash2 size={16} /> Delete All
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="py-12 text-center text-gray-500 flex flex-col items-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-4"></div>
@@ -124,6 +196,14 @@ export function RecycleBin() {
             <table className="admin-table">
               <thead>
                 <tr>
+                  <th className="w-12 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.length > 0 && selectedIds.length === paginatedItems.length}
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
                   <th>Item Name</th>
                   <th>Module</th>
                   <th>Deleted At</th>
@@ -132,7 +212,15 @@ export function RecycleBin() {
               </thead>
               <tbody>
                 {paginatedItems.map((item) => (
-                  <tr key={item.id}>
+                  <tr key={item.id} className={selectedIds.includes(item.id) ? 'bg-blue-50/50' : ''}>
+                    <td className="text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => handleSelectOne(item.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
                     <td>
                       <div className="font-medium text-gray-800">{item.item_name}</div>
                     </td>

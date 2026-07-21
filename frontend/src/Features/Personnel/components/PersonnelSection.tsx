@@ -66,55 +66,101 @@ export const PersonnelSection: React.FC = () => {
   };
   const staffList = personnelList.filter(p => p.order > 1).sort((a,b) => a.order - b.order);
   
-  // Render Dynamic SVG Connectors
   const renderConnectors = () => {
     const n = Math.min(staffList.length, 5);
     if (n === 0) return null;
 
-    const points: number[] = [];
-    const viewBoxWidth = 1000;
-    const centerLine = viewBoxWidth / 2;
-    
-    // For n elements, divide the viewBox equally and find the center of each chunk
-    const step = viewBoxWidth / n;
-    const startX = step / 2;
-
-    for (let i = 0; i < n; i++) {
-      points.push(startX + (i * step));
-    }
-
-    const minX = Math.min(...points, centerLine);
-    const maxX = Math.max(...points, centerLine);
-
     return (
-      <div className="hidden lg:block w-full h-12 relative -mt-4 mb-2 z-10 fade-up-entrance">
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${viewBoxWidth} 80`} preserveAspectRatio="none">
-          <defs>
-            <marker id="arrowhead-gold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill='var(--color-gold)' />
-            </marker>
-          </defs>
-          <path d={`M ${centerLine} 0 L ${centerLine} 20`} stroke='var(--color-gold)' strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
-          
-          {n > 1 && (
-            <path d={`M ${minX} 20 L ${maxX} 20`} stroke='var(--color-gold)' strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
-          )}
-          
-          {points.map((x, idx) => (
-            <path key={idx} d={`M ${x} 20 L ${x} 45`} stroke='var(--color-gold)' strokeWidth="2" fill="none" markerEnd="url(#arrowhead-gold)" vectorEffect="non-scaling-stroke" />
+      <div className="hidden lg:block w-full relative z-10 fade-up-entrance h-16 mb-4">
+        {/* Top center global vertical line */}
+        {n > 1 && (
+          <div className="absolute top-0 left-[calc(50%-1px)] w-[2px] h-[24px] bg-gold-light"></div>
+        )}
+        
+        <div className={`grid ${getGridColsClass(n)} gap-8 w-full h-full`}>
+          {Array.from({ length: n }).map((_, idx) => (
+            <div key={idx} className="relative w-full h-full">
+              
+              {n === 1 ? (
+                // Single item: straight line down
+                <div className="absolute top-0 left-[calc(50%-1px)] w-[2px] h-full bg-gold-light"></div>
+              ) : (
+                <>
+                  {/* Leftmost item: line comes from right, curves down */}
+                  {idx === 0 && (
+                    <div 
+                      className="absolute border-t-2 border-l-2 border-gold-light"
+                      style={{
+                        top: '24px',
+                        right: '-24px',
+                        left: 'calc(50% - 1px)',
+                        height: '24px',
+                        borderTopLeftRadius: '12px'
+                      }}
+                    ></div>
+                  )}
+
+                  {/* Rightmost item: line comes from left, curves down */}
+                  {idx === n - 1 && (
+                    <div 
+                      className="absolute border-t-2 border-r-2 border-gold-light"
+                      style={{
+                        top: '24px',
+                        left: '-24px',
+                        right: 'calc(50% - 1px)',
+                        height: '24px',
+                        borderTopRightRadius: '12px'
+                      }}
+                    ></div>
+                  )}
+
+                  {/* Middle items: horizontal line crosses entirely, vertical line drops down */}
+                  {idx > 0 && idx < n - 1 && (
+                    <>
+                      <div 
+                        className="absolute bg-gold-light"
+                        style={{
+                          top: '24px',
+                          left: '-24px',
+                          right: '-24px',
+                          height: '2px'
+                        }}
+                      ></div>
+                      <div 
+                        className="absolute bg-gold-light"
+                        style={{
+                          top: '24px',
+                          left: 'calc(50% - 1px)',
+                          width: '2px',
+                          height: '24px'
+                        }}
+                      ></div>
+                    </>
+                  )}
+                </>
+              )}
+              
+              {/* Arrow head */}
+              <span 
+                className="material-symbols-outlined text-gold-light text-xl absolute left-1/2 -translate-x-1/2 leading-none bg-transparent rounded-full z-10 font-bold"
+                style={{ top: '44px' }}
+              >
+                arrow_downward
+              </span>
+            </div>
           ))}
-        </svg>
+        </div>
       </div>
     );
   };
 
   const getGridColsClass = (n: number) => {
-    if (n === 1) return 'lg:grid-cols-1 max-w-sm';
-    if (n === 2) return 'lg:grid-cols-2 max-w-2xl';
-    if (n === 3) return 'lg:grid-cols-3 max-w-4xl';
-    if (n === 4) return 'lg:grid-cols-4 max-w-6xl';
-    if (n >= 5) return 'lg:grid-cols-5 max-w-7xl';
-    return 'lg:grid-cols-3 max-w-4xl';
+    if (n === 1) return 'grid-cols-1 lg:grid-cols-1 max-w-sm mx-auto';
+    if (n === 2) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2 max-w-2xl mx-auto';
+    if (n === 3) return 'grid-cols-1 md:grid-cols-3 lg:grid-cols-3 max-w-4xl mx-auto';
+    if (n === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto';
+    if (n >= 5) return 'grid-cols-1 md:grid-cols-3 lg:grid-cols-5 max-w-7xl mx-auto';
+    return 'grid-cols-1 md:grid-cols-3 lg:grid-cols-3 max-w-4xl mx-auto';
   };
 
   return (
@@ -180,7 +226,7 @@ export const PersonnelSection: React.FC = () => {
             )}
 
             {/* Staff Cards */}
-            <div className={`grid grid-cols-1 ${getGridColsClass(staffList.length)} gap-4 w-full justify-items-center`}>
+            <div className={`grid ${getGridColsClass(staffList.length)} gap-8 w-full justify-items-center relative z-20`}>
               {staffList.slice(0, 5).map((person, idx) => (
                 <React.Fragment key={idx}>
                   {/* Arrow for 2nd and subsequent items on mobile/tablet */}

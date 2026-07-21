@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 
 export function Reports() {
   const [reportType, setReportType] = useState('summary');
@@ -413,69 +414,95 @@ export function Reports() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="border border-gray-300 p-4">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Total Visits</p>
-                <p className="text-2xl font-bold font-sans">{reportData.total_visits}</p>
-              </div>
-              <div className="border border-gray-300 p-4">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Books Acquired</p>
-                <p className="text-2xl font-bold font-sans">{reportData.total_books}</p>
-              </div>
-              <div className="border border-gray-300 p-4">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Emails Processed</p>
-                <p className="text-2xl font-bold font-sans">{reportData.total_emails}</p>
-              </div>
-              <div className="border border-gray-300 p-4">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Avg Rating</p>
-                <p className="text-2xl font-bold font-sans">{reportData.ratings_summary.average_rating} / 5</p>
-              </div>
+              {(() => {
+                const currentType = activeReportInfo?.type || reportType;
+                return (
+                  <>
+                    {(currentType === 'summary' || currentType === 'visitors') && (
+                      <div className="border border-gray-300 p-4">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Total Visits</p>
+                        <p className="text-2xl font-bold font-sans">{reportData.total_visits}</p>
+                      </div>
+                    )}
+                    {(currentType === 'summary' || currentType === 'books') && (
+                      <div className="border border-gray-300 p-4">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Books Acquired</p>
+                        <p className="text-2xl font-bold font-sans">{reportData.total_books}</p>
+                      </div>
+                    )}
+                    {(currentType === 'summary' || currentType === 'interactions') && (
+                      <div className="border border-gray-300 p-4">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Emails Processed</p>
+                        <p className="text-2xl font-bold font-sans">{reportData.total_emails}</p>
+                      </div>
+                    )}
+                    {(currentType === 'summary' || currentType === 'visitors') && (
+                      <div className="border border-gray-300 p-4">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 font-sans">Avg Rating</p>
+                        <p className="text-2xl font-bold font-sans">{reportData.ratings_summary.average_rating} / 5</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 break-inside-avoid">
-               <div className="border border-gray-300 p-4">
-                  <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Feedback Ratings Breakdown</h4>
-                  <div className="h-64">
-                    {(() => {
-                      const ya = dynamicAxis(extractValues(ratingData, 'count'));
-                      return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" fontSize={12} />
-                            <YAxis domain={ya.domain} ticks={ya.ticks} allowDecimals={false} fontSize={12} />
-                            <RechartsTooltip />
-                            <Bar dataKey="count" fill='#C9A84C' />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      );
-                    })()}
-                  </div>
-               </div>
-               <div className="border border-gray-300 p-4">
-                  <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Interactions Overview</h4>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={interactionData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={80}
-                          fill="#4f46e5"
-                          dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          {interactionData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-               </div>
+              {(() => {
+                const currentType = activeReportInfo?.type || reportType;
+                return (
+                  <>
+                    {(currentType === 'summary' || currentType === 'visitors') && (
+                      <div className="border border-gray-300 p-4">
+                          <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Feedback Ratings Breakdown</h4>
+                          <div className="h-64">
+                            {(() => {
+                              const ya = dynamicAxis(extractValues(ratingData, 'count'));
+                              return (
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" fontSize={12} />
+                                    <YAxis domain={ya.domain} ticks={ya.ticks} allowDecimals={false} fontSize={12} />
+                                    <RechartsTooltip />
+                                    <Bar dataKey="count" fill='#C9A84C' />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              );
+                            })()}
+                          </div>
+                      </div>
+                    )}
+                    {(currentType === 'summary' || currentType === 'interactions') && (
+                      <div className="border border-gray-300 p-4">
+                          <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Interactions Overview</h4>
+                          <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={interactionData}
+                                  cx="50%"
+                                  cy="50%"
+                                  labelLine={false}
+                                  outerRadius={80}
+                                  fill="#4f46e5"
+                                  dataKey="value"
+                                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                >
+                                  {interactionData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip />
+                                <Legend />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {(activeReportInfo?.type === 'summary' || activeReportInfo?.type === 'books' || (!activeReportInfo && (reportType === 'summary' || reportType === 'books'))) && (
@@ -539,34 +566,11 @@ export function Reports() {
           </div>
         </div>
       )}
-      {/* Undo Delete Toast */}
-      {undoState && (
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800 text-sm">Item deleted</p>
-              <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={cancelDelete}
-                className="text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded transition-colors cursor-pointer"
-              >
-                Undo
-              </button>
-              <button onClick={executeNow} className="text-gray-400 hover:text-gray-600 cursor-pointer" aria-label="Close and delete now">
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className="bg-gray-400 h-full transition-all ease-linear"
-              style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
-            />
-          </div>
-        </div>
-      )}
+      <UndoDeleteToast 
+        undoState={undoState} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
+      />
     </>
   );
 }

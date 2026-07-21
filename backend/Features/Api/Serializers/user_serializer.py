@@ -37,6 +37,17 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    def validate_email(self, value):
+        if not value:
+            return value
+        user_id = self.instance.id if self.instance else None
+        qs = User.objects.filter(email__iexact=value)
+        if user_id:
+            qs = qs.exclude(id=user_id)
+        if qs.exists():
+            raise serializers.ValidationError("this email is already exist try another email.")
+        return value
+
     class Meta:
         model = User
         fields = ["id", "username", "email", "first_name", "last_name",

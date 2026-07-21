@@ -14,5 +14,8 @@ class IRecycleBinService:
     def delete_permanently(self, id: int) -> bool:
         pass
 
+    def move_to_bin(self, original_id: int, source_module: str, item_name: str, data_snapshot: dict, user_id: int = None) -> Any:
+        pass
+
     def auto_cleanup(self) -> int:
         pass

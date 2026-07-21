@@ -134,6 +134,7 @@ class RecycleBinRepository(IRecycleBinRepository):
             elif item.source_module == 'CONTACT_MSG':
                 snap = dict(item.data_snapshot)
                 snap.pop('id', None)
+                snap.pop('attachments', None)
                 ContactMessage.objects.create(**snap)
                 
             return True

@@ -8,6 +8,7 @@ class SiteSettings(models.Model):
     library_name = models.CharField(max_length=255, default="JRMSU Katipunan Library")
     address = models.CharField(max_length=500, default="Katipunan, Zamboanga del Norte")
     contact_email = models.EmailField(default="katipunan.library@jrmsu.edu.ph")
+    alternate_email = models.EmailField(default="jrmsukclibrary@gmail.com", blank=True, null=True)
     phone_number = models.CharField(max_length=50, blank=True, null=True)
     
     # Opening Hours

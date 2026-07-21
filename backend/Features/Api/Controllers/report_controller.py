@@ -3,6 +3,9 @@
 from rest_framework import viewsets, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action
+import datetime
+from django.utils import timezone
+
 from Features.Services.Implementations.analytics_service import SiteVisitService
 from Features.Services.Implementations.batch_service import BatchService
 from Features.Services.Implementations.contact_service import ContactService
@@ -40,9 +43,6 @@ class ReportViewSet(viewsets.ViewSet):
         return Response(data)
 
     def _get_summary_data(self, report_type, date_range):
-        import datetime
-        from django.utils import timezone
-
         today = timezone.now().date()
         cutoff_date = None
         end_date = None
@@ -155,7 +155,8 @@ class ReportViewSet(viewsets.ViewSet):
                         'rating': f.rating,
                         'category': f.category,
                         'message': f.message,
-                        'created_at': f.created_at.isoformat() if hasattr(f.created_at, 'isoformat') else str(f.created_at)
+                        'created_at': f.created_at.isoformat() if hasattr(f.created_at, 'isoformat') else str(f.created_at),
+                        'days_old': (datetime.date.today() - f.created_at.date()).days if hasattr(f.created_at, 'date') else 0
                     } for f in recent_all
                 ]
             }
@@ -181,7 +182,8 @@ class ReportViewSet(viewsets.ViewSet):
                     'rating': f.rating,
                     'category': f.category,
                     'message': f.message,
-                    'created_at': f.created_at.isoformat() if hasattr(f.created_at, 'isoformat') else str(f.created_at)
+                    'created_at': f.created_at.isoformat() if hasattr(f.created_at, 'isoformat') else str(f.created_at),
+                    'days_old': (datetime.date.today() - f.created_at.date()).days if hasattr(f.created_at, 'date') else 0
                 } for f in recent_feedback
             ]
         }
