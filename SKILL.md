@@ -1,1109 +1,733 @@
-# SKILL: JRMSU Katipunan Campus Library — Web Application
-> AI Agent Skill File for OpenCode + DeepSeek V4 Flash
-> Version 2.0 — Full-Stack Build Specification
+---
+name: jrmsu-library-fullstack-architecture
+description: >
+  Full-stack architecture skill for the JRMSU Library System and Landing Page project.
+  Apply this skill whenever Jhon is working on frontend structure (React + Vite + TypeScript),
+  backend structure (Django DRF), database schema, cache design, or any architecture decision
+  for the JRMSU Library System. Triggers on: "project structure", "architecture", "vertical slice",
+  "backend flow", "frontend flow", "flowchain", "where does X go", "organize structure",
+  "add feature", "new endpoint", "database schema", "cache layer", "repository", "service layer",
+  or any mention of JRMSU Library Landing Page or Library Management System.
+  This is the single source of truth for all architecture rules, flow chains, placement logic,
+  do/don't rules, and project structures — frontend, backend, and database combined.
+---
+
+# JRMSU Library System — Full-Stack Architecture Skill
+
+This is the **reusable architecture rule set** for the JRMSU Library project.
+It covers the Landing Page (React + Vite) and the Library Management System (Django + React).
+Do not change the chain flow unless Jhon explicitly overrides a section.
 
 ---
 
-## AGENT IDENTITY INSTRUCTIONS
+## 0) Identity and Role
 
-You are building the **official web application** for JRMSU Katipunan Campus Library. You have full context of the design system, content, architecture, and interaction rules. Follow every rule here exactly. Do not invent patterns not specified. Do not apply generic AI frontend templates. Every decision must be deliberate and grounded in this document.
-
----
-
-## PART 1 — PROJECT IDENTITY
-
-| Field | Value |
-|---|---|
-| Product Name | JRMSU Katipunan Campus Library — Official Web App |
-| Institution | Jose Rizal Memorial State University – Katipunan Campus |
-| Address | National Highway, Barangay Dos, Katipunan, Zamboanga del Norte, Philippines |
-| Audience | Students, Faculty, Staff, Alumni, External Researchers |
-| Tech Stack | React 18 + TypeScript + Vite + Tailwind CSS |
-| Tone | Professional, modern, academic — clean and dignified. NOT corporate-generic. NOT generic AI template. |
-| Primary Contact Email 1 | katipunan.library@jrmsu.edu.ph |
-| Primary Contact Email 2 | jrmsukclibrary@gmail.com |
-| Facebook | https://www.facebook.com/JRMSUkatipunanlibrary |
-| Library Hours | Monday – Friday, 7:00 AM – 7:00 PM (Philippine Time, UTC+8) |
+You are a **Senior Full-Stack Software Architect** and **Project Structure Designer**.
+Always apply this skill as the default rule set for every architectural decision in this project.
+Never create spaghetti code. Never mix responsibilities. Never skip layers. Never place code randomly.
 
 ---
 
-## PART 2 — ANTI-PATTERN RULES (READ FIRST, ALWAYS ENFORCE)
+## 1) Core Framework at a Glance
 
-These patterns are BANNED. Reject them even if they seem convenient.
-
-### BANNED UI PATTERNS
-- ❌ Generic hero with a single centered stock-photo card
-- ❌ Three-column feature cards with emoji icons and "Lorem ipsum" filler
-- ❌ Flat color sections alternating white/gray with no visual language
-- ❌ Cookie-cutter testimonial carousels
-- ❌ `box-shadow` applied uniformly to every element
-- ❌ Blue CTA buttons (`#007BFF`, `#0D6EFD`) — use accent (`#ADD8E6` / light blue) or gold instead
-- ❌ Rounded pill navbar with hamburger that drops down in a centered overlay
-- ❌ Footer with 5 identical icon columns
-- ❌ `display: none` toggle for accordions (use `max-height` transition instead)
-- ❌ Gradient backgrounds that look like SaaS landing pages
-
-### BANNED CSS PATTERNS
-- ❌ `section { background: linear-gradient(rgba(255,255,255,0.90), ...) }` — this paints a near-opaque white rect on top of the body background image, KILLING the visibility
-- ❌ Setting `background` shorthand on `<section>` elements that sit on top of a body background-image
-- ❌ `transition: all 0.3s` — always specify exact properties
-- ❌ `!important` unless absolutely necessary for overrides
-- ❌ Inline styles for layout — use CSS classes
-
-### CORRECT BACKGROUND BLEND APPROACH
-```css
-/* WRONG — covers the background image completely */
-section {
-  background: linear-gradient(rgba(255,255,255,0.90), rgba(255,255,255,0.90));
-}
-
-/* CORRECT — 70% white overlay via ::before so 30% of library image shows through */
-section {
-  position: relative;
-}
-section::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.70);
-  pointer-events: none;
-  z-index: 0;
-}
-section > * {
-  position: relative;
-  z-index: 1;
-}
-/* Exception: footer keeps solid bg */
-footer {
-  background: var(--navy-dark);
-}
-```
-
----
-
-## PART 3 — DESIGN SYSTEM
-
-### 3.1 Google Fonts (import in index.css, FIRST LINE)
-```css
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-```
-
-### 3.2 CSS Custom Properties (define in `:root` inside index.css)
-```css
-:root {
-  /* === JRMSU Brand Colors === */
-  --navy:             #002B7F;   /* JRMSU Navy Blue — primary brand */
-  --navy-dark:        #001655;   /* Deep Navy — footer, hero gradient start */
-  --navy-mid:         #1A3A7A;   /* Medium Navy — gradient mid, section bg */
-  --gold:             #C9A84C;   /* JRMSU Gold — CTAs, accents, active states */
-  --gold-light:       #F0D97A;   /* Light Gold — hover highlights */
-  --gold-pale:        #FDF6E0;   /* Pale Gold — quote block backgrounds */
-
-  /* === Surface Colors === */
-  --white:            #FFFFFF;   /* Cards, primary text on dark */
-  --warm-white:       #F8F7F2;   /* Page background — library paper feel */
-  --light-blue:       #EEF2FF;   /* Alternating section tints, info blocks */
-
-  /* === Accent Color (used on dark backgrounds) === */
-  --accent:           #ADD8E6;   /* Light blue — nav links, hero text, card headings on navy */
-
-  /* === Text Colors === */
-  --text:             #111827;   /* Near-black — primary body text */
-  --text-mid:         #4B5563;   /* Mid gray — secondary text, descriptions */
-  --text-light:       #9CA3AF;   /* Light gray — captions, timestamps, labels */
-
-  /* === Utility === */
-  --border:           #E2E8F0;   /* Card borders, dividers */
-  --success:          #22C55E;   /* Library OPEN indicator */
-  --danger:           #EF4444;   /* Library CLOSED indicator */
-
-  /* === Typography === */
-  --font-display:     'Playfair Display', serif;
-  --font-body:        'Inter', sans-serif;
-  --font-mono:        'JetBrains Mono', monospace;
-
-  /* === Spacing === */
-  --section-py:       80px;
-  --section-px:       24px;
-  --gutter:           24px;
-  --max-width:        1200px;
-
-  /* === Shape === */
-  --radius-card:      12px;
-  --radius-btn:       8px;
-  --radius-input:     6px;
-  --radius-pill:      9999px;
-
-  /* === Shadows === */
-  --shadow-card:      0 4px 24px rgba(0, 43, 127, 0.08);
-  --shadow-hover:     0 12px 40px rgba(0, 43, 127, 0.16);
-  --shadow-glass:     0 8px 32px rgba(0, 43, 127, 0.12);
-}
-
-@media (max-width: 640px) {
-  :root {
-    --section-py: 48px;
-    --section-px: 16px;
-  }
-}
-```
-
-### 3.3 Typography System
-| Role | Font | Weight | Size | Usage |
-|---|---|---|---|---|
-| Display / H1 Hero | Playfair Display | 700 | `clamp(36px, 5vw, 64px)` | Hero headline |
-| H2 Section | Playfair Display | 700 | `clamp(28px, 3vw, 40px)` | Section titles |
-| H3 Sub | Playfair Display | 600 | 22–26px | Cards, librarian name |
-| Body LG | Inter | 400 | 18px | Lead paragraphs |
-| Body MD | Inter | 400 | 15–16px | Standard body copy |
-| Label / Eyebrow | Inter | 600 | 11–12px | UPPERCASE, letter-spacing 0.1em |
-| UI / Nav | Inter | 500 | 13–14px | Nav links, buttons |
-| Clock Digits | JetBrains Mono | 600 | `clamp(32px, 5vw, 56px)` | Live clock |
-| Caption | Inter | 400 | 11–12px | Table captions, footer links |
-
-### 3.4 Component Specifications
-
-#### Buttons
-```css
-/* Primary — gold fill */
-.btn-primary {
-  background: var(--gold);
-  color: var(--navy-dark);
-  border: none;
-  border-radius: var(--radius-btn);
-  padding: 12px 28px;
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 200ms ease, transform 150ms ease;
-}
-.btn-primary:hover { background: var(--gold-light); transform: translateY(-1px); }
-
-/* Secondary — ghost white (on dark bg) */
-.btn-secondary {
-  background: transparent;
-  color: var(--white);
-  border: 1px solid rgba(255,255,255,0.35);
-  border-radius: var(--radius-btn);
-  padding: 12px 28px;
-  font-family: var(--font-body);
-  font-weight: 500;
-  font-size: 14px;
-  cursor: pointer;
-  transition: border-color 200ms ease, background 200ms ease;
-}
-.btn-secondary:hover { border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.08); }
-
-/* Ghost — outlined navy (on light bg) */
-.btn-ghost {
-  background: transparent;
-  color: var(--navy);
-  border: 1px solid var(--navy);
-  border-radius: var(--radius-btn);
-  padding: 10px 24px;
-  font-family: var(--font-body);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 200ms ease;
-}
-.btn-ghost:hover { background: var(--navy); color: var(--white); }
-```
-
-#### Badges & Chips
-```css
-.badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: var(--radius-pill); font-family: var(--font-body); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; }
-.badge-external       { background: #059669; color: #fff; }
-.badge-internal-ext   { background: var(--navy); color: #fff; }
-.badge-elibrary       { background: #7C3AED; color: #fff; }
-.badge-internal       { background: var(--navy-mid); color: #fff; }
-.chip-free            { background: #E8F5E9; color: #15803D; padding: 4px 10px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; }
-.chip-overdue         { background: #FEF3C7; color: #D97706; padding: 4px 10px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; }
-```
-
-#### Service Step Table Row Colors
-```css
-.step-row-normal-odd  { background: #FFFFFF; }
-.step-row-normal-even { background: #EEF2FF; }
-.step-row-overdue     { background: #FFFBEB; border-left: 3px solid #D97706; }
-.step-row-total       { background: var(--navy); color: white; font-weight: 700; }
-```
-
-#### Glass Card
-```css
-.glass-card {
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(201, 168, 76, 0.3);
-  border-radius: 16px;
-}
-```
-
-### 3.5 Animation Definitions
-```css
-/* Keyframes */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(28px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes colonBlink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
-}
-@keyframes statusPulseGreen {
-  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-  70%  { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
-}
-@keyframes statusPulseRed {
-  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-  70%  { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-@keyframes scrollBounce {
-  0%, 100% { transform: translateY(0); opacity: 0.5; }
-  50%       { transform: translateY(6px); opacity: 1; }
-}
-
-/* Scroll-reveal utility */
-.reveal {
-  opacity: 0;
-  transform: translateY(28px);
-  transition: opacity 700ms ease, transform 700ms ease;
-}
-.reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-.reveal:nth-child(2) { transition-delay: 60ms; }
-.reveal:nth-child(3) { transition-delay: 120ms; }
-.reveal:nth-child(4) { transition-delay: 180ms; }
-.reveal:nth-child(5) { transition-delay: 240ms; }
-
-/* Card hover lift */
-.card-lift {
-  transition: transform 250ms ease, box-shadow 250ms ease;
-}
-.card-lift:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-hover);
-}
-
-/* Reduced motion override */
-@media (prefers-reduced-motion: reduce) {
-  .reveal, .card-lift { transition: opacity 300ms ease !important; transform: none !important; }
-  .clock-colon { animation: none !important; }
-}
-```
-
-### 3.6 Animation Rules
-| Effect | Trigger | Properties | Duration |
-|---|---|---|---|
-| `fade-in-up` | Scroll → IntersectionObserver | `opacity 0→1`, `translateY 28→0` | 700ms ease |
-| `card-lift` | Hover | `translateY 0→-6px`, shadow increase | 250ms ease |
-| `colon-blink` | Every 1s CSS | clock colons opacity cycle | 1s infinite step-end |
-| `status-pulse` | Continuous | radial `box-shadow` expansion | 2s infinite |
-| Accordion open/close | Click | `max-height 0→scrollHeight`, `opacity 0→1` | 400ms ease |
-| Navbar blur | >60px scroll | `backdrop-filter blur(12px)` | 300ms ease |
-| Hero stagger | Page load | badge→H1→tagline→clock→CTAs | 80ms stagger |
-| Modal slide-in | Click | `translateX(100%)→translateX(0)` or scale | 350ms ease-out |
-
-**Rule:** No bounce. No loop. No elastic. Professional and purposeful only.
-
----
-
-## PART 4 — PROJECT ARCHITECTURE (FEATURE-BASED / VERTICAL-SLICE)
-
-### 4.1 Full Folder Structure
-```
-src/
-├── App.tsx                              # Root router — composes all pages
-├── main.tsx                             # Vite entry point
-│
-├── Pages/                               # Route-level page assemblies only
-│   ├── Home/
-│   │   └── HomePage.tsx                 # Assembles Hero + Personnel + Location
-│   ├── About/
-│   │   └── AboutPage.tsx                # About dropdown tabs + org chart + history + quality objectives
-│   ├── Services/
-│   │   └── ServicesPage.tsx             # Library Services + Feedback dropdown + External Services dropdown
-│   ├── FileServices/
-│   │   └── FileServicesPage.tsx         # Google Sheet embed + E-Books + Student Handbooks
-│   └── OnlineAccess/
-│       └── OnlineAccessPage.tsx         # Open Access + Resources + Acquired E-Resources
-│
-├── Features/                            # Feature-specific vertical slices
-│   ├── Hero/
-│   │   ├── components/
-│   │   │   └── HeroSection.tsx          # Hero with clock widget + CTA buttons
-│   │   └── hooks/
-│   │       └── useLibraryClock.ts       # Clock tick + PH timezone + open/closed logic
-│   ├── Gateway/
-│   │   └── components/
-│   │       └── GatewaySection.tsx       # Campus intro / welcome panel
-│   ├── Personnel/
-│   │   └── components/
-│   │       └── PersonnelSection.tsx     # Librarian's Corner with Ma'am Kiara photo
-│   ├── Services/
-│   │   └── components/
-│   │       ├── ServicesSection.tsx      # Library service cards (accordion)
-│   │       ├── FeedbackDropdown.tsx     # Dropdown + 10 sliding modal cards
-│   │       └── ExternalServicesDropdown.tsx  # Dropdown + 20 sliding modal cards
-│   ├── Location/
-│   │   └── components/
-│   │       └── LocationSection.tsx      # Google Maps embed + address
-│   ├── About/
-│   │   └── components/
-│   │       ├── OrgStructure.tsx         # Organizational chart
-│   │       ├── History.tsx              # JRMSU history content
-│   │       └── QualityObjectives.tsx    # Library quality objectives
-│   ├── FileServices/
-│   │   └── components/
-│   │       └── FileServicesSection.tsx  # Google Sheet iframe + resource links
-│   ├── OnlineAccess/
-│   │   └── components/
-│   │       ├── OpenAccessJournals.tsx   # Open access links grid
-│   │       ├── Resources.tsx            # Resources links grid
-│   │       └── AcquiredEResources.tsx   # Acquired e-resources links
-│   └── Contact/
-│       └── components/
-│           └── ContactSection.tsx       # Contact info + feedback form
-│
-├── Components/                          # Shared reusable UI primitives
-│   ├── LayoutBars/
-│   │   ├── TopNavBar.tsx                # Fixed top navbar with dropdown + mobile drawer
-│   │   └── Footer.tsx                   # Footer with iso-sidebar + quick links + contact
-│   ├── Shared/
-│   │   ├── GlassSurface.tsx             # Frosted glass panel wrapper
-│   │   ├── SectionEyebrow.tsx           # Gold uppercase label
-│   │   ├── Badge.tsx                    # Colored badge/chip
-│   │   ├── AccordionCard.tsx            # Reusable max-height accordion
-│   │   ├── ModalCard.tsx                # Sliding modal card overlay
-│   │   └── RevealWrapper.tsx            # IntersectionObserver fade-in-up wrapper
-│   └── Icons/
-│       └── icons.tsx                    # SVG icon components (no external icon lib)
-│
-├── LayoutStyles/                        # Global styling
-│   ├── index.css                        # CSS tokens, animations, backgrounds, resets
-│   └── Colors.ts                        # TypeScript palette constants
-│
-├── Hooks/                               # Shared reusable hooks
-│   ├── useIntersectionObserver.ts       # Reveal-on-scroll observer
-│   └── useScrolledNav.ts               # Tracks scroll > 60px for navbar blur
-│
-├── Lib/
-│   └── assets/
-│       └── data.ts                      # CDN asset URLs, link lists, service data
-│
-└── Types/
-    └── landing.types.ts                 # TypeScript interfaces for all data shapes
-```
-
-### 4.2 TypeScript Types (landing.types.ts)
-```typescript
-export interface ServiceStep {
-  clientStep: string;
-  agencyAction: string;
-  fees: string;
-  time: string;
-  person: string;
-  isOverdue?: boolean;
-}
-
-export interface LibraryService {
-  id: string;
-  title: string;
-  subtitle: string;
-  category: 'borrowing' | 'returning' | 'e-library' | 'clearance';
-  badgeType: 'external' | 'internal-ext' | 'e-library' | 'internal';
-  whoMayAvail: string;
-  totalTime: string;
-  totalFee: string;
-  requirements: { item: string; whereToSecure?: string }[];
-  steps: ServiceStep[];
-}
-
-export interface OnlineResource {
-  name: string;
-  url: string;
-  category: 'open-access' | 'resources' | 'acquired';
-}
-
-export interface NavItem {
-  label: string;
-  href: string;
-  dropdown?: { label: string; href: string }[];
-}
-
-export interface ContactInfo {
-  email1: string;
-  email2: string;
-  facebook: string;
-  hours: string;
-  address: string;
-}
-```
-
-### 4.3 Background Blend Fix (index.css — CRITICAL)
-```css
-/* Body background — library building image */
-body {
-  background-image: url('/assets/library-building.jpg'); /* use actual asset */
-  background-size: cover;
-  background-attachment: fixed;
-  background-position: center;
-  min-height: 100vh;
-}
-
-/* Section overlay — 70% white so 30% of library building shows through */
-section {
-  position: relative;
-}
-section::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.70);
-  pointer-events: none;
-  z-index: 0;
-}
-section > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* Footer — solid bg exception */
-footer {
-  background: var(--navy-dark) !important;
-}
-footer::before { display: none; }
-```
-
----
-
-## PART 5 — NAVIGATION
-
-### 5.1 TopNavBar.tsx Rules
-- Fixed top, full width, `z-index: 1000`
-- Height: 64px desktop / 56px mobile
-- Default: `background: var(--navy)`
-- After 60px scroll: `background: rgba(0,43,127,0.95)`, `backdrop-filter: blur(12px)`, `border-bottom: 1px solid rgba(201,168,76,0.3)`
-
-### 5.2 Logo (left side)
-```
-[SVG gold circle "J"] + "JRMSU Library" (Playfair Display 18px white)
-                         "KATIPUNAN CAMPUS" (Inter 10px gold, uppercase, letter-spacing 0.1em)
-```
-
-### 5.3 Nav Links (right side, desktop)
-Order: `HOME | ABOUT | SERVICES | FILE SERVICES | ONLINE ACCESS`
-- Inter 500, 13px, UPPERCASE, letter-spacing 0.05em, color white
-- Hover/active: gold underline animation (scaleX 0→1, transform-origin left)
-- ABOUT has a dropdown:
-
-```
-ABOUT ▾
-├── Organizational Structure    → /about#org-structure
-├── History of JRMSU            → /about#history
-└── JRMSU Library Quality Objectives → /about#quality-objectives
-```
-
-### 5.4 Mobile Nav (< 768px)
-- Show hamburger ☰ icon (white, 24px)
-- Click opens slide-down drawer: `background: var(--navy-dark)`, 100% width
-- Links stack vertically, 48px height, gold bottom border
-- ✕ closes drawer; tapping a link closes it and navigates
-
----
-
-## PART 6 — HOME PAGE
-
-### 6.1 Hero Section (HeroSection.tsx)
-
-**Layout:** Full viewport (`100vh`), flexbox column, `align-items: center`, `justify-content: center`, `text-align: center`
-
-**Background:**
-```css
-.hero {
-  background: linear-gradient(160deg, #001655 0%, #002B7F 55%, #1A3A7A 100%);
-  position: relative;
-}
-.hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 40L40 0M-5 5L5-5M35 45L45 35' stroke='white' stroke-width='0.5' fill='none'/%3E%3C/svg%3E");
-  opacity: 0.04;
-  pointer-events: none;
-}
-```
-
-**Content stack (staggered fade-in-up on mount, 80ms delay per item):**
-
-1. Library hours badge pill:
-   ```
-   📚  Library Hours: Monday – Friday  |  7:00 AM – 7:00 PM
-   ```
-   Style: `border: 1px solid rgba(201,168,76,0.4)`, `background: rgba(255,255,255,0.06)`, `border-radius: 99px`, padding `8px 20px`, Inter 600 12px uppercase, color `var(--gold)`
-
-2. H1: **"Welcome to JRMSU Katipunan Campus Library"**
-   Playfair Display 700, `clamp(36px,5vw,64px)`, color white
-
-3. Tagline (italic, Playfair Display 400, 18px, `rgba(255,255,255,0.72)`):
-   *"From pages to possibilities — knowledge, research, and lifelong learning."*
-
-4. **⭐ REAL-TIME CLOCK WIDGET** (see 6.2 below)
-
-5. CTA Buttons:
-   - `View Our Services` → `btn-primary`, navigates to `/services`
-   - `Learn More` → `btn-secondary`, navigates to `/about`
-
-6. Scroll indicator (absolute, bottom 48px, center):
-   ```
-   ↓  SCROLL
-   ```
-   Inter 11px uppercase, `rgba(255,255,255,0.4)`, animation: `scrollBounce 2s ease-in-out infinite`
-
-### 6.2 Real-Time Clock Widget (useLibraryClock.ts)
-
-**This is the signature element — build it perfectly.**
-
-```typescript
-// useLibraryClock.ts
-import { useState, useEffect } from 'react';
-
-interface ClockState {
-  timeStr: string;      // "HH:MM:SS AM/PM"
-  dateStr: string;      // "MM – DD – YYYY"
-  isOpen: boolean;      // true = library is open
-}
-
-export function useLibraryClock(): ClockState {
-  const [state, setState] = useState<ClockState>({ timeStr: '', dateStr: '', isOpen: false });
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      const phOptions = { timeZone: 'Asia/Manila' } as const;
-
-      // Time string — HH:MM:SS AM/PM
-      const timeStr = new Intl.DateTimeFormat('en-PH', {
-        ...phOptions,
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
-      }).format(now);
-
-      // Date string — MM – DD – YYYY
-      const p = new Intl.DateTimeFormat('en-PH', {
-        ...phOptions,
-        month: '2-digit', day: '2-digit', year: 'numeric'
-      }).formatToParts(now);
-      const m = p.find(x => x.type === 'month')?.value ?? '';
-      const d = p.find(x => x.type === 'day')?.value ?? '';
-      const y = p.find(x => x.type === 'year')?.value ?? '';
-      const dateStr = `${m} – ${d} – ${y}`;
-
-      // Open/closed — Mon–Fri 7:00 AM to 7:00 PM PH Time
-      const phNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
-      const day = phNow.getDay();   // 0=Sun, 1=Mon … 5=Fri, 6=Sat
-      const hour = phNow.getHours();
-      const isOpen = day >= 1 && day <= 5 && hour >= 7 && hour < 19;
-
-      setState({ timeStr, dateStr, isOpen });
-    };
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  return state;
-}
-```
-
-**Clock widget JSX structure (inside HeroSection.tsx):**
-```tsx
-<div className="glass-card clock-widget">
-  <div className="clock-time">
-    {/* Split timeStr into parts so colons get .clock-colon class */}
-    {renderTimeWithBlinkingColons(timeStr)}
-  </div>
-  <div className="clock-date">{dateStr}</div>
-  <div className={`status-dot ${isOpen ? 'open' : 'closed'}`}>
-    <span className="dot-pulse" />
-    <span className="status-text">
-      {isOpen ? 'LIBRARY IS NOW OPEN' : 'LIBRARY IS CLOSED'}
-    </span>
-  </div>
-</div>
-```
-
-```css
-.clock-widget { padding: 28px 48px; text-align: center; }
-.clock-time { font-family: var(--font-mono); font-size: clamp(32px,5vw,56px); font-weight: 600; color: var(--gold); }
-.clock-colon { animation: colonBlink 1s step-end infinite; }
-.clock-date { font-family: var(--font-mono); font-size: 14px; color: rgba(255,255,255,0.5); margin-top: 4px; }
-.status-dot { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 16px; }
-.dot-pulse { width: 10px; height: 10px; border-radius: 50%; }
-.status-dot.open .dot-pulse { background: var(--success); animation: statusPulseGreen 2s infinite; }
-.status-dot.closed .dot-pulse { background: var(--danger); animation: statusPulseRed 2s infinite; }
-.status-text { font-family: var(--font-body); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; }
-.status-dot.open .status-text { color: var(--success); }
-.status-dot.closed .status-text { color: var(--danger); }
-```
-
-### 6.3 Librarian's Corner (PersonnelSection.tsx)
-
-Layout: Centered card, max-width 760px, two-column horizontal split:
-- **Left panel** (min-width 220px): `background: linear-gradient(180deg, var(--navy-dark), var(--navy))`
-  - Center: real photo of Ma'am Kiara — `import maamKiara from '/assets/maam_kiaras.png'`
-  - Image: `width: 120px`, `height: 140px`, `object-fit: cover`, `border-radius: 8px`, `border: 2px solid var(--gold)`
-  - Name: **"Kiara Keren M. Alavanza"** — Playfair Display 600 16px white
-  - Title: **"Campus Librarian"** — Inter 400 12px `var(--gold)` uppercase
-  - Decorative line: `width: 40px`, `border-top: 2px solid rgba(201,168,76,0.4)`, centered
-- **Right panel** (white bg, padding 36px):
-  - Eyebrow: `LIBRARIAN'S CORNER` — Inter 600 11px `var(--gold)` uppercase
-  - Quote block (gold-pale bg, gold left border 4px):
-    *"From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence."*
-  - Mission text (Inter 400 15px `var(--text-mid)`, line-height 1.7):
-    Full library mission paragraphs (see Part 9 for full content)
-  - Closing italic (Playfair Display 400 italic 16px `var(--gold)`):
-    *"Thank you for making the library part of your journey. Padayon, JRMSUans!"*
-
-### 6.4 Location Section (LocationSection.tsx)
-
-- Eyebrow: `📍 FIND US HERE`
-- Google Maps iframe embed for JRMSU Katipunan Campus:
-  ```html
-  <iframe
-    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d..."
-    width="100%" height="380"
-    style="border:0; border-radius:12px; border: 2px solid var(--gold);"
-    allowfullscreen loading="lazy"
-    title="JRMSU Katipunan Campus Location"
-  />
-  ```
-  Location: National Highway, Barangay Dos, Katipunan, Zamboanga del Norte, Philippines
-- Address line: Inter 400 14px `var(--text-mid)`
-
----
-
-## PART 7 — ABOUT PAGE
-
-### 7.1 Tab/Dropdown Selections
-The About page has a tab switcher or dropdown selector at the top:
-
-| Tab Label | Component |
-|---|---|
-| Organizational Structure | `OrgStructure.tsx` — org chart flowchart |
-| History of JRMSU | `History.tsx` — text content block |
-| JRMSU Library Quality Objectives | `QualityObjectives.tsx` — objectives list |
-| Staff / Personnel | `PersonnelSection.tsx` — transferred here from old location |
-
-Active tab state tracked in `AboutPage.tsx` via `useState`.
-Default active: "Organizational Structure".
-
----
-
-## PART 8 — SERVICES PAGE
-
-### 8.1 Library Services Section
-Full text services list — render each as a styled card. See Part 10 for full text.
-
-### 8.2 Citizens Charter — 7 Accordion Service Cards
-Tab filter row: `ALL | BORROWING | RETURNING | E-LIBRARY | CLEARANCE` (pill tabs, gold active)
-
-Each card: header (clickable, `aria-expanded`) → expanded panel with requirements + step table.
-Use `AccordionCard.tsx` with `max-height` transition.
-
-Full service data is defined in `data.ts` — see Part 11.
-
-### 8.3 Feedback and Complaints Mechanism — FeedbackDropdown.tsx
-- **Trigger:** Dropdown button/header (accordion style)
-- **On expand:** Render 10 sliding modal cards in a horizontal scroll or swipe carousel
-- **Each card:** displays one image from `assets/Feedback and complains mechanism/`
-  - Image naming pattern: `feedback-01.jpg` through `feedback-10.jpg` (use actual filenames)
-  - Card: `width: 320px`, `border-radius: 12px`, `overflow: hidden`, shadow
-  - Modal overlay: clicking a card opens it fullscreen with ESC/✕ close
-- **Slide animation:** `transform: translateX(100%) → translateX(0)`, 350ms ease-out
-- **Navigation arrows:** prev/next inside the gallery
-
-### 8.4 External Services — ExternalServicesDropdown.tsx
-- **Trigger:** Dropdown button/header (accordion style)
-- **On expand:** Render 20 sliding modal cards in a horizontal scroll carousel
-- **Each card:** displays one image from `assets/Library External Services/`
-  - Image naming pattern: `external-01.jpg` through `external-20.jpg` (use actual filenames)
-  - Same card style as Feedback cards
-  - Clicking opens fullscreen modal overlay with ESC/✕ close
-- **Total:** Exactly 20 cards, 20 images
-
----
-
-## PART 9 — FILE SERVICES PAGE
-
-- **Google Sheet embed** (primary content):
-  ```html
-  <iframe
-    src="[GOOGLE_SHEET_PUBLISHED_URL]"
-    width="100%" height="600"
-    style="border: 1px solid var(--border); border-radius: 12px;"
-    title="Library File Services"
-  />
-  ```
-- **E-Books and Journals** card:
-  - Button → `https://drive.google.com/drive/folders/1yFnMsT2s5o_t4pZgbIFzi2c1o2xb6YEG?usp=sharing`
-- **Student Handbooks** card (in Resources section):
-  - Button → `https://drive.google.com/file/d/18erQ6LSfT3Jia84n77WBPOb1JfzI-tQj/view`
-
----
-
-## PART 10 — ONLINE ACCESS PAGE
-
-### 10.1 Open Access Journals
-| Resource | URL |
-|---|---|
-| Agriculture | https://www.mdpi.com/journal/agriculture |
-| List of Scientific Journal | https://en.wikipedia.org/wiki/Lists_of_academic_journals |
-| List of Academic Journal | https://en.wikipedia.org/wiki/Lists_of_academic_journals |
-| Worldcat | https://search.worldcat.org/ |
-| Google Book | https://books.google.com/?hl=en |
-| Online Free E-Books | https://www.free-ebooks.net/ |
-| Gutenberg | https://www.gutenberg.org/ |
-| Scribd | https://www.scribd.com/ |
-| GetFreeEbooks | https://getfreeebooks.com/ |
-| DOST Publication | https://www.dost.gov.ph/index.php?option=com_content&task=view&id=712&Itemid=201 |
-| Highwire Press | https://www.highwirepress.com/ |
-| IPL Magazines | https://www.ipl.org/ |
-
-### 10.2 Resources
-| Resource | URL |
-|---|---|
-| Science Direct | https://www.sciencedirect.com/ |
-| Philippine Elib | https://www.elib.gov.ph/ |
-| ERIC Educ. Res. Info. Center | https://eric.ed.gov/ |
-| Gale Database | https://link.gale.com/apps/menu?userGroupName=phusm&prodId=MENU |
-| Philippine E-Journals | https://ejournals.ph/ |
-| Springer Nature Link | https://link.springer.com/ |
-| E-Library USA | https://docs.google.com/forms/d/e/1FAIpQLSdK93TrYAkWrl32xWxlOItfYFTTgUQPY_Ws2ZhxfuVMvojpiA/viewform |
-| Seameo-innotech eBooks | *(URL to be provided — leave placeholder)* |
-| ProQuest | https://www.proquest.com/ |
-| Student Handbooks | https://drive.google.com/file/d/18erQ6LSfT3Jia84n77WBPOb1JfzI-tQj/view |
-
-### 10.3 Acquired E-Resources
-| Resource | URL |
-|---|---|
-| Bookshelf | https://www.vitalsource.com/ |
-| Scholaar | https://scholaar.com/ |
-
----
-
-## PART 11 — LIBRARY SERVICES TEXT CONTENT
-
-### 11.1 Library Services List (ServicesSection.tsx)
-Render each service as a styled service card:
-
-1. **Library User Education** — formal/informal orientation for first year and transferees; instruction in OPAC use
-2. **Informal Reference Service** — one-on-one assistance for information queries
-3. **Readers Advisory Services** — helps users locate, retrieve, and access information
-4. **Technical Services** — mechanical/technical processing: cataloging (DDC), accessioning, ILS encoding, materials forwarding
-5. **Audio-Visual Services** — AV facilities for events and teaching/learning; faculty coordinates with librarian
-6. **Circulation Services** — borrowing, returning, renewal, reservation, overdue fines; librarian may exclude some materials
-7. **Ask-a-Librarian / #AskRIZAL** — online queries via FB Messenger, IG, Twitter, email, webpage; answered during office hours
-8. **Photo/Scan Me Service** — limited page photography/scanning using personal gadgets
-9. **OPAC Service** — Online Public Access Catalog at strategic library locations
-10. **Printing Service** — hard copy printing for a minimal fee
-11. **Property Counter Service** — baggage area near entrance/exit doors
-12. **Selective Dissemination of Information (SDI)** — newly acquired resources by field
-13. **Current Awareness Services** — library news, resources, events via social media (FB, IG, Twitter), webpage
-14. **Referral Information Service (RIS)** — referral letters for other libraries, issued by Campus Librarian
-15. **File Transfer Service** — digitization of print materials for faculty/students
-16. **Internet / e-Library / Free Wi-Fi** — internet access for all bona fide students and faculty
-17. **Online Databases Service** — e-books, e-journals, market research, legal databases, encyclopaedias, e-magazines, e-newspapers; credentials via email
-
-### 11.2 Campus Contact Details Table (inside Ask-a-Librarian)
-| Campus | Email | Social Media | Contact |
-|---|---|---|---|
-| Main Campus | main.library@jrmsu.edu.ph | JRMSU Main Campus Library | 09215903198 / 09353404868 |
-| Dipolog Campus | dipolog.library@jrmsu.edu.ph | FB: JRMSU Dipolog Campus Library; IG & Twitter: @jrmsudiplibrary | (065) 917 8171 / (065) 918 0268 |
-| Katipunan Campus | katipunan.library@jrmsu.edu.ph | JRMSU Katipunan Campus Library | (065) 918 0141 |
-| Tampilisan Campus | jrmsutampilisan.library@jrmsu.edu.ph | JRMSU Tampilisan Campus Library | 09165537813 |
-| Siocon Campus | siocon.library@jrmsu.edu.ph | JRMSU Siocon Campus Library | 09976177595 |
-
----
-
-## PART 12 — CITIZENS CHARTER — 7 SERVICES DATA (data.ts)
-
-```typescript
-// src/Lib/assets/data.ts — partial (services array)
-export const libraryServices: LibraryService[] = [
-  {
-    id: 'clearance-online',
-    title: 'Signing of Library Clearance',
-    subtitle: 'Online Transaction',
-    category: 'clearance',
-    badgeType: 'external',
-    whoMayAvail: 'Students',
-    totalTime: '18 minutes',
-    totalFee: 'None',
-    requirements: [
-      { item: 'Clearance' },
-      { item: 'Borrower\'s Card / Clear Record in the Integrated Library System (ILS)' },
-    ],
-    steps: [
-      { clientStep: 'Log in to https://jrmsu-arms.online/ and click the student portal', agencyAction: '1.1 Log in to https://jrmsu-arms.online/ and click the designee portal', fees: 'None', time: '5 min', person: 'Librarian / Library Staff' },
-      { clientStep: 'Request for online clearance signing', agencyAction: '2.1 View and check Students Clearance Request', fees: 'None', time: '3 min', person: 'Librarian / Library Staff' },
-      { clientStep: 'Wait for the designee to process and approve the clearance', agencyAction: '3.1 Check students\' records and process online clearance', fees: 'None', time: '3 min', person: 'Librarian / Library Staff' },
-      { clientStep: 'Accomplish the customer feedback form', agencyAction: '4.1 Provide client with CSM form or using the link: www.jrmsu.online/feedback', fees: 'None', time: '5 min', person: 'Librarian / Library Staff' },
-    ],
-  },
-  {
-    id: 'borrowing-automated',
-    title: 'Circulation — Borrowing Service',
-    subtitle: 'Automated Transaction',
-    category: 'borrowing',
-    badgeType: 'internal-ext',
-    whoMayAvail: 'Students, Faculty, and Staff',
-    totalTime: '23 minutes',
-    totalFee: 'None',
-    requirements: [
-      { item: 'For Students: Validated Student\'s ID', whereToSecure: 'Office of Student Affairs and Services (OSAS)' },
-      { item: 'For Students: EDP', whereToSecure: 'Registrar\'s Office' },
-      { item: 'For Faculty and Staff: Faculty/Staff ID', whereToSecure: 'OSAS' },
-      { item: 'For Faculty: Teacher\'s Load', whereToSecure: 'Registrar\'s Office' },
-    ],
-    steps: [
-      { clientStep: 'Select book(s) or materials using the Online Public Access Catalog (OPAC)', agencyAction: '1.1 Assists the library customers in locating the book(s) or materials', fees: 'None', time: '10 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Present ID and selected materials to the circulation in-charge for proper recording', agencyAction: '2.1 Check and verify ID and selected materials; 2.2 Login in ILS circulation module; 2.3 Scan barcode of borrowers\' ID and book(s); 2.4 Print receipt', fees: 'None', time: '5 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Receive the borrowed book(s) or materials', agencyAction: '3.1 Release the borrowed book(s) or materials to the borrower', fees: 'None', time: '3 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Accomplish the customer feedback form', agencyAction: '4.1 Provide client with CSM form or using the link: www.jrmsu.online/feedback', fees: 'None', time: '5 min', person: 'Circulation in-Charge / Librarian' },
-    ],
-  },
-  {
-    id: 'borrowing-manual',
-    title: 'Circulation — Borrowing Service',
-    subtitle: 'Manual Transaction',
-    category: 'borrowing',
-    badgeType: 'internal-ext',
-    whoMayAvail: 'Students, Faculty, and Staff',
-    totalTime: '26 minutes',
-    totalFee: 'None',
-    requirements: [
-      { item: 'For Students: Validated Student\'s ID', whereToSecure: 'OSAS' },
-      { item: 'For Students: EDP', whereToSecure: 'Registrar\'s Office' },
-      { item: 'For Faculty and Staff: Faculty/Staff ID', whereToSecure: 'OSAS' },
-      { item: 'For Faculty: Teacher\'s Load', whereToSecure: 'Registrar\'s Office' },
-    ],
-    steps: [
-      { clientStep: 'Select book(s) or materials using the OPAC', agencyAction: '1.1 Assists library customers in locating the book(s) or materials', fees: 'None', time: '10 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Present ID and selected materials to the circulation in-charge', agencyAction: '2.1 Check and verify the ID and selected materials', fees: 'None', time: '5 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Fill-out the book card and borrowers\' card', agencyAction: '3.1 Check the signed book card and borrowers\' card', fees: 'None', time: '3 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Receive the borrowed book(s) or materials', agencyAction: '4.1 Release the borrowed book(s) or materials; 4.2 Keep the borrowers\' card with signed book card', fees: 'None', time: '3 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Accomplish the customer feedback form', agencyAction: '5.1 Provide client with CSM form or using the link: www.jrmsu.online/feedback', fees: 'None', time: '5 min', person: 'Circulation in-Charge / Librarian' },
-    ],
-  },
-  {
-    id: 'returning-automated',
-    title: 'Circulation — Returning Service',
-    subtitle: 'Automated Transaction',
-    category: 'returning',
-    badgeType: 'internal-ext',
-    whoMayAvail: 'Students, Faculty, and Staff',
-    totalTime: '23 minutes',
-    totalFee: 'PHP 10 × no. of hours (overdue)',
-    requirements: [
-      { item: 'Borrowed Book(s) or materials', whereToSecure: 'Library' },
-      { item: 'For Overdue: Official Receipt (OR)', whereToSecure: 'Cashier\'s Office' },
-    ],
-    steps: [
-      { clientStep: 'Present the borrowed book(s) or materials to the circulation in-charge', agencyAction: '1.1 Scan or swipe the book\'s barcode in the ILS circulation module return dashboard', fees: 'None', time: '3 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'For Overdue: 2a. Proceed to cashier\'s office; 2b. Present Official Receipt (OR) as proof of payment; 2c. Acknowledge receipt of OR', agencyAction: '2.1.1 Instruct borrower to proceed to cashier\'s office to pay overdue fines; 2.1.2 Record OR number in logbook; 2.1.3 Return OR to borrower', fees: 'PHP 10.00/office hour (excl. weekends & holidays)', time: '15 min', person: 'Circulation in-Charge / Librarian', isOverdue: true },
-      { clientStep: 'Accomplish the customer feedback form', agencyAction: '3.1 Provide client with CSM form or using the link: www.jrmsu.online/feedback', fees: 'None', time: '5 min', person: 'Circulation in-Charge / Librarian' },
-    ],
-  },
-  {
-    id: 'returning-manual',
-    title: 'Circulation — Returning Service',
-    subtitle: 'Manual Transaction',
-    category: 'returning',
-    badgeType: 'internal-ext',
-    whoMayAvail: 'Students, Faculty, and Staff',
-    totalTime: '27 minutes',
-    totalFee: 'PHP 10 × no. of hours (overdue)',
-    requirements: [
-      { item: 'Borrowed Book(s) or materials', whereToSecure: 'Library' },
-      { item: 'For Overdue: Official Receipt (OR)', whereToSecure: 'Cashier\'s Office' },
-    ],
-    steps: [
-      { clientStep: 'Present the borrowed book(s) or materials to the circulation in-charge', agencyAction: '1.1 Receive and check the borrowed book(s); 1.2 Retrieve borrower\'s card and book card, record return date; 1.3 Place book card back into book pocket', fees: 'None', time: '5 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'For Overdue: 2a. Proceed to cashier\'s office; 2b. Present OR as proof; 2c. Acknowledge receipt', agencyAction: '2.1.1 Calculate fines; 2.1.2 Instruct borrower to proceed to cashier\'s office; 2.1.3 Record OR number in logbook; 2.1.4 Return OR to borrower', fees: 'PHP 10.00/office hour (excl. weekends & holidays)', time: '15 min', person: 'Circulation in-Charge / Librarian', isOverdue: true },
-      { clientStep: 'Receive the borrower\'s card', agencyAction: '3.1 Release the borrowers\' card to the borrower', fees: 'None', time: '2 min', person: 'Circulation in-Charge / Librarian' },
-      { clientStep: 'Accomplish the customer feedback form', agencyAction: '4.1 Provide client with CSM form or using the link: www.jrmsu.online/feedback', fees: 'None', time: '5 min', person: 'Circulation in-Charge / Librarian' },
-    ],
-  },
-  {
-    id: 'e-library',
-    title: 'E-Library Services',
-    subtitle: '',
-    category: 'e-library',
-    badgeType: 'e-library',
-    whoMayAvail: 'Students, Faculty, Staff, Alumni, and External Researchers',
-    totalTime: '19 minutes',
-    totalFee: 'None',
-    requirements: [
-      { item: 'A. For Students: Student\'s ID' },
-      { item: 'B. For Faculty and Employees: Employee\'s ID' },
-      { item: 'C. Alumni: Alumni\'s ID' },
-      { item: 'D. External Researchers: Referral Letter / Endorsement Letter', whereToSecure: 'External Library / Agency / Institution' },
-    ],
-    steps: [
-      { clientStep: 'Present school ID for logbook recording, then swipe ID at the barcode reader', agencyAction: '1.1 Verify ID validity', fees: 'None', time: '3 min', person: 'IT / E-Library in-Charge' },
-      { clientStep: 'First-time users: obtain a username and password', agencyAction: '2.1 Issue username and password (30 hours per semester)', fees: 'None', time: '5 min', person: 'IT / E-Library in-Charge' },
-      { clientStep: 'Proceed to the designated workstation', agencyAction: '3.1 Assist and monitor the client as needed', fees: 'None', time: '3 min', person: 'IT / E-Library in-Charge' },
-      { clientStep: 'Log out the user\'s account', agencyAction: '4.1 Instruct user to organize workstation and ensure it is ready for next user', fees: 'None', time: '3 min', person: 'IT / E-Library in-Charge' },
-      { clientStep: 'Accomplish the customer feedback form', agencyAction: '5.1 Provide client with CSM form or using the link: www.jrmsu.online/feedback', fees: 'None', time: '5 min', person: 'IT / E-Library in-Charge' },
-    ],
-  },
-  {
-    id: 'clearance-manual',
-    title: 'Signing of Library Clearance',
-    subtitle: 'Manual Transaction',
-    category: 'clearance',
-    badgeType: 'internal',
-    whoMayAvail: 'Faculty and Staff',
-    totalTime: '13 minutes',
-    totalFee: 'None',
-    requirements: [
-      { item: 'Shall return all borrowed book(s) or materials', whereToSecure: 'Library' },
-      { item: 'Faculty / Staff clearance', whereToSecure: 'Library' },
-    ],
-    steps: [
-      { clientStep: 'Present customers\' clearance', agencyAction: '1.1 Check the records of the faculty/staff in the library record or in the Integrated Library System (ILM)', fees: 'None', time: '5 min', person: 'Librarian / Library Staff' },
-      { clientStep: 'Wait for the assigned library personnel to process and approve the clearance', agencyAction: '2.1 Release the customer\'s clearance', fees: 'None', time: '3 min', person: 'Librarian / Library Staff' },
-      { clientStep: 'Accomplish the customer feedback form', agencyAction: '3.1 Provide client with CSM form or using the link: www.jrmsu.online/feedback', fees: 'None', time: '5 min', person: 'Librarian / Library Staff' },
-    ],
-  },
-];
-```
-
----
-
-## PART 13 — QUICK LINKS & FOOTER
-
-### 13.1 Quick Links (in Footer center column + sidebar)
-```
-Library Policies        → /library-policies
-Contact Support         → navigates to #contact section
-Privacy Policy          → /privacy-policy
-Facebook Page           → https://www.facebook.com/JRMSUkatipunanlibrary
-```
-
-### 13.2 Footer Layout (3-column, `background: var(--navy-dark)`)
-
-**Gold top border:** `border-top: 2px solid var(--gold)`
-
-**Left column:**
-- Display `iso-sidebar.png` — `import isoSidebar from '/assets/iso-sidebar.png'`
-- `width: 180px`, `object-fit: contain`
-
-**Center column:**
-- Heading: `QUICK LINKS` (Inter 600 11px var(--gold) uppercase)
-- Links: Library Policies | Contact Support | Privacy Policy | Facebook Page
-
-**Right column:**
-- Heading: `CONTACT US` (Inter 600 11px var(--gold) uppercase)
-- Email 1: katipunan.library@jrmsu.edu.ph
-- Email 2: jrmsukclibrary@gmail.com
-- Facebook: https://www.facebook.com/JRMSUkatipunanlibrary
-
-**Bottom bar:**
-```
-© {new Date().getFullYear()} JRMSU-Katipunan Campus Library. All rights reserved.
-                                        JRMSU Main | GOV.PH | Data Privacy
-```
-
----
-
-## PART 14 — ACCESSIBILITY REQUIREMENTS
-
-| Rule | Implementation |
-|---|---|
-| WCAG 2.1 AA minimum | Navy on white 8.6:1 ✅, Gold on navy 5.2:1 ✅, White on navy 8.6:1 ✅ |
-| `<h1>` once per page | Hero headline only |
-| Heading hierarchy | H1 → H2 → H3, never skip levels |
-| Keyboard nav | All interactive elements focusable; no `tabindex="-1"` on links |
-| Focus ring | `outline: 2px solid var(--gold); outline-offset: 2px` on `:focus-visible` |
-| Accordion | `<button aria-expanded="true/false">` — never `<div>` with click |
-| Icons | `aria-label` on all icon-only buttons |
-| Images | `alt` text on all `<img>` — including Ma'am Kiara's photo: `alt="Kiara Keren M. Alavanza, Campus Librarian"` |
-| Iframes | `title` attribute required on Google Maps and Google Sheet iframes |
-| Modal | `role="dialog"`, `aria-modal="true"`, focus trapped inside, ESC closes |
-| Forms | `<label for="">` paired with every `<input>` and `<textarea>` |
-| Motion | `@media (prefers-reduced-motion: reduce)` disables all transform animations |
-
----
-
-## PART 15 — EXTERNAL LINKS (ALL VERIFIED)
-
-### University Libraries
-| Campus | URL |
-|---|---|
-| Main Campus (Dapitan) | https://jrmsu.edu.ph/library/ |
-| Dipolog Campus | http://dipolog.jrmsu.edu.ph/ |
-| Tampilisan Campus | http://tampilisan.jrmsu.edu.ph/ |
-| Siocon Campus | http://siocon.jrmsu.edu.ph/ |
-| Katipunan Campus | *(current page)* |
-
-### External Systems
-| Service | URL |
-|---|---|
-| JRMSU ARMS Online | https://jrmsu-arms.online/ |
-| Online Library Clearance | https://www.jrmsu-clearance.online/ |
-| CSM Feedback Form | https://www.jrmsu.online/feedback |
-| JRMSU Katipunan Campus Website | https://katipunan.jrmsu.edu.ph/ |
-
-### File Services Resources
-| Resource | URL |
-|---|---|
-| E-Books and Journals (Drive) | https://drive.google.com/drive/folders/1yFnMsT2s5o_t4pZgbIFzi2c1o2xb6YEG?usp=sharing |
-| Student Handbooks (Drive) | https://drive.google.com/file/d/18erQ6LSfT3Jia84n77WBPOb1JfzI-tQj/view |
-
----
-
-## PART 16 — ASSETS REFERENCE TABLE
-
-| Asset Name | Path in Project | Usage |
+| Layer | Technology | Pattern |
 |---|---|---|
-| Librarian Photo | `/public/assets/maam_kiaras.png` | PersonnelSection — Librarian's Corner |
-| ISO Sidebar Image | `/public/assets/iso-sidebar.png` | Footer — left column |
-| Feedback Cards (10) | `/public/assets/feedback/feedback-01.jpg` … `feedback-10.jpg` | FeedbackDropdown modal cards |
-| External Services (20) | `/public/assets/external/external-01.jpg` … `external-20.jpg` | ExternalServicesDropdown modal cards |
-| Library Building | `/public/assets/library-building.jpg` | Body background-image (must show through sections) |
+| Web Frontend | React + Vite + TypeScript | Feature-based Vertical Slice |
+| Mobile Frontend | React Native + TypeScript | Feature-based Vertical Slice |
+| Backend | Django + DRF + Python | Layered Model-First |
+| Database | SQL Server (SSMS19 Recommended) / MySQL / PostgreSQL | Strict Relational |
+| Cache | Redis | Infrastructure Layer |
+| Auth | JWT + HMAC-SHA256 QR | Backend-enforced |
 
 ---
 
-## PART 17 — VERIFICATION CHECKLIST
+## 2) Universal Rules — Always Follow
 
-Before marking any feature complete, verify:
-
-- [ ] Background library image is **visibly clear** behind all sections (not covered by white overlay)
-- [ ] `section::before` pseudo-element at `rgba(255,255,255,0.70)` is applied, NOT `background` on `section`
-- [ ] Clock ticks every second, shows PH time (UTC+8), colons blink
-- [ ] Open/closed status flips correctly based on PH day/hour
-- [ ] Navbar blurs at 60px scroll, gold border appears
-- [ ] Mobile hamburger opens slide-down drawer, closes on link tap
-- [ ] About dropdown shows 4 sub-sections
-- [ ] All 7 service accordions expand/collapse with `max-height` transition (NOT `display:none`)
-- [ ] Feedback dropdown expands to show 10 image cards, clickable to fullscreen modal
-- [ ] External Services dropdown expands to show 20 image cards, clickable to fullscreen modal
-- [ ] Modals trap focus, close on ESC or ✕
-- [ ] Footer left shows iso-sidebar.png
-- [ ] Footer center shows all 4 Quick Links including Facebook
-- [ ] Footer right shows both email addresses + Facebook link
-- [ ] All external links open in `target="_blank"` with `rel="noopener noreferrer"`
-- [ ] `npm run build` produces no TypeScript errors
-- [ ] Lighthouse accessibility score ≥ 90
+```
+✅ DO                                        ❌ NEVER DO
+─────────────────────────────────────────    ────────────────────────────────────────
+Follow the exact flow chain                  Skip layers
+Place code in the correct layer              Mix responsibilities
+Keep every file to one responsibility        Put business logic in controllers
+Keep modules modular and reusable            Put API calls in page components
+Keep frontend and backend separate           Put DB queries in middleware
+Keep DB relational and controlled            Put UI logic in DB code
+Follow the flow chain direction              Reverse or bypass the chain
+Add short purpose comments to every file     Leave files without clear ownership
+Keep platform-specific code isolated         Duplicate feature logic across platforms
+Enforce all security on the backend          Rely on frontend visibility as security
+```
 
 ---
 
-*SKILL.md v2.0 — JRMSU Katipunan Campus Library*
-*Compiled from: DESIGN.md, Frontend_Structure_rules.md, INSTRUCTIONS_PROMPT.md, service charter photos*
+## 3) Flow Chains — Never Alter Order
+
+### 3A) Frontend Flow Chain
+
+```
+Pages
+  ↓  (route-level composition only)
+Features
+  ↓  (business logic and workflows)
+Hooks / State / API (Endpoints)
+  ↓  (reusable logic, shared state, backend calls)
+Shared Components
+  ↓  (presentational primitives only)
+Libs / Utilities
+  ↓  (infrastructure: auth, clients, helpers)
+Assets
+```
+
+### 3B) Backend Flow Chain
+
+```
+Models
+  ↓
+Enums
+  ↓
+Django ORM
+  ↓
+Repository Implementation
+  ↓
+Repository Interface
+  ↓
+Service Implementation
+  ↓
+Service Interface
+  ↓
+Helpers
+  ↓
+API Controllers
+  ↓
+Middleware
+  ↓
+manage.py → settings.py → Custom Management Commands
+```
+
+### 3C) HTTP Request Flow Chain
+
+```
+Incoming Request
+  ↓
+Django Middleware  (rate limit, CSRF, auth guards, idempotency)
+  ↓
+API Controller    (parse request, call service, return response)
+  ↓
+Service Layer     (validate, enforce rules, orchestrate)
+  ↓
+Repository Layer  (query, persist, filter)
+  ↓
+Database          (final state)
+```
+
+### 3D) Cache Read Flow
+
+```
+Request → Middleware → Controller → Service → Cache Service
+  Cache HIT?  → Return Data
+  Cache MISS? → Repository → Database → Store in Cache → Return Data
+```
+
+### 3E) Cache Write / Invalidation Flow
+
+```
+Request → Controller → Service → Repository → Database
+  Success? → Invalidate: book:{id}, book:list, dashboard:stats → Return Result
+```
+
+### 3F) Contact Form Flow (Domain-Specific)
+
+```
+Visitor submits Contact Form
+  ↓
+Django Middleware (rate_limit_middleware, CSRF)
+  ↓
+ContactController  POST /api/contact
+  ↓
+ContactService  (validate, sanitize via input_sanitizer, send email notification)
+  ↓
+ContactRepository  (persist inquiry)
+  ↓
+Database  ContactMessages table
+```
+
+---
+
+## 4) JRMSU Landing Page — Frontend Vertical Slice Structure
+
+> **DO NOT change any UI, functions, color scheme, styles, or components.**
+> This reorganization is **structure-only** — same files, better layer placement.
+
+```
+JRMSU LIBRARY LANDING PAGE/            # Root project folder (Vite + React setup at root)
+│
+├── public/
+│   └── assets/                        # Static public images and files (served directly by Vite)
+│
+├── src/
+│   │
+│   ├── Pages/                         # Route-level page assemblies only — no business logic here
+│   │   ├── Home/
+│   │   │   └── HomePage.tsx           # Main entry route — composes Hero, Maps, Feedback features
+│   │   ├── About/
+│   │   │   └── AboutPage.tsx          # About route — History, Vision, Objectives sections
+│   │   ├── Administration/
+│   │   │   └── AdministrationPage.tsx # Administration overview page route
+│   │   ├── Collection/
+│   │   │   └── CollectionPage.tsx     # Collection route — New Books, Local Books, Online catalog
+│   │   ├── Personnel/
+│   │   │   └── PersonnelPage.tsx      # Personnel route wrapper — composes PersonnelSection
+│   │   ├── PhysicalSetup/
+│   │   │   └── PhysicalSetupPage.tsx  # Physical setup route wrapper — composes LibrarySectionCarousel
+│   │   └── Services/
+│   │       └── ServicesPage.tsx       # Services route wrapper — composes ServicesSection
+│   │
+│   ├── Features/                      # Feature-specific vertical slices — owns business workflows
+│   │   │
+│   │   ├── Home/                      # Home page feature slice
+│   │   │   └── components/
+│   │   │       ├── HeroSection.tsx           # Hero with real-time clock and library open/closed status
+│   │   │       └── LibraryMapSection.tsx     # Google Maps satellite embed for library location
+│   │   │
+│   │   ├── Services/                  # Library services feature slice
+│   │   │   └── components/
+│   │   │       ├── ServicesSection.tsx       # 17 library services accordion with steps
+│   │   │       └── ExternalServicesSection.tsx # External services accordion with auto-slideshow
+│   │   │
+│   │   ├── Feedback/                  # Visitor feedback feature slice
+│   │   │   └── components/
+│   │   │       ├── FeedbackSection.tsx       # Feedback accordion with auto-slideshow display
+│   │   │       └── FeedbackStickyCard.tsx    # Floating sticky feedback button overlay
+│   │   │
+│   │   ├── Collection/                # Book collection feature slice
+│   │   │   └── components/
+│   │   │       ├── NewlyAcquiredBooks.tsx    # Newly acquired books section display
+│   │   │       └── BlueModalCarousel.tsx     # 3D rotating carousel for newly acquired books
+│   │   │
+│   │   ├── PhysicalSetup/             # Library physical setup feature slice
+│   │   │   └── components/
+│   │   │       └── LibrarySectionCarousel.tsx # 3D rotating carousel for library physical areas
+│   │   │
+│   │   ├── Personnel/                 # Library personnel feature slice
+│   │   │   └── components/
+│   │   │       └── PersonnelSection.tsx      # Flowchart layout for library staff hierarchy
+│   │   │
+│   │   ├── EResources/                # E-Resources feature slice — LEGACY (keep, do not delete)
+│   │   │   └── components/
+│   │   │       └── EResourcesPage.tsx        # E-Resources section component (unused — legacy ref)
+│   │   │
+│   │   ├── AIAssistant/               # Rizal AI assistant feature slice
+│   │   │   └── components/
+│   │   │       └── RizalAssistant.tsx        # Dr. Rizal floating AI assistant chat modal
+│   │   │
+│   │   └── Auth/                      # Authentication and authorization slice
+│   │       └── components/
+│   │           ├── LoginForm.tsx             # Main admin login form
+│   │           └── ForgotPasswordModal.tsx   # Floating modal for password reset flow
+│   │
+│   ├── Endpoints/                     # API endpoint stubs — frontend to backend bridge layer
+│   │   ├── contactApi.ts              # POST /api/contact — contact form submission to backend
+│   │   ├── feedbackApi.ts             # POST /api/feedback — visitor feedback submission
+│   │   ├── personnelApi.ts            # GET /api/personnel — fetch library staff list from DB
+│   │   ├── cmsApi.ts                  # CMS CRUD — /api/books, /api/departments, /api/gallery
+│   │   ├── notificationApi.ts         # GET /api/notifications/all/ — smart aggregated notifications
+│   │   └── userApi.ts                 # Auth and profile operations (login, reset password, etc)
+│   │
+│   ├── Components/                    # Shared reusable UI primitives — presentational only
+│   │   ├── LayoutBars/                # Global layout frame components
+│   │   │   ├── TopNavBar.tsx          # Main header navigation with hover dropdowns
+│   │   │   └── Footer.tsx             # Global footer component
+│   │   ├── Modals/                    # Shared modal components
+│   │   │   ├── BookListModal.tsx      # Modal for full book list display
+│   │   │   └── FileViewerModal.tsx    # Modal for PDF/file viewer from collection tree
+│   │   └── Shared/                    # Common reusable UI elements
+│   │       ├── DragDropFileUpload.tsx # Drag-and-drop file upload zone — used in all admin upload modals
+│   │       ├── FacebookBubble.tsx     # Floating Facebook Messenger bubble overlay
+│   │       ├── ImageGallery.tsx       # Reusable image slider with auto-play capabilities
+│   │       ├── SkeletonLoader.tsx     # Loading animations — Line, Circle, Card, Page variants
+│   │       ├── TreeView.tsx           # Interactive file explorer tree component
+│   │       └── UOPACSection.tsx       # UOPAC QR Code display and redirect section
+│   │
+│   ├── LayoutStyles/                  # Global styling and color system — all colors defined here
+│   │   └── index.css                  # Global CSS tokens, Tailwind base, and custom animations
+│   │
+│   ├── Libs/                          # General utilities and helper functions
+│   │   ├── chartUtils.ts              # Dynamic scaling and formatting for Recharts
+│   │   └── Assets/                    # Constants, data files, links
+│   │
+│   ├── Hooks/                         # Shared reusable hooks only
+│   │   └── useIntersectionObserver.ts # Custom hook for scroll-based fade-in animations
+│   │
+│   ├── Libs/                          # Shared frontend infrastructure and data utilities
+│   │   └── Assets/                    # CDN URLs, link lists, service data, JSON config data
+│   │       ├── data.ts                # Global constants, static arrays, and link mappings
+│   │       ├── eBooksTree.json        # JSON tree representation of local books directory
+│   │       └── treeData.ts            # Types and configs for the tree viewer component
+│   │
+│   ├── Assets/                        # Static image assets (Vite-resolved) — pictures, icons, PDFs
+│   │   └── (images, icons, media)     # No logic here — raw static files only
+│   │
+│   ├── App.tsx                        # Main router setup with React Suspense and lazy loading
+│   └── main.tsx                       # React DOM entry point
+│
+├── frontend/
+│   └── FrontendStructure.md           # Frontend architecture documentation (this structure)
+├── scripts/                           # Build and utility scripts
+├── SKILLS/                            # Custom agent skills directory
+├── .env.example                       # Environment variable template
+├── .gitignore                         # Git ignore definitions
+├── AGENTS.md                          # Committed agent skills and conventions
+├── DESIGN.md                          # Design system guidelines
+├── index.html                         # Vite entry HTML (root)
+├── package.json                       # NPM dependencies and scripts
+├── package-lock.json                  # NPM lockfile
+├── PROJECT_SKILL.md                   # Project-specific AI agent instructions
+├── README.md                          # Project overview and description
+├── SETUP.md                           # Setup and installation instructions
+├── SKILL.md                           # This architecture skill definitions file
+├── tsconfig.json                      # TypeScript compiler configuration
+└── vite.config.ts                     # Vite bundler configuration
+```
+
+### Frontend Layer Rules
+
+| Layer | Purpose | What Belongs | What is Forbidden |
+|---|---|---|---|
+| `Pages/` | Route-level composition | Layout assembly, route entry points | Business logic, API calls, feature duplication |
+| `Features/` | Vertical slice ownership | Workflow logic, feature hooks, feature API | Global state, shared UI, infrastructure |
+| `Endpoints/` | Backend bridge | API call functions, request/response types | Business rules, UI rendering |
+| `Components/` | Shared UI primitives | Modals, cards, nav bars, shared elements | Feature-specific logic, API calls |
+| `LayoutStyles/` | Global styling | CSS tokens, Tailwind base, color variables | Component-specific styles |
+| `Hooks/` | Shared reusable hooks | Reusable hook logic, observers | Feature-specific hooks (those go in Features/) |
+| `Libs/Assets/` | Data and config | Constants, link lists, JSON data, CDN URLs | UI components, business logic |
+| `Assets/` | Static files | Images, icons, PDFs, media | Any logic or code |
+
+---
+
+## 5) Backend Vertical Slice Structure (Django)
+
+```
+backend/                                    # Root Django backend application
+│
+├── manage.py                              # Main Django management entry point
+├── requirements.txt                       # Python dependencies
+├── .env                                   # Environment config (secrets, DB URL, SMTP)
+│
+├── core/                                  # Django project configuration layer
+│   ├── __init__.py                        # pymysql.install_as_MySQLdb() initialization
+│   ├── settings.py                        # Django settings — DB, Auth, CORS, JWT, SMTP, Redis
+│   ├── urls.py                            # Root URL config — /admin/ + /api/ + /assets/
+│   ├── asgi.py                            # ASGI entry point
+│   ├── wsgi.py                            # WSGI entry point
+│   └── middleware/                        # Request preprocessing layer
+│       ├── auth_middleware.py             # JWT auth check and token validation
+│       ├── idempotency_middleware.py      # Duplicate request protection
+│       └── rate_limit_middleware.py       # Prevents form submission spam
+│
+└── Features/                              # Domain vertical slices — main Django app
+    ├── __init__.py
+    ├── apps.py                            # FeaturesConfig — registers Django app
+    ├── models.py                          # Re-exports all models from Data/Models/
+    ├── migrations/                        # Django auto-generated migration files
+    │
+    ├── Data/                              # Model-first foundation — database shape only
+    │   ├── Models/
+    │   │   ├── __init__.py                # Exports all models for Django ORM discovery
+    │   │   ├── account_model.py           # Account entity (extends AbstractUser: is_librarian, is_guest)
+    │   │   ├── contact_message_model.py   # Entity for submitted contact form inquiries
+    │   │   ├── feedback_model.py          # Entity for visitor feedback submissions
+    │   │   ├── personnel_model.py         # CMS entity for library staff profiles
+    │   │   ├── newly_acquired_book_model.py # Book entity with cover image and metadata
+    │   │   ├── eresource_model.py         # EResourceDepartment + EResourceFile (multi-level tree)
+    │   │   └── library_interior_image_model.py # Gallery images with category labels
+    │   └── Enums/
+    │       ├── inquiry_status.py          # Enum: new, read, replied — contact message state
+    │       └── feedback_rating.py         # Enum: 1–5 stars — visitor rating values
+    │
+    ├── Repositories/                      # Data access layer only — no business rules here
+    │   ├── Interfaces/
+    │   │   ├── contact_repository_interface.py   # Contract for contact data access
+    │   │   ├── feedback_repository_interface.py  # Contract for feedback data access
+    │   │   └── i_notification_repository.py      # Contract for notification data access
+    │   └── Implementations/
+    │       ├── contact_repository.py      # Contact inquiry persistence via Django ORM
+    │       ├── feedback_repository.py     # Feedback record persistence via Django ORM
+    │       └── notification_repository.py # Notification aggregate ORM queries
+    │
+    ├── Services/                          # Business logic layer only — no DB access here
+    │   ├── Interfaces/
+    │   │   ├── contact_service_interface.py  # Contract for contact workflow
+    │   │   ├── feedback_service_interface.py # Contract for feedback workflow
+    │   │   └── i_notification_service.py     # Contract for notification workflow
+    │   └── Implementations/
+    │       ├── contact_service.py         # Validates form, prevents spam, triggers email, saves to repo
+    │       ├── feedback_service.py        # Handles feedback submission rules and dedup logic
+    │       └── notification_service.py    # Aggregates notifications from system data
+    │
+    ├── Helpers/                           # Reusable support utilities — not full workflows
+    │   ├── input_sanitizer.py             # Cleans and sanitizes all public form submissions (XSS guard)
+    │   ├── authentication.py             # JWT helper utilities and token handling
+    │   ├── permissions.py                # Role and access permission helper utilities
+    │   ├── password.py                   # Password hashing and validation helpers
+    │   └── notification_helper.py        # Notification format and time utilities
+    │
+    ├── Api/                              # REST API layer — expose endpoints only
+    │   ├── Controllers/
+    │   │   ├── contact_controller.py      # POST /api/contact — receive and dispatch contact form
+    │   │   ├── feedback_controller.py     # POST /api/feedback — receive and dispatch feedback
+    │   │   ├── personnel_controller.py    # GET /api/personnel — return staff list
+    │   │   ├── cms_controller.py          # CRUD /api/books, /api/departments, /api/resources, /api/gallery
+    │   │   └── notification_controller.py # GET /api/notifications/all/ — smart aggregated notifications
+    │   ├── Serializers/
+    │   │   ├── contact_serializer.py      # Shape contact request and response data
+    │   │   ├── feedback_serializer.py     # Shape feedback request and response data
+    │   │   ├── personnel_serializer.py    # Shape personnel response data
+    │   │   └── cms_serializers.py         # Book, Department, EResource, Gallery serializers
+    │   └── Routes/
+    │       └── api_router.py              # All URL patterns — auth, contact, feedback, cms
+    │
+    ├── Infrastructure/                    # External system setup — not business logic
+    │   ├── Database/
+    │   │   ├── db_engine.py               # Database engine selector — MySQL, PostgreSQL, SQL Server
+    │   │   ├── connection_factory.py      # Builds DB connection settings from .env
+    │   │   └── health_check.py            # Pings database and returns health status
+    │   ├── Cache/                         # Redis cache layer — performance concern, not domain
+    │   │   ├── redis_client.py            # Creates Redis connection pool from config
+    │   │   ├── redis_config.py            # Reads Redis settings from .env
+    │   │   ├── redis_health.py            # Redis health check and ping utility
+    │   │   ├── cache_service.py           # Generic cache get/set/delete operations
+    │   │   ├── cache_keys.py              # Central cache key naming conventions
+    │   │   ├── ttl_rules.py               # Cache TTL expiration policy definitions
+    │   │   └── cache_invalidation.py      # Cache invalidation rules per entity type
+    │   ├── EmailClient/
+    │   │   └── email_sender.py            # Sends notifications to library staff on form submission
+    │   └── ApiTools/
+    │       ├── scalar_v1.py               # Scalar V1 API docs integration support
+    │       └── drf_tools.py               # Django REST Framework tooling and pagination setup
+    │
+    ├── Management/                        # Django CLI tools and operational scripts
+    │   ├── Commands/
+    │   │   ├── add_migration.py           # Wrapper for makemigrations — use instead of raw command
+    │   │   ├── update_database.py         # Wrapper for migrate — use instead of raw command
+    │   │   ├── createsuperuser_custom.py  # Creates first privileged librarian account
+    │   │   └── imports_assets             # Asset crawler — seeds DB from local /assets/ folder
+    │   └── Scripts/
+    │       └── setup_db.py                # First-time database bootstrap script
+    │
+    └── Logs/                              # Implementation and error logs
+        ├── ImplementationLogs/            # Feature and architecture change records
+        └── ErrorLogs/                     # Runtime and build error records
+```
+
+### Backend Layer Rules
+
+| Layer | Purpose | What Belongs | What is Forbidden |
+|---|---|---|---|
+| `Data/Models/` | DB shape | Tables, entities, relations | Business rules, API logic |
+| `Data/Enums/` | Fixed values | Roles, statuses, constrained options | Logic, computation |
+| `Repositories/` | Data access | CRUD, filtering, ORM queries | Business rules, HTTP concerns |
+| `Services/` | Business logic | Validation, workflows, orchestration | DB queries, HTTP parsing |
+| `Helpers/` | Utilities | Reusable support functions | Full workflows, DB calls |
+| `Api/Controllers/` | Endpoints | Parse request, call service, return response | Business logic, DB queries |
+| `Api/Serializers/` | Data shaping | Request/response field mapping | Business validation |
+| `Infrastructure/` | External systems | DB engine, cache, email, API tools | Domain logic |
+| `Management/` | CLI ops | Migrations, seeds, setup commands | Application logic |
+| `core/middleware/` | Request guards | Rate limit, CSRF, auth, idempotency | Business logic, DB queries |
+
+---
+
+## 6) Database Vertical Slice Schema
+
+```
+JRMSULIBRARYDATABASE                            # Root database for the JRMSU Library System
+│
+├── Security/                                   # Authentication and authorization data
+│   ├── Roles                                   # Role definitions table — admin, librarian, student, guest
+│   ├── Permissions                             # Permission definitions table — read, write, delete
+│   ├── RolePermissions                         # Role-to-permission mapping junction table
+│   ├── UserSessions                            # Active JWT session tracking table
+│   ├── LoginAttempts                           # Failed and successful login attempt tracking
+│   └── SecurityEvents                          # Security audit event log table
+│
+├── Users/                                      # User identity and profile data
+│   ├── Users                                   # Main user accounts table (email, password hash, role)
+│   ├── UserProfiles                            # Extended profile details table (name, avatar, contact)
+│   ├── Librarians                              # Librarian-specific profile and assignment table
+│   └── Students                                # Student-specific profile and ID number table
+│
+├── Library/                                    # Library catalog and physical inventory
+│   ├── Books                                   # Core book catalog table (title, author, ISBN, cover)
+│   ├── Authors                                 # Author master table
+│   ├── Categories                              # Category and Dewey classification master table
+│   ├── BookCategories                          # Book-to-category mapping junction table
+│   ├── BookCopies                              # Physical copy inventory table (barcode, condition)
+│   ├── Shelves                                 # Shelf location table (section, row, level)
+│   ├── Rooms                                   # Room location table (floor, section label)
+│   └── QRBookCodes                             # Book QR code hash table for scan-based access
+│
+├── EResources/                                 # E-resource departments and file assets
+│   ├── EResourceDepartments                    # Department groupings for e-resources
+│   └── EResourceFiles                          # Individual e-resource files with department FK
+│
+├── Personnel/                                  # Library staff CMS data
+│   └── Personnel                               # Staff profiles — name, role, image, order
+│
+├── Gallery/                                    # Library interior photo gallery
+│   └── LibraryInteriorImages                   # Gallery images with category labels and order
+│
+├── ContactMessages/                            # Contact form submissions from visitors
+│   └── ContactMessages                         # Submitted inquiries — name, email, message, status
+│
+├── Transactions/                               # Borrowing, returns, reservations, and fines
+│   ├── BorrowTransactions                      # Borrow transaction records table
+│   ├── ReturnTransactions                      # Return transaction records table
+│   ├── Reservations                            # Book reservation table with queue tracking
+│   ├── Fines                                   # Outstanding fine records table
+│   ├── FinePayments                            # Fine payment history table
+│   └── TransactionIdempotency                  # Duplicate request protection per transaction
+│
+├── AI/                                         # AI assistant prompt and response history
+│   ├── AIChats                                 # Conversation session master table
+│   ├── AIPrompts                               # Stored prompt inputs per session
+│   ├── AIResponses                             # Stored AI response outputs per session
+│   └── AIRequestLimits                         # Per-user AI usage and rate tracking
+│
+├── Audit/                                      # Full audit trail and traceability
+│   ├── AuditLogs                               # Main audit trail — who did what, when
+│   ├── AdminActions                            # Admin-specific action history
+│   ├── APIRequestLogs                          # Full API request log table
+│   └── EntityChanges                           # Before/after entity change snapshot table
+│
+├── Reports/                                    # Reporting and analytics aggregates
+│   ├── DailyStatistics                         # Daily usage stats snapshot table
+│   ├── MonthlyStatistics                       # Monthly usage stats snapshot table
+│   └── BorrowingAnalytics                      # Detailed borrowing trend analytics table
+│
+└── Configuration/                              # System-wide configuration values
+    ├── SystemSettings                          # Application-level settings table (key-value)
+    ├── BorrowPolicies                          # Borrowing duration and limit policy table
+    ├── FineRules                               # Fine calculation rule table
+    └── FeatureFlags                            # Feature toggle table (on/off per environment)
+```
+
+### Database Flow
+
+```
+Frontend (React)
+  ↓
+Django REST API  (DRF controllers + serializers)
+  ↓
+Service Layer    (validation + business rules)
+  ↓
+Repository Layer (ORM queries)
+  ↓
+Database         (SQL Server / MySQL / PostgreSQL)
+  ↓
+SSMS / DB Client (management and reporting)
+```
+
+### Database Rules
+
+```
+✅ DO                                        ❌ NEVER DO
+─────────────────────────────────────────    ────────────────────────────────────────
+Use relational tables with foreign keys      Use SQLite in production
+Separate audit, security, AI, transactions   Mix domain data into the same table group
+Use ORM for all standard queries             Hardcode secrets in application code
+Keep DB config in .env only                  Put raw SQL in controllers without reason
+Use explicit FK relationships                Bypass ORM without strong justification
+Keep sensitive data in protected structures  Mix DB rules into UI code
+```
+
+---
+
+## 7) Cache Architecture
+
+Cache is an **infrastructure concern** — it lives inside `Backend/Features/Infrastructure/Cache/`.
+It is never a business domain. It never owns data. It only serves performance.
+
+### What Cache CAN Store
+
+- Book catalog listings
+- Book detail pages
+- Dashboard statistics
+- Library map data
+- User permissions (short TTL)
+- System settings and reference data
+- AI responses (per session key)
+- Borrowing and reservation summaries
+
+### What Cache MUST NOT Store
+
+- Passwords or password hashes
+- Refresh tokens or MFA secrets
+- Database credentials
+- Private security secrets
+- Sensitive personal data (full PII)
+
+### Cache Key Naming Convention (from `cache_keys.py`)
+
+```
+book:{id}           → Single book detail
+book:list           → Full catalog list
+dashboard:stats     → Dashboard summary
+user:perms:{id}     → User permission set
+ai:response:{hash}  → Cached AI response
+```
+
+---
+
+## 8) Security Rules
+
+```
+✅ DO                                        ❌ NEVER DO
+─────────────────────────────────────────    ────────────────────────────────────────
+Enforce auth decisions on the backend        Rely on frontend UI visibility as security
+Keep API keys server-side only               Store API keys in frontend bundles
+Put secrets in .env only                     Hardcode secrets in source code
+Sanitize all public form inputs              Trust raw user input directly
+Log all security events to SecurityEvents    Expose sensitive data in API logs
+Use role-based access control (RBAC)         Grant access based on client-side checks
+Protect all admin endpoints with middleware  Skip middleware for internal API routes
+```
+
+All public form submissions (Contact, Feedback) **must** pass through `input_sanitizer.py` to prevent XSS.
+Backend middleware validates auth on every protected route before controllers are reached.
+
+---
+
+## 9) Cross-Platform Rules
+
+| Platform | Technology | Entry |
+|---|---|---|
+| Web | React + Vite | `src/main.tsx` |
+| Mobile | React Native | `Platforms/mobile/` |
+| Desktop | React + Electron | `Platforms/desktop/` |
+
+- Keep platform-specific adapters in `Platforms/` and never in `Features/` or `Components/`
+- Shared business logic, types, and API contracts must be platform-agnostic
+- Do not fork the entire architecture for each platform
+- Do not duplicate feature logic three times — only platform adapter wrappers differ
+
+---
+
+## 10) File Comment Rules
+
+Every file must have a one-line comment that answers:
+- What layer owns this file?
+- What is this file responsible for?
+- What is NOT allowed here?
+
+**Comment Format (TypeScript)**
+```tsx
+// [Layer: Features/Feedback] — FeedbackSection component.
+// Renders feedback accordion with auto-slideshow.
+// Do NOT put API calls or global state here.
+```
+
+**Comment Format (Python)**
+```python
+# [Layer: Services] — contact_service.py
+# Validates contact form, sanitizes input, triggers email, calls repository.
+# Do NOT query database directly — use ContactRepository only.
+```
+
+---
+
+## 11) Adding a New Feature — Checklist
+
+When Jhon adds a new feature (e.g., new CMS section, new page, new API endpoint):
+
+```
+1. [ ] Define the model in Data/Models/
+2. [ ] Define enums in Data/Enums/ if fixed values are needed
+3. [ ] Create migration via add_migration management command
+4. [ ] Define repository interface in Repositories/Interfaces/
+5. [ ] Implement repository in Repositories/Implementations/
+6. [ ] Define service interface in Services/Interfaces/
+7. [ ] Implement service in Services/Implementations/
+8. [ ] Add serializer in Api/Serializers/
+9. [ ] Add controller in Api/Controllers/
+10. [ ] Register route in Api/Routes/api_router.py
+11. [ ] Add frontend endpoint stub in src/Endpoints/
+12. [ ] Add feature slice in src/Features/{FeatureName}/
+13. [ ] Compose in the correct Page in src/Pages/
+14. [ ] Update AuditLogs if the feature touches user data
+15. [ ] Add cache invalidation to cache_invalidation.py if the feature is cached
+```
+
+---
+
+## 12) Placement Decision Guide
+
+When unsure where code belongs, ask these questions in order:
+
+```
+Is it a page route entry point?        → Pages/
+Is it feature-specific UI or workflow? → Features/{FeatureName}/components/
+Is it a backend API call?              → Endpoints/
+Is it reusable UI used in 2+ places?   → Components/Shared/ or Components/Modals/
+Is it a global layout element?         → Components/LayoutBars/
+Is it a shared hook?                   → Hooks/
+Is it static data / link list?         → Libs/Assets/
+Is it a static image or media file?    → Assets/
+Is it global CSS or color tokens?      → LayoutStyles/
+Is it a Django model?                  → Features/Data/Models/
+Is it database access logic?           → Features/Repositories/
+Is it business logic / rules?          → Features/Services/
+Is it an API endpoint handler?         → Features/Api/Controllers/
+Is it external system setup?           → Features/Infrastructure/
+Is it cache logic?                     → Features/Infrastructure/Cache/
+```
+
+---
+
+## 13) Final Strict Rules — Repeat and Follow Always
+
+```
+NEVER violate the flow chain.
+NEVER create spaghetti code.
+NEVER mix responsibilities.
+NEVER bypass the architecture.
+NEVER place code in the wrong layer.
+NEVER skip layers in the chain.
+NEVER put business logic in controllers.
+NEVER put database queries in middleware.
+NEVER put API calls in page components.
+NEVER store secrets in frontend code.
+ALWAYS keep comments on every file.
+ALWAYS keep the structure visible and predictable.
+ALWAYS follow the exact flow chain in section 3.
+ALWAYS place new code by following section 12's decision guide.
+ALWAYS run migrations through management commands, not raw Django commands.
+```
+
+---
+
+*This skill is the single source of truth for all architecture decisions in the JRMSU Library System project.
+Update this file when the project introduces new layers, platforms, or architectural changes.*
+
+---
+
+## What's New: Terminal Admin Protection & Management
+*Feature Update (July 2026)*
+
+**1. Protection for Terminal-Created Admins:**
+If an admin is created via the terminal using either `python manage.py createsuperuser` or `python manage.py createsuperuser_custom`, they are permanently flagged as a **Terminal-Created Admin**.
+- **Security Rule:** Any admin created via the system's Admin Panel UI is strictly prohibited from modifying, suspending, or deleting Terminal-Created Admins.
+- This ensures developers/sysadmins cannot be locked out by UI staff.
+
+**2. The `deletespecificsuperuser` Command:**
+To manage Terminal-Created Admins, a dedicated terminal command is now available:
+- It exclusively targets admins created via the terminal (UI-created admins are ignored).
+- It provides a safe, interactive menu to list, delete a specific admin, or bulk-delete all terminal-created admins.
+
+**Usage:**
+- **No Docker (Local):** 
+  ```bash
+  python manage.py deletespecificsuperuser
+  ```
+- **Docker Mode:** 
+  ```bash
+  docker-compose exec backend python manage.py deletespecificsuperuser
+  ```

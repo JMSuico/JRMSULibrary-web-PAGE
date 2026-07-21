@@ -1,0 +1,119 @@
+services:
+
+  # ─── Layer 4: Database ─────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jrmsu_library
+      POSTGRES_USER: jrmsu_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jrmsu_admin -d jrmsu_library"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # ─── Layer 3: Backend ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DB_ENGINE: postgresql
+      DB_NAME: jrmsu_library
+      DB_USER: jrmsu_admin
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: "False"
+      DISABLE_SSL_REDIRECT: "True"
+      ALLOWED_HOSTS: "*"
+      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://192.168.15.194:3000,http://192.168.15.194:3001,http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001,http://192.168.1.111:3000,http://192.168.1.111:3001"
+      OLLAMA_URL: "http://ollama:11434/api/chat"
+      # SMTP — Gmail App Password
+      EMAIL_HOST: "smtp.gmail.com"
+      EMAIL_PORT: "587"
+      EMAIL_HOST_USER: "katipunan.library@jrmsu.edu.ph"
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      DEFAULT_FROM_EMAIL: "JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>"
+      # External library credentials
+      VITALSOURCE_EMAIL: ${VITALSOURCE_EMAIL}
+      VITALSOURCE_PASSWORD: ${VITALSOURCE_PASSWORD}
+      SCHOLAAR_USERNAME: ${SCHOLAAR_USERNAME}
+      SCHOLAAR_PASSWORD: ${SCHOLAAR_PASSWORD}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./backend/media:/app/media
+      - ./frontend/src/Assets/assets:/app/frontend_assets:ro
+
+  # ─── Layer 1: Frontend Webpage (Public Landing Page) ───────────────────
+  frontend-webpage:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+  # ─── Layer 2: Frontend Admin Page ──────────────────────────────────────
+  frontend-admin:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3001:80"
+
+  # ─── Layer 5: Model AI ─────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # ─── Layer 5 Init: Auto-pull Qwen Model ────────────────────────────────
+  ollama-init:
+    image: ollama/ollama:latest
+    restart: "no"
+    depends_on:
+      - ollama
+    entrypoint: ["sh", "-c", "sleep 10 && ollama pull qwen2.5:1.5b"]
+    environment:
+      - OLLAMA_HOST=ollama:11434
+
+volumes:
+  db_data:
+  ollama_data:

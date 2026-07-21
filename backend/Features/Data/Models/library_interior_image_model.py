@@ -1,3 +1,4 @@
+# [Layer: Data/Models] — library_interior_image_model.py
 from django.db import models
 
 

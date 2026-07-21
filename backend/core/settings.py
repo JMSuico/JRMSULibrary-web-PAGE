@@ -10,27 +10,47 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+
+
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Lightweight .env loader for local (non-Docker) deployment
+_env_file = BASE_DIR.parent / '.env'
+if _env_file.exists():
+    with open(_env_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, val = line.split('=', 1)
+                os.environ.setdefault(key.strip(), val.strip())
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
 
-ALLOWED_HOSTS = []
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not DEBUG and not SECRET_KEY:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("SECRET_KEY environment variable must be set when DEBUG=False.")
+elif not SECRET_KEY:
+    SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
+
+_raw_allowed_hosts = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS = [h.strip() for h in _raw_allowed_hosts.split(",") if h.strip()]
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -41,6 +61,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "django_filters",
     "corsheaders",
+    "channels",
     # Local
     "Features",
 ]
@@ -53,7 +74,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.AuditLogMiddleware",
+    "core.middleware.CSPMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -74,42 +96,100 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "core.wsgi.application"
+ASGI_APPLICATION = "core.asgi.application"
 
+# In-Memory backend for Channels (Prevents Redis timeouts during mass bulk saves)
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
+
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv(BASE_DIR / ".env")
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "jrmsu_library",
-        "USER": "root",
-        "PASSWORD": "",
-        "HOST": "127.0.0.1",
-        "PORT": "3306",
-        "OPTIONS": {
-            "charset": "utf8mb4",
-            "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
+DB_ENGINE = os.environ.get("DB_ENGINE", "mssql")
+
+if DB_ENGINE == "mssql":
+    _mssql_options = {
+        "driver": os.environ.get("DB_MSSQL_DRIVER", "ODBC Driver 17 for SQL Server"),
+    }
+    if os.environ.get("DB_WINDOWS_AUTH", "True") == "True":
+        _mssql_options["extra_params"] = "Trusted_Connection=yes;"
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "mssql",
+            "NAME": os.environ.get("DB_NAME", "JRMSUKatipunanCampusLibrary"),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "1433"),
+            "USER": os.environ.get("DB_USER", ""),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "OPTIONS": _mssql_options,
+        }
+    }
+
+elif DB_ENGINE == "mysql":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": os.environ.get("DB_NAME", "JRMSUKatipunanCampusLibrary"),
+            "USER": os.environ.get("DB_USER", "root"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+            "PORT": os.environ.get("DB_PORT", "3306"),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
+    }
+
+elif DB_ENGINE == "postgresql":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DB_NAME", "JRMSUKatipunanCampusLibrary"),
+            "USER": os.environ.get("DB_USER", "postgres"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
+        }
+    }
+
+else:
+    # Fallback: default MSSQL with Windows Auth
+    DATABASES = {
+        "default": {
+            "ENGINE": "mssql",
+            "NAME": "JRMSUKatipunanCampusLibrary",
+            "HOST": "localhost",
+            "OPTIONS": {
+                "driver": "ODBC Driver 17 for SQL Server",
+                "extra_params": "Trusted_Connection=yes;",
+            },
+        }
+    }
+
+# Centralized Caching for Cross-Server Rate Limiting
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_cache_table',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+        "NAME": "Features.Helpers.password_validators.CustomPasswordValidator",
     },
 ]
 
@@ -132,16 +212,17 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Custom user model
 AUTH_USER_MODEL = "Features.Account"
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-]
+_env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001")
+_allowed_origins = _env_origins + ",http://192.168.1.111:3000,http://192.168.1.111:3001,http://localhost:3000,http://localhost:3001,http://localhost:5173"
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -152,7 +233,38 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    # NOTE: No DEFAULT_THROTTLE_CLASSES — throttling is applied per-view only (login, contact, feedback, chat)
+    # This prevents the '1999 seconds' error on collection browsing pages for anonymous users on Wi-Fi.
+    "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "5000/hour",       # Anonymous browsing (Local Books, Online Access)
+        "user": "10000/hour",      # Authenticated admin users
+        "contact": "200/hour",     # Contact form submissions
+        "login": "10/minute",      # Login attempts
+        "chat": "200/hour",        # AI chat
+        "feedback": "30/hour"      # Feedback form
+    }
 }
+
+# Production Security Settings
+if not DEBUG:
+    _ssl_enabled = os.environ.get("DISABLE_SSL_REDIRECT", "False").lower() not in ("true", "1", "yes")
+    SECURE_SSL_REDIRECT = _ssl_enabled
+    SESSION_COOKIE_SECURE = _ssl_enabled
+    CSRF_COOKIE_SECURE = _ssl_enabled
+    SESSION_COOKIE_HTTPONLY = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# Enforce strict session management
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_AGE = 43200  # 12 hours max session length (in seconds)
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Timezone (Philippine Time)
 TIME_ZONE = "Asia/Manila"
@@ -160,3 +272,60 @@ TIME_ZONE = "Asia/Manila"
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# File Upload Security Limits (Prevent DoS via disk exhaustion)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+
+# --- Python 3.14 Django Template Context Monkeypatch ---
+try:
+    import django.template.context
+    def _base_context_copy(self):
+        duplicate = self.__class__()
+        duplicate.dicts = self.dicts[:]
+        return duplicate
+    def _request_context_copy(self):
+        duplicate = _base_context_copy(self)
+        if hasattr(self, 'request'):
+            duplicate.request = self.request
+        return duplicate
+    django.template.context.BaseContext.__copy__ = _base_context_copy
+    if hasattr(django.template.context, 'RequestContext'):
+        django.template.context.RequestContext.__copy__ = _request_context_copy
+except Exception:
+    pass
+# -------------------------------------------------------
+
+# ============================================================
+# Email (SMTP via Gmail — JRMSU Library Account)
+# ============================================================
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'katipunan.library@jrmsu.edu.ph')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '') # Must be set in .env
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>')
+EMAIL_TIMEOUT = 60  # Increased to handle large 25MB attachments
+
+# IMAP — for syncing inbound Gmail messages into the Admin Panel inbox
+IMAP_HOST = os.environ.get('IMAP_HOST', 'imap.gmail.com')
+
+# ============================================================
+# Throttle Cache — use file-based to survive restarts
+# ============================================================
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'jrmsu-library-cache',
+    }
+}
+
+# ============================================================
+# External Library Credentials (for auto-login proxy)
+# Must be set in .env — never hardcode credentials here.
+# ============================================================
+VITALSOURCE_EMAIL = os.environ.get('VITALSOURCE_EMAIL', '')
+VITALSOURCE_PASSWORD = os.environ.get('VITALSOURCE_PASSWORD', '')
+SCHOLAAR_USERNAME = os.environ.get('SCHOLAAR_USERNAME', '')
+SCHOLAAR_PASSWORD = os.environ.get('SCHOLAAR_PASSWORD', '')

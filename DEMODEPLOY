@@ -1,0 +1,149 @@
+# JRMSU Library System — Docker Demo Deployment Tracking
+
+## Current State
+Docker Desktop is installed. The VS Code Docker + Kubernetes extensions are installed.
+The `demo.md`, `implementationDockerandKubernates.md`, and `DEMODEPLOYMENT.md` documents are complete and aligned.
+
+**All Docker/container files have been successfully created.** The system is now fully capable of running the local Docker demo.
+
+---
+
+## 5-Layer Architecture Overview
+As documented in `DEMODEPLOYMENT.md`, the system is structured into 5 integrated layers:
+
+| Layer | URL | What It Is |
+|-------|-----|-----------|
+| **Layer 1 (Frontend Webpage)** | http://localhost:3000 | Serves the Public Library Webpage. |
+| **Layer 2 (Frontend Admin Page)** | http://localhost:3001/admin | Serves the Admin Panel. |
+| **Layer 3 (Backend)** | http://192.168.15.194:8000/api | Django REST API |
+| **Layer 4 (Database)**| localhost:5432 | PostgreSQL (internal network, accessible via DBeaver/pgAdmin) |
+| **Layer 5 (Model AI)**| localhost:11434 | Ollama running in Docker. Needs Qwen2.5:1.5b pulled |
+
+---
+
+## Phase 0 — Pre-Checks (Completed)
+- [x] Docker Desktop installed
+- [x] VS Code Docker extension installed  
+- [x] VS Code Kubernetes extension installed
+- [x] `demo.md` written
+- [x] `implementationDockerandKubernates.md` written
+- [x] `DEMODEPLOYMENT.md` generated (Updated 5-layer instructions)
+
+---
+
+## Phase 1 — Create Missing Files (Completed)
+
+All required files have been created and configured. 
+
+### Layer 1 & 2 — Frontend Files
+- **`frontend/Dockerfile`**: Multi-stage build (Node 20 builds Vite app, Nginx serves dist).
+- **`frontend/nginx.conf`**: Configured for SPA fallback so React Router handles `/admin`.
+
+### Layer 3 — Backend Files
+- **`backend/Dockerfile`**: Python 3.11-slim, sets up Gunicorn.
+- **`backend/requirements-docker.txt`**: Uses `psycopg2-binary` instead of heavy MSSQL drivers for the Docker environment.
+
+### Root Level — Orchestration Files
+- **`docker-compose.yml`**: Wires the 5 layers together (2 frontend containers, 1 backend, 1 database, 1 host AI).
+- **`.env.docker`**: Environment variables for the Docker Compose run.
+- **`k8s/` directory**: All Kubernetes YAML manifests have been generated.
+
+---
+
+## Phase 2 — Backend Database Config for Docker (Completed)
+
+- [x] `DB_ENGINE=postgresql` is utilized for Docker.
+- [x] `psycopg2-binary` is installed via `requirements-docker.txt`.
+- [x] `ALLOWED_HOSTS` in `backend/core/settings.py` is configured properly (set to `*`).
+- [x] CORS and Cookie configurations (`SESSION_COOKIE_SAMESITE`) correctly support `localhost` bridging.
+
+---
+
+## Phase 3 — Run the Demo (Ready)
+
+Follow the official `DEMODEPLOYMENT.md` instructions:
+1. Ensure `.env` is properly populated.
+2. Run `docker-compose build --no-cache`.
+3. Run `docker-compose up -d --force-recreate`.
+4. Apply migrations: `docker-compose exec backend python manage.py migrate`.
+5. Create admin: `docker-compose exec backend python manage.py createsuperuser`.
+6. Import eBooks: `docker-compose exec backend python manage.py imports_assets`.
+7. Download the AI Model: `docker-compose exec ollama ollama run qwen2.5:1.5b`.
+8. Access http://localhost:3000 (webpage) and http://localhost:3001/admin (admin) to verify.
+
+---
+
+## Phase 4 — Optional: Kubernetes (After Demo Works)
+
+Only after Docker Compose demo works successfully:
+1. Build and tag images for a registry.
+2. Apply manifests with `kubectl apply -f k8s/`.
+3. Configure Ingress for production domains.
+
+---
+
+## Summary of File Status
+
+| # | File | Status |
+|---|------|--------|
+| 1 | `frontend/Dockerfile` | **EXISTS** |
+| 2 | `frontend/nginx.conf` | **EXISTS** |
+| 3 | `backend/Dockerfile` | **EXISTS** |
+| 4 | `backend/requirements-docker.txt` | **EXISTS** |
+| 5 | `docker-compose.yml` (root) | **EXISTS** (Updated to 5-Layers) |
+| 6 | `.env.docker` (root) | **EXISTS** |
+| 7 | `k8s/namespace.yaml` | **EXISTS** |
+| 8 | `k8s/secrets.yaml` | **EXISTS** |
+| 9 | `k8s/database.yaml` | **EXISTS** |
+| 10 | `k8s/backend.yaml` | **EXISTS** |
+| 11 | `k8s/frontend-webpage.yaml` | **EXISTS** |
+| 12 | `k8s/frontend-admin.yaml` | **EXISTS** |
+| 13 | `k8s/ingress.yaml` | **EXISTS** |
+| 14 | Fix `ALLOWED_HOSTS` in `settings.py` | **DONE** |
+
+### 3.7 Self-Healing & Auto-Scaling (HPA)
+
+Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
+
+To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
+
+To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
+```bash
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/hpa.yaml
+```
+
+Verify the HPA is running:
+```bash
+kubectl get hpa -n jrmsu-library
+```
+
+### 🚀 One-Click Kubernetes Start/Stop Scripts
+For convenience, two helper scripts have been added to the project root:
+- **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
+- **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.
+
+---
+
+## What's New: Terminal Admin Protection & Management
+*Feature Update (July 2026)*
+
+**1. Protection for Terminal-Created Admins:**
+If an admin is created via the terminal using either `python manage.py createsuperuser` or `python manage.py createsuperuser_custom`, they are permanently flagged as a **Terminal-Created Admin**.
+- **Security Rule:** Any admin created via the system's Admin Panel UI is strictly prohibited from modifying, suspending, or deleting Terminal-Created Admins.
+- This ensures developers/sysadmins cannot be locked out by UI staff.
+
+**2. The `deletespecificsuperuser` Command:**
+To manage Terminal-Created Admins, a dedicated terminal command is now available:
+- It exclusively targets admins created via the terminal (UI-created admins are ignored).
+- It provides a safe, interactive menu to list, delete a specific admin, or bulk-delete all terminal-created admins.
+
+**Usage:**
+- **No Docker (Local):** 
+  ```bash
+  python manage.py deletespecificsuperuser
+  ```
+- **Docker Mode:** 
+  ```bash
+  docker-compose exec backend python manage.py deletespecificsuperuser
+  ```

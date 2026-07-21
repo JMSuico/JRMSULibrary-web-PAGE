@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Ignored assets and skills
+/SKILLS/
+/assets/eBooks/eBooks/Department/
+/assets/Library pic/
+/assets/PHYSICAL SET-UP 2026/
+/assets/eBooks/

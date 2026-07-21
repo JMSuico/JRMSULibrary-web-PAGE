@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.*
+.git
+.vite
+.gitignore
+*.md
+*.cjs
+*.py
+src/Assets/assets/eBooks

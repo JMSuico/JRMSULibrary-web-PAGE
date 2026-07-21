@@ -1,0 +1,23 @@
+# Docker-specific requirements
+# Uses PostgreSQL (psycopg2-binary) instead of MSSQL/pyodbc
+# which requires heavy Windows-only ODBC drivers unavailable in Linux containers.
+
+asgiref==3.11.1
+Django==4.2.30
+django-cors-headers==4.9.0
+django-filter==25.1
+djangorestframework==3.17.1
+pillow==12.2.0
+python-dotenv==1.2.2
+pytz==2026.2
+sqlparse==0.5.5
+tzdata==2026.2
+requests==2.34.2
+
+# PostgreSQL driver (replaces mssql-django + pyodbc for Docker/Linux)
+psycopg2-binary==2.9.10
+
+# WebSockets
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.1.2

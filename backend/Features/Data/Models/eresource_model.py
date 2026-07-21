@@ -1,3 +1,4 @@
+# [Layer: Data/Models] — eresource_model.py
 from django.db import models
 
 
@@ -21,9 +22,10 @@ class EResourceFile(models.Model):
         EResourceDepartment, on_delete=models.CASCADE,
         related_name='files'
     )
-    name = models.CharField(max_length=300)
-    file = models.FileField(upload_to='e_resources/')
+    name = models.CharField(max_length=500)
+    file = models.FileField(upload_to='e_resources/', max_length=500)
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     class Meta:
         ordering = ['name']

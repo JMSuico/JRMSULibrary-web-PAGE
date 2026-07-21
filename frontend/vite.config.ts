@@ -1,0 +1,43 @@
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import {defineConfig} from 'vite';
+
+export default defineConfig(() => {
+  return {
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.'),
+      },
+    },
+    server: {
+      // HMR is disabled in AI Studio via DISABLE_HMR env var.
+      // Do not modifyâ€”file watching is disabled to prevent flickering during agent edits.
+      hmr: process.env.DISABLE_HMR !== 'true',
+      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
+      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      port: 3000,
+      strictPort: false, // Will try 3000, if taken will gracefully fallback to 3001
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
+        '/media': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
+      },
+    },
+  };
+});
+
+// ==========================================
+// LIBRARY WIFI SERVERS (Saved for reference)
+// http://192.168.15.194:3000/ 
+// http://192.168.15.194:3001
+// 
+// CURRENT PESO WIFI (Dynamic IP)
+// http://10.0.0.102:3000/
+// ==========================================

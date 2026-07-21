@@ -1,208 +1,458 @@
 # JRMSU Library Landing Page — SETUP
 
-## Prerequisites
-
-| Tool       | Version    | Download |
-|------------|------------|----------|
-| Node.js    | >= 20      | https://nodejs.org |
-| Python     | 3.14.3     | https://python.org |
-| XAMPP      | Latest     | https://apachefriends.org (optional, for MySQL) |
+This file covers two deployment modes:
+- **Mode A — Local Development** (SSMS 19 + npm run dev)
+- **Mode B — Docker Demo** (All 5 layers containerized, no installs needed)
 
 ---
 
-## 1. Frontend (React + Vite)
+## Prerequisites
 
-Open **one** terminal at the **project root**:
+### Mode A — Local Development
 
-```
-cd C:\Users\provu\Desktop\JRMSU LIBRARY LANDING PAGE
+| Tool                          | Version  | Download                                           |
+|-------------------------------|----------|----------------------------------------------------|
+| Node.js                       | >= 20    | https://nodejs.org                                 |
+| Python                        | 3.11+    | https://python.org                                 |
+| SQL Server (SSMS 19)          | Latest   | https://learn.microsoft.com/en-us/ssms/download    |
+| ODBC Driver 17 for SQL Server | Latest   | https://learn.microsoft.com/en-us/sql/connect/odbc |
+| Ollama (for AI Assistant)     | Latest   | https://ollama.com                                 |
+
+### Mode B — Docker Demo
+
+| Tool            | Version | Download                                          |
+|-----------------|---------|---------------------------------------------------|
+| Docker Desktop  | Latest  | https://www.docker.com/products/docker-desktop/   |
+
+No Node.js, Python, or SQL Server install needed for Docker mode.
+
+---
+
+## Mode A — Local Development (SSMS 19)
+
+### 1. SQL Server 19 (SSMS) — Connection Details
+
+| Setting         | Value                                                      |
+|-----------------|------------------------------------------------------------|
+| Server Name     | `localhost` or `.\SQLEXPRESS`                              |
+| Authentication  | Windows Authentication OR SQL Server Authentication        |
+| Port            | `1433` (default)                                           |
+| Database Name   | `JRMSUKatipunanCampusLibrary`                              |
+| ODBC Driver     | `ODBC Driver 17 for SQL Server`                            |
+
+### 2. Database Setup (Interactive)
+
+```bash
+cd backend
+python setup_db.py
 ```
 
-### Install dependencies
+This handles everything: creates the `.env` file, creates the database,
+sets up login credentials, and grants permissions.
+
+### 3. Backend — Django Setup
+
+```bash
+cd backend
+
+# First time only: create virtual environment
+python -m venv venv
+venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Apply database migrations
+python manage.py migrate
+
+# (Optional) Create admin superuser
+python manage.py createsuperuser
+
+# Import eBooks, Library Gallery, and Base Assets (Background, Org Structure, Personnel)
+python manage.py imports_assets
+
+# Start backend server on port 8000
+python manage.py runserver 8000
 ```
+
+Backend loads at: http://localhost:8000
+
+### 4. AI Assistant — Ollama Setup (Rizal AI)
+
+The Rizal AI Assistant requires Ollama to be running locally with the lightweight `qwen2.5:1.5b` model.
+
+Open a new terminal:
+```bash
+# Pull and run the model (this will download ~1GB the first time)
+ollama run qwen2.5:1.5b
+```
+Keep this running, or close it and Ollama will still run in the background.
+
+### 5. Frontend — React + Vite + Tailwind v4 Setup
+
+Open a second terminal:
+
+```bash
+cd frontend
+
+# Install dependencies (first time only)
 npm install
-```
 
-### Run dev server (port 3000)
-```
+# Start dev server on port 3000
 npm run dev
 ```
 
-Frontend loads at: **http://localhost:3000**
+Frontend loads at: http://localhost:3000
 
-### Build for production
-```
-npm run build
-```
-Output goes to `dist/`.
+### 6. Run Everything Together
 
----
-
-## 2. Backend — Django (SQLite — fast setup)
-
-Open a **second** terminal at the **project root**, then:
-
-```
-cd Backend
-```
-
-### Activate virtual environment
-```
-venv\Scripts\activate
-```
-(You should see `(venv)` in the prompt.)
-
-### Apply database migrations
-```
-python manage.py migrate
-```
-
-### Seed CMS data from asset files
-```
-python manage.py seed_assets
-```
-
-### Create an admin account (optional)
-```
-python manage.py createsuperuser
-```
-
-### Run backend server (port 8000)
-```
-python manage.py runserver 8000
-```
-
-Backend loads at: **http://localhost:8000**
+| Terminal | Command                                                              | URL                    |
+|----------|----------------------------------------------------------------------|------------------------|
+| 1        | `cd backend && venv\Scripts\activate && python manage.py runserver 8000` | http://localhost:8000  |
+| 2        | `cd frontend && npm run dev`                                         | http://localhost:3000  |
+| 3        | `ollama run qwen2.5:1.5b`                                            | AI Engine (Background) |
 
 ---
 
-## 3. Backend — XAMPP / MySQL (optional, replaces SQLite)
+## Mode B — Docker Demo (Recommended for Sharing / Demo)
 
-Skip this section if you are fine with SQLite.
+This runs all 5 layers (Webpage, Admin Panel, Backend, Database, AI Engine) in Docker
+containers without needing to install Python, Node.js, SQL Server, or Ollama.
 
-### 3a. Start XAMPP
+### 1. Start the System
 
-1. Open **XAMPP Control Panel** (as Administrator).
-2. Click **Start** next to **Apache**.
-3. Click **Start** next to **MySQL**.
-4. Click **Admin** next to MySQL to open **phpMyAdmin**.
+```bash
+# Build and start all 4 containers
+docker-compose up -d --build
 
-### 3b. Create the database
+# First time: apply database migrations
+docker-compose exec backend python manage.py migrate
 
-In phpMyAdmin:
-1. Click **New** (left sidebar).
-2. Database name: `jrmsu_library`
-3. Collation: `utf8mb4_general_ci`
-4. Click **Create**.
+# First time: create admin account (skip if already created)
+docker-compose exec backend python manage.py createsuperuser
 
-### 3c. Configure Django to use MySQL
-
-Edit `Backend\core\settings.py`.
-
-Find the `DATABASES` block (around line 40). Replace it with:
-
-```python
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "jrmsu_library",
-        "USER": "root",
-        "PASSWORD": "",
-        "HOST": "127.0.0.1",
-        "PORT": "3306",
-        "OPTIONS": {
-            "sql_mode": "STRICT_TRANS_TABLES",
-        },
-    }
-}
+# Import eBooks, Library Gallery, and Base Assets (Background, Org Structure, Personnel)
+docker-compose exec backend python manage.py imports_assets
 ```
 
-### 3d. Activate venv, migrate & run
+### 2. Stop the System
+
+```bash
+docker-compose down
+```
+
+### 3. Access Points (Docker Mode)
+
+| Layer   | What              | URL                            | Notes                          |
+|---------|-------------------|--------------------------------|--------------------------------|
+| Layer 1 | Public Webpage    | http://localhost:3000          | Student-facing library site    |
+| Layer 2 | Admin Panel       | http://localhost:3001/admin    | Login: admin / admin123        |
+| Layer 3 | Backend API       | http://localhost:8000/api      | JSON REST API                  |
+| Layer 3 | Django Admin      | http://localhost:8000/admin    | Raw Django admin panel         |
+| Layer 4 | PostgreSQL DB     | localhost:5432                 | Use DBeaver or pgAdmin to view |
+| Layer 5 | Model AI Engine   | http://localhost:11434         | Fully automated Ollama API     |
+
+### 4. Database Credentials (Docker / PostgreSQL)
+
+| Setting   | Value                    |
+|-----------|--------------------------|
+| Host      | localhost                |
+| Port      | 5432                     |
+| Database  | jrmsu_library            |
+| Username  | jrmsu_admin              |
+| Password  | JRMSULibrary2026Secure!  |
+
+To access the database using a terminal:
+
+```bash
+docker-compose exec db psql -U jrmsu_admin -d jrmsu_library
+```
+
+Useful psql commands inside:
+
+```sql
+\dt            -- list all tables
+\q             -- exit
+SELECT COUNT(*) FROM "Features_book";
+```
+
+### 5. Migrating Data from SSMS19 (Development) to Docker PostgreSQL
+
+If you entered data into your SQL Server (SSMS19) database during development (Mode A) and want to transfer it to your new Docker environment (Mode B):
+
+1. **Dump the Data from SSMS19:**
+   Open a terminal in the `backend` folder where your `venv` is active, and your `.env` points to SQL Server:
+   ```bash
+   venv\Scripts\activate
+   python manage.py dumpdata -e contenttypes -e auth.Permission > data.json
+   ```
+
+2. **Convert to UTF-8 (Required for Windows PowerShell):**
+   ```bash
+   python -c "import codecs; codecs.open('data_utf8.json', 'w', 'utf-8').write(codecs.open('data.json', 'r', 'utf-16').read())"
+   ```
+
+3. **Copy to the Docker Container and Load:**
+   Ensure your Docker containers are running, then execute:
+   ```bash
+   docker cp data_utf8.json jrmsulibrarylandingpage-backend-1:/app/data_utf8.json
+   docker exec jrmsulibrarylandingpage-backend-1 python manage.py flush --no-input
+   docker exec jrmsulibrarylandingpage-backend-1 python manage.py loaddata data_utf8.json
+   ```
+
+### 6. Terminal Access to Backend Container
+
+While containers are running, use these commands:
+
+```bash
+# Enter interactive Linux shell inside the backend container
+docker-compose exec backend bash
+
+# Run Django management commands directly
+docker-compose exec backend python manage.py migrate
+docker-compose exec backend python manage.py showmigrations
+docker-compose exec backend python manage.py shell
+docker-compose exec backend python manage.py createsuperuser
+docker-compose exec backend python manage.py imports_assets
+
+# View live container logs
+docker-compose logs -f backend
+docker-compose logs -f db
+
+# Check all container status
+docker-compose ps
+```
+
+### 6. Rebuild After Code Changes
+
+If you change any Python or React source files:
+
+```bash
+# Rebuild specific service only
+docker-compose build --no-cache backend
+docker-compose up -d
+
+# Or rebuild everything from scratch
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+### 7. Sharing With Classmates (Hotspot / Wi-Fi)
+
+**Step 1 — Find your laptop IP address:**
+
+```bash
+ipconfig
+```
+
+Look for IPv4 Address under your Wi-Fi or Hotspot adapter
+(e.g., 192.168.1.5 or 192.168.137.1).
+
+**Step 2 — Connect classmates to the same network:**
+- Hotspot: Turn on Windows Mobile Hotspot in Settings.
+- Router: Everyone joins the same Wi-Fi.
+
+**Step 3 — Classmates open in their browser:**
 
 ```
-cd Backend
-venv\Scripts\activate
-python manage.py migrate
-python manage.py seed_assets
-python manage.py runserver 8000
+Webpage:      http://YOUR_IP:3000
+Admin Panel:  http://YOUR_IP:3001/admin
+API:          http://YOUR_IP:8000/api
 ```
+
+*(Note: Thanks to our built-in Nginx proxy, you do NOT need to hardcode your IP address in `docker-compose.yml`. Just build and run, and the frontend will automatically route API requests to the backend!)*
+
+**Sharing project files to classmates (for them to run on their own laptop):**
+1. Zip the project folder and share via USB / Google Drive / Telegram.
+2. They install Docker Desktop from https://www.docker.com/products/docker-desktop/
+3. They unzip and run:
+   ```bash
+   docker-compose up -d --build backend frontend-webpage frontend-admin redis db
+   docker-compose exec backend python manage.py migrate
+   ```
+4. They open http://localhost:3000 and it works on their machine!
 
 ---
 
-## 4. Run Both Together (one command)
+## Migration Cheat Sheet
 
-From the **project root**:
-
-```
-npm run start
-```
-
-This runs `npm run dev` (frontend port 3000) and `npm run backend` (Django port 8000) concurrently in a single terminal.
-
----
-
-## 5. Running Tests
-
-### Backend API tests
-```
-cd Backend
-venv\Scripts\activate
-python test_api.py
-```
-
-### Frontend type-check
-```
-npm run lint
-```
+| Task                         | Local (Mode A)                                    | Docker (Mode B)                                               |
+|------------------------------|---------------------------------------------------|---------------------------------------------------------------|
+| Apply migrations             | `python manage.py migrate`                        | `docker-compose exec backend python manage.py migrate`        |
+| Generate new migrations      | `python manage.py makemigrations`                 | `docker-compose exec backend python manage.py makemigrations` |
+| Show migration status        | `python manage.py showmigrations`                 | `docker-compose exec backend python manage.py showmigrations` |
+| Create superuser             | `python manage.py createsuperuser`                | `docker-compose exec backend python manage.py createsuperuser`|
+| Import Assets (eBooks+Base)  | `python manage.py imports_assets`                  | `docker-compose exec backend python manage.py imports_assets`  |
+| Open Django shell            | `python manage.py shell`                          | `docker-compose exec backend python manage.py shell`          |
 
 ---
 
-## 6. Troubleshooting
+## Key URLs
 
-| Symptom | Fix |
-|---------|-----|
-| `'python' is not recognized` | Install Python 3.14+ and check PATH |
-| `'npm' is not recognized` | Install Node.js 20+ and check PATH |
-| `'venv' is not recognized` | Run `python -m venv venv` inside `Backend/` |
-| `ModuleNotFoundError: No module named '...'` | `pip install -r requirements.txt` or manually `pip install <module>` |
-| `CORS error in browser` | Make sure Django is running on port 8000 |
-| Images not loading in gallery | Django server must be running (`npm run backend`) |
-| `django.db.utils.OperationalError` with MySQL | Start XAMPP MySQL first |
-| Migration issues after switching to MySQL | Delete old `Backend\db.sqlite3`, re-run `migrate` |
-
----
-
-## 7. Key URLs
-
-| Page | URL |
-|------|-----|
-| Landing Page | http://localhost:3000 |
-| Django Admin | http://localhost:8000/admin/ |
-| Gallery API | http://localhost:8000/api/gallery |
-| Books API | http://localhost:8000/api/books |
-| Resources API | http://localhost:8000/api/resources |
-| Auth Login | POST http://localhost:8000/api/auth/login |
-| phpMyAdmin | http://localhost/phpmyadmin |
+| Page              | Local (Mode A)                       | Docker (Mode B)               |
+|-------------------|--------------------------------------|-------------------------------|
+| Webpage           | http://localhost:3000                | http://localhost:3000         |
+| Admin Panel       | http://localhost:3000/admin          | http://localhost:3001/admin   |
+| Backend API       | http://localhost:8000/api            | http://localhost:8000/api     |
+| Django Admin      | http://localhost:8000/admin          | http://localhost:8000/admin   |
+| Books API         | http://localhost:8000/api/books      | Same                          |
+| E-Resources API   | http://localhost:8000/api/files      | Same                          |
+| Gallery API       | http://localhost:8000/api/gallery    | Same                          |
+| Contact API       | http://localhost:8000/api/contact    | Same                          |
+| Managed Files API | http://localhost:8000/api/managed-files | Same                       |
+| Auth Login        | POST /api/auth/login                 | Same                          |
 
 ---
 
-## 8. Project Layout (quick reference)
+## Troubleshooting
+
+| Symptom                                 | Fix                                                              |
+|-----------------------------------------|------------------------------------------------------------------|
+| `'python' is not recognized`            | Install Python 3.11+ and add to PATH                            |
+| `'npm' is not recognized`               | Install Node.js 20+ and add to PATH                             |
+| `ModuleNotFoundError`                   | `pip install -r requirements.txt`                               |
+| `CORS error in browser`                 | Ensure Django runs on port 8000                                  |
+| `pyodbc.InterfaceError`                 | Install ODBC Driver 17 for SQL Server                           |
+| `django.db.utils.OperationalError`      | Ensure SQL Server service is running in Windows Services         |
+| `Login failed for user`                 | Use Windows Authentication and set `Trusted_Connection=yes`      |
+| Docker: `vite: not found`               | Run `docker-compose build --no-cache` to bust broken cache       |
+| Docker: `mssql module not found`        | `DB_ENGINE=postgresql` is set in Dockerfile — this is correct    |
+| Docker: `STATIC_ROOT not set`           | Already fixed in settings.py — rebuild if this happens           |
+| Docker: `Host not allowed`              | Check `ALLOWED_HOSTS=*` is set in docker-compose.yml environment |
+| Classmates cannot load from Hotspot     | Update `VITE_API_BASE_URL` in docker-compose.yml to your IP      |
+
+---
+
+## Project Layout (Quick Reference)
 
 ```
-JRMSU LIBRARY LANDING PAGE/     ← root
-├── src/                        ← React frontend
-│   ├── Features/
-│   ├── Pages/
-│   ├── components/
-│   └── main.tsx
-├── Backend/                    ← Django backend
-│   ├── core/                   ← settings, urls
-│   ├── Features/               ← models, API, serializers
+JRMSU LIBRARY LANDING PAGE/           <- root
+├── frontend/                         <- Layer 1 & 2: React + Vite + Tailwind v4
+│   ├── src/
+│   │   ├── Pages/                    <- Route-level page wrappers (no business logic)
+│   │   ├── Features/                 <- Vertical-slice domain features + business logic
+│   │   ├── Components/               <- Shared UI primitives only
+│   │   ├── Hooks/                    <- Global hooks
+│   │   ├── Libs/                     <- Constants, data, links
+│   │   └── LayoutStyles/             <- Global CSS tokens (index.css)
+│   ├── Dockerfile                    <- Docker build for frontend
+│   ├── nginx.conf                    <- Nginx SPA routing config
+│   └── package.json
+├── backend/                          <- Layer 3: Django + DRF API
+│   ├── core/                         <- settings.py, urls.py, wsgi.py
+│   ├── Features/                     <- Domain: Models, API, Services, Repos
+│   │   ├── Api/Controllers/
+│   │   ├── Api/Serializers/
+│   │   ├── Api/Routes/
+│   │   ├── Data/Models/
+│   │   ├── Data/Enums/
+│   │   ├── Repositories/
+│   │   ├── Services/
+│   │   └── Helpers/
+│   ├── Dockerfile                    <- Docker build for backend
+│   ├── requirements.txt              <- Local dev requirements (MSSQL)
+│   ├── requirements-docker.txt       <- Docker requirements (PostgreSQL, no MSSQL)
 │   ├── manage.py
-│   ├── test_api.py
-│   └── venv/                   ← Python virtual env
-├── assets/                     ← images, eBooks (served by Django)
-├── package.json
-├── vite.config.ts
-└── SETUP.md                    ← this file
+│   └── setup_db.py                   <- Interactive local DB setup
+├── k8s/                              <- Kubernetes manifests (cloud deployment)
+├── docker-compose.yml                <- Orchestrates all 5 layers
+├── .env                              <- Docker environment variables (never commit!)
+├── .env.docker                       <- Template for .env
+├── Access.md                         <- How to access all layers + sharing guide
+├── demo.md                           <- Docker demo walkthrough
+├── SETUP.md                          <- this file
+├── SKILL.md                          <- Architecture rules and flow chains
+└── AGENTS.md                         <- Agent conventions
 ```
+
+---
+
+## Flow Chains — Core Architecture Principles
+
+### Frontend Flow Chain
+
+```
+Pages
+  -> (route-level composition only)
+Features
+  -> (business logic and workflows)
+Hooks / State / API Endpoints
+  -> (reusable logic, shared state, backend calls)
+Shared Components
+  -> (presentational primitives only)
+Libs / Utilities / Assets
+```
+
+### Backend Flow Chain
+
+```
+Models (Data/Models/)
+  -> Enums (Data/Enums/)
+  -> Django ORM
+  -> Repository Implementation
+  -> Repository Interface
+  -> Service Implementation
+  -> Service Interface
+  -> Helpers
+  -> API Controllers
+  -> Middleware
+  -> manage.py -> settings.py -> Custom Management Commands
+```
+
+### HTTP Request Flow Chain
+
+```
+Incoming Request
+  -> Django Middleware  (rate limit, CSRF, auth guards)
+  -> API Controller    (parse request, call service, return response)
+  -> Service Layer     (validate, enforce rules, orchestrate)
+  -> Repository Layer  (query, persist, filter)
+  -> Database          (final state)
+```
+
+### 3.7 Self-Healing & Auto-Scaling (HPA)
+
+Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
+
+To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
+
+To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
+```bash
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/hpa.yaml
+```
+
+Verify the HPA is running:
+```bash
+kubectl get hpa -n jrmsu-library
+```
+
+### 🚀 One-Click Kubernetes Start/Stop Scripts
+For convenience, two helper scripts have been added to the project root:
+- **Start Cluster**: Run `.\start-k8s.ps1` in PowerShell to automatically apply all configurations in the correct order.
+- **Stop Cluster**: Run `.\stop-k8s.ps1` in PowerShell to cleanly shut down and delete the cluster resources.
+
+---
+
+## What's New: Terminal Admin Protection & Management
+*Feature Update (July 2026)*
+
+**1. Protection for Terminal-Created Admins:**
+If an admin is created via the terminal using either `python manage.py createsuperuser` or `python manage.py createsuperuser_custom`, they are permanently flagged as a **Terminal-Created Admin**.
+- **Security Rule:** Any admin created via the system's Admin Panel UI is strictly prohibited from modifying, suspending, or deleting Terminal-Created Admins.
+- This ensures developers/sysadmins cannot be locked out by UI staff.
+
+**2. The `deletespecificsuperuser` Command:**
+To manage Terminal-Created Admins, a dedicated terminal command is now available:
+- It exclusively targets admins created via the terminal (UI-created admins are ignored).
+- It provides a safe, interactive menu to list, delete a specific admin, or bulk-delete all terminal-created admins.
+
+**Usage:**
+- **No Docker (Local):** 
+  ```bash
+  python manage.py deletespecificsuperuser
+  ```
+- **Docker Mode:** 
+  ```bash
+  docker-compose exec backend python manage.py deletespecificsuperuser
+  ```
