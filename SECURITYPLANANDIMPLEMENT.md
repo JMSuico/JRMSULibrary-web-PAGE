@@ -1,18 +1,18 @@
-# SECURITYPLANANDIMPLEMENT.md
-# JRMSU Library System — Full Security Plan & Implementation Guide
+ï»¿# SECURITYPLANANDIMPLEMENT.md
+# JRMSU Library System ï¿½ Full Security Plan & Implementation Guide
 # Generated: 2026-07-21 | Deep Comprehensive Analysis
 
 ---
 
 > **HOW TO READ THIS DOCUMENT**
 > This document is structured in three layers:
-> 1. **Existing Security** — what is confirmed working (do NOT remove these)
-> 2. **Status of Old SecurityImplementation.md** — what was done, what changed
-> 3. **Threat Model & New Recommendations** — what still needs attention by priority
+> 1. **Existing Security** ï¿½ what is confirmed working (do NOT remove these)
+> 2. **Status of Old SecurityImplementation.md** ï¿½ what was done, what changed
+> 3. **Threat Model & New Recommendations** ï¿½ what still needs attention by priority
 
 ---
 
-## PART 1 — EXISTING SECURITY (CONFIRMED ACTIVE)
+## PART 1 ï¿½ EXISTING SECURITY (CONFIRMED ACTIVE)
 
 The following security measures were confirmed as active after reading every relevant backend controller, service, helper, middleware, and settings file.
 
@@ -70,7 +70,7 @@ The following security measures were confirmed as active after reading every rel
 |---|---|---|
 | HTML strip + html.escape on all public form fields | input_sanitizer.py -> contact_service.py:32-38 | ACTIVE |
 | Disposable/temp email blocklist (100+ domains) | email_helper.py:15-52 | DEFINED but DISABLED |
-| Django ORM only — zero raw SQL | All repositories verified | ACTIVE |
+| Django ORM only ï¿½ zero raw SQL | All repositories verified | ACTIVE |
 | Email uniqueness check with descriptive error | user_serializer.py + user_controller.py | ACTIVE |
 
 ### 1.7 File Upload Security
@@ -117,31 +117,31 @@ The following security measures were confirmed as active after reading every rel
 
 ---
 
-## PART 2 — STATUS OF OLD SecurityImplementation.md
+## PART 2 ï¿½ STATUS OF OLD SecurityImplementation.md
 
 ALL Phase 1 and Phase 2 items are confirmed implemented. The old document is superseded by this one.
 
 | Old Finding | Status |
 |---|---|
-| Auth & Privilege Escalation — IsSuperUser | FULLY DONE |
-| Login Brute-Force — LoginRateThrottle | FULLY DONE + ENHANCED |
+| Auth & Privilege Escalation ï¿½ IsSuperUser | FULLY DONE |
+| Login Brute-Force ï¿½ LoginRateThrottle | FULLY DONE + ENHANCED |
 | Hardcoded SMTP Secret | FULLY DONE |
-| Clickjacking — X-Frame-Options | FULLY DONE |
+| Clickjacking ï¿½ X-Frame-Options | FULLY DONE |
 | Session Cookie Security | FULLY DONE |
 | Analytics/Reports Exposure | FULLY DONE |
 | Unrestricted File Uploads | FULLY DONE |
 | CORS Configuration | FULLY DONE |
 | HSTS | FULLY DONE |
-| Dependency Audit | DONE (1 low npm vuln — non-exploitable) |
+| Dependency Audit | DONE (1 low npm vuln ï¿½ non-exploitable) |
 | Audit Logging | FULLY DONE |
 | Phase 2 CMS file whitelist | FULLY DONE |
 | Content-Type Nosniff | FULLY DONE |
 
 ---
 
-## PART 3 — THREAT MODEL & NEW RECOMMENDATIONS
+## PART 3 ï¿½ THREAT MODEL & NEW RECOMMENDATIONS
 
-### THREAT 1 — Stored XSS via Contact/Feedback (HIGH)
+### THREAT 1 ï¿½ Stored XSS via Contact/Feedback (HIGH)
 - Endpoint: POST /api/contact/, POST /api/feedback/
 - Attack: Malicious script in message body executed when admin views inbox
 - Current Defense: input_sanitizer.py regex strip + React JSX escaping
@@ -149,94 +149,94 @@ ALL Phase 1 and Phase 2 items are confirmed implemented. The old document is sup
 - Fix: Add bleach library for allowlist-based sanitization. Add max_length to serializer fields.
 - Status: PARTIALLY MITIGATED
 
-### THREAT 2 — Analytics Tracking Data Poisoning (MEDIUM-HIGH)
+### THREAT 2 ï¿½ Analytics Tracking Data Poisoning (MEDIUM-HIGH)
 - Endpoint: POST /api/analytics/track/
 - Attack: Bots inflate visitor counts; analytics rendered useless
 - Current Defense: SHA256 hash deduplicates by day. No throttle on this endpoint.
 - Fix: Add AnalyticsThrottle (5/hour per IP) using ScopedRateThrottle.
-- Status: NOT MITIGATED — throttle must be added
+- Status: NOT MITIGATED ï¿½ throttle must be added
 
-### THREAT 3 — AI Prompt Injection (MEDIUM)
+### THREAT 3 ï¿½ AI Prompt Injection (MEDIUM)
 - Endpoint: POST /api/ai/chat/
 - Attack: User injects system prompt overrides via message or history array
 - Current Defense: Grounded system prompt. 6-message history limit.
 - Fix: Add 500-char max on user_message. Validate history keys. Block known injection keywords.
 - Status: PARTIALLY MITIGATED
 
-### THREAT 4 — Disposable Email Check Disabled (MEDIUM-HIGH)
+### THREAT 4 ï¿½ Disposable Email Check Disabled (MEDIUM-HIGH)
 - Endpoint: POST /api/contact/
 - Attack: Spambots flood admin inbox with fake/disposable emails
 - Current Defense: 100+ domain blocklist EXISTS but is COMMENTED OUT in contact_service.py:44
 - Fix: Re-enable is_disposable_email() check. The DNS check can stay disabled for performance.
-- Status: NOT MITIGATED — 2 lines need to be uncommented
+- Status: NOT MITIGATED ï¿½ 2 lines need to be uncommented
 
-### THREAT 5 — Security Headers Only Active in Production (MEDIUM)
-- Location: settings.py:249-261 — inside "if not DEBUG:" block
+### THREAT 5 ï¿½ Security Headers Only Active in Production (MEDIUM)
+- Location: settings.py:249-261 ï¿½ inside "if not DEBUG:" block
 - Attack: Dev/staging deployments have no clickjacking or XSS header protection
 - Fix: Move X_FRAME_OPTIONS, SECURE_BROWSER_XSS_FILTER, SECURE_CONTENT_TYPE_NOSNIFF outside the if block.
 - Status: PARTIALLY MITIGATED
 
-### THREAT 6 — LocMemCache: Throttle Reset on Restart + Multi-Worker Bypass (MEDIUM)
+### THREAT 6 ï¿½ LocMemCache: Throttle Reset on Restart + Multi-Worker Bypass (MEDIUM)
 - Location: settings.py:317-322
 - Attack (A): Backend restart wipes all login attempt counters
 - Attack (B): Multi-worker Gunicorn setup means each worker has separate counters (4 workers = 4x the allowed rate)
 - Fix: Switch to DatabaseCache or Redis for throttle storage. Redis is already in the docker-compose stack.
 - Status: NOT FULLY MITIGATED
 
-### THREAT 7 — CSP Uses unsafe-inline and unsafe-eval (MEDIUM)
-- Location: middleware.py:25 — "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+### THREAT 7 ï¿½ CSP Uses unsafe-inline and unsafe-eval (MEDIUM)
+- Location: middleware.py:25 ï¿½ "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
 - Attack: unsafe-inline defeats CSP XSS protection. unsafe-eval allows eval() abuse.
 - Fix: Remove 'unsafe-eval'. Migrate to nonce-based CSP for inline scripts.
-- Status: PARTIALLY MITIGATED — CSP present but weakened
+- Status: PARTIALLY MITIGATED ï¿½ CSP present but weakened
 
-### THREAT 8 — VitalSource/Scholaar Credentials Visible in Bridge HTML (HIGH)
+### THREAT 8 ï¿½ VitalSource/Scholaar Credentials Visible in Bridge HTML (HIGH)
 - Endpoints: /api/external-proxy/vitalsource/, /api/external-proxy/scholaar/
 - Attack: Any user opening DevTools (F12) on the bridge page can read library credentials in hidden form fields.
 - Fix: Short-term: Put proxy endpoints behind IsAuthenticated. Long-term: Use server-side headless browser proxy instead of client-side form submission.
-- Status: RISK PRESENT — structural limitation
+- Status: RISK PRESENT ï¿½ structural limitation
 
-### THREAT 9 — DEBUG=True as Default Fallback (CRITICAL)
-- Location: settings.py:36 — DEBUG defaults to "True" if env var is unset
+### THREAT 9 ï¿½ DEBUG=True as Default Fallback (CRITICAL)
+- Location: settings.py:36 ï¿½ DEBUG defaults to "True" if env var is unset
 - Attack: If .env file is missing, Django runs in debug mode, exposing full stack traces, SQL, and internal paths to any user who triggers an error.
 - Fix (ONE LINE): Change "True" to "False" as the default.
   - BEFORE: DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
   - AFTER:  DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
-- Status: CRITICAL — NOT MITIGATED
+- Status: CRITICAL ï¿½ NOT MITIGATED
 
-### THREAT 10 — Real Database Password in Access.md (HIGH if shared publicly)
-- File: Access.md:135 — contains PostgreSQL password: JRMSULibrary2026Secure!
+### THREAT 10 - Real Database Password in Access.md (HIGH if shared publicly)
+- File: Access.md:135 - contains PostgreSQL password.
 - Attack: If this file is committed to a public GitHub or shared via USB/Discord, the database is fully accessible to attackers.
-- Fix: Remove the real password. Replace with: "Password: [See your .env file]"
-- Status: RISK PRESENT — documentation contains live credential
+- Fix: None required locally. Access.md is intended as a personal log to avoid forgetting credentials. Since *.md files are now ignored in .gitignore, the risk of accidental commit is mitigated.
+- Status: RISK ACCEPTED - intentional local documentation
 
-### THREAT 11 — Contact Attachment Validation Needs Verification (MEDIUM)
+### THREAT 11 ï¿½ Contact Attachment Validation Needs Verification (MEDIUM)
 - Endpoint: POST /api/contact/ with file attachments
 - Attack: Public user uploads malicious file via contact form attachment
 - Current: MalwareScannerHelper exists in cms_service.py but contact_service.py attachment path is unclear
 - Fix: Verify contact_service.submit_contact() calls MalwareScannerHelper on each attachment. Add max 3 files, max 10MB each.
 - Status: NEEDS VERIFICATION
 
-### THREAT 12 — Password Reset Code Verification Throttle (MEDIUM)
+### THREAT 12 ï¿½ Password Reset Code Verification Throttle (MEDIUM)
 - Endpoint: POST /api/users/reset_password_with_code/
 - Attack: 8-digit numeric codes (100M possibilities) can be brute-forced if verification is not rate-limited
 - Current: Request endpoint is throttled. Verification endpoint status is unconfirmed.
 - Fix: Confirm reset_password_with_code has throttle. Add 10 attempts per email per hour limit.
 - Status: NEEDS VERIFICATION
 
-### THREAT 13 — Django /admin URL Discoverable (MEDIUM)
+### THREAT 13 ï¿½ Django /admin URL Discoverable (MEDIUM)
 - URL: /admin (Django built-in admin panel)
 - Attack: Well-known URL is a target for automated scanners and brute-force tools
 - Fix: Change URL to non-obvious path in urls.py. Or restrict to INTERNAL_IPS only in production.
-- Status: RISK PRESENT — default URL exposed
+- Status: RISK PRESENT ï¿½ default URL exposed
 
-### THREAT 14 — Inactivity Timer Bypassable via localStorage (LOW)
+### THREAT 14 ï¿½ Inactivity Timer Bypassable via localStorage (LOW)
 - Location: AdminLayout.tsx:69
 - Attack: User opens console, types localStorage.setItem("admin_last_activity", Date.now()) to reset timer
 - Current Defense: Server session (SESSION_COOKIE_AGE=12hr) is the authoritative limit. localStorage is just a UI convenience.
-- Fix: Add server-side inactivity check in heartbeat endpoint — if last_active > 10 min, return 401 and force logout.
-- Status: LOW RISK — server session is authoritative
+- Fix: Add server-side inactivity check in heartbeat endpoint ï¿½ if last_active > 10 min, return 401 and force logout.
+- Status: LOW RISK ï¿½ server session is authoritative
 
-### THREAT 15 — Message Field Length Not Limited (LOW)
+### THREAT 15 ï¿½ Message Field Length Not Limited (LOW)
 - Endpoints: POST /api/contact/, POST /api/feedback/
 - Attack: 10MB text payload accepted, stored in DB, causes memory issues in admin inbox
 - Fix: Add max_length to serializer: message=5000, name=200, subject=300.
@@ -251,29 +251,29 @@ ALL Phase 1 and Phase 2 items are confirmed implemented. The old document is sup
 
 ---
 
-## PART 4 — PRIORITY ACTION TABLE
+## PART 4 ï¿½ PRIORITY ACTION TABLE
 
 | Priority | # | Issue | Effort |
 |---|---|---|---|
-| CRITICAL | 9 | DEBUG defaults to True — change "True" to "False" in settings.py:36 | 1 line |
-| CRITICAL | 10 | Real DB password in Access.md — remove and replace with placeholder | 1 line |
-| HIGH | 8 | Bridge page creds visible in HTML — add IsAuthenticated to proxy | Small |
-| HIGH | 4 | Disposable email check disabled — uncomment 2 lines in contact_service.py | 2 lines |
-| HIGH | 2 | Analytics track has no throttle — add ScopedRateThrottle | Small |
-| HIGH | 6 | LocMemCache throttle resets on restart — switch to DatabaseCache or Redis | Medium |
+| CRITICAL | 9 | DEBUG defaults to True ï¿½ change "True" to "False" in settings.py:36 | 1 line |
+| CRITICAL | 10 | Real DB password in Access.md ï¿½ remove and replace with placeholder | 1 line |
+| HIGH | 8 | Bridge page creds visible in HTML ï¿½ add IsAuthenticated to proxy | Small |
+| HIGH | 4 | Disposable email check disabled ï¿½ uncomment 2 lines in contact_service.py | 2 lines |
+| HIGH | 2 | Analytics track has no throttle ï¿½ add ScopedRateThrottle | Small |
+| HIGH | 6 | LocMemCache throttle resets on restart ï¿½ switch to DatabaseCache or Redis | Medium |
 | MEDIUM | 1 | XSS: add bleach as second sanitization layer | Small |
 | MEDIUM | 3 | AI: add 500-char limit and history validation | Small |
-| MEDIUM | 5 | Security headers only in prod — move outside if block | Small |
-| MEDIUM | 7 | CSP has unsafe-eval — remove it | 1 line |
-| MEDIUM | 11 | Contact attachments — verify MalwareScannerHelper is called | Small |
-| MEDIUM | 12 | Password reset code — verify verification endpoint is throttled | Small |
-| MEDIUM | 13 | Django /admin URL — change or restrict | Small |
-| LOW | 14 | Inactivity timer — add server-side check to heartbeat | Small |
-| LOW | 15 | Message field max_length — add to serializer | Small |
+| MEDIUM | 5 | Security headers only in prod ï¿½ move outside if block | Small |
+| MEDIUM | 7 | CSP has unsafe-eval ï¿½ remove it | 1 line |
+| MEDIUM | 11 | Contact attachments ï¿½ verify MalwareScannerHelper is called | Small |
+| MEDIUM | 12 | Password reset code ï¿½ verify verification endpoint is throttled | Small |
+| MEDIUM | 13 | Django /admin URL ï¿½ change or restrict | Small |
+| LOW | 14 | Inactivity timer ï¿½ add server-side check to heartbeat | Small |
+| LOW | 15 | Message field max_length ï¿½ add to serializer | Small |
 
 ---
 
-## PART 5 — ARCHITECTURE SECURITY SUMMARY
+## PART 5 ï¿½ ARCHITECTURE SECURITY SUMMARY
 
 | Layer | Component | Rating | Key Risk |
 |---|---|---|---|
@@ -288,27 +288,27 @@ ALL Phase 1 and Phase 2 items are confirmed implemented. The old document is sup
 
 ---
 
-## PART 6 — DEPLOYMENT CONTEXT
+## PART 6 ï¿½ DEPLOYMENT CONTEXT
 
 - For LOCAL DEMO + LAN sharing: DEBUG=True is expected. HTTP-only. Security headers skipped. Acceptable.
 - For PUBLIC DEPLOYMENT: All "if not DEBUG:" guards must be active. Nginx with SSL in front. DISABLE_SSL_REDIRECT env var is the correct escape hatch for local Docker.
-- Access.md is a local documentation file but treat it as if shareable — remove real credentials.
+- Access.md is a local documentation file but treat it as if shareable ï¿½ remove real credentials.
 
 ---
 
-## PART 7 — ORDERED CHECKLIST
+## PART 7 ï¿½ ORDERED CHECKLIST
 
-CRITICAL — Do Immediately:
+CRITICAL ï¿½ Do Immediately:
 [ ] Change settings.py line 36: DEBUG default from "True" to "False"
 [ ] Remove real DB password from Access.md
 
-HIGH — Before Public Deployment:
+HIGH ï¿½ Before Public Deployment:
 [ ] Uncomment is_disposable_email() check in contact_service.py:44-45
 [ ] Add AnalyticsThrottle to POST /api/analytics/track/
 [ ] Add IsAuthenticated to external proxy endpoints
 [ ] Switch CACHES to DatabaseCache or Redis backend
 
-MEDIUM — Before Production Hardening:
+MEDIUM ï¿½ Before Production Hardening:
 [ ] Install bleach and add as second layer in contact_service.py sanitization
 [ ] Add max_length to ContactMessageSerializer fields
 [ ] Add 500-char limit + history validation to ai_controller.py chat endpoint
@@ -318,7 +318,7 @@ MEDIUM — Before Production Hardening:
 [ ] Verify reset_password_with_code endpoint is rate-limited
 [ ] Change Django /admin URL to non-obvious path in urls.py
 
-LOW — Optional Hardening:
+LOW ï¿½ Optional Hardening:
 [ ] Add server-side last_active check in heartbeat endpoint
 [ ] Add confirm=true to recycle bin permanent delete
 

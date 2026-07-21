@@ -11,9 +11,10 @@ import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { LayoutGrid, List } from 'lucide-react';
+import { ResearchReferencesManager } from './ResearchReferencesManager';
 
 export function ContentManager() {
-  const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence' | 'research_references'>('content');
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
 
@@ -325,6 +326,12 @@ export function ContentManager() {
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'excellence' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'excellence' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Excellence in Information
+          </button>
+          <button 
+            onClick={() => setActiveTab('research_references')}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'research_references' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'research_references' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
+          >
+            Research References
           </button>
         </div>
 
@@ -697,6 +704,10 @@ export function ContentManager() {
             </div>
             );
           })()}
+
+          {activeTab === 'research_references' && (
+            <ResearchReferencesManager />
+          )}
 
           {activeTab === 'personnel' && (() => {
             const chiefLibrarian = personnelList.find(p => p.order === 1) || { name: 'Kiara Keren M. Alavanza', title: 'Campus Librarian', photo: null };

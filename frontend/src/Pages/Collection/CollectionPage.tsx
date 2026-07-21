@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { NewlyAcquiredBooks } from '@/src/Features/Collection/components/NewlyAcquiredBooks';
+import { ResearchReferencesTable } from '@/src/Features/Collection/components/ResearchReferencesTable';
 import { TreeView } from '@/src/Components/Shared/TreeView';
 import { FileViewerModal } from '@/src/Components/Modals/FileViewerModal';
 import { eBooksTree } from '@/src/Libs/Assets/treeData';
@@ -108,6 +109,7 @@ const tabOptions = [
   { id: 'online', label: 'Online Access' },
   { id: 'external-libraries', label: 'External Libraries' },
   { id: 'union-opac', label: 'Union OPAC' },
+  { id: 'research-references', label: 'Research & Thesis References' },
 ];
 
 export default function CollectionPage() {
@@ -150,7 +152,7 @@ export default function CollectionPage() {
     load();
   }, []);
 
-  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries', 'union-opac'];
+  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries', 'union-opac', 'research-references'];
   const activeTab = validTabs.includes(tab as string) ? (tab as string) : 'newly-acquired';
 
   // Auto-open modal if search param specifies a service
@@ -216,6 +218,11 @@ export default function CollectionPage() {
         {/* Newly Acquired Books — renders the existing component as-is */}
         {activeTab === 'newly-acquired' && (
           <NewlyAcquiredBooks />
+        )}
+
+        {/* Research & Thesis References */}
+        {activeTab === 'research-references' && (
+          <ResearchReferencesTable />
         )}
 
         {/* External Libraries — New Page Module */}

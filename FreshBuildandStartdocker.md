@@ -188,3 +188,4 @@ To manage Terminal-Created Admins, a dedicated terminal command is now available
   ```bash
   docker-compose exec backend python manage.py deletespecificsuperuser
   ```
+ docker-compose build --no-cache frontend-admin ; docker-compose up -d frontend-admin ; docker-compose build --no-cache frontend-webpage ; docker-compose up -d frontend-webpage ; docker-compose up -d --build backend

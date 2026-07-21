@@ -61,6 +61,7 @@ export const TopNavBar: React.FC = () => {
     { label: 'Online Access', path: '/collection/online' },
     { label: 'External Libraries', path: '/collection/external-libraries' },
     { label: 'Union OPAC', path: '/collection/union-opac' },
+    { label: 'Research & Thesis References', path: '/collection/research-references' },
   ];
 
   const navLinks: NavLink[] = [
