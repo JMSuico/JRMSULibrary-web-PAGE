@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { personnelApi } from '@/src/Endpoints/personnelApi';
@@ -11,11 +11,44 @@ import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { LayoutGrid, List } from 'lucide-react';
+import { ResearchReferencesManager } from './ResearchReferencesManager';
 
 export function ContentManager() {
-  const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence' | 'research_references'>('content');
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
+
+  // Tab Dragging State
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const [isDraggingTabs, setIsDraggingTabs] = useState(false);
+  const [startXTabs, setStartXTabs] = useState(0);
+  const [scrollLeftTabs, setScrollLeftTabs] = useState(0);
+
+  const onMouseDownTabs = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tabsContainerRef.current) return;
+    setIsDraggingTabs(true);
+    setStartXTabs(e.pageX - tabsContainerRef.current.offsetLeft);
+    setScrollLeftTabs(tabsContainerRef.current.scrollLeft);
+    tabsContainerRef.current.style.cursor = 'grabbing';
+  };
+
+  const onMouseLeaveTabs = () => {
+    setIsDraggingTabs(false);
+    if (tabsContainerRef.current) tabsContainerRef.current.style.cursor = 'grab';
+  };
+
+  const onMouseUpTabs = () => {
+    setIsDraggingTabs(false);
+    if (tabsContainerRef.current) tabsContainerRef.current.style.cursor = 'grab';
+  };
+
+  const onMouseMoveTabs = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingTabs || !tabsContainerRef.current) return;
+    e.preventDefault(); // prevent text selection while dragging
+    const x = e.pageX - tabsContainerRef.current.offsetLeft;
+    const walk = (x - startXTabs) * 1.5;
+    tabsContainerRef.current.scrollLeft = scrollLeftTabs - walk;
+  };
 
   // Content State
   const [contents, setContents] = useState<PageContent[]>([]);
@@ -237,13 +270,27 @@ export function ContentManager() {
   }
 
   const handleDeletePersonnel = async (id: number) => {
-    try {
-      await personnelApi.deletePersonnel(id);
-      setPersonnelList(prev => prev.filter(p => p.id !== id));
-      showToast('Personnel deleted successfully', 'success');
-    } catch (e: any) {
-      showToast(e.message || 'Failed to delete personnel', 'error');
-    }
+    const personToDelete = personnelList.find(p => p.id === id);
+    if (!personToDelete) return;
+
+    // Optimistic delete
+    setPersonnelList(prev => prev.filter(p => p.id !== id));
+
+    triggerDelete(
+      personToDelete.name,
+      async () => {
+        try {
+          await personnelApi.deletePersonnel(id);
+        } catch (e: any) {
+          setPersonnelList(prev => [...prev, personToDelete].sort((a,b) => a.order - b.order));
+          showToast(e.message || 'Failed to delete personnel', 'error');
+        }
+      },
+      () => {
+        setPersonnelList(prev => [...prev, personToDelete].sort((a,b) => a.order - b.order));
+        showToast('Personnel restoration undone', 'success');
+      }
+    );
   };
 
   const handlePersonnelSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -289,7 +336,22 @@ export function ContentManager() {
 
       <div className="admin-table-wrapper" style={{ padding: 0 }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-surface-container-highest)' }}>
+        <div 
+          ref={tabsContainerRef}
+          onMouseDown={onMouseDownTabs}
+          onMouseLeave={onMouseLeaveTabs}
+          onMouseUp={onMouseUpTabs}
+          onMouseMove={onMouseMoveTabs}
+          style={{ 
+            display: 'flex', 
+            borderBottom: '1px solid var(--color-surface-container-highest)',
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+            WebkitOverflowScrolling: 'touch',
+            cursor: 'grab'
+          }}
+          className="custom-scrollbar"
+        >
           <button 
             onClick={() => setActiveTab('content')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'content' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'content' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
@@ -325,6 +387,12 @@ export function ContentManager() {
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'excellence' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'excellence' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Excellence in Information
+          </button>
+          <button 
+            onClick={() => setActiveTab('research_references')}
+            style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'research_references' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'research_references' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
+          >
+            Research References
           </button>
         </div>
 
@@ -697,6 +765,10 @@ export function ContentManager() {
             </div>
             );
           })()}
+
+          {activeTab === 'research_references' && (
+            <ResearchReferencesManager />
+          )}
 
           {activeTab === 'personnel' && (() => {
             const chiefLibrarian = personnelList.find(p => p.order === 1) || { name: 'Kiara Keren M. Alavanza', title: 'Campus Librarian', photo: null };

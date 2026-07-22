@@ -23,8 +23,8 @@ class AcquisitionBatchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AcquisitionBatch
-        fields = ['id', 'name', 'description', 'status', 'is_display_batch', 'opened_at', 'closed_at', 'safety_expiry', 'created_by', 'remarks', 'book_count']
-        read_only_fields = ['id', 'status', 'is_display_batch', 'opened_at', 'closed_at', 'created_by']
+        fields = ['id', 'name', 'description', 'status', 'is_display_batch', 'opened_at', 'closed_at', 'safety_expiry', 'created_by', 'remarks', 'book_count', 'last_interacted_at']
+        read_only_fields = ['id', 'status', 'is_display_batch', 'opened_at', 'closed_at', 'created_by', 'last_interacted_at']
 
     def get_book_count(self, obj):
         return obj.books.count()

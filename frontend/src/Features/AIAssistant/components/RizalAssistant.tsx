@@ -90,6 +90,30 @@ export const RizalAssistant: React.FC = () => {
     setFormError('');
   };
 
+  const getDailyRatingCount = () => {
+    const today = new Date().toDateString();
+    try {
+      const data = JSON.parse(localStorage.getItem('daily_ratings') || '{}');
+      if (data.date === today) {
+        return typeof data.count === 'number' ? data.count : 0;
+      }
+    } catch (e) {}
+    // Fallback for old 'has_rated_today' flag if they rated exactly once today in old system
+    if (localStorage.getItem('has_rated_today') === today) {
+      return 1;
+    }
+    return 0;
+  };
+
+  const incrementDailyRatingCount = () => {
+    const today = new Date().toDateString();
+    const count = getDailyRatingCount();
+    localStorage.setItem('daily_ratings', JSON.stringify({
+      date: today,
+      count: count + 1
+    }));
+  };
+
   // Listen for custom event from ExternalIframeModal
   useEffect(() => {
     const handleOpenChat = (e: any) => {
@@ -588,7 +612,7 @@ export const RizalAssistant: React.FC = () => {
                   <button onClick={() => handleSuggestionClick('reservation')} className="flex items-center justify-center gap-2 bg-white text-navy-mid hover:bg-gold-light/20 border border-navy-mid/20 rounded-xl px-3 py-2 text-xs font-semibold transition-colors shadow-sm">
                     <Calendar size={14} /> Reserve a Room
                   </button>
-                  {localStorage.getItem('has_rated_today') !== new Date().toDateString() && (
+                  {getDailyRatingCount() < 3 && (
                     <button onClick={() => handleSuggestionClick('rate')} className="col-span-2 flex items-center justify-center gap-2 bg-white text-navy-mid hover:bg-gold-light/20 border border-navy-mid/20 rounded-xl px-3 py-2 text-xs font-semibold transition-colors shadow-sm">
                       <Star size={14} /> Rate Us
                     </button>

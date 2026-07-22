@@ -22,7 +22,7 @@ export function BooksManager() {
   const [currentBatch, setCurrentBatch] = useState<AcquisitionBatch | null>(null);
   const currentBatchIdRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
   // Modals
   const [isCreateBatchOpen, setIsCreateBatchOpen] = useState(false);
   const [isBookFormOpen, setIsBookFormOpen] = useState(false);
@@ -40,7 +40,7 @@ export function BooksManager() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
+
   const { showToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
@@ -84,15 +84,15 @@ export function BooksManager() {
     try {
       const allBatches = await batchApi.getAllBatches();
       setBatches(allBatches);
-      
+
       let targetBatchId = currentBatchIdRef.current;
-      
+
       if (!targetBatchId || !allBatches.some(b => b.id === targetBatchId)) {
         const displayBatch = allBatches.find(b => b.is_display_batch);
         const openBatch = allBatches.find(b => b.status === 'open');
         targetBatchId = openBatch?.id || displayBatch?.id || (allBatches.length > 0 ? allBatches[0].id : null);
       }
-      
+
       if (targetBatchId) {
         const fullBatch = await batchApi.getBatchById(targetBatchId);
         setCurrentBatch(fullBatch);
@@ -183,11 +183,13 @@ export function BooksManager() {
   const handleViewAudit = async (id: number) => {
     setLoading(true);
     try {
+      await batchApi.touchBatch(id);
       const history = await batchApi.getBatchHistory(id);
       const batch = batches.find(b => b.id === id);
       if (batch) {
         setAuditBatch({ ...batch, history });
       }
+      loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to load audit trail', 'error');
     } finally {
@@ -220,15 +222,17 @@ export function BooksManager() {
 
   const handleViewBatchBooks = async (id: number) => {
     setLoading(true);
-    // Immediately set ref to prevent auto-refresh race conditions
-    currentBatchIdRef.current = id;
-    // Reset book-level filters so stale search/category doesn't carry over to a different batch
-    setSearchQuery('');
-    setSelectedCategory('All');
-    setCurrentPage(1);
     try {
+      await batchApi.touchBatch(id);
+      // Immediately set ref to prevent auto-refresh race conditions
+      currentBatchIdRef.current = id;
+      // Reset book-level filters so stale search/category doesn't carry over to a different batch
+      setSearchQuery('');
+      setSelectedCategory('All');
+      setCurrentPage(1);
       const fullBatch = await batchApi.getBatchById(id);
       setCurrentBatch(fullBatch);
+      loadData();
     } catch (error) {
       console.error(error);
     } finally {
@@ -332,6 +336,7 @@ export function BooksManager() {
 
   // Batches sorted ascending for View All modal
   const batchesAscending = [...batches].sort((a, b) => new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime());
+  const sortedRecentBatches = [...batches].sort((a, b) => new Date(b.last_interacted_at || b.opened_at).getTime() - new Date(a.last_interacted_at || a.opened_at).getTime());
 
   if (loading && batches.length === 0) {
     return <div style={{ padding: 40, textAlign: 'center' }}><RefreshCw className="animate-spin" /> Loading...</div>;
@@ -339,10 +344,10 @@ export function BooksManager() {
 
   return (
     <>
-      <div className="w-full relative mb-6">
+      <div className="admin-content__header mb-6 relative">
         <div className="pr-36">
-          <h1 className="text-2xl font-bold font-playfair text-navy mb-1">Newly Acquired Books</h1>
-          <p className="text-gray-500 text-sm m-0">Manage batches of new acquisitions. Only one batch can be actively displayed to the public at a time.</p>
+          <h1>Newly Acquired Books</h1>
+          <p className="mt-1">Manage batches of new acquisitions. Only one batch can be actively displayed to the public at a time.</p>
         </div>
         <div className="absolute top-0 right-0">
           <button
@@ -381,15 +386,15 @@ export function BooksManager() {
             <ListOrdered size={15} /> View All ({batches.length})
           </button>
         </div>
-        <div 
+        <div
           ref={recentBatchesRef}
           onMouseDown={onMouseDownBatches}
           onMouseLeave={onMouseLeaveBatches}
           onMouseUp={onMouseUpBatches}
           onMouseMove={onMouseMoveBatches}
-          style={{ 
-            display: 'flex', 
-            overflowX: 'auto', 
+          style={{
+            display: 'flex',
+            overflowX: 'auto',
             gap: 16,
             paddingBottom: 8,
             scrollSnapType: 'x mandatory',
@@ -398,7 +403,7 @@ export function BooksManager() {
           }}
           className="custom-scrollbar"
         >
-          {batches.slice(0, 7).map((batch) => (
+          {sortedRecentBatches.slice(0, 7).map((batch) => (
             <div key={batch.id} style={{ minWidth: 300, flex: '0 0 auto', scrollSnapAlign: 'start' }}>
               <BatchCard
                 batch={batch}
@@ -496,7 +501,7 @@ export function BooksManager() {
                 </tbody>
               </table>
               {filteredBooks.length > itemsPerPage && (
-                <Pagination 
+                <Pagination
                   currentPage={currentPage}
                   totalPages={totalPages}
                   onPageChange={setCurrentPage}
@@ -514,25 +519,25 @@ export function BooksManager() {
                   {/* Kebab Menu */}
                   <div className="absolute top-2 right-2 z-10">
                     <div className="relative inline-block text-left">
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(activeBookDropdown === book.id ? null : book.id); }}
                         className="p-1.5 rounded-full bg-white/90 hover:bg-white text-gray-600 shadow-sm transition-colors border border-gray-100 cursor-pointer"
                         aria-label="Book actions"
                       >
                         <MoreVertical size={16} />
                       </button>
-                      
+
                       {activeBookDropdown === book.id && (
                         <>
                           <div className="fixed inset-0 z-[9999] animate-modal-overlay" onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(null); }}></div>
                           <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1 animate-modal-card" onClick={e => e.stopPropagation()}>
-                            <button 
+                            <button
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
                               onClick={() => { setEditingBook(book); setIsBookFormOpen(true); setActiveBookDropdown(null); }}
                             >
                               <Pencil size={14} /> Edit
                             </button>
-                            <button 
+                            <button
                               className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
                               onClick={() => { handleDeleteBook(book.id); setActiveBookDropdown(null); }}
                             >
@@ -560,7 +565,7 @@ export function BooksManager() {
               ))}
               {filteredBooks.length > itemsPerPage && (
                 <div className="col-span-full">
-                  <Pagination 
+                  <Pagination
                     currentPage={currentPage}
                     totalPages={totalPages}
                     onPageChange={setCurrentPage}
@@ -587,7 +592,7 @@ export function BooksManager() {
         onClose={() => setEditBatch(null)}
         onSubmit={handleEditBatch}
       />
-      
+
       <BookFormModal
         isOpen={isBookFormOpen}
         onClose={() => { setIsBookFormOpen(false); setEditingBook(undefined); }}
@@ -597,7 +602,7 @@ export function BooksManager() {
 
       {/* View All Batches Modal */}
       {viewAllOpen && createPortal(
-<div className="fixed inset-0 ] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]" onClick={() => setViewAllOpen(false)}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]" onClick={() => setViewAllOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden animate-modal-card" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><BookOpen size={20} className="text-navy" /> All Batches ({batches.length})</h2>
@@ -612,10 +617,10 @@ export function BooksManager() {
                 <button onClick={() => setViewAllOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={20} /></button>
               </div>
             </div>
-            
+
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex gap-2 items-center">
               <span className="text-sm text-gray-600 font-medium mr-2">Bulk Actions:</span>
-              <button 
+              <button
                 onClick={() => handleBulkAction('CLOSE')}
                 disabled={selectedBatchIds.size === 0}
                 className="admin-btn admin-btn--secondary disabled:opacity-50"
@@ -623,7 +628,7 @@ export function BooksManager() {
               >
                 Close Selected
               </button>
-              <button 
+              <button
                 onClick={() => handleBulkAction('CONTINUE')}
                 disabled={selectedBatchIds.size === 0}
                 className="admin-btn admin-btn--primary disabled:opacity-50"
@@ -638,8 +643,8 @@ export function BooksManager() {
                 <thead>
                   <tr>
                     <th style={{ width: 40 }}>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         onChange={(e) => {
                           if (e.target.checked) setSelectedBatchIds(new Set(batchesAscending.map(b => b.id)));
                           else setSelectedBatchIds(new Set());
@@ -660,8 +665,8 @@ export function BooksManager() {
                   {batchesAscending.map((b, idx) => (
                     <tr key={b.id} className={selectedBatchIds.has(b.id) ? 'bg-blue-50/50' : ''}>
                       <td>
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={selectedBatchIds.has(b.id)}
                           onChange={(e) => {
                             const next = new Set(selectedBatchIds);
@@ -679,38 +684,38 @@ export function BooksManager() {
                       <td style={{ color: 'var(--color-gray-500)', fontSize: '0.85rem' }}>{new Date(b.opened_at).toLocaleDateString()}</td>
                       <td className="text-right">
                         <div className="relative inline-block text-left">
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === b.id ? null : b.id); }}
                             className="p-1 rounded hover:bg-gray-100 text-gray-500"
                           >
                             <MoreVertical size={16} />
                           </button>
-                          
+
                           {activeDropdown === b.id && (
                             <>
-                              <div className="fixed inset-0 z-[9999] animate-modal-overlay" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
-                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 z-20 py-1 animate-modal-card" onClick={e => e.stopPropagation()}>
-                                <button 
+                              <div className="fixed inset-0 z-[9999] bg-transparent" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
+                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1" onClick={e => e.stopPropagation()}>
+                                <button
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                   onClick={() => { setViewAllOpen(false); handleViewBatchBooks(b.id); setActiveDropdown(null); }}
                                 >
                                   View Books
                                 </button>
-                                <button 
+                                <button
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                   onClick={() => { handleViewAudit(b.id); setActiveDropdown(null); }}
                                 >
                                   View Audit
                                 </button>
                                 {b.status === 'open' ? (
-                                  <button 
+                                  <button
                                     className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                                     onClick={() => { updateBatchStatus(b.id, 'closed'); setActiveDropdown(null); }}
                                   >
                                     Close Batch
                                   </button>
                                 ) : (
-                                  <button 
+                                  <button
                                     className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50"
                                     onClick={() => { updateBatchStatus(b.id, 'open'); setActiveDropdown(null); }}
                                   >
@@ -733,8 +738,8 @@ export function BooksManager() {
             </div>
           </div>
         </div>,
-document.body
-)}
+        document.body
+      )}
 
       {/* Audit Modal */}
       {auditBatch && createPortal(
@@ -813,10 +818,10 @@ document.body
         document.body
       )}
 
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </>
   );

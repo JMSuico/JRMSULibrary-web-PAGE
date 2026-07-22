@@ -34,6 +34,10 @@ class IBatchService(ABC):
         pass
 
     @abstractmethod
+    def touch_batch(self, batch_id: int) -> Optional[Any]:
+        pass
+
+    @abstractmethod
     def get_current_display_batch(self) -> Optional[Any]:
         pass
 

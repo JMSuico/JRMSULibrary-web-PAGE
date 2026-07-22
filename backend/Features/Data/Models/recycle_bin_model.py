@@ -15,6 +15,7 @@ class RecycleBin(models.Model):
         ('ERESOURCE_FILE', 'E-Resources (Files)'),
         ('CONTACT_MSG', 'Contact Messages'),
         ('REPORT', 'Generated Reports'),
+        ('RESEARCH_REF', 'Research References'),
     )
 
     original_id = models.IntegerField()

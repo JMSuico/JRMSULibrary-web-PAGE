@@ -164,5 +164,25 @@ This document contains a comprehensive mapping of all API endpoints across the *
 
 ---
 
+## 11. Research References Endpoints
+### Backend Models
+- `ResearchReference`: Stores all bibliographic data and optionally attached files.
+
+| Feature | Method | Endpoint Path | Description | Frontend Client Mapping | Used In (Webpage / Admin Page) |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| **References** | `GET` | `/api/research-references/` | List all research references (supports pagination/search). | `referenceApi.getReferences()` | Webpage: `CollectionPage`<br/>Admin: `ResearchReferencesManager` |
+| **References** | `GET` | `/api/research-references/{id}/` | Get details of a single reference. | `referenceApi.getReference(id)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `POST` | `/api/research-references/` | Add a new research reference. | `referenceApi.createReference(data)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `PATCH` | `/api/research-references/{id}/` | Update a research reference. | `referenceApi.updateReference(id, data)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `DELETE`| `/api/research-references/{id}/` | Delete a research reference. | `referenceApi.deleteReference(id)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `POST` | `/api/research-references/bulk-delete/`| Delete multiple references. | `referenceApi.bulkDelete(ids)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `DELETE`| `/api/research-references/{id}/remove-file/`| Remove the attached file from a reference. | `referenceApi.removeFile(id)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `GET` | `/api/research-references/{id}/preview/`| Preview the attached file (PDF/Docx). | `referenceApi.previewFile(id)` | Webpage: `CollectionPage` |
+| **References** | `POST` | `/api/research-references/bulk-import/`| Bulk insert multiple records (Legacy). | `referenceApi.bulkImport(data)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `POST` | `/api/research-references/sync-preview/`| Compare JSON array with DB to generate a sync diff. | `referenceApi.syncPreview(data)` | Admin Page: `ResearchReferencesManager` |
+| **References** | `POST` | `/api/research-references/sync-commit/`| Dispatch sync diff to Celery queue (Returns 202). | `referenceApi.syncCommit(payload)` | Admin Page: `ResearchReferencesManager` |
+
+---
+
 > **Note on Permissions**: All endpoints except for `/api/health/`, `/api/csrf/`, `/api/users/login/`, `/api/analytics/count/`, `/api/analytics/track/`, and the public `GET` methods for content, batches, and eresources require a valid Admin session cookie (`sessionid`) to execute successfully. Any `POST`, `PUT`, `PATCH`, or `DELETE` requests will strictly return a `403 Forbidden` if unauthorized.
 

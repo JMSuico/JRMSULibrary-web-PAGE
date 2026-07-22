@@ -21,6 +21,7 @@ from Features.Api.Controllers.external_proxy_controller import (
 )
 from Features.Api.Controllers.ai_controller import AIViewSet
 from Features.Api.Controllers.csrf_controller import get_csrf_token
+from Features.Api.Controllers.reference_controller import ResearchReferenceViewSet
 
 
 from Features.Api.Controllers.health_controller import HealthCheckViewSet
@@ -44,6 +45,7 @@ router.register(r'reports', ReportViewSet, basename='report')
 router.register(r'settings', SettingsViewSet, basename='settings')
 router.register(r'recycle-bin', RecycleBinViewSet, basename='recycle-bin')
 router.register(r'notifications', NotificationViewSet, basename='notification')
+router.register(r'research-references', ResearchReferenceViewSet, basename='research-reference')
 
 # Domain endpoints
 router.register(r'personnel', PersonnelViewSet, basename='personnel')

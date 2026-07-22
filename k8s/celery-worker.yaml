@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: jrmsu-library
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+        - name: celery
+          image: jrmsu-library/backend:latest
+          command: ["celery", "-A", "core", "worker", "-l", "INFO", "--concurrency=4"]
+          envFrom:
+            - secretRef:
+                name: backend-secret
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis-svc.jrmsu-library.svc.cluster.local:6379/0"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: media-storage
+              mountPath: /app/media
+      volumes:
+        - name: media-storage
+          persistentVolumeClaim:
+            claimName: media-pvc

@@ -4,6 +4,7 @@ import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { ClassicHorizontalCarousel } from '@/src/Components/Shared/ClassicHorizontalCarousel';
 import { useCarouselStyle } from '@/src/Hooks/useCarouselStyle';
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 
 interface GalleryModalItem {
   src: string;
@@ -177,24 +178,30 @@ export const LibrarySectionCarousel: React.FC = () => {
   // Dynamic images from backend — falls back to static if DB is empty
   const [sectionImages, setSectionImages] = useState<GalleryModalItem[]>(STATIC_FALLBACK_IMAGES);
 
+  const loadData = async () => {
+    try {
+      const data = await galleryApi.getAllImages();
+      const activeImages = data.filter(img => img.is_active);
+      if (activeImages.length > 0) {
+        setSectionImages(
+          activeImages.map(img => ({
+            src: resolveImageSrc(img),
+            label: img.section_label || img.title || 'Library Section',
+          }))
+        );
+      } else {
+        setSectionImages(STATIC_FALLBACK_IMAGES);
+      }
+    } catch (err) {
+      console.error('Failed to load gallery images', err);
+    }
+  };
+
   useEffect(() => {
-    galleryApi.getAllImages()
-      .then((data: GalleryImage[]) => {
-        const activeImages = data.filter(img => img.is_active);
-        if (activeImages.length > 0) {
-          setSectionImages(
-            activeImages.map(img => ({
-              src: resolveImageSrc(img),
-              label: img.section_label || img.title || 'Library Section',
-            }))
-          );
-        }
-        // If no active images from DB, static fallback remains
-      })
-      .catch(() => {
-        // Silently keep static fallback images
-      });
+    loadData();
   }, []);
+
+  useAutoRefresh(loadData, 30000);
 
   const goTo = useCallback((idx: number) => {
     const len = sectionImages.length;

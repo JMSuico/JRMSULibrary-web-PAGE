@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { libraryServices } from '@/src/Libs/Assets/data';
 import { cmsApi, ManagedFile, ManagedLink, PageContent } from '@/src/Endpoints/cmsApi';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { Loader2, Download, ExternalLink } from 'lucide-react';
 
 function extractTextBlocksFromHtml(html: string): string[] {
@@ -41,25 +42,28 @@ export const ServicesSection: React.FC = () => {
   const [servicesContent, setServicesContent] = useState<PageContent | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const loadData = async () => {
+    try {
+      const [f, l, c] = await Promise.all([
+        cmsApi.getAllFiles(),
+        cmsApi.getAllLinks(),
+        cmsApi.getAllContent()
+      ]);
+      setFiles(f.filter(file => file.is_active));
+      setLinks(l.filter(link => link.is_active));
+      setServicesContent(c.find(item => item.slug === 'library_services') || null);
+    } catch (e) {
+      console.error('Failed to load assets from CMS', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAssets = async () => {
-      try {
-        const [f, l, c] = await Promise.all([
-          cmsApi.getAllFiles(),
-          cmsApi.getAllLinks(),
-          cmsApi.getAllContent()
-        ]);
-        setFiles(f.filter(file => file.is_active));
-        setLinks(l.filter(link => link.is_active));
-        setServicesContent(c.find(item => item.slug === 'library_services') || null);
-      } catch (e) {
-        console.error('Failed to load assets from CMS', e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAssets();
+    loadData();
   }, []);
+
+  useAutoRefresh(loadData, 30000);
 
   const filteredServices = activeTab === 'all'
     ? libraryServices

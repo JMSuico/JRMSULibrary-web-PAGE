@@ -15,9 +15,10 @@ class AcquisitionBatch(models.Model):
     safety_expiry = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='created_batches')
     remarks = models.TextField(blank=True)
+    last_interacted_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-opened_at']
+        ordering = ['-last_interacted_at', '-opened_at']
 
     def __str__(self):
         return self.name

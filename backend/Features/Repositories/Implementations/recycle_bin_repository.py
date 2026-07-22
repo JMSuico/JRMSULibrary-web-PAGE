@@ -13,11 +13,16 @@ from Features.Data.Models.managed_link_model import ManagedLink
 from Features.Data.Models.managed_file_model import ManagedFile
 from Features.Data.Models.eresource_model import EResourceDepartment, EResourceFile
 from Features.Data.Models.contact_message_model import ContactMessage
+from Features.Data.Models.personnel_model import Personnel
+from Features.Data.Models.research_reference_model import ResearchReference
+
 class RecycleBinRepository(IRecycleBinRepository):
     def get_all(self) -> List[Any]:
+        self.delete_older_than(30)
         return list(RecycleBin.objects.all())
 
     def get_by_module(self, module: str) -> List[Any]:
+        self.delete_older_than(30)
         return list(RecycleBin.objects.filter(source_module=module))
 
     def get_by_id(self, id: int) -> Optional[Any]:
@@ -45,9 +50,15 @@ class RecycleBinRepository(IRecycleBinRepository):
         return deleted_count
 
     def restore_entity(self, item: Any) -> bool:
+        def _clean_urls(snap_dict):
+            for k, v in snap_dict.items():
+                if isinstance(v, str) and '/media/' in v:
+                    snap_dict[k] = v.split('/media/')[-1]
+            return snap_dict
+
         try:
             if item.source_module == 'BATCH':
-                snap = dict(item.data_snapshot)
+                snap = _clean_urls(dict(item.data_snapshot))
                 books_data = snap.pop('books', [])
                 snap.pop('id', None)
                 snap.pop('is_display_batch', None)
@@ -69,28 +80,38 @@ class RecycleBinRepository(IRecycleBinRepository):
                         category=book_data.get('category', ''),
                     )
             elif item.source_module == 'CMS_CONTENT':
-                snap = dict(item.data_snapshot)
+                snap = _clean_urls(dict(item.data_snapshot))
                 snap.pop('id', None)
                 PageContent.objects.create(**snap)
                 
             elif item.source_module == 'CMS_IMAGE':
-                snap = dict(item.data_snapshot)
+                snap = _clean_urls(dict(item.data_snapshot))
                 snap.pop('id', None)
                 PageImage.objects.create(**snap)
 
             elif item.source_module == 'CMS_LINK':
-                snap = dict(item.data_snapshot)
+                snap = _clean_urls(dict(item.data_snapshot))
                 snap.pop('id', None)
                 ManagedLink.objects.create(**snap)
 
             elif item.source_module == 'CMS_FILE':
-                snap = dict(item.data_snapshot)
+                snap = _clean_urls(dict(item.data_snapshot))
                 snap.pop('id', None)
                 ManagedFile.objects.create(**snap)
 
+            elif item.source_module == 'PERSONNEL':
+                snap = _clean_urls(dict(item.data_snapshot))
+                snap.pop('id', None)
+                Personnel.objects.create(**snap)
+
+            elif item.source_module == 'RESEARCH_REF':
+                snap = _clean_urls(dict(item.data_snapshot))
+                snap.pop('id', None)
+                ResearchReference.objects.create(**snap)
+
             elif item.source_module == 'ERESOURCE_DEPT':
                 def restore_dept(dept_snap, parent_id=None):
-                    snap = dict(dept_snap)
+                    snap = _clean_urls(dict(dept_snap))
                     snap.pop('id', None)
                     children_data = snap.pop('children', [])
                     files_data = snap.pop('files', [])
@@ -106,7 +127,7 @@ class RecycleBinRepository(IRecycleBinRepository):
                     
                     # Restore files
                     for file_snap in files_data:
-                        f_snap = dict(file_snap)
+                        f_snap = _clean_urls(dict(file_snap))
                         f_snap.pop('id', None)
                         f_snap.pop('department', None)
                         EResourceFile.objects.create(department=dept, **f_snap)
@@ -120,7 +141,7 @@ class RecycleBinRepository(IRecycleBinRepository):
                 restore_dept(item.data_snapshot)
 
             elif item.source_module == 'ERESOURCE_FILE':
-                snap = dict(item.data_snapshot)
+                snap = _clean_urls(dict(item.data_snapshot))
                 snap.pop('id', None)
                 snap.pop('children', None)
                 snap.pop('files', None)
@@ -132,7 +153,7 @@ class RecycleBinRepository(IRecycleBinRepository):
                         EResourceFile.objects.create(department=dept, **snap)
 
             elif item.source_module == 'CONTACT_MSG':
-                snap = dict(item.data_snapshot)
+                snap = _clean_urls(dict(item.data_snapshot))
                 snap.pop('id', None)
                 snap.pop('attachments', None)
                 ContactMessage.objects.create(**snap)

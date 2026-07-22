@@ -1,6 +1,6 @@
 # [Layer: Api/Controllers] — report_controller.py
 
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 import datetime
@@ -10,6 +10,7 @@ from Features.Services.Implementations.analytics_service import SiteVisitService
 from Features.Services.Implementations.batch_service import BatchService
 from Features.Services.Implementations.contact_service import ContactService
 from Features.Services.Implementations.feedback_service import FeedbackService
+from Features.Services.Implementations.tasks import generate_report_task
 from Features.Repositories.Implementations.analytics_repository import SiteVisitRepository
 from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
 from Features.Repositories.Implementations.contact_repository import ContactRepository
@@ -195,19 +196,19 @@ class ReportViewSet(viewsets.ViewSet):
         title = request.data.get('title', f"Report - {date_range.replace('-', ' ').title()}")
         
         data = self._get_summary_data(report_type, date_range)
+        user_id = request.user.id if request.user and request.user.is_authenticated else None
         
-        report = self.report_service.generate_and_save_report(
+        generate_report_task.delay(
             title=title,
             report_type=report_type,
             date_range=date_range,
-            generated_by=request.user if request.user.is_authenticated else None,
+            user_id=user_id,
             report_data=data
         )
         return Response({
-            "message": "Report generated and saved",
-            "report_id": report.id,
+            "message": "Report generation queued",
             "data": data
-        })
+        }, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=False, methods=['get'])
     def history(self, request):

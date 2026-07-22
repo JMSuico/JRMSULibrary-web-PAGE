@@ -13,6 +13,7 @@ import { InitialLoader } from '@/src/Components/Shared/InitialLoader';
 import { PrivacyConsentModal } from '@/src/Components/Shared/PrivacyConsentModal';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
+import { ChunkErrorBoundary } from '@/src/Components/Shared/ChunkErrorBoundary';
 
 // Resolves a Django media path to a full browser-usable URL.
 // Django ImageFields return relative paths like `settings/bg.jpg`.
@@ -113,49 +114,51 @@ function PublicLayout() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Admin Login - Completely isolated full-page layout */}
-        <Route path="/admin/login" element={
-          <ToastProvider>
+    <ChunkErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          {/* Admin Login - Completely isolated full-page layout */}
+          <Route path="/admin/login" element={
+            <ToastProvider>
+              <Suspense fallback={<PageSkeleton />}>
+                <LoginPage />
+              </Suspense>
+            </ToastProvider>
+          } />
+
+          {/* Admin Routes - Requires layout with sidebar */}
+          <Route path="/admin" element={
             <Suspense fallback={<PageSkeleton />}>
-              <LoginPage />
+              <AdminLayout />
             </Suspense>
-          </ToastProvider>
-        } />
+          }>
+            <Route index element={<DashboardPage />} />
+            <Route path="books" element={<BooksManagerPage />} />
+            <Route path="batch-history" element={<BatchHistoryPage />} />
+            <Route path="sections" element={<SectionsManagerPage />} />
+            <Route path="content" element={<ContentManagerPage />} />
+            <Route path="eresources" element={<EResourcesManagerPage />} />
+            <Route path="email" element={<EmailMessagePage />} />
+            <Route path="users" element={<UserManagementPage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="recycle-bin" element={<RecycleBinPage />} />
+          </Route>
 
-        {/* Admin Routes - Requires layout with sidebar */}
-        <Route path="/admin" element={
-          <Suspense fallback={<PageSkeleton />}>
-            <AdminLayout />
-          </Suspense>
-        }>
-          <Route index element={<DashboardPage />} />
-          <Route path="books" element={<BooksManagerPage />} />
-          <Route path="batch-history" element={<BatchHistoryPage />} />
-          <Route path="sections" element={<SectionsManagerPage />} />
-          <Route path="content" element={<ContentManagerPage />} />
-          <Route path="eresources" element={<EResourcesManagerPage />} />
-          <Route path="email" element={<EmailMessagePage />} />
-          <Route path="users" element={<UserManagementPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="recycle-bin" element={<RecycleBinPage />} />
-        </Route>
-
-        {/* Public Website Routes */}
-        <Route path="/" element={<PublicLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="about" element={<AboutPage />} />
-          <Route path="services" element={<ServicesPage />} />
-          <Route path="administration" element={<AdministrationPage />} />
-          <Route path="personnel" element={<PersonnelPage />} />
-          <Route path="collection" element={<CollectionPage />} />
-          <Route path="collection/:tab" element={<CollectionPage />} />
-          <Route path="physical-setup" element={<PhysicalSetupPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          {/* Public Website Routes */}
+          <Route path="/" element={<PublicLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="about" element={<AboutPage />} />
+            <Route path="services" element={<ServicesPage />} />
+            <Route path="administration" element={<AdministrationPage />} />
+            <Route path="personnel" element={<PersonnelPage />} />
+            <Route path="collection" element={<CollectionPage />} />
+            <Route path="collection/:tab" element={<CollectionPage />} />
+            <Route path="physical-setup" element={<PhysicalSetupPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ChunkErrorBoundary>
   );
 }

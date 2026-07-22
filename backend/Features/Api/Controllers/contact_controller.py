@@ -9,6 +9,7 @@ from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from Features.Api.Serializers.contact_serializer import ContactMessageSerializer
 from Features.Repositories.Implementations.contact_repository import ContactRepository
 from Features.Services.Implementations.contact_service import ContactService
+from Features.Services.Implementations.tasks import process_single_reply_task, process_bulk_reply_task
 
 
 class AdminUserRateThrottle(UserRateThrottle):
@@ -88,46 +89,40 @@ class ContactMessageViewSet(viewsets.ViewSet):
         """
         POST /api/contact/{id}/reply/
         Body: { "reply_body": "Dear user, ...", "send_to_chatbot": true }
-        Sends a real SMTP email reply from the library's Gmail to the original sender.
-        Optionally saves reply_text to DB so it appears in the Rizal Chatbot.
+        Dispatches email to Celery background worker.
         """
         reply_body = request.data.get('reply_body', '').strip()
         send_to_chatbot = request.data.get('send_to_chatbot', False)
         if not reply_body:
             return Response({'error': 'Reply body cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            result = self.service.reply_to_message(int(pk), reply_body, send_to_chatbot=send_to_chatbot)
-            if result['success']:
-                return Response(result, status=status.HTTP_200_OK)
-            return Response(result, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        except ValueError as e:
-            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        process_single_reply_task.delay(int(pk), reply_body, send_to_chatbot)
+        
+        return Response(
+            {'message': 'Reply queued for sending.', 'success': True}, 
+            status=status.HTTP_202_ACCEPTED
+        )
 
     @action(detail=False, methods=['post'], url_path='bulk-reply')
     def bulk_reply(self, request):
         """
         POST /api/contact/bulk-reply/
         Body: { "message_ids": [1, 2, 3], "reply_body": "..." }
-        Sends replies sequentially to prevent rate limits or timeout bombs.
+        Dispatches bulk email sending to Celery background worker.
         """
         message_ids = request.data.get('message_ids', [])
         reply_body = request.data.get('reply_body', '').strip()
         
         if not message_ids or not reply_body:
-            return Response({'error': 'message_ids and reply_body are required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'message_ids and reply_body are required.'}, 
+status=status.HTTP_400_BAD_REQUEST)
 
-        results = []
-        for msg_id in message_ids:
-            try:
-                res = self.service.reply_to_message(int(msg_id), reply_body)
-                results.append({'id': msg_id, 'success': res['success'], 'detail': res['detail']})
-            except Exception as e:
-                results.append({'id': msg_id, 'success': False, 'detail': str(e)})
+        process_bulk_reply_task.delay(message_ids, reply_body)
 
-        return Response({'results': results}, status=status.HTTP_200_OK)
+        return Response(
+            {'message': 'Bulk replies queued for sending.', 'success': True}, 
+            status=status.HTTP_202_ACCEPTED
+        )
 
     @action(detail=False, methods=['post'], url_path='upload-attachment')
     def upload_attachment(self, request):

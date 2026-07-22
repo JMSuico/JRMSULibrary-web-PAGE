@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { NewlyAcquiredBooks } from '@/src/Features/Collection/components/NewlyAcquiredBooks';
+import { ResearchReferencesTable } from '@/src/Features/Collection/components/ResearchReferencesTable';
 import { TreeView } from '@/src/Components/Shared/TreeView';
 import { FileViewerModal } from '@/src/Components/Modals/FileViewerModal';
 import { eBooksTree } from '@/src/Libs/Assets/treeData';
@@ -9,6 +10,7 @@ import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 import { eresourceApi, EResourceDepartment } from '@/src/Endpoints/eresourceApi';
 import { cmsApi, ManagedLink } from '@/src/Endpoints/cmsApi';
 import { ExternalIframeModal } from '@/src/Components/Modals/ExternalIframeModal';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { Loader2, BookOpen, GraduationCap, ChevronDown } from 'lucide-react';
 
 function collectFiles(nodes: TreeNodeData[]): TreeNodeData[] {
@@ -108,6 +110,7 @@ const tabOptions = [
   { id: 'online', label: 'Online Access' },
   { id: 'external-libraries', label: 'External Libraries' },
   { id: 'union-opac', label: 'Union OPAC' },
+  { id: 'research-references', label: 'Research & Thesis References' },
 ];
 
 export default function CollectionPage() {
@@ -126,31 +129,34 @@ export default function CollectionPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string; } | null>(null);
 
+  const load = async () => {
+    setLoadingResources(true);
+    setErrorMsg(null);
+    try {
+      console.log('Fetching Collection resources...');
+      const [deps, links] = await Promise.all([
+        eresourceApi.getAllDepartments(),
+        cmsApi.getAllLinks()
+      ]);
+      console.log('Fetched deps:', deps);
+      console.log('Fetched links:', links);
+      setDepartments(deps);
+      setOnlineLinks(links.filter(l => l.is_active));
+    } catch (e: any) {
+      console.error('Failed to load Collection resources', e);
+      setErrorMsg(e.message || 'Failed to load');
+    } finally {
+      setLoadingResources(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setLoadingResources(true);
-      setErrorMsg(null);
-      try {
-        console.log('Fetching Collection resources...');
-        const [deps, links] = await Promise.all([
-          eresourceApi.getAllDepartments(),
-          cmsApi.getAllLinks()
-        ]);
-        console.log('Fetched deps:', deps);
-        console.log('Fetched links:', links);
-        setDepartments(deps);
-        setOnlineLinks(links.filter(l => l.is_active));
-      } catch (e: any) {
-        console.error('Failed to load Collection resources', e);
-        setErrorMsg(e.message || 'Failed to load');
-      } finally {
-        setLoadingResources(false);
-      }
-    };
     load();
   }, []);
 
-  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries', 'union-opac'];
+  useAutoRefresh(load, 30000);
+
+  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries', 'union-opac', 'research-references'];
   const activeTab = validTabs.includes(tab as string) ? (tab as string) : 'newly-acquired';
 
   // Auto-open modal if search param specifies a service
@@ -216,6 +222,11 @@ export default function CollectionPage() {
         {/* Newly Acquired Books — renders the existing component as-is */}
         {activeTab === 'newly-acquired' && (
           <NewlyAcquiredBooks />
+        )}
+
+        {/* Research & Thesis References */}
+        {activeTab === 'research-references' && (
+          <ResearchReferencesTable />
         )}
 
         {/* External Libraries — New Page Module */}

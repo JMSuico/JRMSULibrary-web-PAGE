@@ -95,6 +95,16 @@ class AcquisitionBatchViewSet(viewsets.ViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=['post'])
+    def touch(self, request, pk=None):
+        try:
+            batch = self.service.touch_batch(pk)
+            if not batch:
+                return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"status": "Batch touched"})
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=False, methods=['get'])
     def current(self, request):
         batch = self.service.get_current_display_batch()

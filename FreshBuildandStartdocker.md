@@ -65,6 +65,9 @@ docker-compose up -d --build frontend-admin
 docker-compose up -d --build backend
 ```
 ```bash
+docker-compose up -d --build celery-worker
+```
+```bash
 docker-compose up -d --build redis
 ```
 ```bash
@@ -146,17 +149,20 @@ Use these with extreme caution!
 
 Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
 
-To handle dynamic traffic (scaling up when there are many requests and scaling down when traffic is low), we use **Horizontal Pod Autoscaling (HPA)**.
+To handle dynamic traffic, we use **Horizontal Pod Autoscaling (HPA)**. Our HPA is configured to scale not only on CPU/Memory, but primarily on **HTTP Request Rate** via the NGINX Ingress controller. This means if traffic spikes, new pods are instantly spawned before the CPU even reaches its limit, preventing lag for all users. Heavy background tasks (like bulk CSV imports) are offloaded to isolated **Celery worker** pods backed by **Redis**, ensuring the web server never gets blocked by database I/O.
 
-To apply this Auto-Scaling and Self-Healing configuration to your cluster, run:
+To apply this Auto-Scaling and Celery background processing configuration to your cluster, run:
 ```bash
+kubectl apply -f k8s/redis.yaml
 kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/celery-worker.yaml
 kubectl apply -f k8s/hpa.yaml
 ```
 
-Verify the HPA is running:
+Verify the HPA and pods are running:
 ```bash
 kubectl get hpa -n jrmsu-library
+kubectl get pods -n jrmsu-library
 ```
 
 ### 🚀 One-Click Kubernetes Start/Stop Scripts
@@ -188,3 +194,4 @@ To manage Terminal-Created Admins, a dedicated terminal command is now available
   ```bash
   docker-compose exec backend python manage.py deletespecificsuperuser
   ```
+ docker-compose build --no-cache frontend-admin ; docker-compose up -d frontend-admin ; docker-compose build --no-cache frontend-webpage ; docker-compose up -d frontend-webpage ; docker-compose up -d --build backend

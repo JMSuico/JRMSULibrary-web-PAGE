@@ -528,8 +528,12 @@ export function EmailMessage() {
               {selectedIds.size} message(s) selected
             </span>
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => handleBulkAction('READ')} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50">Mark Read</button>
-              <button onClick={() => handleBulkAction('ARCHIVED')} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50">Archive</button>
+              {!showArchived && (
+                <button onClick={() => handleBulkAction('READ')} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50">Mark as Read</button>
+              )}
+              <button onClick={() => handleBulkAction(showArchived ? 'READ' : 'ARCHIVED')} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50">
+                {showArchived ? 'Unarchive' : 'Archive'}
+              </button>
               <button onClick={() => setBulkReplyModal({ body: '' })} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50 text-green-700">Reply All</button>
               {filterType === 'RESERVATION' && (
                 <>
@@ -1048,7 +1052,7 @@ export function EmailMessage() {
         document.body
       )}
       {/* Background Bulk Send Toast */}
-      {queueState.isActive && !bulkReplyModal && (
+      {queueState.isActive && !bulkReplyModal && createPortal(
         <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-blue-100 p-4 w-80 flex flex-col gap-3 animate-modal-overlay">
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -1073,7 +1077,8 @@ export function EmailMessage() {
               style={{ width: `${((queueState.successIds.length + queueState.failedIds.length) / (queueState.currentIds.length + queueState.pendingIds.length + queueState.successIds.length + queueState.failedIds.length)) * 100}%` }}
             ></div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Undo Delete Toast */}
