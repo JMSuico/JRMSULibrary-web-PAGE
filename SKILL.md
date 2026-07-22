@@ -129,7 +129,7 @@ Incoming Request → API Controller → Celery Task .delay() → Return 202 Acce
 Celery Worker → Service Layer → Repository Layer → Database
 ```
 
-### 3D) Cache Read Flow
+### 3E) Cache Read Flow
 
 ```
 Request → Middleware → Controller → Service → Cache Service
@@ -137,14 +137,14 @@ Request → Middleware → Controller → Service → Cache Service
   Cache MISS? → Repository → Database → Store in Cache → Return Data
 ```
 
-### 3E) Cache Write / Invalidation Flow
+### 3F) Cache Write / Invalidation Flow
 
 ```
 Request → Controller → Service → Repository → Database
   Success? → Invalidate: book:{id}, book:list, dashboard:stats → Return Result
 ```
 
-### 3F) Contact Form Flow (Domain-Specific)
+### 3G) Contact Form Flow (Domain-Specific)
 
 ```
 Visitor submits Contact Form
@@ -229,10 +229,17 @@ JRMSU LIBRARY LANDING PAGE/            # Root project folder (Vite + React setup
 │   │   │   └── components/
 │   │   │       └── RizalAssistant.tsx        # Dr. Rizal floating AI assistant chat modal
 │   │   │
-│   │   └── Auth/                      # Authentication and authorization slice
+│   │   ├── Auth/                      # Authentication and authorization slice
+│   │   │   └── components/
+│   │   │       ├── LoginForm.tsx             # Main admin login form
+│   │   │       └── ForgotPasswordModal.tsx   # Floating modal for password reset flow
+│   │   │
+│   │   └── Admin/                     # Admin panel dashboard and management features
 │   │       └── components/
-│   │           ├── LoginForm.tsx             # Main admin login form
-│   │           └── ForgotPasswordModal.tsx   # Floating modal for password reset flow
+│   │           ├── ContentManager.tsx        # Manage dynamic content, links, and files
+│   │           ├── UserManagement.tsx        # Manage UI-created users and terminal admins
+│   │           ├── RecycleBin.tsx            # Restore or permanently delete soft-deleted items
+│   │           └── BooksManager.tsx          # Manage book inventory and batches
 │   │
 │   ├── Endpoints/                     # API endpoint stubs — frontend to backend bridge layer
 │   │   ├── contactApi.ts              # POST /api/contact — contact form submission to backend
@@ -371,7 +378,10 @@ backend/                                    # Root Django backend application
     │   └── Implementations/
     │       ├── contact_service.py         # Validates form, prevents spam, triggers email, saves to repo
     │       ├── feedback_service.py        # Handles feedback submission rules and dedup logic
-    │       └── notification_service.py    # Aggregates notifications from system data
+    │       ├── notification_service.py    # Aggregates notifications from system data
+    │       ├── report_service.py          # Generates summary analytics and handles background tasks
+    │       ├── batch_service.py           # Manages item batches and recent interactions
+    │       └── tasks.py                   # Celery shared background tasks (@shared_task)
     │
     ├── Helpers/                           # Reusable support utilities — not full workflows
     │   ├── input_sanitizer.py             # Cleans and sanitizes all public form submissions (XSS guard)
@@ -386,11 +396,14 @@ backend/                                    # Root Django backend application
     │   │   ├── feedback_controller.py     # POST /api/feedback — receive and dispatch feedback
     │   │   ├── personnel_controller.py    # GET /api/personnel — return staff list
     │   │   ├── cms_controller.py          # CRUD /api/books, /api/departments, /api/resources, /api/gallery
-    │   │   └── notification_controller.py # GET /api/notifications/all/ — smart aggregated notifications
+    │   │   ├── notification_controller.py # GET /api/notifications/all/ — smart aggregated notifications
+    │   │   ├── report_controller.py       # GET and POST endpoints for triggering Celery reports
+    │   │   └── batch_controller.py        # Endpoints for interacting with batches
     │   ├── Serializers/
     │   │   ├── contact_serializer.py      # Shape contact request and response data
     │   │   ├── feedback_serializer.py     # Shape feedback request and response data
     │   │   ├── personnel_serializer.py    # Shape personnel response data
+    │   │   ├── batch_serializer.py        # Serializes batch interaction dates and stats
     │   │   └── cms_serializers.py         # Book, Department, EResource, Gallery serializers
     │   └── Routes/
     │       └── api_router.py              # All URL patterns — auth, contact, feedback, cms
@@ -419,7 +432,8 @@ backend/                                    # Root Django backend application
     │   │   ├── add_migration.py           # Wrapper for makemigrations — use instead of raw command
     │   │   ├── update_database.py         # Wrapper for migrate — use instead of raw command
     │   │   ├── createsuperuser_custom.py  # Creates first privileged librarian account
-    │   │   └── imports_assets             # Asset crawler — seeds DB from local /assets/ folder
+    │   │   ├── deletespecificsuperuser.py # Custom command to manage terminal-created admins
+    │   │   └── imports_assets.py          # Asset crawler — seeds DB from local /assets/ folder
     │   └── Scripts/
     │       └── setup_db.py                # First-time database bootstrap script
     │

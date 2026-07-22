@@ -15,6 +15,8 @@ The system is structured into **5 distinct layers**:
 | **Layer 3** | Backend | Django + DRF API server (Gunicorn, Port 8000) |
 | **Layer 4** | Database | PostgreSQL / MariaDB data store (Port 5432) |
 | **Layer 5** | Model AI | Dockerized AI Engine running Qwen2.5:1.5b (Port 11434) |
+| **Layer 6** | Message Broker | Redis in-memory data structure store (Port 6379) |
+| **Layer 7** | Background Worker| Celery worker for asynchronous tasks (e.g., Reports) |
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -36,6 +38,15 @@ The system is structured into **5 distinct layers**:
 │                 │  Django + DRF   │         │  PostgreSQL     │          │
 │                 │  Port: 8000     │         │  Port: 5432     │          │
 │                 └────────┬────────┘         └─────────────────┘          │
+│                          │                                               │
+│                          ▼                                               │
+│                 ┌─────────────────┐         ┌─────────────────┐          │
+│                 │   Layer 6       │         │   Layer 7       │          │
+│                 │ Message Broker  │◀────────│   Background    │          │
+│                 │                 │         │   Worker        │          │
+│                 │      Redis      │         │     Celery      │          │
+│                 │   Port: 6379    │         │                 │          │
+│                 └─────────────────┘         └─────────────────┘          │
 │                          │                                               │
 │                          ▼                                               │
 │                 ┌─────────────────┐                                      │
@@ -130,18 +141,45 @@ services:
     ports:
       - "5432:5432"
 
+  # ─── Layer 6: Message Broker ──────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
   # ─── Layer 3: Backend ────────────────────────────────────────────────
   backend:
     build: ./backend
     depends_on:
       - db
+      - redis
     environment:
       DATABASE_URL: postgres://jrmsu_admin:${DB_PASSWORD}@db:5432/jrmsu_library
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       DJANGO_DEBUG: "false"
       ALLOWED_HOSTS: "*"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
     ports:
       - "8000:8000"
+    volumes:
+      - media_data:/app/media
+
+  # ─── Layer 7: Background Worker ──────────────────────────────────────
+  celery-worker:
+    build: ./backend
+    restart: unless-stopped
+    command: celery -A core worker -l info
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: postgres://jrmsu_admin:${DB_PASSWORD}@db:5432/jrmsu_library
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: "false"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
     volumes:
       - media_data:/app/media
 
@@ -321,7 +359,78 @@ spec:
       targetPort: 8000
 ```
 
-### 3.4 Frontend Deployments (Layer 1 — Webpage & Layer 2 — Admin)
+### 3.4 Redis Deployment
+
+```yaml
+# k8s/redis.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: jrmsu-library
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-svc
+  namespace: jrmsu-library
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+```
+
+### 3.5 Celery Worker Deployment
+
+```yaml
+# k8s/celery-worker.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: jrmsu-library
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: jrmsu-library/backend:latest
+          command: ["celery", "-A", "core", "worker", "-l", "info"]
+          envFrom:
+            - secretRef:
+                name: backend-secret
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis-svc:6379/0"
+            - name: CELERY_RESULT_BACKEND
+              value: "redis://redis-svc:6379/0"
+```
+
+### 3.6 Frontend Deployments (Layer 1 — Webpage & Layer 2 — Admin)
 
 ```yaml
 # k8s/frontend-webpage.yaml  (Layer 1 — Public Webpage)
@@ -407,7 +516,7 @@ spec:
       targetPort: 80
 ```
 
-### 3.5 Ingress (HTTPS termination)
+### 3.7 Ingress (HTTPS termination)
 
 ```yaml
 # k8s/ingress.yaml
@@ -458,7 +567,7 @@ spec:
                   number: 8000
 ```
 
-### 3.6 Secrets
+### 3.8 Secrets
 
 ```yaml
 # k8s/secrets.yaml (NEVER commit real values — use sealed-secrets or vault)
@@ -484,7 +593,7 @@ stringData:
   DJANGO_SECRET_KEY: <CHANGE_ME>
 ```
 
-### 3.7 Self-Healing & Auto-Scaling (HPA)
+### 3.9 Self-Healing & Auto-Scaling (HPA)
 
 Kubernetes automatically provides **Self-Healing** through **Liveness and Readiness Probes**. If your server crashes or becomes unresponsive, Kubernetes will detect the failure and automatically restart the pod to bring the system back online.
 

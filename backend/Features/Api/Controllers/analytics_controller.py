@@ -33,8 +33,10 @@ class SiteVisitViewSet(viewsets.ViewSet):
         this_week = self.service.get_count_by_date_range(start_date=week_start)
         return Response({'total_visits': total, 'this_week': this_week})
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], url_path='track')
+    from rest_framework.throttling import ScopedRateThrottle
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], url_path='track', throttle_classes=[ScopedRateThrottle])
     def track(self, request):
+        self.throttle_scope = 'analytics_track'
         """Public endpoint: records a unique page visit for the day based on visitor_id or IP hash."""
         import hashlib
         

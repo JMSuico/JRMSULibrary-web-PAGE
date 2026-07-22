@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from Features.Helpers.external_proxy_helper import (
     fetch_vitalsource_tokens,
     fetch_scholaar_tokens,
@@ -191,8 +191,8 @@ def _build_bridge_html(
 </html>"""
 
 
-@require_GET
-@csrf_exempt
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def vitalsource_auto_login(request):
     """
     Serves an HTML bridge page that provides VitalSource login credentials.
@@ -276,8 +276,8 @@ def vitalsource_auto_login(request):
     return HttpResponse(html, content_type="text/html")
 
 
-@require_GET
-@csrf_exempt
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def scholaar_auto_login(request):
     """
     Serves an HTML bridge page that provides Scholaar login credentials.

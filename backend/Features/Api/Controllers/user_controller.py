@@ -130,12 +130,20 @@ class UserViewSet(viewsets.ViewSet):
         
         return Response({"message": f"User {user.username} was forced to log out."})
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def heartbeat(self, request):
         if not request.user.is_authenticated:
             return Response(status=401)
         from django.utils import timezone
-        request.user.last_active = timezone.now()
+        from datetime import timedelta
+        
+        now = timezone.now()
+        if request.user.last_active and (now - request.user.last_active) > timedelta(minutes=10):
+            from django.contrib.auth import logout
+            logout(request)
+            return Response({"error": "Session timeout due to inactivity."}, status=401)
+            
+        request.user.last_active = now
         request.user.save(update_fields=['last_active'])
         return Response({"status": "ok"})
 

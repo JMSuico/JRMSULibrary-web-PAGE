@@ -132,7 +132,7 @@ The database runs in the background. You do NOT access it through a browser.
 | Port       | 5432                         |
 | Database   | jrmsu_library                |
 | Username   | jrmsu_admin                  |
-| Password   | JRMSULibrary2026Secure!      |
+| Password   | <CHANGE_ME_LOCAL_DB_PASSWORD>      |
 
 ### Option A — Connect via terminal (psql inside the container):
 

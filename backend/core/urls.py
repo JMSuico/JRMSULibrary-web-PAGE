@@ -5,7 +5,7 @@ from django.conf.urls.static import static
 from django.views.static import serve
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path("secure-admin-console/", admin.site.urls),
     path("api/", include("Features.Api.Routes")),
 ]
 

@@ -16,6 +16,11 @@ This document contains a comprehensive mapping of all API endpoints across the *
 | **Login** | `POST` | `/api/users/login/` | Authenticate an admin user. | `userApi.login()` | Admin Page: `LoginPage.tsx` |
 | **Logout** | `POST` | `/api/users/logout/` | End the admin session. | `userApi.logout()` | Admin Page: `AdminLayout.tsx` |
 | **Check Session** | `GET` | `/api/users/me/` | Verify current user auth state. | `userApi.checkAuth()` | Admin Page: `AdminLayout.tsx`, `UserManagement.tsx` |
+| **Users** | `GET` | `/api/users/` | List all admin users. | `userApi.getUsers()` | Admin Page: `UserManagement.tsx` |
+| **Users** | `POST` | `/api/users/` | Create a new admin user. | `userApi.createUser()` | Admin Page: `UserManagement.tsx` |
+| **Users** | `PATCH` | `/api/users/{id}/` | Update user details/status. | `userApi.updateUser()` | Admin Page: `UserManagement.tsx` |
+| **Users** | `DELETE`| `/api/users/{id}/` | Delete an admin user. | `userApi.deleteUser()` | Admin Page: `UserManagement.tsx` |
+| **Reset Password** | `POST` | `/api/users/reset_password_with_code/` | Reset password via email code. | `userApi.resetPassword()` | Admin Page: `ForgotPasswordModal.tsx` |
 
 ---
 

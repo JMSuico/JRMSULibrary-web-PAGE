@@ -33,7 +33,7 @@ if _env_file.exists():
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
+DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get("SECRET_KEY")
@@ -242,9 +242,15 @@ REST_FRAMEWORK = {
         "contact": "200/hour",     # Contact form submissions
         "login": "10/minute",      # Login attempts
         "chat": "200/hour",        # AI chat
-        "feedback": "30/hour"      # Feedback form
+        "feedback": "30/hour",     # Feedback form
+        "analytics_track": "5/hour" # Analytics tracking
     }
 }
+
+# Security Headers (Always Active)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
 
 # Production Security Settings
 if not DEBUG:
@@ -253,9 +259,6 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = _ssl_enabled
     CSRF_COOKIE_SECURE = _ssl_enabled
     SESSION_COOKIE_HTTPONLY = True
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'DENY'
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True

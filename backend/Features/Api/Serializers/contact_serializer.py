@@ -12,6 +12,10 @@ class ContactAttachmentSerializer(serializers.ModelSerializer):
 
 class ContactMessageSerializer(serializers.ModelSerializer):
     attachments = ContactAttachmentSerializer(many=True, read_only=True)
+    name = serializers.CharField(max_length=200)
+    subject = serializers.CharField(max_length=300)
+    message = serializers.CharField(max_length=5000)
+    
     
     class Meta:
         model = ContactMessage
