@@ -144,6 +144,15 @@ class BatchService(IBatchService):
             self.batch_repo.record_history(batch_id, "Reopened", "Batch reopened for additions", user_id)
         return batch
 
+    @transaction.atomic
+    def touch_batch(self, batch_id: int) -> Optional[Any]:
+        # Simple save to trigger auto_now on last_interacted_at
+        batch = self.batch_repo.get_batch_by_id(batch_id)
+        if batch:
+            batch.save(update_fields=['last_interacted_at'])
+            return batch
+        return None
+
     def get_current_display_batch(self) -> Optional[Any]:
         return self.batch_repo.get_current_display_batch()
 

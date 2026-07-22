@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface UndoDeleteToastProps {
@@ -14,12 +15,12 @@ interface UndoDeleteToastProps {
 export const UndoDeleteToast: React.FC<UndoDeleteToastProps> = ({ undoState, onUndo, onExecuteNow }) => {
   if (!undoState) return null;
 
-  return (
-    <div className="fixed bottom-6 right-6 z-[99] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
+  return createPortal(
+    <div className="fixed bottom-6 right-6 z-[10000] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <p className="font-semibold text-gray-800 text-sm">Action pending...</p>
-          <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
+           <p className="font-semibold text-gray-800 text-sm">Action pending...</p>
+           <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">"{undoState.itemName}"</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -39,6 +40,7 @@ export const UndoDeleteToast: React.FC<UndoDeleteToastProps> = ({ undoState, onU
           style={{ width: `${(undoState.countdown / 3) * 100}%`, transitionDuration: '1s' }}
         />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -41,7 +41,8 @@ class PersonnelViewSet(viewsets.ViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def destroy(self, request, pk=None):
-        success = self.service.delete_personnel(pk)
+        user_id = request.user.id if request.user.is_authenticated else None
+        success = self.service.delete_personnel(pk, user_id)
         if success:
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)

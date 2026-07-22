@@ -11,15 +11,18 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useExcelParser, ParsedSheet, ExcelParseResult } from '@/src/Hooks/useExcelParser';
-import { referenceApi, BulkImportResult } from '@/src/Endpoints/referenceApi';
+import { referenceApi, SyncCommitResult, SyncDiff } from '@/src/Endpoints/referenceApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { ChunkedSyncState } from '@/src/Hooks/useChunkedSync';
 
 interface ExcelUploadModalProps {
   onClose: () => void;
-  onImportComplete: () => void;
+  syncState: ChunkedSyncState;
+  startSync: (diff: SyncDiff, applyDeletions: boolean) => Promise<void>;
+  cancelSync: () => void;
 }
 
-type Step = 'upload' | 'preview' | 'result';
+type Step = 'upload' | 'preview' | 'diff' | 'result';
 
 const DEPT_SHORT: Record<string, string> = {
   'Research of Bachelor of Science in Forestry (BSF)': 'BSF',
@@ -28,18 +31,31 @@ const DEPT_SHORT: Record<string, string> = {
   'Narrative Report of Secondary Education': 'Secondary Ed.',
 };
 
-export function ExcelUploadModal({ onClose, onImportComplete }: ExcelUploadModalProps) {
+export function ExcelUploadModal({ onClose, syncState, startSync, cancelSync }: ExcelUploadModalProps) {
   const [step, setStep] = useState<Step>('upload');
   const [isDragging, setIsDragging] = useState(false);
   const [parseResult, setParseResult] = useState<ExcelParseResult | null>(null);
-  const [importResult, setImportResult] = useState<BulkImportResult | null>(null);
+  
+  // Use local state only if sync is not active/finished
+  const [localSyncDiff, setLocalSyncDiff] = useState<SyncDiff | null>(null);
+  const syncDiff = syncState.syncDiff || localSyncDiff;
+  
+  const [applyDeletions, setApplyDeletions] = useState(syncState.applyDeletions || false);
+  const importResult = syncState.finalResult;
+  const isImporting = syncState.isActive;
+  
   const [isParsing, setIsParsing] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { parseFile } = useExcelParser();
   const { showToast } = useToast();
+
+  React.useEffect(() => {
+    if (syncState.isActive) setStep('diff');
+    else if (syncState.finalResult) setStep('result');
+  }, [syncState.isActive, syncState.finalResult]);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -73,11 +89,10 @@ export function ExcelUploadModal({ onClose, onImportComplete }: ExcelUploadModal
     [handleFile]
   );
 
-  const handleImport = async () => {
+  const handleAnalyze = async () => {
     if (!parseResult) return;
-    setIsImporting(true);
+    setIsAnalyzing(true);
     try {
-      // Flatten all sheets into a single records array
       const records = parseResult.sheets.flatMap((sheet) =>
         sheet.rows.map((row) => ({
           category: row.category,
@@ -94,17 +109,24 @@ export function ExcelUploadModal({ onClose, onImportComplete }: ExcelUploadModal
         }))
       );
 
-      const result = await referenceApi.bulkImportReferences(records);
-      setImportResult(result);
-      setStep('result');
-      if (result.imported > 0) {
-        onImportComplete();
-        showToast(`Successfully imported ${result.imported} references!`, 'success');
-      }
+      const diff = await referenceApi.syncPreview(records);
+      setLocalSyncDiff(diff);
+      setStep('diff');
     } catch (err: any) {
-      showToast(err.message || 'Import failed. Please try again.', 'error');
+      showToast(err.message || 'Failed to analyze records.', 'error');
     } finally {
-      setIsImporting(false);
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleSyncCommit = async () => {
+    if (!syncDiff) return;
+    try {
+      await startSync(syncDiff, applyDeletions);
+      // We don't close here, we let the background sync toast handle it,
+      // and the step will automatically become 'result' when done via the useEffect.
+    } catch (err: any) {
+      showToast(err.message || 'Failed to start sync.', 'error');
     }
   };
 
@@ -140,12 +162,13 @@ export function ExcelUploadModal({ onClose, onImportComplete }: ExcelUploadModal
 
         {/* Step Indicator */}
         <div className="flex items-center gap-0 px-6 py-4 border-b border-gray-100 bg-gray-50 shrink-0">
-          {(['upload', 'preview', 'result'] as Step[]).map((s, idx) => {
-            const labels = ['1. Upload', '2. Preview', '3. Result'];
+          {(['upload', 'preview', 'diff', 'result'] as Step[]).map((s, idx) => {
+            const labels = ['1. Upload', '2. Preview', '3. Diff', '4. Result'];
             const isActive = step === s;
             const isDone =
-              (s === 'upload' && (step === 'preview' || step === 'result')) ||
-              (s === 'preview' && step === 'result');
+              (s === 'upload' && step !== 'upload') ||
+              (s === 'preview' && (step === 'diff' || step === 'result')) ||
+              (s === 'diff' && step === 'result');
             return (
               <React.Fragment key={s}>
                 <div
@@ -161,7 +184,7 @@ export function ExcelUploadModal({ onClose, onImportComplete }: ExcelUploadModal
                   {isDone ? <CheckCircle2 size={14} /> : null}
                   {labels[idx]}
                 </div>
-                {idx < 2 && <ChevronRight size={14} className="text-gray-300 mx-1" />}
+                {idx < 3 && <ChevronRight size={14} className="text-gray-300 mx-1" />}
               </React.Fragment>
             );
           })}
@@ -299,29 +322,139 @@ export function ExcelUploadModal({ onClose, onImportComplete }: ExcelUploadModal
             </div>
           )}
 
-          {/* STEP 3: RESULT */}
+          {/* STEP 3: DIFF REVIEW */}
+          {step === 'diff' && syncDiff && (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-gray-800">Database Sync Analysis</h3>
+                <div className="text-xs font-semibold px-3 py-1 bg-gray-100 text-gray-500 rounded-full">
+                  Total Analyzed: {syncDiff.to_create.length + syncDiff.to_update.length + syncDiff.unchanged}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center">
+                  <p className="text-xl font-black text-emerald-700">{syncDiff.to_create.length}</p>
+                  <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">New</p>
+                </div>
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+                  <p className="text-xl font-black text-blue-700">{syncDiff.to_update.length}</p>
+                  <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Updated</p>
+                </div>
+                <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-center">
+                  <p className="text-xl font-black text-red-700">{syncDiff.to_delete.length}</p>
+                  <p className="text-[10px] font-bold text-red-600 uppercase mt-1">Removed in File</p>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+                  <p className="text-xl font-black text-gray-700">{syncDiff.unchanged}</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase mt-1">Unchanged</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                  <span className="font-bold text-sm text-gray-700">Preview of Changes</span>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-white sticky top-0 border-b border-gray-100">
+                      <tr>
+                        <th className="px-4 py-2 font-bold text-gray-500">Status</th>
+                        <th className="px-4 py-2 font-bold text-gray-500">Title</th>
+                        <th className="px-4 py-2 font-bold text-gray-500">Department/Category</th>
+                        <th className="px-4 py-2 font-bold text-gray-500">Changes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 bg-white">
+                      {syncDiff.to_create.map((r, i) => (
+                        <tr key={`c-${i}`}>
+                          <td className="px-4 py-2">
+                            <span className="px-2 py-1 bg-emerald-100 text-emerald-700 font-bold rounded">New</span>
+                          </td>
+                          <td className="px-4 py-2 font-medium truncate max-w-[200px]">{r.title}</td>
+                          <td className="px-4 py-2 text-gray-500 truncate max-w-[150px]">{DEPT_SHORT[r.department || ''] || r.category}</td>
+                          <td className="px-4 py-2 text-gray-400">-</td>
+                        </tr>
+                      ))}
+                      {syncDiff.to_update.map((r, i) => (
+                        <tr key={`u-${i}`}>
+                          <td className="px-4 py-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 font-bold rounded">Updated</span>
+                          </td>
+                          <td className="px-4 py-2 font-medium truncate max-w-[200px]">{r.title}</td>
+                          <td className="px-4 py-2 text-gray-500 truncate max-w-[150px]">{DEPT_SHORT[r.department || ''] || r.category}</td>
+                          <td className="px-4 py-2 text-blue-600 truncate max-w-[150px]">
+                            {Object.keys(r.changes).join(', ')}
+                          </td>
+                        </tr>
+                      ))}
+                      {syncDiff.to_delete.map((r, i) => (
+                        <tr key={`d-${i}`}>
+                          <td className="px-4 py-2">
+                            <span className="px-2 py-1 bg-red-100 text-red-700 font-bold rounded">Removed</span>
+                          </td>
+                          <td className="px-4 py-2 font-medium text-gray-500 truncate max-w-[200px] line-through">{r.title}</td>
+                          <td className="px-4 py-2 text-gray-400 truncate max-w-[150px]">{DEPT_SHORT[r.department || ''] || r.department}</td>
+                          <td className="px-4 py-2 text-gray-400">Missing from file</td>
+                        </tr>
+                      ))}
+                      {syncDiff.to_create.length === 0 && syncDiff.to_update.length === 0 && syncDiff.to_delete.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-gray-500 font-medium">
+                            No changes detected against the database.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {syncDiff.to_delete.length > 0 && (
+                <div className="flex items-center gap-3 bg-red-50 p-4 rounded-xl border border-red-100">
+                  <input
+                    type="checkbox"
+                    id="applyDeletions"
+                    checked={applyDeletions}
+                    onChange={(e) => setApplyDeletions(e.target.checked)}
+                    className="w-5 h-5 rounded text-red-600 focus:ring-red-500 border-gray-300"
+                  />
+                  <label htmlFor="applyDeletions" className="text-sm font-semibold text-red-900 cursor-pointer select-none">
+                    Also remove {syncDiff.to_delete.length} deleted records from the database
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 4: RESULT */}
           {step === 'result' && importResult && (
             <div className="space-y-5 text-center py-4">
               <div
                 className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
-                  importResult.imported > 0 ? 'bg-emerald-100' : 'bg-red-100'
+                  (importResult.created > 0 || importResult.updated > 0 || importResult.deleted > 0) && importResult.errors.length === 0 ? 'bg-emerald-100' : 'bg-amber-100'
                 }`}
               >
-                {importResult.imported > 0 ? (
+                {(importResult.created > 0 || importResult.updated > 0 || importResult.deleted > 0) && importResult.errors.length === 0 ? (
                   <CheckCircle2 size={40} className="text-emerald-600" />
                 ) : (
-                  <AlertTriangle size={40} className="text-red-500" />
+                  <AlertTriangle size={40} className="text-amber-500" />
                 )}
               </div>
 
               <div>
                 <p className="text-2xl font-black text-gray-900">
-                  {importResult.imported} of {importResult.total_submitted} records imported
+                  Sync Completed
                 </p>
-                <p className="text-gray-500 text-sm mt-2">
+                <div className="flex justify-center gap-4 mt-3">
+                  <span className="text-sm font-bold text-emerald-600">{importResult.created} Created</span>
+                  <span className="text-sm font-bold text-blue-600">{importResult.updated} Updated</span>
+                  <span className="text-sm font-bold text-red-600">{importResult.deleted} Deleted</span>
+                </div>
+                <p className="text-gray-500 text-xs mt-3">
                   {importResult.errors.length === 0
-                    ? 'All records were imported successfully!'
-                    : `${importResult.errors.length} row(s) had errors and were skipped.`}
+                    ? 'All changes applied successfully without errors.'
+                    : `${importResult.errors.length} operation(s) had errors.`}
                 </p>
               </div>
 
@@ -342,36 +475,53 @@ export function ExcelUploadModal({ onClose, onImportComplete }: ExcelUploadModal
 
         {/* Footer actions */}
         <div className="px-6 py-4 border-t border-gray-100 flex justify-between items-center shrink-0 bg-gray-50">
-          <button
-            onClick={step === 'upload' ? onClose : () => setStep(step === 'result' ? 'preview' : 'upload')}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-all cursor-pointer"
-          >
-            {step === 'upload' ? (
-              'Cancel'
-            ) : (
-              <>
-                <ChevronLeft size={16} /> Back
-              </>
-            )}
-          </button>
+          {syncState.isActive ? (
+            <button
+              onClick={cancelSync}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-red-600 border border-red-700 rounded-xl hover:bg-red-700 transition-all cursor-pointer shadow-sm"
+            >
+              Cancel Sync
+            </button>
+          ) : (
+            <button
+              onClick={step === 'upload' ? onClose : () => setStep(
+                step === 'result' ? 'upload' : 
+                step === 'diff' ? 'preview' : 'upload'
+              )}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-all cursor-pointer"
+            >
+              {step === 'upload' ? 'Cancel' : <><ChevronLeft size={16} /> Back</>}
+            </button>
+          )}
 
           {step === 'upload' && null}
 
           {step === 'preview' && (
             <button
-              onClick={handleImport}
-              disabled={isImporting || parseResult!.totalRows === 0}
+              onClick={handleAnalyze}
+              disabled={isAnalyzing || parseResult!.totalRows === 0}
+              className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+            >
+              {isAnalyzing ? (
+                <><Loader2 size={16} className="animate-spin" /> Analyzing...</>
+              ) : (
+                <>Analyze Differences <ChevronRight size={16} /></>
+              )}
+            </button>
+          )}
+
+          {step === 'diff' && (
+            <button
+              onClick={handleSyncCommit}
+              disabled={isImporting || (syncDiff?.to_create.length === 0 && syncDiff?.to_update.length === 0 && (!applyDeletions || syncDiff?.to_delete.length === 0))}
               className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: 'var(--color-primary)' }}
             >
               {isImporting ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" /> Importing...
-                </>
+                <><Loader2 size={16} className="animate-spin" /> Syncing ({syncState.processedRecords} / {syncState.totalRecords})...</>
               ) : (
-                <>
-                  <Upload size={16} /> Import {parseResult!.totalRows} Records
-                </>
+                <><CheckCircle2 size={16} /> Confirm & Sync</>
               )}
             </button>
           )}

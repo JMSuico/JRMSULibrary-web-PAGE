@@ -23,3 +23,13 @@ spec:
         target:
           type: Utilization
           averageUtilization: 80
+    - type: External
+      external:
+        metric:
+          name: nginx_ingress_controller_requests
+          selector:
+            matchLabels:
+              ingress: jrmsu-ingress
+        target:
+          type: Value
+          value: 100

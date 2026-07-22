@@ -10,6 +10,7 @@ import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 import { eresourceApi, EResourceDepartment } from '@/src/Endpoints/eresourceApi';
 import { cmsApi, ManagedLink } from '@/src/Endpoints/cmsApi';
 import { ExternalIframeModal } from '@/src/Components/Modals/ExternalIframeModal';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { Loader2, BookOpen, GraduationCap, ChevronDown } from 'lucide-react';
 
 function collectFiles(nodes: TreeNodeData[]): TreeNodeData[] {
@@ -128,29 +129,32 @@ export default function CollectionPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string; } | null>(null);
 
+  const load = async () => {
+    setLoadingResources(true);
+    setErrorMsg(null);
+    try {
+      console.log('Fetching Collection resources...');
+      const [deps, links] = await Promise.all([
+        eresourceApi.getAllDepartments(),
+        cmsApi.getAllLinks()
+      ]);
+      console.log('Fetched deps:', deps);
+      console.log('Fetched links:', links);
+      setDepartments(deps);
+      setOnlineLinks(links.filter(l => l.is_active));
+    } catch (e: any) {
+      console.error('Failed to load Collection resources', e);
+      setErrorMsg(e.message || 'Failed to load');
+    } finally {
+      setLoadingResources(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setLoadingResources(true);
-      setErrorMsg(null);
-      try {
-        console.log('Fetching Collection resources...');
-        const [deps, links] = await Promise.all([
-          eresourceApi.getAllDepartments(),
-          cmsApi.getAllLinks()
-        ]);
-        console.log('Fetched deps:', deps);
-        console.log('Fetched links:', links);
-        setDepartments(deps);
-        setOnlineLinks(links.filter(l => l.is_active));
-      } catch (e: any) {
-        console.error('Failed to load Collection resources', e);
-        setErrorMsg(e.message || 'Failed to load');
-      } finally {
-        setLoadingResources(false);
-      }
-    };
     load();
   }, []);
+
+  useAutoRefresh(load, 30000);
 
   const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries', 'union-opac', 'research-references'];
   const activeTab = validTabs.includes(tab as string) ? (tab as string) : 'newly-acquired';

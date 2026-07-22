@@ -10,11 +10,14 @@ import {
 import { Search, Plus, Edit2, Trash2, X, Save, Upload } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { ExcelUploadModal } from '@/src/Features/Admin/components/ExcelUploadModal';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
-import { Link } from 'lucide-react';
+import { Link, Loader2, CheckCircle2 } from 'lucide-react';
+import { useDraggableScroll } from '@/src/Hooks/useDraggableScroll';
+import { useChunkedSync } from '@/src/Hooks/useChunkedSync';
 
 const DEPT_SHORT: Record<string, string> = {
   'Research of Bachelor of Science in Forestry (BSF)': 'BSF',
@@ -37,6 +40,14 @@ export function ResearchReferencesManager() {
   const [editingRef, setEditingRef] = useState<ResearchReference | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const { state: syncState, startSync, cancelSync, resetSync } = useChunkedSync(() => {
+    loadData();
+    setTimeout(() => {
+      resetSync();
+      setIsUploadModalOpen(false);
+    }, 3000); // clear toast after 3 seconds
+  });
+
   // Controlled category inside the Add/Edit form (to drive department enable/disable)
   const [formCategory, setFormCategory] = useState<string>('Research for College Student in JRMSU');
   
@@ -44,8 +55,12 @@ export function ResearchReferencesManager() {
   const [accessType, setAccessType] = useState<'none' | 'link' | 'file'>('none');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+
   const { showToast } = useToast();
-  const { triggerDelete } = useUndoDelete();
+  const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
+  const scrollRef = useDraggableScroll<HTMLDivElement>();
 
   const limit = 20;
 
@@ -54,6 +69,8 @@ export function ResearchReferencesManager() {
     try {
       const result = await referenceApi.getAllReferences(page, limit, debouncedSearch, filterCategory, filterDepartment);
       setData(result);
+      // Clear selections when page changes
+      setSelectedIds(new Set());
     } catch (err: any) {
       showToast(err.message || 'Failed to load references', 'error');
     } finally {
@@ -138,6 +155,14 @@ export function ResearchReferencesManager() {
   };
 
   const handleDelete = (ref: ResearchReference) => {
+    // Optimistic delete
+    if (data) {
+      setData({
+        ...data,
+        results: data.results.filter(r => r.id !== ref.id)
+      });
+    }
+
     triggerDelete(
       ref.title,
       async () => {
@@ -151,13 +176,57 @@ export function ResearchReferencesManager() {
       },
       () => {
         showToast('Deletion undone', 'success');
+        loadData();
       }
     );
-    // Optimistic UI update
-    setData(prev => prev ? {
-      ...prev,
-      results: prev.results.filter(r => r.id !== ref.id)
-    } : null);
+  };
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked && data) {
+      setSelectedIds(new Set(data.results.map(r => r.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    
+    // Optimistic delete
+    if (data) {
+      setData({
+        ...data,
+        results: data.results.filter(r => !selectedIds.has(r.id))
+      });
+    }
+
+    triggerDelete(
+      `${selectedIds.size} references`,
+      async () => {
+        try {
+          setIsDeletingBulk(true);
+          await referenceApi.bulkDeleteReferences(Array.from(selectedIds));
+          setSelectedIds(new Set());
+          loadData();
+        } catch (err: any) {
+          showToast(err.message || 'Failed to delete references', 'error');
+          loadData();
+        } finally {
+          setIsDeletingBulk(false);
+        }
+      },
+      () => {
+        showToast('Bulk deletion undone', 'success');
+        loadData();
+      }
+    );
   };
 
   const openModal = (ref: ResearchReference | null = null) => {
@@ -215,27 +284,55 @@ export function ResearchReferencesManager() {
 
         {/* Action buttons */}
         <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => setIsUploadModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors cursor-pointer"
-          >
-            <Upload size={16} />
-            Upload Excel / CSV
-          </button>
-          <button
-            onClick={() => openModal()}
-            className="admin-btn admin-btn--primary flex items-center gap-2"
-          >
-            <Plus size={16} /> Add Reference
-          </button>
+          <div className="flex gap-2 items-center">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={isDeletingBulk}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {isDeletingBulk ? <><Loader2 size={16} className="animate-spin" /> Deleting...</> : <><Trash2 size={16} /> Delete Selected ({selectedIds.size})</>}
+              </button>
+            )}
+            <button
+              disabled={syncState.isActive}
+              onClick={() => setIsUploadModalOpen(true)}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors cursor-pointer ${syncState.isActive ? 'text-gray-400 bg-gray-50 border border-gray-200 cursor-not-allowed' : 'text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100'}`}
+            >
+              <Upload size={16} />
+              {syncState.isActive ? 'Sync in Progress...' : 'Upload Excel / CSV'}
+            </button>
+            {syncState.isActive && !isUploadModalOpen && (
+              <button
+                onClick={() => setIsUploadModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer"
+              >
+                View Sync Progress
+              </button>
+            )}
+            <button
+              onClick={() => openModal()}
+              className="admin-btn admin-btn--primary flex items-center gap-2"
+            >
+              <Plus size={16} /> Add Reference
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="admin-table-scroll">
+      <div className="admin-table-scroll" ref={scrollRef}>
         <table className="admin-table min-w-[1300px]">
           <thead>
             <tr>
+              <th className="w-10 text-center">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  checked={data?.results.length ? selectedIds.size === data.results.length : false}
+                  onChange={handleSelectAll}
+                />
+              </th>
               <th className="w-12">No.</th>
               <th className="w-24">Acc No.</th>
               <th className="w-24">Call No.</th>
@@ -257,6 +354,14 @@ export function ResearchReferencesManager() {
             ) : (
               data?.results.map((ref) => (
                 <tr key={ref.id} className="hover:bg-gray-50">
+                  <td className="text-center">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      checked={selectedIds.has(ref.id)}
+                      onChange={() => handleSelectOne(ref.id)}
+                    />
+                  </td>
                   <td>{ref.no || '-'}</td>
                   <td>{ref.acc_no || '-'}</td>
                   <td>{ref.call_number || '-'}</td>
@@ -490,13 +595,48 @@ export function ResearchReferencesManager() {
       {/* Excel/CSV Upload Modal */}
       {isUploadModalOpen && (
         <ExcelUploadModal
-          onClose={() => setIsUploadModalOpen(false)}
-          onImportComplete={() => {
+          onClose={() => {
             setIsUploadModalOpen(false);
-            loadData();
+            if (!syncState.isActive && syncState.finalResult) {
+              resetSync();
+            }
           }}
+          syncState={syncState}
+          startSync={startSync}
+          cancelSync={cancelSync}
         />
       )}
+
+      {/* Sync Toast Notification */}
+      {syncState.message && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className={`shadow-lg rounded-xl border p-4 flex items-center gap-3 ${syncState.isCancelled ? 'bg-red-50 border-red-200' : syncState.isActive ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`}>
+            {syncState.isActive ? (
+              <Loader2 className="animate-spin text-blue-600" size={24} />
+            ) : syncState.isCancelled ? (
+              <X className="text-red-600" size={24} />
+            ) : (
+              <CheckCircle2 className="text-emerald-600" size={24} />
+            )}
+            <div>
+              <p className={`font-semibold text-sm ${syncState.isCancelled ? 'text-red-800' : syncState.isActive ? 'text-blue-800' : 'text-emerald-800'}`}>
+                {syncState.message}
+              </p>
+              {syncState.totalRecords > 0 && syncState.isActive && (
+                <p className="text-xs text-blue-600/80 mt-0.5">
+                  Processing chunked records in background...
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <UndoDeleteToast 
+        undoState={undoState} 
+        onUndo={cancelDelete} 
+        onExecuteNow={executeNow} 
+      />
     </div>
   );
 }

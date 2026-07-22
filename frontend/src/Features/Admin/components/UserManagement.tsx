@@ -238,9 +238,9 @@ export function UserManagement() {
                         <button 
                           className="admin-btn admin-btn--icon" 
                           aria-label={user.is_active ? "Suspend User" : "Activate User"}
-                          title={user.id === currentUser?.id ? "Cannot suspend own account" : (user.is_active ? "Suspend User" : "Activate User")}
-                          disabled={user.id === currentUser?.id}
-                          style={{ opacity: user.id === currentUser?.id ? 0.3 : 1, cursor: user.id === currentUser?.id ? 'not-allowed' : 'pointer' }}
+                          title={user.id === currentUser?.id ? "Cannot suspend own account" : (user.is_terminal_created ? "Cannot suspend Terminal-Created Admin" : (user.is_active ? "Suspend User" : "Activate User"))}
+                          disabled={user.id === currentUser?.id || user.is_terminal_created}
+                          style={{ opacity: (user.id === currentUser?.id || user.is_terminal_created) ? 0.3 : 1, cursor: (user.id === currentUser?.id || user.is_terminal_created) ? 'not-allowed' : 'pointer' }}
                           onClick={() => {
                             if (user.id === currentUser?.id) return;
                             setConfirmModal({
@@ -294,8 +294,9 @@ export function UserManagement() {
                         <button 
                           className="admin-btn admin-btn--icon" 
                           aria-label="Delete" 
-                          title="Delete User"
-                          style={{ color: 'var(--color-red-600)' }}
+                          title={user.id === currentUser?.id ? "Cannot delete own account" : (user.is_terminal_created ? "Cannot delete Terminal-Created Admin" : "Delete User")}
+                          disabled={user.id === currentUser?.id || user.is_terminal_created}
+                          style={{ color: 'var(--color-red-600)', opacity: (user.id === currentUser?.id || user.is_terminal_created) ? 0.3 : 1, cursor: (user.id === currentUser?.id || user.is_terminal_created) ? 'not-allowed' : 'pointer' }}
                           onClick={() => handleDelete(user)}
                         >
                           <Trash2 size={15} />

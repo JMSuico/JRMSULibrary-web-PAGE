@@ -51,6 +51,8 @@ services:
       ALLOWED_HOSTS: "*"
       ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://192.168.15.194:3000,http://192.168.15.194:3001,http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001,http://192.168.1.111:3000,http://192.168.1.111:3001"
       OLLAMA_URL: "http://ollama:11434/api/chat"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
       # SMTP — Gmail App Password
       EMAIL_HOST: "smtp.gmail.com"
       EMAIL_PORT: "587"
@@ -68,6 +70,38 @@ services:
       - ./backend:/app
       - ./backend/media:/app/media
       - ./frontend/src/Assets/assets:/app/frontend_assets:ro
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    pull_policy: never
+    restart: unless-stopped
+    command: celery -A core worker -l info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DB_ENGINE: postgresql
+      DB_NAME: jrmsu_library
+      DB_USER: jrmsu_admin
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: "False"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      EMAIL_HOST: "smtp.gmail.com"
+      EMAIL_PORT: "587"
+      EMAIL_HOST_USER: "katipunan.library@jrmsu.edu.ph"
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      DEFAULT_FROM_EMAIL: "JRMSU-KC Library <katipunan.library@jrmsu.edu.ph>"
+    volumes:
+      - ./backend:/app
+      - ./backend/media:/app/media
 
   # ─── Layer 1: Frontend Webpage (Public Landing Page) ───────────────────
   frontend-webpage:

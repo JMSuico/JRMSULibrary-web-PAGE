@@ -10,6 +10,7 @@ export interface User {
   date_joined: string;
   avatar_url?: string | null;
   is_online?: boolean;
+  is_terminal_created?: boolean;
 }
 
 export const userApi = {

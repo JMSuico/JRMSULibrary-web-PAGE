@@ -3,6 +3,7 @@ import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { assets } from '@/src/Libs/Assets/data';
 import { cmsApi, PageContent } from '@/src/Endpoints/cmsApi';
 import { personnelApi } from '@/src/Endpoints/personnelApi';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { Loader2 } from 'lucide-react';
 
 function extractTextBlocksFromHtml(html: string): string[] {
@@ -21,40 +22,24 @@ export const PersonnelSection: React.FC = () => {
 
   const [personnelList, setPersonnelList] = React.useState<any[]>([]);
 
-  React.useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        const contents = await cmsApi.getAllContent();
-        setPersonnelContent(contents.find(c => c.slug === 'personnel_text') || null);
-      } catch (err) {
-        console.error('Failed to load Personnel content', err);
-      }
-    };
-    fetchContent();
-  }, []);
+  const loadData = async () => {
+    try {
+      const [contents, staff] = await Promise.all([
+        cmsApi.getAllContent(),
+        personnelApi.getPersonnel()
+      ]);
+      setPersonnelContent(contents.find(c => c.slug === 'personnel_text') || null);
+      setPersonnelList(staff.sort((a,b) => a.order - b.order));
+    } catch (err) {
+      console.error('Failed to load Personnel data', err);
+    }
+  };
 
   React.useEffect(() => {
-    const fetchPersonnel = async () => {
-      try {
-        const staff = await personnelApi.getPersonnel();
-        setPersonnelList(staff.sort((a,b) => a.order - b.order));
-      } catch (err) {
-        console.error('Failed to load Personnel list', err);
-      }
-    };
-    fetchPersonnel();
+    loadData();
   }, []);
 
-  // Listen to cms updates
-  React.useEffect(() => {
-    const handleCmsUpdate = () => {
-      personnelApi.getPersonnel().then(staff => {
-        setPersonnelList(staff.sort((a,b) => a.order - b.order));
-      }).catch(console.error);
-    };
-    window.addEventListener('cms_updated', handleCmsUpdate);
-    return () => window.removeEventListener('cms_updated', handleCmsUpdate);
-  }, []);
+  useAutoRefresh(loadData, 30000);
 
   const textBlocks = personnelContent ? extractTextBlocksFromHtml(personnelContent.content) : [];
   

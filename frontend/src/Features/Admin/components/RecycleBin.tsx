@@ -151,8 +151,14 @@ export function RecycleBin() {
             >
               <option value="ALL">All Modules</option>
               <option value="BOOKS">Books</option>
-              <option value="GALLERY">Sections</option>
               <option value="BATCH">Batches (Newly Acquired)</option>
+              <option value="GALLERY">Sections</option>
+              <option value="PERSONNEL">Library Personnel</option>
+              <option value="RESEARCH_REF">Research References</option>
+              <option value="CMS_FILE">Manual Files</option>
+              <option value="CMS_LINK">External Links</option>
+              <option value="ERESOURCE_DEPT">E-Resource Departments</option>
+              <option value="ERESOURCE_FILE">E-Resource Files</option>
               <option value="REPORT">Generated Reports</option>
             </select>
           </div>
@@ -226,13 +232,19 @@ export function RecycleBin() {
                     </td>
                     <td>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                        item.source_module === 'BOOKS'
-                          ? 'bg-blue-100 text-blue-800'
-                          : item.source_module === 'BATCH'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-purple-100 text-purple-800'
+                        item.source_module === 'BOOKS' ? 'bg-blue-100 text-blue-800' :
+                        item.source_module === 'BATCH' ? 'bg-amber-100 text-amber-800' :
+                        item.source_module === 'PERSONNEL' ? 'bg-emerald-100 text-emerald-800' :
+                        item.source_module === 'RESEARCH_REF' ? 'bg-teal-100 text-teal-800' :
+                        item.source_module.startsWith('CMS_') ? 'bg-indigo-100 text-indigo-800' :
+                        item.source_module.startsWith('ERESOURCE_') ? 'bg-cyan-100 text-cyan-800' :
+                        'bg-purple-100 text-purple-800'
                       }`}>
-                        {item.source_module === 'BATCH' ? 'Batch' : item.source_module.toLowerCase()}
+                        {item.source_module === 'BATCH' ? 'Batch' : 
+                         item.source_module === 'RESEARCH_REF' ? 'Research Ref' : 
+                         item.source_module === 'CMS_FILE' ? 'Manual File' :
+                         item.source_module === 'CMS_LINK' ? 'External Link' :
+                         item.source_module.replace('_', ' ').toLowerCase()}
                       </span>
                     </td>
                     <td>

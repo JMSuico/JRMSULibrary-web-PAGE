@@ -4,7 +4,9 @@ import { Search, Link as LinkIcon, FileText } from 'lucide-react';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { useDebounce } from '@/src/Hooks/useDebounce';
+import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { ReferenceFileViewerModal } from '@/src/Features/Collection/components/ReferenceFileViewerModal';
+import { useDraggableScroll } from '@/src/Hooks/useDraggableScroll';
 
 export function ResearchReferencesTable() {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
@@ -16,6 +18,7 @@ export function ResearchReferencesTable() {
   const [category, setCategory] = useState('All');
   const [selectedFileRef, setSelectedFileRef] = useState<{ id: number, name: string } | null>(null);
   
+  const scrollRef = useDraggableScroll<HTMLDivElement>();
   const limit = 50;
 
   const loadData = async () => {
@@ -33,6 +36,8 @@ export function ResearchReferencesTable() {
   useEffect(() => {
     loadData();
   }, [page, debouncedSearch, category]);
+
+  useAutoRefresh(loadData, 30000);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
@@ -88,7 +93,7 @@ export function ResearchReferencesTable() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-primary/10 shadow-inner bg-white/95">
+        <div className="overflow-x-auto rounded-xl border border-primary/10 shadow-inner bg-white/95" ref={scrollRef}>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-outline-variant)' }}>

@@ -46,6 +46,20 @@ export interface BulkImportResult {
   total_submitted: number;
 }
 
+export interface SyncDiff {
+  to_create: Partial<ResearchReference>[];
+  to_update: (Partial<ResearchReference> & { id: number; changes: Record<string, [any, any]> })[];
+  to_delete: Pick<ResearchReference, 'id' | 'title' | 'author' | 'department'>[];
+  unchanged: number;
+}
+
+export interface SyncCommitResult {
+  created: number;
+  updated: number;
+  deleted: number;
+  errors: { row?: number; id?: number; title?: string; error: any }[];
+}
+
 export const referenceApi = {
   getAllReferences: async (
     page = 1,
@@ -99,6 +113,32 @@ export const referenceApi = {
   removeReferenceFile: async (id: number): Promise<void> => {
     await apiClient(`/research-references/${id}/remove-file/`, {
       method: 'DELETE',
+    });
+  },
+
+  syncPreview: async (records: Partial<ResearchReference>[]): Promise<SyncDiff> => {
+    return await apiClient('/research-references/sync-preview/', {
+      method: 'POST',
+      body: JSON.stringify(records),
+    });
+  },
+
+  syncCommit: async (payload: {
+    to_create: Partial<ResearchReference>[];
+    to_update: (Partial<ResearchReference> & { id: number; changes: Record<string, [any, any]> })[];
+    to_delete: number[];
+    apply_deletions: boolean;
+  }): Promise<SyncCommitResult> => {
+    return await apiClient('/research-references/sync-commit/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  bulkDeleteReferences: async (ids: number[]): Promise<void> => {
+    await apiClient('/research-references/bulk-delete/', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
     });
   },
 };

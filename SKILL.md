@@ -36,7 +36,8 @@ Never create spaghetti code. Never mix responsibilities. Never skip layers. Neve
 | Mobile Frontend | React Native + TypeScript | Feature-based Vertical Slice |
 | Backend | Django + DRF + Python | Layered Model-First |
 | Database | SQL Server (SSMS19 Recommended) / MySQL / PostgreSQL | Strict Relational |
-| Cache | Redis | Infrastructure Layer |
+| Cache & Message Broker | Redis | Infrastructure Layer |
+| Background Workers | Celery | Asynchronous Task Offloading |
 | Auth | JWT + HMAC-SHA256 QR | Backend-enforced |
 
 ---
@@ -118,6 +119,14 @@ Service Layer     (validate, enforce rules, orchestrate)
 Repository Layer  (query, persist, filter)
   ↓
 Database          (final state)
+```
+
+### 3D) Background Task Flow (Celery)
+
+```
+Incoming Request → API Controller → Celery Task .delay() → Return 202 Accepted
+  ↓ (Background Process via Redis Broker)
+Celery Worker → Service Layer → Repository Layer → Database
 ```
 
 ### 3D) Cache Read Flow
@@ -391,7 +400,7 @@ backend/                                    # Root Django backend application
     │   │   ├── db_engine.py               # Database engine selector — MySQL, PostgreSQL, SQL Server
     │   │   ├── connection_factory.py      # Builds DB connection settings from .env
     │   │   └── health_check.py            # Pings database and returns health status
-    │   ├── Cache/                         # Redis cache layer — performance concern, not domain
+    │   ├── Cache/                         # Redis cache & Celery Broker layer
     │   │   ├── redis_client.py            # Creates Redis connection pool from config
     │   │   ├── redis_config.py            # Reads Redis settings from .env
     │   │   ├── redis_health.py            # Redis health check and ping utility

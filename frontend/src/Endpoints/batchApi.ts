@@ -18,6 +18,7 @@ export interface AcquisitionBatch {
   is_display_batch: boolean;
   opened_at: string;
   closed_at: string | null;
+  last_interacted_at: string;
   safety_expiry: string | null;
   created_by: number | null;
   remarks: string;
@@ -74,6 +75,10 @@ export const batchApi = {
 
   reopenBatch: async (id: number): Promise<void> => {
     return apiClient(`/batches/${id}/reopen/`, { method: 'POST' });
+  },
+
+  touchBatch: async (id: number): Promise<void> => {
+    return apiClient(`/batches/${id}/touch/`, { method: 'POST' });
   },
 
   addBookToBatch: async (batchId: number, data: FormData): Promise<BatchBook> => {

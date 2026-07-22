@@ -12,8 +12,8 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "email", "first_name", "last_name",
-                  "is_active", "is_staff", "date_joined", "avatar_url", "is_online"]
-        read_only_fields = ["id", "date_joined"]
+                  "is_active", "is_staff", "date_joined", "avatar_url", "is_online", "is_terminal_created"]
+        read_only_fields = ["id", "date_joined", "is_terminal_created"]
 
     def get_is_online(self, obj):
         from django.utils import timezone
