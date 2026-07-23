@@ -1,0 +1,118 @@
+# Deploying to Northflank (Docker & Docker-Compose)
+
+Northflank is a modern, developer-friendly cloud platform designed to build and deploy containers, databases, and cron jobs directly from your Git repository or Docker registry. It has native support for interpreting `docker-compose.yml` files, making it a great candidate for testing your JRMSU Library system.
+
+---
+
+## 1. Pros and Cons of Northflank
+
+### **Pros**
+* **Native Docker-Compose Support:** You don't have to rewrite your entire infrastructure into Kubernetes manifests immediately; Northflank can parse your `docker-compose.yml` and spin up the equivalent services.
+* **Seamless CI/CD:** Automatically rebuilds and redeploys your containers whenever you push code to GitHub/GitLab.
+* **Excellent UI & DX (Developer Experience):** Viewing live logs, shell access, and metrics (CPU/RAM) is incredibly easy through their web dashboard.
+* **Managed Add-ons:** If you don't want to run your own PostgreSQL or Redis inside a container, Northflank offers them as 1-click managed databases.
+* **Secret Management:** Very secure and easy-to-use interface for injecting your `.env` variables without exposing them.
+
+### **Cons**
+* **Ephemeral File System by Default:** Like Heroku or Render, containers on Northflank lose their local files when they restart. You **must** configure persistent volumes for your Database and Django Media (uploaded images/PDFs), which costs money.
+* **Pricing:** While great for testing, scaling multiple containers (Backend, Frontend, DB, Redis, Celery, Ollama) can get expensive quickly compared to a raw $10 DigitalOcean VPS.
+* **Ollama (AI) Heavy Resource Requirements:** The Ollama container requires significant RAM (at least 4GB-8GB) to run models like LLaMA/Mistral. Cloud platforms charge a premium for high-RAM containers.
+
+---
+
+## 2. What You Can and Cannot Do
+
+### **What You CAN Do:**
+* **Auto-Deploy on Push:** Connect your GitHub repo, and it will automatically deploy the frontend, backend, and worker whenever you merge to `main`.
+* **Access a Terminal:** You can open a live terminal directly from your browser to run commands like `python manage.py migrate` inside your running backend container.
+* **Map Services Internally:** Your backend can talk to Redis or the Database using internal DNS names (just like Docker Compose networks), keeping that traffic off the public internet.
+
+### **What You CANNOT Do:**
+* **Store Uploaded Files Locally (Without a Volume):** If a user uploads an E-Resource PDF to the local `/media/` folder, it will be deleted the next time the server restarts. You *must* attach a persistent volume to the backend container or use AWS S3/Cloudinary.
+* **Run Raw `docker-compose up` Commands:** You don't actually SSH into a server and type `docker-compose up`. Northflank takes your compose file and orchestrates the containers itself.
+* **Run Heavy AI Models Cheaply:** Running the `ollama` container on cloud infrastructure without a dedicated GPU will be slow (CPU inference) and requires expensive RAM tiers.
+
+---
+
+## 3. Setup Instructions (Phase by Phase)
+
+### Phase 1: Prepare Your Code
+1. Ensure your entire project is pushed to a Git provider (GitHub, GitLab, or Bitbucket).
+2. Ensure your `.env` file is **NOT** in the repository (it shouldn't be, thanks to `.gitignore`).
+
+### Phase 2: Create Northflank Services via Docker Compose
+1. Create a Northflank account and create a new **Project** (e.g., `jrmsu-library`).
+2. Go to **Services** -> **Create Service** -> **Import from Docker Compose**.
+3. Point it to your Git repository and select your `docker-compose.yml` file.
+4. Northflank will parse the file and attempt to create individual services for:
+   * `backend`
+   * `frontend-webpage`
+   * `frontend-admin`
+   * `celery-worker`
+   * `db` (Postgres)
+   * `redis`
+   * `ollama`
+
+### Phase 3: Configure Environment Variables (Secrets)
+Because your `.env` file isn't uploaded, the containers will crash (just like our `SECRET_KEY` error earlier) until you provide the secrets.
+1. In Northflank, navigate to **Secret Groups**.
+2. Create a new Secret Group and add all the variables from your local `.env` file (e.g., `SECRET_KEY`, `POSTGRES_USER`, `POSTGRES_PASSWORD`).
+3. Attach this Secret Group to your `backend`, `db`, and `celery-worker` services.
+
+### Phase 4: Configure Persistent Storage (Crucial)
+1. For the `db` service, you must go to the **Volumes** tab and create a persistent disk (e.g., 5GB) mounted to `/var/lib/postgresql/data`.
+2. For the `backend` service, create a persistent disk mounted to `/app/media` (or wherever your `MEDIA_ROOT` points) so user uploads survive restarts.
+3. For `ollama`, mount a volume to `/root/.ollama` so you don't have to re-download the AI models every time the server restarts.
+
+### Phase 5: Expose Ports
+By default, containers are isolated. You need to tell Northflank which containers are allowed to talk to the public internet.
+1. Go to the **Ports** configuration for `frontend-webpage`. Check the box to expose port `80` (or `3000`) publicly. Northflank will give you a free URL (e.g., `jrmsu-web-xyz.northflank.app`).
+2. Do the same for `frontend-admin`.
+3. Do the same for `backend` (exposing port `8000`) so the frontends can communicate with the API.
+4. *Security Rule:* **DO NOT** expose `db`, `redis`, or `ollama` to the public internet. Leave them internal so only the backend can communicate with them.
+
+### Phase 6: Final Setup
+1. Open the Northflank shell for your `backend` container.
+2. Run your database migrations: `python manage.py migrate`.
+3. Create your first admin user: `python manage.py createsuperuser`.
+4. Open the Northflank shell for your `ollama` container and download your model: `ollama run mistral` (or whichever model you chose).
+
+---
+
+## 4. The "Super Free Tier" Stack (Alternative to Northflank)
+
+If you are looking for a **"Super Free Tier"** to test this specific stack, there is one major reality you need to know first: **Ollama (AI) will not run on any free tier.** 
+
+Running AI models locally (like Mistral or Llama) requires at least 4GB to 8GB of RAM. Almost every free cloud provider limits you to **512MB of RAM**. If you try to run Ollama on a free tier, the container will instantly crash due to "Out of Memory" (OOM) errors. 
+
+*(If you want the AI to be free in the cloud, you usually have to replace Ollama with an API like **Groq** or **Google Gemini**, which offer very generous free API tiers).*
+
+If you are okay with testing without the AI (or pointing the cloud backend to your local Ollama via a tunnel like Ngrok), here is the ultimate "Frankenstein" setup to host this entire system for **.00/month**:
+
+### 1. The Frontend (React/Vite) ?? **Vercel** or **Cloudflare Pages**
+* **Cost:** 100% Free forever.
+* **Why:** They are the undisputed kings of frontend hosting. You just connect your GitHub repository, and they will automatically build and deploy your React UI on a global CDN. It never sleeps, and it is lightning fast.
+
+### 2. The Backend (Django + Docker) ?? **Koyeb** or **Render**
+* **Koyeb:**
+  * **Cost:** Free forever (1 Web Service, 512MB RAM).
+  * **Why it's great:** Unlike other free tiers, Koyeb **does not sleep** when inactive. It runs Docker natively.
+* **Render:**
+  * **Cost:** Free (512MB RAM).
+  * **The catch:** The backend will "go to sleep" if no one visits the site for 15 minutes. The next person who visits will have to wait 30–50 seconds for the server to wake up.
+
+### 3. The Database (PostgreSQL) ?? **Neon.tech** or **Supabase**
+* **Cost:** 100% Free (Generous limits).
+* **Why:** Running databases in Docker on free tiers is risky because you lose data when the container restarts. **Neon.tech** or **Supabase** gives you a free, managed Serverless Postgres database. You just take the DATABASE_URL they give you and paste it into your backend .env variables. 
+
+### 4. The Cache/Message Broker (Redis for Celery) ?? **Upstash**
+* **Cost:** Free (Up to 10,000 requests per day).
+* **Why:** Upstash provides "Serverless Redis". It takes 10 seconds to set up, and they give you a Redis URL to plug directly into your Django/Celery .env file.
+
+### Summary of the Ultimate Free Stack:
+If I were deploying your JRMSU Library system for absolutely , I would do this:
+1. Put the **Frontend** on **Vercel**.
+2. Put the **Database** on **Supabase** or **Neon**.
+3. Put the **Redis** on **Upstash**.
+4. Put the **Django Backend** and **Celery Worker** on **Render** or **Koyeb**.
+5. *(Optional)* Use a free API key from Groq or Google Gemini for the AI Chatbot instead of Ollama.
