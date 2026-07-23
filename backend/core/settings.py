@@ -23,10 +23,16 @@ _env_file = BASE_DIR.parent / '.env'
 if _env_file.exists():
     with open(_env_file, 'r', encoding='utf-8') as f:
         for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, val = line.split('=', 1)
-                os.environ.setdefault(key.strip(), val.strip())
+            if line.strip() and not line.strip().startswith('#'):
+                # Strip inline comments
+                if '#' in line:
+                    line = line.split('#')[0]
+                key, val = line.strip().split('=', 1)
+                # Strip leading and trailing double quotes if present
+                val = val.strip()
+                if val.startswith('"') and val.endswith('"'):
+                    val = val[1:-1]
+                os.environ.setdefault(key.strip(), val)
 
 
 # Quick-start development settings - unsuitable for production
