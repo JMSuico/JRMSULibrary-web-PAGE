@@ -1,12 +1,11 @@
 // Use relative API base url so Vite proxy (in dev) and Nginx (in prod) handles routing.
 // This ensures SameSite cookies work correctly across identical origins.
 const getApiBase = () => {
-  if (typeof window !== 'undefined') {
-    // Note: If you need to hit an external IP directly without a proxy,
-    // you would configure it here. But with Vite proxy and Nginx, relative is best.
+  if (import.meta.env.DEV) {
     return import.meta.env.VITE_API_BASE_URL || '/api';
   }
-  return import.meta.env.VITE_API_BASE_URL || '/api';
+  // Hardcoded fallback for Vercel production if env var is missing
+  return import.meta.env.VITE_API_BASE_URL || 'https://jrmsulibrary-web-page.onrender.com/api';
 };
 
 const API_BASE = getApiBase();
@@ -44,7 +43,7 @@ let _csrfFetchPromise: Promise<void> | null = null;
 export const ensureCsrfToken = async (): Promise<void> => {
   if (getCookie('csrftoken')) return; // Already have it
   if (_csrfFetchPromise) return _csrfFetchPromise; // Deduplicate concurrent calls
-  _csrfFetchPromise = fetch('/api/csrf/', { credentials: 'include' })
+  _csrfFetchPromise = fetch(`${API_BASE}/csrf/`, { credentials: 'include' })
     .then(() => { /* cookie is now set by Django */ })
     .catch(() => { /* silently fail — form will retry */ })
     .finally(() => { _csrfFetchPromise = null; });

@@ -26,7 +26,7 @@ export const aiApi = {
    */
   chatStream: async (message: string, history: ChatMessage[], onChunk: (chunk: string) => void): Promise<void> => {
     // API base must match how apiClient resolves URLs
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+    const API_BASE = import.meta.env.DEV ? (import.meta.env.VITE_API_BASE_URL || '/api') : (import.meta.env.VITE_API_BASE_URL || 'https://jrmsulibrary-web-page.onrender.com/api');
     const url = `${API_BASE}/ai/chat/`;
     
     // Extract CSRF if available (same logic as apiClient)
