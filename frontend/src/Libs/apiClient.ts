@@ -1,11 +1,16 @@
 // Use relative API base url so Vite proxy (in dev) and Nginx (in prod) handles routing.
 // This ensures SameSite cookies work correctly across identical origins.
 const getApiBase = () => {
-  if (import.meta.env.DEV) {
-    return import.meta.env.VITE_API_BASE_URL || '/api';
+  let base = import.meta.env.VITE_API_BASE_URL;
+  if (!base) {
+    base = import.meta.env.DEV ? '/api' : 'https://jrmsulibrary-web-page.onrender.com/api';
+  } else {
+    // If the user forgot to add /api to the environment variable, add it automatically
+    if (!base.endsWith('/api') && !base.endsWith('/api/')) {
+      base = base.endsWith('/') ? `${base}api` : `${base}/api`;
+    }
   }
-  // Hardcoded fallback for Vercel production if env var is missing
-  return import.meta.env.VITE_API_BASE_URL || 'https://jrmsulibrary-web-page.onrender.com/api';
+  return base;
 };
 
 const API_BASE = getApiBase();
