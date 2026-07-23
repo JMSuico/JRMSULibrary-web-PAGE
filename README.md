@@ -1,12 +1,12 @@
 # JRMSU Library - Katipunan Campus
 
-![JRMSU Logo](./frontend/public/android-chrome-192x192.png)
+![JRMSU Logo](./frontend/public/assets/3d%20jrmsu%20logo.jpg)
 
 A modern, highly interactive, and AI-powered web platform for the Jose Rizal Memorial State University (JRMSU) Library, Katipunan Campus. This system serves as the digital front door for the library, offering students seamless access to e-resources, physical book catalogs, real-time library status, and an integrated AI research assistant.
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 - **Real-Time Philippine Time Clock:** Signature hero section clock (JetBrains Mono, gold, blinking colons) synchronized to UTC+8.
 - **E-Resources Integration:** Integrated proxy handlers for Scholaar and VitalSource.
 - **AI Research Assistant:** Powered locally by Ollama (Qwen 2.5), capable of assisting students with research queries without external API costs.
@@ -14,7 +14,7 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 - **Terminal Admin Protection:** Specialized security feature that protects sysadmin accounts created via terminal from being modified or deleted by web UI users.
 - **Vertical-Slice Architecture:** Both the frontend and backend are structured for maximum scalability and feature isolation.
 
-## 🛠️ Technology Stack
+##  Technology Stack
 **Frontend:**
 - React 19 + TypeScript 5.8
 - Vite 6
@@ -37,7 +37,7 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 
 ---
 
-## 🚀 Quick Start (Docker - Recommended)
+##  Quick Start (Docker - Recommended)
 
 The fastest way to get the entire 5-layer stack (Frontend, Backend, Database, Redis, and AI) running is using Docker.
 
@@ -63,12 +63,12 @@ docker-compose exec backend python manage.py imports_assets
 
 ---
 
-## 💻 Local Development (Without Docker)
+##  Local Development (Without Docker)
 For detailed instructions on running the system natively on Windows (using SSMS 19 and Node.js directly), please refer to the [DevSetup.md](./DevSetup.md) documentation file.
 
 ---
 
-## 🎨 UI/UX Design System
+##  UI/UX Design System
 This project adheres to a strict "UI-UX Pro Max" guideline:
 - **Colors:** Navy (`#002B7F`), Gold (`#C9A84C`), Deep Navy (`#001655`).
 - **Typography:** Playfair Display (Headings), Inter (Body), JetBrains Mono (Clock).
@@ -77,7 +77,7 @@ This project adheres to a strict "UI-UX Pro Max" guideline:
 
 ---
 
-## 🔐 Security & Administration
+##  Security & Administration
 To protect core system integrity, this project includes a **Terminal-Created Admin Protection** feature. Admins generated via `createsuperuser` cannot be modified by standard web interface administrators. 
 
 To manage these terminal admins, use the custom command:
@@ -87,7 +87,7 @@ python manage.py deletespecificsuperuser
 
 ---
 
-## 🏗️ Architecture & Flowchains
+##  Architecture & Flowchains
 
 All code in this project follows a strict **Vertical Slice** (Frontend) and **Layered Model-First** (Backend) architecture as defined in `SKILL.md`.
 
@@ -148,7 +148,7 @@ Database          (final state)
 
 ---
 
-## 📂 Code Placement Decision Guide (Where Does X Go?)
+##  Code Placement Decision Guide (Where Does X Go?)
 
 When placing new code, ask these questions in order:
 
@@ -179,7 +179,7 @@ Is it cache logic?                     → Features/Infrastructure/Cache/
 
 ---
 
-## 📚 Project Documentation
+##  Project Documentation
 For more in-depth guides, please refer to the markdown files in the project root:
 - `DevSetup.md`: Complete local and Docker setup guide.
 - `SETUP.md`: Developer workflow setup.
