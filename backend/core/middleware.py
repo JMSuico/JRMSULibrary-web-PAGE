@@ -22,7 +22,7 @@ class CSPMiddleware(MiddlewareMixin):
     def process_response(self, request, response):
         csp_header = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' data: https://fonts.gstatic.com; "
             "img-src 'self' data: blob: https:; "

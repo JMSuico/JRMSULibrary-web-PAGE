@@ -30,10 +30,10 @@ export const LibraryMapSection: React.FC = () => {
                   <div>
                     <h3 className="font-headline-md text-xl font-bold mb-2 text-gold-light">Our Location</h3>
                     <p className="text-base leading-relaxed mb-2 text-white/90">
-                      Barangay Dos, Katipunan,<br />Zamboanga del Norte
+                      Barangay Dos, Katipunan,<br />Zamboanga del Norte, Philippines
                     </p>
                     <p className="text-sm font-mono tracking-wider text-white/60">
-                      8.509171, 123.286122
+                      8.510047, 123.286297
                     </p>
                   </div>
                 </div>
@@ -67,7 +67,7 @@ export const LibraryMapSection: React.FC = () => {
             {/* Right Column: Map Container (Satellite View) */}
             <div className="h-[400px] lg:h-full min-h-[400px] rounded-2xl overflow-hidden shadow-2xl border-4 border-gold-light/30">
               <iframe
-                src="https://maps.google.com/maps?q=8.509171,123.286122&t=k&z=18&output=embed"
+                src="https://maps.google.com/maps?q=8.510047,123.286297&t=k&z=18&output=embed"
                 className="w-full h-full border-0"
                 allowFullScreen={true}
                 loading="lazy"

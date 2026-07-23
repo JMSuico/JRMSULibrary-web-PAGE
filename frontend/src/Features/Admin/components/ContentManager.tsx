@@ -69,7 +69,8 @@ export function ContentManager() {
   const [files, setFiles] = useState<ManagedFile[]>([]);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileUploadCategory, setFileUploadCategory] = useState<'Manual' | 'OrgStructure'>('Manual');
+  const [fileUploadCategory, setFileUploadCategory] = useState<'Manual' | 'OrgStructure' | 'Excellence'>('Manual');
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
 
   const [personnelList, setPersonnelList] = useState<any[]>([]);
   const [isPersonnelModalOpen, setIsPersonnelModalOpen] = useState(false);
@@ -217,20 +218,11 @@ export function ContentManager() {
       showToast('Please select a file to upload', 'error');
       return;
     }
-    const fd = new FormData(e.currentTarget);
-    const cat = fd.get('category') as string;
+    if (isUploadingFile) return;
+    setIsUploadingFile(true);
     
-    if (cat === 'OrgStructure' || cat === 'Excellence') {
-      const existingFiles = files.filter(f => f.category === cat);
-      for (const f of existingFiles) {
-        try {
-          await cmsApi.deleteFile(f.id);
-        } catch (e) {
-          console.error('Failed to delete existing file', e);
-        }
-      }
-    }
-
+    const fd = new FormData(e.currentTarget);
+    
     fd.append('file', selectedFile);
     try {
       await cmsApi.createFile(fd);
@@ -240,6 +232,8 @@ export function ContentManager() {
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to upload file', 'error');
+    } finally {
+      setIsUploadingFile(false);
     }
   };
 
@@ -1015,7 +1009,7 @@ export function ContentManager() {
 
       {/* Link Modal */}
       {isLinkModalOpen && createPortal(
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center ] p-4 z-[9999] animate-modal-overlay">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999] animate-modal-overlay">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">{editingLink ? 'Edit Link' : 'Add Link'}</h2>
@@ -1090,7 +1084,7 @@ export function ContentManager() {
 
       {/* File Modal */}
       {isFileModalOpen && createPortal(
-        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center ] p-4 z-[9999] animate-modal-overlay">
+        <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999] animate-modal-overlay">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">Upload File</h2>
@@ -1134,7 +1128,10 @@ export function ContentManager() {
               </label>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
                 <button type="button" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg" disabled={!selectedFile}>Save</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg flex items-center justify-center gap-2" disabled={!selectedFile || isUploadingFile}>
+                  {isUploadingFile ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
+                  Save
+                </button>
               </div>
             </form>
           </div>

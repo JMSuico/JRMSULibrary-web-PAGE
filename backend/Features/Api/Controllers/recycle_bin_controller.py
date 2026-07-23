@@ -37,6 +37,13 @@ class RecycleBinViewSet(viewsets.ViewSet):
         return Response({"error": "Failed to restore item"}, status=status.HTTP_400_BAD_REQUEST)
 
     def destroy(self, request, pk=None):
+        confirm = request.query_params.get('confirm', '').lower()
+        if confirm != 'true':
+            return Response(
+                {"error": "Permanent deletion requires confirm=true parameter"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
         success = self.service.delete_permanently(pk)
         if success:
             return Response(status=status.HTTP_204_NO_CONTENT)

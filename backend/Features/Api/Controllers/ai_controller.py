@@ -38,6 +38,25 @@ class AIViewSet(viewsets.ViewSet):
 
         if not user_message:
             return Response({'error': 'Message cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if len(user_message) > 500:
+            return Response({'error': 'Message exceeds the maximum limit of 500 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not isinstance(chat_history, list):
+            chat_history = []
+        else:
+            # Validate history array keys and prevent prompt injection keywords
+            validated_history = []
+            for item in chat_history:
+                if isinstance(item, dict) and 'sender' in item and 'text' in item:
+                    # Sanitize text
+                    import bleach
+                    clean_text = bleach.clean(str(item.get('text', '')))
+                    sender = str(item.get('sender', 'user'))
+                    if sender not in ['user', 'rizal']:
+                        sender = 'user'
+                    validated_history.append({'sender': sender, 'text': clean_text})
+            chat_history = validated_history
 
         # Return stream response
         def event_stream():

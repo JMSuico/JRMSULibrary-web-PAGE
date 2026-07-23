@@ -22,6 +22,6 @@ export const recycleApi = {
   },
 
   deletePermanently: async (id: number): Promise<void> => {
-    return apiClient(`/recycle-bin/${id}/`, { method: 'DELETE' });
+    return apiClient(`/recycle-bin/${id}/?confirm=true`, { method: 'DELETE' });
   }
 };

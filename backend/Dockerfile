@@ -17,7 +17,7 @@ COPY . .
 ENV DB_ENGINE=postgresql
 
 # Collect static files (non-fatal — app may not have STATIC_ROOT set yet)
-RUN python manage.py collectstatic --noinput || true
+RUN SECRET_KEY="dummy-key-for-build" python manage.py collectstatic --noinput || true
 
 EXPOSE 8000
 

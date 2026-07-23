@@ -18,6 +18,8 @@ from Features.Helpers.email_helper import (
 from Features.Services.Interfaces.contact_service_interface import ContactServiceInterface
 import threading
 import logging
+import bleach
+from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
 
 logger = logging.getLogger(__name__)
 
@@ -30,22 +32,21 @@ class ContactService(ContactServiceInterface):
 
     def submit_contact(self, data: dict, files: list = None):
         sanitized = {
-            'name': sanitize_input(data.get('name', '')),
-            'email': sanitize_input(data.get('email', '')),
-            'subject': sanitize_input(data.get('subject', '')),
-            'message': sanitize_input(data.get('message', '')),
-            'message_type': sanitize_input(data.get('message_type', 'EMAIL')),
+            'name': bleach.clean(sanitize_input(data.get('name', ''))),
+            'email': bleach.clean(sanitize_input(data.get('email', ''))),
+            'subject': bleach.clean(sanitize_input(data.get('subject', ''))),
+            'message': bleach.clean(sanitize_input(data.get('message', ''))),
+            'message_type': bleach.clean(sanitize_input(data.get('message_type', 'EMAIL'))),
         }
 
         email = sanitized['email']
 
         # --- Disposable / Temporary Email Detection ---
-        # TODO(Temporary): Commented out for testing fake emails per user request
-        # if is_disposable_email(email):
-        #     raise ValueError(f"Temporary or disposable email addresses are not accepted: {email}")
+        if is_disposable_email(email):
+             raise ValueError(f"Temporary or disposable email addresses are not accepted: {email}")
 
-        # if not is_email_domain_valid(email):
-        #     raise ValueError(f"The email domain appears to be invalid or unreachable: {email}")
+        if not is_email_domain_valid(email):
+             raise ValueError(f"The email domain appears to be invalid or unreachable: {email}")
 
         # Batching logic: check if same email sent same type of message within last hour
         recent_message = self.repository.get_recent_by_email_and_type(
@@ -77,6 +78,9 @@ class ContactService(ContactServiceInterface):
                 if f.size > 10 * 1024 * 1024:
                     raise ValueError(f"File {f.name} is too large. Maximum size is 10MB.")
                 
+                if not MalwareScannerHelper.verify_file_safety(f):
+                    raise ValueError(f"File {f.name} was blocked by security policies.")
+
                 ContactAttachment.objects.create(
                     contact_message=message,
                     file=f,
@@ -226,6 +230,9 @@ class ContactService(ContactServiceInterface):
             
         if file.size > 10 * 1024 * 1024:
             raise ValueError(f"File {file.name} is too large. Maximum size is 10MB.")
+            
+        if not MalwareScannerHelper.verify_file_safety(file):
+            raise ValueError(f"File {file.name} was blocked by security policies.")
         
         fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'temp_attachments'))
         filename = f"{uuid.uuid4()}.{ext}" if ext else str(uuid.uuid4())
