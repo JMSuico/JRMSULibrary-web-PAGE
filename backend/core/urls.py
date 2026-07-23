@@ -4,9 +4,10 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.views.static import serve
 from django.http import HttpResponse
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 
 def create_temp_admin(request):
+    User = get_user_model()
     if not User.objects.filter(username="admin").exists():
         User.objects.create_superuser("admin", "admin@jrmsu.edu.ph", "Admin@1111")
         return HttpResponse("SUCCESS: Admin created! You can now log in with admin / Admin@1111")
