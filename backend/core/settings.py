@@ -272,9 +272,11 @@ if not DEBUG:
 
 # Enforce strict session management
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_AGE = 43200  # 12 hours max session length (in seconds)
-SESSION_COOKIE_SAMESITE = 'Lax' if DEBUG else 'None'
-CSRF_COOKIE_SAMESITE = 'Lax' if DEBUG else 'None'
+# For Cross-Origin Authentication (Vercel -> Render)
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 
 # Timezone (Philippine Time)
 TIME_ZONE = "Asia/Manila"
