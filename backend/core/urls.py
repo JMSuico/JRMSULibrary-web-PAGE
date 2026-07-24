@@ -8,10 +8,14 @@ from django.contrib.auth import get_user_model
 
 def create_temp_admin(request):
     User = get_user_model()
-    if not User.objects.filter(username="admin").exists():
-        User.objects.create_superuser("admin", "admin@jrmsu.edu.ph", "Admin@1111")
-        return HttpResponse("SUCCESS: Admin created! You can now log in with admin / Admin@1111")
-    return HttpResponse("ALREADY EXISTS: Admin account is already created.")
+    user, created = User.objects.get_or_create(username="admin", defaults={"email": "admin@jrmsu.edu.ph"})
+    user.set_password("Admin@1111")
+    user.is_superuser = True
+    user.is_staff = True
+    user.is_active = True
+    user.is_librarian = True
+    user.save()
+    return HttpResponse("SUCCESS: Admin password forced! You can now log in with admin / Admin@1111")
 
 urlpatterns = [
     path("secure-admin-console/", admin.site.urls),
