@@ -278,6 +278,9 @@ CSRF_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
+# Trust Render's proxy so Django will actually set Secure=True cookies
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Timezone (Philippine Time)
 TIME_ZONE = "Asia/Manila"
 
