@@ -196,19 +196,25 @@ class ReportViewSet(viewsets.ViewSet):
         title = request.data.get('title', f"Report - {date_range.replace('-', ' ').title()}")
         
         data = self._get_summary_data(report_type, date_range)
-        user_id = request.user.id if request.user and request.user.is_authenticated else None
+        user = request.user if request.user and request.user.is_authenticated else None
         
-        generate_report_task.delay(
-            title=title,
-            report_type=report_type,
-            date_range=date_range,
-            user_id=user_id,
-            report_data=data
-        )
-        return Response({
-            "message": "Report generation queued",
-            "data": data
-        }, status=status.HTTP_202_ACCEPTED)
+        try:
+            report = self.report_service.generate_and_save_report(
+                title=title,
+                report_type=report_type,
+                date_range=date_range,
+                generated_by=user,
+                report_data=data
+            )
+            return Response({
+                "message": "Report generated successfully",
+                "report_id": report.id,
+                "data": data
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['get'])
     def history(self, request):

@@ -5,6 +5,10 @@
       "destination": "https://jrmsulibrary-web-page.onrender.com/api/$1"
     },
     {
+      "source": "/media/(.*)",
+      "destination": "https://jrmsulibrary-web-page.onrender.com/media/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
