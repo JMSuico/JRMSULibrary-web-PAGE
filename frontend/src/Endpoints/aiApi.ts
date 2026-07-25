@@ -28,7 +28,7 @@ export const aiApi = {
     // API base must match how apiClient resolves URLs
     let API_BASE = import.meta.env.VITE_API_BASE_URL;
     if (!API_BASE) {
-      API_BASE = import.meta.env.DEV ? '/api' : 'https://jrmsulibrary-web-page.onrender.com/api';
+      API_BASE = '/api';
     } else {
       if (!API_BASE.endsWith('/api') && !API_BASE.endsWith('/api/')) {
         API_BASE = API_BASE.endsWith('/') ? `${API_BASE}api` : `${API_BASE}/api`;

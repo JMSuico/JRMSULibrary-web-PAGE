@@ -3,7 +3,8 @@
 const getApiBase = () => {
   let base = import.meta.env.VITE_API_BASE_URL;
   if (!base) {
-    base = import.meta.env.DEV ? '/api' : 'https://jrmsulibrary-web-page.onrender.com/api';
+    // Force relative path in production so Vercel proxy handles it
+    base = '/api';
   } else {
     // If the user forgot to add /api to the environment variable, add it automatically
     if (!base.endsWith('/api') && !base.endsWith('/api/')) {
