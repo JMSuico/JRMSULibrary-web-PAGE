@@ -172,8 +172,9 @@ JRMSU LIBRARY LANDING PAGE/            # Root project folder (Vite + React setup
 │
 ├── public/
 │   └── assets/                        # Static public images and files (served directly by Vite)
-│
 ├── src/
+│   ├── Assets/                        # React imported assets (fonts, data.ts, core static files)
+│   │   └── FAQ cache/                 # Stateful storage for AI Caching (faq_cache.json)
 │   │
 │   ├── Pages/                         # Route-level page assemblies only — no business logic here
 │   │   ├── Home/
@@ -754,3 +755,10 @@ To manage Terminal-Created Admins, a dedicated terminal command is now available
   ```bash
   docker-compose exec backend python manage.py deletespecificsuperuser
   ```
+
+
+## Interactive API Documentation (Scalar V1)
+To view the automatically generated API documentation and test endpoints directly from your browser:
+1. Ensure the Docker containers are running (docker-compose up -d).
+2. Open your browser and navigate to: **http://localhost:8000/api/docs/**
+3. The raw OpenAPI schema is available at: **http://localhost:8000/api/schema/**

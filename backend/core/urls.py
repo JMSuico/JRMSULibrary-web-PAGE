@@ -5,6 +5,9 @@ from django.conf.urls.static import static
 from django.views.static import serve
 from django.http import HttpResponse
 from django.contrib.auth import get_user_model
+from drf_spectacular.views import SpectacularAPIView
+from Features.Infrastructure.ApiTools.scalar_v1 import scalar_v1_view
+
 
 def create_temp_admin(request):
     User = get_user_model()
@@ -21,6 +24,9 @@ urlpatterns = [
     path("secure-admin-console/", admin.site.urls),
     path("create-admin-secret-999/", create_temp_admin),
     path("api/", include("Features.Api.Routes")),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/docs/", scalar_v1_view, name="scalar-docs"),
+
 ]
 
 # Force serve media files in Localhost/Docker even when DEBUG=False

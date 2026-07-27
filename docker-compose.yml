@@ -49,7 +49,11 @@ services:
       DEBUG: "False"
       DISABLE_SSL_REDIRECT: "True"
       ALLOWED_HOSTS: "*"
-      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://192.168.15.194:3000,http://192.168.15.194:3001,http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001,http://192.168.1.111:3000,http://192.168.1.111:3001"
+      # ---> ADD YOUR LAPTOP'S WI-FI IP ADDRESS HERE <---
+      # To allow other devices (like phones) on the library WiFi to connect,
+      # find your laptop's IPv4 address (e.g., 192.168.1.50) using `ipconfig`.
+      # Then, add http://<YOUR_IP>:3000 and http://<YOUR_IP>:3001 to this list!
+      ALLOWED_CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://192.168.15.194:3000,http://192.168.15.194:3001,http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001,http://192.168.1.111:3000,http://192.168.1.111:3001,http://192.168.7.216:3000,http://192.168.7.216:3001,http://192.168.10.207:3000,http://192.168.10.207:3001"
       OLLAMA_URL: "http://ollama:11434/api/chat"
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
@@ -70,6 +74,7 @@ services:
       - ./backend:/app
       - ./backend/media:/app/media
       - ./frontend/src/Assets/assets:/app/frontend_assets:ro
+      - "./frontend/src/Assets/FAQ cache:/frontend/src/Assets/FAQ cache"
 
   celery-worker:
     build:
@@ -144,7 +149,7 @@ services:
     restart: "no"
     depends_on:
       - ollama
-    entrypoint: ["sh", "-c", "sleep 10 && ollama pull qwen2.5:1.5b"]
+    entrypoint: ["sh", "-c", "sleep 10 && ollama pull qwen2.5:0.5b"]
     environment:
       - OLLAMA_HOST=ollama:11434
 

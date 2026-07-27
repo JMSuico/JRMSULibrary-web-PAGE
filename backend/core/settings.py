@@ -17,7 +17,10 @@ from pathlib import Path
 from datetime import timedelta
 import time
 import socket
+import sys
 
+# UNIVERSAL SANDBOX: Protect all plugins from Algorithmic Complexity DoS (CVE-2022-43027)
+sys.set_int_max_str_digits(4300)
 # Force IPv4 for all socket connections to prevent [Errno 101] Network is unreachable
 # on local WIFI networks (like PESO WIFI) that advertise IPv6 but don't route it.
 orig_getaddrinfo = socket.getaddrinfo
@@ -76,6 +79,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Third-party
     "rest_framework",
+    "drf_spectacular",
     "django_filters",
     "corsheaders",
     "channels",
@@ -94,6 +98,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "core.middleware.AuditLogMiddleware",
     "core.middleware.CSPMiddleware",
+    "core.middleware.GlobalSecurityHeadersMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -243,6 +248,7 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
 
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
@@ -283,11 +289,20 @@ if not DEBUG:
 
 # Enforce strict session management
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
 # For Cross-Origin Authentication (Vercel -> Render)
-SESSION_COOKIE_SAMESITE = 'None'
-CSRF_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+if os.environ.get("DISABLE_SSL_REDIRECT", "False").lower() in ("true", "1", "yes"):
+    # If SSL is disabled (like in local WiFi dev), disable Secure cookies
+    # and use Lax so they work over standard HTTP.
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+else:
+    SESSION_COOKIE_SAMESITE = 'None'
+    CSRF_COOKIE_SAMESITE = 'None'
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # Trust Render's proxy so Django will actually set Secure=True cookies
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -367,3 +382,10 @@ CELERY_TIMEZONE = 'Asia/Manila'
 # Prevent 500 Internal Server errors when Redis is not running (e.g. Render deployments)
 if os.environ.get('USE_CELERY', 'False').lower() != 'true':
     CELERY_TASK_ALWAYS_EAGER = True
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "JRMSU Library API",
+    "DESCRIPTION": "API endpoints for the JRMSU Katipunan Campus Library Landing Page and CMS.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}

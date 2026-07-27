@@ -5,6 +5,12 @@ import os
 import requests
 import json
 import logging
+import re
+import random
+import difflib
+from django.core.cache import cache
+from django.conf import settings
+from pathlib import Path
 from Features.Repositories.Implementations.personnel_repository import PersonnelRepository
 from Features.Repositories.Implementations.cms_repository import ManagedLinkRepository
 from Features.Repositories.Implementations.batch_repository import BatchRepository
@@ -15,10 +21,109 @@ class AIService:
     def __init__(self):
         # Use OLLAMA_URL env var if available (useful for Docker to reach host), else fallback
         self.ollama_url = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434/api/chat')
-        self.model_name = 'qwen2.5:1.5b'
+        self.model_name = 'qwen2.5:0.5b'
         self.personnel_repo = PersonnelRepository()
         self.link_repo = ManagedLinkRepository()
         self.batch_repo = BatchRepository()
+        
+        project_root = Path(settings.BASE_DIR).parent
+        self.faq_file_path = str(project_root / 'frontend' / 'src' / 'Assets' / 'FAQ cache' / 'faq_cache.json')
+        
+    def _normalize_question(self, text: str) -> str:
+        """Converts to lowercase and removes punctuation for consistent matching"""
+        text = str(text).lower()
+        return re.sub(r'[^a-z0-9\s]', '', text).strip()
+
+    def _get_cached_answer(self, question: str, client_ip: str):
+        if not os.path.exists(self.faq_file_path):
+            return None
+        try:
+            with open(self.faq_file_path, 'r', encoding='utf-8') as f:
+                faq_cache = json.load(f)
+            
+            norm_q = self._normalize_question(question)
+            
+            # 1. EXACT MATCH FIRST (O(1) Ultra-Fast Lookup)
+            matched_q = None
+            if norm_q in faq_cache:
+                matched_q = norm_q
+            else:
+                # 2. FUZZY SEMANTIC MATCHING (Fallback)
+                # Check if there's a highly similar question in the cache
+                known_questions = list(faq_cache.keys())
+                matches = difflib.get_close_matches(norm_q, known_questions, n=1, cutoff=0.85)
+                if matches:
+                    matched_q = matches[0]
+            
+            if not matched_q:
+                return None
+                
+            answers_list = faq_cache[matched_q]
+            
+            if not isinstance(answers_list, list) or not answers_list:
+                return None
+                
+            # 3. STATEFUL IP TRACKING
+            # Track which answers this IP has already seen for this specific question
+            cache_key = f"faq_history_{client_ip}_{matched_q}"
+            seen_indices = cache.get(cache_key, [])
+            
+            # Find which answers haven't been shown yet
+            unseen_indices = [i for i in range(len(answers_list)) if i not in seen_indices]
+            
+            # 3. AUTO-EXPANSION (AI FALLBACK)
+            if not unseen_indices:
+                # User has seen all variations! Return None to force AI to generate a new one.
+                return None
+                
+            # 4. ROUND-ROBIN RANDOM SELECTION
+            selected_idx = random.choice(unseen_indices)
+            selected_answer = answers_list[selected_idx]
+            
+            # 5. SAVE TRACKING STATE (24 Hour TTL)
+            seen_indices.append(selected_idx)
+            cache.set(cache_key, seen_indices, 86400) # 24 hours TTL
+            
+            return selected_answer
+        except Exception as e:
+            logger.error(f"Error reading FAQ cache: {e}")
+            return None
+
+    def _save_to_cache(self, question: str, answer: str):
+        # Don't cache very short or error-like responses
+        if not answer or len(answer) < 10 or "I'm sorry" in answer or "I'm currently offline" in answer:
+            return
+            
+        faq_cache = {}
+        if os.path.exists(self.faq_file_path):
+            try:
+                with open(self.faq_file_path, 'r', encoding='utf-8') as f:
+                    faq_cache = json.load(f)
+            except Exception:
+                pass
+        
+        norm_q = self._normalize_question(question)
+        
+        # Fuzzy match to append to existing question list instead of creating a duplicate entry
+        known_questions = list(faq_cache.keys())
+        matches = difflib.get_close_matches(norm_q, known_questions, n=1, cutoff=0.85)
+        
+        if matches:
+            matched_q = matches[0]
+            # Ensure it's a list
+            if not isinstance(faq_cache[matched_q], list):
+                faq_cache[matched_q] = [faq_cache[matched_q]]
+            # Append new variant
+            faq_cache[matched_q].append(answer.strip())
+        else:
+            # Create brand new list
+            faq_cache[norm_q] = [answer.strip()]
+        
+        try:
+            with open(self.faq_file_path, 'w', encoding='utf-8') as f:
+                json.dump(faq_cache, f, indent=4)
+        except Exception as e:
+            logger.error(f"Error saving to FAQ cache: {e}")
         
     def _build_dynamic_system_prompt(self):
         # Fetch dynamic live data from database
@@ -66,10 +171,16 @@ DYNAMIC DATABASE KNOWLEDGE:
 - Recently Added Books: {books_text}
 """
 
-    def generate_chat_response(self, user_message: str, chat_history: list = None) -> str:
+    def generate_chat_response(self, user_message: str, chat_history: list = None, client_ip: str = "0.0.0.0") -> str:
         """
         Sends the user message and dynamic context history to Ollama and returns the response string.
         """
+        # --- DYNAMIC AI CACHING FILTER ---
+        cached_answer = self._get_cached_answer(user_message, client_ip)
+        if cached_answer:
+            return cached_answer
+        # ---------------------------------
+        
         messages = [
             {"role": "system", "content": self._build_dynamic_system_prompt()}
         ]
@@ -96,7 +207,10 @@ DYNAMIC DATABASE KNOWLEDGE:
             data = response.json()
             
             if 'message' in data and 'content' in data['message']:
-                return data['message']['content'].strip()
+                answer = data['message']['content'].strip()
+                # Save the new AI answer to the cache!
+                self._save_to_cache(user_message, answer)
+                return answer
             return "I'm sorry, I received an invalid response from my AI engine."
             
         except requests.exceptions.ConnectionError:
@@ -109,10 +223,21 @@ DYNAMIC DATABASE KNOWLEDGE:
             logger.error(f"Error communicating with Ollama: {str(e)}")
             return "I'm sorry, an internal error occurred while processing your request."
 
-    def generate_chat_stream(self, user_message: str, chat_history: list = None):
+    def generate_chat_stream(self, user_message: str, chat_history: list = None, client_ip: str = "0.0.0.0"):
         """
         Sends the user message and dynamic context history to Ollama and yields the response as a stream.
         """
+        # --- DYNAMIC AI CACHING FILTER ---
+        cached_answer = self._get_cached_answer(user_message, client_ip)
+        if cached_answer:
+            # Yield word by word to simulate AI typing speed
+            import time
+            for word in cached_answer.split(' '):
+                yield word + " "
+                time.sleep(0.01)
+            return
+        # ---------------------------------
+        
         messages = [{"role": "system", "content": self._build_dynamic_system_prompt()}]
         
         if chat_history:
@@ -132,11 +257,18 @@ DYNAMIC DATABASE KNOWLEDGE:
             response = requests.post(self.ollama_url, json=payload, stream=True, timeout=120)
             response.raise_for_status()
             
+            full_answer = ""
             for line in response.iter_lines():
                 if line:
                     data = json.loads(line)
                     if 'message' in data and 'content' in data['message']:
-                        yield data['message']['content']
+                        chunk = data['message']['content']
+                        full_answer += chunk
+                        yield chunk
+            
+            # Save the full answer to cache after stream finishes
+            if full_answer:
+                self._save_to_cache(user_message, full_answer)
                         
         except requests.exceptions.ConnectionError:
             logger.error(f"Failed to connect to Ollama at {self.ollama_url}")
