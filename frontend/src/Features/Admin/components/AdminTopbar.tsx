@@ -61,21 +61,47 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
   const navigate = useNavigate();
   const { showToast } = useToast();
   const previousUnread = useRef(0);
+  const initialLoad = useRef(true);
+  const authError = useRef(false);
+
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
+    if (authError.current) return;
     try {
       setLoading(true);
       const data = await notificationApi.getAll();
       setNotifications(data.notifications);
       setTotalVisits(data.total_visits);
       
-      if (data.unread_count > previousUnread.current && previousUnread.current !== 0) {
+      // If not the first load, and unread count increased, notify!
+      if (!initialLoad.current && data.unread_count > previousUnread.current) {
         showToast('You have new notifications!', 'info');
+        
+        // Show desktop push notification
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification('JRMSU Library', {
+            body: 'You have a new message or reservation in the Admin Panel.',
+            icon: '/favicon.ico'
+          });
+        }
       }
       previousUnread.current = data.unread_count;
+      initialLoad.current = false;
       setUnreadCount(data.unread_count);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load notifications', err);
+      // If we got a 401/403 or network error indicating session loss, stop polling to prevent backend log spam
+      if (err.message?.includes('401') || err.message?.includes('403') || err.message?.toLowerCase().includes('forbidden')) {
+        authError.current = true;
+      }
     } finally {
       setLoading(false);
     }
