@@ -6,6 +6,8 @@ import { personnelApi } from '@/src/Endpoints/personnelApi';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { Loader2 } from 'lucide-react';
 
+import { getImageUrl } from '@/src/Libs/apiClient';
+
 function extractTextBlocksFromHtml(html: string): string[] {
   if (!html) return [];
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -186,7 +188,7 @@ export const PersonnelSection: React.FC = () => {
                       <img
                         alt={chiefLibrarian.name}
                         className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
-                        src={chiefLibrarian.photo && (chiefLibrarian.photo.startsWith('http') || chiefLibrarian.photo.startsWith('/media')) ? chiefLibrarian.photo : (chiefLibrarian.photo ? `/media/${chiefLibrarian.photo}` : assets.images.chiefLibrarian)}
+                        src={(chiefLibrarian.photo ? getImageUrl(chiefLibrarian.photo) : assets.images.chiefLibrarian)}
                       />
                     </div>
                     <div className="bg-navy-dark/80 backdrop-blur-sm px-4 py-3 rounded-xl border border-gold-light/10 shadow-lg w-full">
@@ -228,7 +230,7 @@ export const PersonnelSection: React.FC = () => {
                   >
                     {person.photo ? (
                       <div className="w-20 h-20 rounded-full border-2 border-gold-light/40 overflow-hidden shadow-lg mx-auto mb-3">
-                        <img src={person.photo.startsWith('http') || person.photo.startsWith('/media') ? person.photo : `/media/${person.photo}`} alt={person.name} className="w-full h-full object-cover" />
+                        <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-20 h-20 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 shadow-lg">

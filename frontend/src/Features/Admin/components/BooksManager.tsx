@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Eye, Pencil, Trash2, X, ChevronRight, ListOrdered, MoreVertical } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
@@ -551,7 +552,7 @@ export function BooksManager() {
 
                   <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
                     {book.cover_image ? (
-                      <img src={book.cover_image} alt={book.title} style={{ height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }} />
+                      <img src={getImageUrl(book.cover_image)} alt={book.title} style={{ height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }} />
                     ) : (
                       <BookOpen size={40} color='var(--color-gray-400)' />
                     )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { X, Upload } from 'lucide-react';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
@@ -204,7 +205,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             
             {initialData && initialData.cover_image && !coverImage && (
               <div className="mb-3 flex items-center gap-3 p-2 border border-gray-200 rounded-md">
-                <img src={initialData.cover_image} alt="Current cover" className="w-10 h-14 object-cover rounded" />
+                <img src={getImageUrl(initialData.cover_image)} alt="Current cover" className="w-10 h-14 object-cover rounded" />
                 <span className="text-sm text-gray-600">Current cover image</span>
               </div>
             )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import {
   Users,
@@ -341,7 +342,7 @@ export function UserManagement() {
                 <div className="flex flex-col items-center mb-4">
                   <div className="relative group w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden hover:border-navy transition-colors">
                     {editingUser?.avatar_url ? (
-                      <img src={editingUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                      <img src={getImageUrl(editingUser.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
                       <Users size={24} className="text-gray-400" />
                     )}

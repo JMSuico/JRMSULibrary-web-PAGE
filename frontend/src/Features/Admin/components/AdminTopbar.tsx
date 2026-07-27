@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import {
   Bell, Menu, X, LogOut, Users, TrendingUp, Mail, Send, Calendar, Loader2, Key
 } from 'lucide-react';
@@ -293,7 +294,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
             onClick={() => setShowProfile(!showProfile)}
           >
             {user?.avatar_url ? (
-              <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+              <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               <span className="text-sm">{user?.first_name?.[0]?.toUpperCase() || 'A'}</span>
             )}
@@ -305,7 +306,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
             >
               <div className="w-20 h-20 rounded-full bg-navy text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden">
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                  <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
                   user.first_name?.[0]?.toUpperCase() || 'A'
                 )}

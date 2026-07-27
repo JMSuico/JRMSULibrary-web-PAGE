@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { Settings as SettingsIcon, Lock, Library, Save, CheckCircle, Layers, Archive, RotateCcw, RefreshCw, UserCircle, Camera, Eye, EyeOff } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import type { AdminOutletContext } from '@/src/Pages/Admin/AdminLayout';
@@ -437,7 +438,7 @@ export function Settings() {
                 <div className="relative">
                   <div className="w-16 h-16 rounded-full bg-navy text-white flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden border-2 border-white ring-2 ring-gray-100">
                     {avatarPreview ? (
-                      <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                      <img src={getImageUrl(avatarPreview)} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
                       firstName?.[0]?.toUpperCase() || 'A'
                     )}
@@ -576,9 +577,7 @@ export function Settings() {
                           <img
                             src={
                               !bgImagePreview ? '' :
-                              (bgImagePreview.startsWith('http') || bgImagePreview.startsWith('blob:') || bgImagePreview.startsWith('data:') || bgImagePreview.startsWith('/media/'))
-                                ? bgImagePreview
-                                : `/media/${bgImagePreview}`
+                              getImageUrl(bgImagePreview)
                             }
                             alt="Background Preview"
                             className="w-full h-full object-cover"

@@ -50,7 +50,7 @@ export default function AdministrationPage() {
 
       if (orgChart) setOrgChartUrl(getFileUrl(orgChart.file));
       if (manual) setManualUrl(getFileUrl(manual.file));
-      setAllFiles(files.filter(f => f.is_active && f.category !== 'OrgStructure'));
+      setAllFiles(files.filter(f => f.is_active && (f.category === 'Manual' || !f.category)));
     } catch (e) {
       console.error('Failed to load administration assets from CMS', e);
     } finally {

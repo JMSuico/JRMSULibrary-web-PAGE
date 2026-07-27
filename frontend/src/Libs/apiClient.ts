@@ -20,9 +20,11 @@ export const getImageUrl = (imagePath: string | null | undefined): string => {
   if (!imagePath) return '';
   if (imagePath.startsWith('http') || imagePath.startsWith('data:') || imagePath.startsWith('blob:')) return imagePath;
   
-  // Use relative path for media so Vite proxy/Nginx handles it automatically.
-  return imagePath;
+  if (imagePath.startsWith('/')) return imagePath;
+  return `/${imagePath}`;
 };
+
+export const getFileUrl = getImageUrl;
 
 export function getCookie(name: string) {
   let cookieValue = null;

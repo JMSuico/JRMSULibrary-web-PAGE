@@ -13,6 +13,8 @@ import { Pagination } from '@/src/Components/Shared/Pagination';
 import { LayoutGrid, List } from 'lucide-react';
 import { ResearchReferencesManager } from './ResearchReferencesManager';
 
+import { getImageUrl } from '@/src/Libs/apiClient';
+
 export function ContentManager() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence' | 'research_references'>('content');
   const [loading, setLoading] = useState(false);
@@ -317,7 +319,7 @@ export function ContentManager() {
   const openEditPersonnel = (person: any) => {
     setEditingPersonnelId(person.id);
     setPersonnelPhoto(null);
-    setPersonnelPhotoPreview(person.photo ? (person.photo.startsWith('http') || person.photo.startsWith('blob:') || person.photo.startsWith('/media') ? person.photo : `/media/${person.photo}`) : null);
+    setPersonnelPhotoPreview(person.photo ? (getImageUrl(person.photo)) : null);
     setIsPersonnelModalOpen(true);
   };
 
@@ -682,7 +684,7 @@ export function ContentManager() {
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td>
-                          <img src={file.file.startsWith('http') || file.file.startsWith('/media') ? file.file : `/media/${file.file}`} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
                         </td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -738,7 +740,7 @@ export function ContentManager() {
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td>
-                          <img src={file.file.startsWith('http') || file.file.startsWith('/media') ? file.file : `/media/${file.file}`} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
                         </td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -897,13 +899,13 @@ export function ContentManager() {
                             <img
                               alt={chiefLibrarian.name}
                               className="w-full h-full object-cover"
-                              src={chiefLibrarian.photo.startsWith('http') || chiefLibrarian.photo.startsWith('/media') ? chiefLibrarian.photo : `/media/${chiefLibrarian.photo}`}
+                              src={getImageUrl(chiefLibrarian.photo)}
                             />
                           ) : (
                             <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">No Photo</div>
                           )}
                           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white font-semibold rounded-full gap-2">
-                            <button className="flex items-center gap-1 hover:text-gold-light transition-colors" onClick={(e) => { e.stopPropagation(); setViewingPhoto(chiefLibrarian.photo.startsWith('http') || chiefLibrarian.photo.startsWith('/media') ? chiefLibrarian.photo : `/media/${chiefLibrarian.photo}`); }}>
+                            <button className="flex items-center gap-1 hover:text-gold-light transition-colors" onClick={(e) => { e.stopPropagation(); setViewingPhoto(getImageUrl(chiefLibrarian.photo)); }}>
                               <Search size={16} /> View
                             </button>
                             <button className="flex items-center gap-1 hover:text-gold-light transition-colors" onClick={(e) => { e.stopPropagation(); openEditPersonnel(chiefLibrarian); }}>
@@ -946,7 +948,7 @@ export function ContentManager() {
                           >
                             {/* View / Edit Action Bar at Top */}
                             <div className="absolute top-0 left-0 w-full border-b border-gold-light/20 bg-black/20 p-2 flex justify-start gap-3 z-10">
-                                <button className="flex items-center gap-1 text-white hover:text-gold-light text-xs transition-colors font-medium bg-black/30 px-2 py-1 rounded" onClick={() => setViewingPhoto(person.photo ? (person.photo.startsWith('http') || person.photo.startsWith('/media') ? person.photo : `/media/${person.photo}`) : null)}>
+                                <button className="flex items-center gap-1 text-white hover:text-gold-light text-xs transition-colors font-medium bg-black/30 px-2 py-1 rounded" onClick={() => setViewingPhoto(person.photo ? (getImageUrl(person.photo)) : null)}>
                                   <Search size={12} /> View
                                 </button>
                                 <button className="flex items-center gap-1 text-white hover:text-gold-light text-xs transition-colors font-medium bg-black/30 px-2 py-1 rounded" onClick={() => openEditPersonnel(person)}>
@@ -966,7 +968,7 @@ export function ContentManager() {
                             {/* Card Content */}
                             {person.photo ? (
                               <div className="w-24 h-24 rounded-full border-2 border-gold-light/40 overflow-hidden shadow-lg mx-auto mb-3 mt-2">
-                                <img src={person.photo.startsWith('http') || person.photo.startsWith('/media') ? person.photo : `/media/${person.photo}`} alt={person.name} className="w-full h-full object-cover relative z-0" />
+                                <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover relative z-0" />
                               </div>
                             ) : (
                               <div className="w-24 h-24 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 mt-2 shadow-lg border-2 border-gold-light/20 relative z-0">
@@ -1064,16 +1066,16 @@ export function ContentManager() {
             </div>
             <div className="flex-1 bg-gray-100 overflow-hidden relative">
               {viewingManualFile.file.toLowerCase().endsWith('.pdf') ? (
-                <iframe src={viewingManualFile.file.startsWith('http') || viewingManualFile.file.startsWith('/media') ? viewingManualFile.file : `/media/${viewingManualFile.file}`} className="w-full h-full border-none bg-white" title="PDF Preview" />
+                <iframe src={getImageUrl(viewingManualFile.file)} className="w-full h-full border-none bg-white" title="PDF Preview" />
               ) : viewingManualFile.file.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) ? (
                 <div className="w-full h-full flex items-center justify-center p-4 bg-gray-200">
-                  <img src={viewingManualFile.file.startsWith('http') || viewingManualFile.file.startsWith('/media') ? viewingManualFile.file : `/media/${viewingManualFile.file}`} alt="Preview" className="max-w-full max-h-full object-contain shadow-lg rounded" />
+                  <img src={getImageUrl(viewingManualFile.file)} alt="Preview" className="max-w-full max-h-full object-contain shadow-lg rounded" />
                 </div>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-gray-500">
                   <span className="material-symbols-outlined text-6xl opacity-30">description</span>
                   <p className="text-lg">Browser preview is not available for this file type.</p>
-                  <a href={viewingManualFile.file.startsWith('http') || viewingManualFile.file.startsWith('/media') ? viewingManualFile.file : `/media/${viewingManualFile.file}`} target="_blank" rel="noreferrer" className="admin-btn admin-btn--primary px-6 py-2">Download File</a>
+                  <a href={getImageUrl(viewingManualFile.file)} target="_blank" rel="noreferrer" className="admin-btn admin-btn--primary px-6 py-2">Download File</a>
                 </div>
               )}
             </div>

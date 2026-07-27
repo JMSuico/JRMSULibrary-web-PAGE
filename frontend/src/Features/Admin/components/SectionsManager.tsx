@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 
 import {
@@ -139,15 +140,6 @@ export function SectionsManager() {
       setPreviewUrl(URL.createObjectURL(file));
     }
   };
-
-  const getImageUrl = (imagePath: string | undefined | null) => {
-    if (!imagePath) return '';
-    if (imagePath.startsWith('http')) return imagePath;
-    if (imagePath.startsWith('/media/')) return imagePath;
-    if (imagePath.startsWith('/')) return `/media${imagePath}`;
-    return `/media/${imagePath}`;
-  };
-
   const debouncedSearch = useDebounce(searchQuery, 400);
 
   const filtered = images.filter(
