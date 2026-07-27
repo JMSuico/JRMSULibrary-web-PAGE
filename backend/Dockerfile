@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements-docker.txt .
 RUN pip install --no-cache-dir -r requirements-docker.txt gunicorn
 
+# AUTOMATED SEC OPS: Run pip-audit to purposefully crash the build if a supply chain vulnerability exists
+RUN pip install --no-cache-dir pip-audit && pip-audit -r requirements-docker.txt --desc on
+
 COPY . .
 
 # Set DB_ENGINE so collectstatic doesn't try to load MSSQL drivers during build
@@ -21,4 +24,12 @@ RUN SECRET_KEY="dummy-key-for-build" python manage.py collectstatic --noinput ||
 
 EXPOSE 8000
 
+# Create a non-root user and group for blast-radius isolation
+RUN addgroup --system appgroup && adduser --system --group appuser
+
+# Change ownership of the app directory so appuser can write to media/ and logs
+RUN chown -R appuser:appgroup /app
+
+# Switch to the powerless user
+USER appuser
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "core.asgi:application"]

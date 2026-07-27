@@ -33,3 +33,16 @@ class CSPMiddleware(MiddlewareMixin):
         if 'Content-Security-Policy' not in response:
             response['Content-Security-Policy'] = csp_header
         return response
+
+class GlobalSecurityHeadersMiddleware(MiddlewareMixin):
+    def process_response(self, request, response):
+        # 1. Block old plugins from pretending malicious files are images
+        response['X-Content-Type-Options'] = 'nosniff'
+        
+        # 2. Prevent application URLs from leaking to 3rd-party APIs used by plugins
+        response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        # 3. Mathematically revoke Hardware access (Microphone, Camera, Geolocation) from ALL plugins globally
+        response['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+        
+        return response
