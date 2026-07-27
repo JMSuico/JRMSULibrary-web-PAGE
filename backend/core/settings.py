@@ -352,3 +352,7 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Manila'
+
+# Prevent 500 Internal Server errors when Redis is not running (e.g. Render deployments)
+if os.environ.get('USE_CELERY', 'False').lower() != 'true':
+    CELERY_TASK_ALWAYS_EAGER = True
