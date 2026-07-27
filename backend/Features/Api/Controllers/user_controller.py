@@ -232,20 +232,25 @@ class UserViewSet(viewsets.ViewSet):
         from django.contrib.auth import update_session_auth_hash
         update_session_auth_hash(request, request.user)
         
-        # Send notification email
+        # Send notification email asynchronously
+        import threading
         from django.core.mail import send_mail
         from django.conf import settings
         if request.user.email:
-            try:
-                send_mail(
-                    subject="Your password has been changed",
-                    message="This is a confirmation that the password for your JRMSU Library account has been changed. If you did not make this change, please contact an administrator immediately.",
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[request.user.email],
-                    fail_silently=True
-                )
-            except Exception:
-                pass
+            def send_pwd_change():
+                try:
+                    send_mail(
+                        subject="Your password has been changed",
+                        message="This is a confirmation that the password for your JRMSU Library account has been changed. If you did not make this change, please contact an administrator immediately.",
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[request.user.email],
+                        fail_silently=True
+                    )
+                except Exception:
+                    pass
+            t = threading.Thread(target=send_pwd_change)
+            t.daemon = True
+            t.start()
                 
         return Response({"message": "Password changed successfully"})
 
@@ -313,16 +318,23 @@ class UserViewSet(viewsets.ViewSet):
         
         from django.core.mail import send_mail
         from django.conf import settings
-        try:
-            send_mail(
-                subject="Password Reset Code",
-                message=f"Your password reset code for JRMSU Library Admin Portal is: {code}\n\nThis code is valid for 15 minutes. If you did not request this, please ignore this email.",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[email],
-                fail_silently=True
-            )
-        except Exception:
-            pass
+        import threading
+        
+        def send_pwd_reset():
+            try:
+                send_mail(
+                    subject="Password Reset Code",
+                    message=f"Your password reset code for JRMSU Library Admin Portal is: {code}\n\nThis code is valid for 15 minutes. If you did not request this, please ignore this email.",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[email],
+                    fail_silently=True
+                )
+            except Exception:
+                pass
+                
+        t = threading.Thread(target=send_pwd_reset)
+        t.daemon = True
+        t.start()
 
         # Increment reset attempt counter
         new_reset_attempts = reset_attempts + 1

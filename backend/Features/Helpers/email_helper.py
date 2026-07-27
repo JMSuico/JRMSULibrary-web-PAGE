@@ -6,6 +6,7 @@ from django.core.mail import send_mail, EmailMessage
 from django.conf import settings
 import logging
 import socket
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -83,11 +84,9 @@ def is_email_domain_valid(email: str) -> bool:
         return False
 
 
-def _send_with_retry(email_message, max_retries=2):
+def _send_with_retry_sync(email_message, max_retries=2):
     """
-    Send an email with retry logic.
-    We let Django manage the connection lifecycle (open/close) automatically per send 
-    to avoid 'Server not connected' stale connection errors when sending large attachments.
+    Synchronous actual send logic.
     """
     for attempt in range(max_retries + 1):
         try:
@@ -98,8 +97,20 @@ def _send_with_retry(email_message, max_retries=2):
             # Clear the stale connection so Django creates a fresh one on the next attempt
             email_message.connection = None
             if attempt == max_retries:
-                raise
+                logger.error(f"Approval/Reply email completely failed after {max_retries + 1} attempts: {e}")
+                return False
     return False
+
+def _send_with_retry(email_message, max_retries=2):
+    """
+    Send an email asynchronously with retry logic.
+    Prevents HTTP 502 Bad Gateway errors by instantly returning to the UI
+    while the email is sent in the background.
+    """
+    t = threading.Thread(target=_send_with_retry_sync, args=(email_message, max_retries))
+    t.daemon = True
+    t.start()
+    return True
 
 
 # Maximum attachment size: 10 MB
@@ -265,12 +276,21 @@ Message:
 Login to the Admin Panel to respond:
 http://localhost:3000/admin/email
 """
-        send_mail(
-            subject=f"[New Contact] {subject} — from {sender_name}",
-            message=body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[settings.EMAIL_HOST_USER],
-            fail_silently=True,
-        )
+        # Wrap the direct send_mail in a thread to prevent blocking
+        def send_admin_alert():
+            try:
+                send_mail(
+                    subject=f"[New Contact] {subject} - from {sender_name}",
+                    message=body,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[settings.EMAIL_HOST_USER],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                logger.error(f"Failed to send admin alert email: {e}")
+                
+        t = threading.Thread(target=send_admin_alert)
+        t.daemon = True
+        t.start()
     except Exception as e:
         logger.warning(f"Library notification email failed: {e}")
