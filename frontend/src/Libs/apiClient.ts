@@ -18,7 +18,20 @@ const API_BASE = getApiBase();
 
 export const getImageUrl = (imagePath: string | null | undefined): string => {
   if (!imagePath) return '';
-  if (imagePath.startsWith('http') || imagePath.startsWith('data:') || imagePath.startsWith('blob:')) return imagePath;
+  
+  if (imagePath.startsWith('http')) {
+    try {
+      const url = new URL(imagePath);
+      if (url.pathname.startsWith('/media/')) {
+        return url.pathname;
+      }
+    } catch (e) {
+      // Ignore invalid URLs
+    }
+    return imagePath;
+  }
+  
+  if (imagePath.startsWith('data:') || imagePath.startsWith('blob:')) return imagePath;
   
   if (imagePath.startsWith('/')) return imagePath;
   return `/${imagePath}`;

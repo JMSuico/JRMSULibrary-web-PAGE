@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { publicApi, cmsApi } from '@/src/Endpoints/cmsApi';
 import { settingsApi } from '@/src/Endpoints/settingsApi';
@@ -160,7 +161,7 @@ export const HeroSection: React.FC = () => {
           >
             <div className="relative rounded-3xl overflow-hidden shadow-2xl min-h-[300px] md:min-h-[380px]">
               <img
-                src={excellenceImage}
+                src={getImageUrl(excellenceImage)}
                 alt="JRMSU Library Excellence"
                 className="w-full h-full object-cover block absolute inset-0"
                 loading="lazy"

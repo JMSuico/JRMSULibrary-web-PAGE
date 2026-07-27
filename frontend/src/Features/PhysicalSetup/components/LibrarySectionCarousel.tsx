@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { ClassicHorizontalCarousel } from '@/src/Components/Shared/ClassicHorizontalCarousel';
@@ -90,7 +91,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                      onClick={() => setSelectedImage(img.src)}
                 >
                   <div className="overflow-hidden relative" style={{ aspectRatio: '4 / 3' }}>
-                    <img src={img.src} alt={img.label} className="w-full h-full object-cover block transition-transform duration-500 group-hover:scale-110" loading="lazy" draggable={false} />
+                    <img src={getImageUrl(img.src)} alt={img.label} className="w-full h-full object-cover block transition-transform duration-500 group-hover:scale-110" loading="lazy" draggable={false} />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                        <span className="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity">zoom_in</span>
                     </div>
@@ -116,7 +117,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                       <tr key={realIdx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedImage(img.src)}>
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
-                          <img src={img.src} alt={img.label} className="w-16 h-10 object-cover rounded" />
+                          <img src={getImageUrl(img.src)} alt={img.label} className="w-16 h-10 object-cover rounded" />
                         </td>
                         <td className="py-3 px-3 text-primary font-medium">{img.label}</td>
                       </tr>
@@ -155,7 +156,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
               <span className="material-symbols-outlined text-4xl">close</span>
             </button>
             <img 
-              src={selectedImage} 
+              src={getImageUrl(selectedImage)} 
               alt="Enlarged view" 
               className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl animate-modal-card" 
               onClick={(e) => e.stopPropagation()} 
@@ -284,7 +285,7 @@ export const LibrarySectionCarousel: React.FC = () => {
                   >
                     <div className="w-full" style={{ aspectRatio: '16 / 10' }}>
                       <img
-                        src={img.src}
+                        src={getImageUrl(img.src)}
                         alt={img.label}
                         className="w-full h-full object-cover block"
                         loading="lazy"
@@ -361,7 +362,7 @@ export const LibrarySectionCarousel: React.FC = () => {
           </button>
           <div className="flex flex-col items-center animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <img 
-              src={expandedImage.src} 
+              src={getImageUrl(expandedImage.src)} 
               alt={expandedImage.label} 
               className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
             />

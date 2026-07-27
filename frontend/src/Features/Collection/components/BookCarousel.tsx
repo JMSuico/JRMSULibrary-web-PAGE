@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -118,7 +119,7 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
                 <div className={`w-full h-full rounded-xl overflow-hidden shadow-2xl border border-gold-light/20 bg-primary relative ${pos === 'active' ? 'cursor-zoom-in' : ''}`}>
                   {item.image ? (
                     <img
-                      src={item.image}
+                      src={getImageUrl(item.image)}
                       alt={item.title}
                       className="w-full h-full object-cover block"
                       loading="lazy"
@@ -202,7 +203,7 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
           <div className="flex flex-col items-center animate-modal-card" onClick={(e) => e.stopPropagation()}>
             {expandedItem.image ? (
               <img 
-                src={expandedItem.image} 
+                src={getImageUrl(expandedItem.image)} 
                 alt={expandedItem.title} 
                 className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
               />

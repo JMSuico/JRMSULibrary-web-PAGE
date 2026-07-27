@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 
 interface CarouselItem {
@@ -30,7 +31,7 @@ const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = (
       {item.image && (
         <div className="w-28 h-28 md:w-32 md:h-32 mx-auto mb-5 rounded-2xl overflow-hidden flex-shrink-0">
           <img
-            src={item.image}
+            src={getImageUrl(item.image)}
             alt={item.title}
             className="w-full h-full object-cover block"
             loading="lazy"
@@ -139,7 +140,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                   {item.image && (
                     <div className="w-24 h-24 md:w-32 md:h-32 rounded-xl overflow-hidden flex-shrink-0 mx-auto mb-4">
                       <img
-                        src={item.image}
+                        src={getImageUrl(item.image)}
                         alt={item.title}
                         className="w-full h-full object-cover block"
                         loading="lazy"

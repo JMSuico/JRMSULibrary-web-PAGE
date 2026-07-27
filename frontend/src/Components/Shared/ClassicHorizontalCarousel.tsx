@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
@@ -200,7 +201,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
             {(selectedItem.image || selectedItem.src) ? (
               <div className="w-full max-h-[60vh] rounded-xl overflow-hidden shadow-lg mx-auto flex items-center justify-center bg-gray-50 border border-gray-200 relative group">
                 <img 
-                  src={selectedItem.image || selectedItem.src} 
+                  src={getImageUrl(selectedItem.image || selectedItem.src)} 
                   alt={selectedItem.title || selectedItem.label} 
                   className="max-w-full max-h-[60vh] object-contain transition-transform duration-500 hover:scale-105 cursor-zoom-in" 
                   onClick={() => window.open(selectedItem.image || selectedItem.src, '_blank')}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 
 interface BookModalItem {
@@ -84,7 +85,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                 >
                   {book.image ? (
                     <div className="w-32 h-40 rounded-lg overflow-hidden shadow-md">
-                      <img src={book.image} alt={book.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <img src={getImageUrl(book.image)} alt={book.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                     </div>
                   ) : book.icon ? (
                     <span className="material-symbols-outlined text-[64px] text-primary group-hover:scale-110 transition-transform duration-500">
@@ -121,7 +122,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
                           {book.image ? (
-                            <img src={book.image} alt={book.title} className="w-8 h-8 object-cover rounded" />
+                            <img src={getImageUrl(book.image)} alt={book.title} className="w-8 h-8 object-cover rounded" />
                           ) : book.icon ? (
                             <span className="material-symbols-outlined text-lg text-primary">{book.icon}</span>
                           ) : null}
@@ -178,7 +179,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
             >
               {selectedBook.image ? (
                 <div className="w-48 h-64 mb-6 rounded-lg overflow-hidden shadow-lg mx-auto">
-                  <img src={selectedBook.image} alt={selectedBook.title} className="w-full h-full object-cover" />
+                  <img src={getImageUrl(selectedBook.image)} alt={selectedBook.title} className="w-full h-full object-cover" />
                 </div>
               ) : selectedBook.icon ? (
                 <span className="material-symbols-outlined text-[120px] text-primary mb-6">{selectedBook.icon}</span>
