@@ -6,7 +6,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
-import { notificationApi, Notification } from '@/src/Endpoints/notificationApi';
+import { notificationApi, Notification as AppNotification } from '@/src/Endpoints/notificationApi';
 import { contactApi } from '@/src/Endpoints/contactApi';
 import { NotificationDetailModal } from '@/src/Components/Modals/NotificationDetailModal';
 import { ProfileEditModal } from '@/src/Features/Admin/components/ProfileEditModal';
@@ -49,12 +49,12 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
   const [showProfile, setShowProfile] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [totalVisits, setTotalVisits] = useState(0);
   const [loading, setLoading] = useState(false);
   const [filterMode, setFilterMode] = useState<'all' | 'unread'>('all');
-  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [selectedNotification, setSelectedNotification] = useState<AppNotification | null>(null);
   
   const panelRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -67,8 +67,8 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
   // Request browser notification permission on mount
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
+      if (window.Notification.permission === 'default') {
+        window.Notification.requestPermission().catch(() => {});
       }
     }
   }, []);
@@ -86,8 +86,8 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
         showToast('You have new notifications!', 'info');
         
         // Show desktop push notification
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification('JRMSU Library', {
+        if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
+          new window.Notification('JRMSU Library', {
             body: 'You have a new message or reservation in the Admin Panel.',
             icon: '/favicon.ico'
           });
