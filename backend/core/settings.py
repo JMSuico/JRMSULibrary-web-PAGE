@@ -14,6 +14,17 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+from datetime import timedelta
+import time
+import socket
+
+# Force IPv4 for all socket connections to prevent [Errno 101] Network is unreachable
+# on local WIFI networks (like PESO WIFI) that advertise IPv6 but don't route it.
+orig_getaddrinfo = socket.getaddrinfo
+def getaddrinfo_ipv4_only(*args, **kwargs):
+    responses = orig_getaddrinfo(*args, **kwargs)
+    return [r for r in responses if r[0] == socket.AF_INET]
+socket.getaddrinfo = getaddrinfo_ipv4_only
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
