@@ -99,7 +99,8 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
     } catch (err: any) {
       console.error('Failed to load notifications', err);
       // If we got a 401/403 or network error indicating session loss, stop polling to prevent backend log spam
-      if (err.message?.includes('401') || err.message?.includes('403') || err.message?.toLowerCase().includes('forbidden')) {
+      const msg = err.message?.toLowerCase() || '';
+      if (msg.includes('401') || msg.includes('403') || msg.includes('forbidden') || msg.includes('authentication') || msg.includes('credential')) {
         authError.current = true;
       }
     } finally {
