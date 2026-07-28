@@ -75,6 +75,10 @@ services:
       - ./backend/media:/app/media
       - ./frontend/src/Assets/assets:/app/frontend_assets:ro
       - "./frontend/src/Assets/FAQ cache:/frontend/src/Assets/FAQ cache"
+    # Auto-run migrations on every startup — ensures fresh clones work immediately
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             daphne -b 0.0.0.0 -p 8000 core.asgi:application"
 
   celery-worker:
     build:
