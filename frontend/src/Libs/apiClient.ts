@@ -85,8 +85,18 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
     cache: 'no-store', // Fix: Prevent browser from caching API responses (which causes stale UI on edits)
   });
 
+  // Background polling endpoints that should NEVER trigger a global logout redirect.
+  // These fire silently in the background and may return 401 briefly during session init
+  // or page navigation, which should NOT kick the user out of the admin panel.
+  const SILENT_ENDPOINTS = [
+    '/settings/last_update/',
+    '/users/heartbeat/',
+    '/users/me/',
+  ];
+  const isSilentEndpoint = SILENT_ENDPOINTS.some(ep => endpoint.includes(ep));
+
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
+    if ((response.status === 401 || response.status === 403) && !isSilentEndpoint) {
       if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin/login') {
         window.location.href = '/admin/login';
       }

@@ -21,14 +21,18 @@ ENV DB_ENGINE=postgresql
 # Collect static files (non-fatal — app may not have STATIC_ROOT set yet)
 RUN SECRET_KEY="dummy-key-for-build" python manage.py collectstatic --noinput || true
 
+# Copy entrypoint script and make it executable
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8000
 
 # Create a non-root user and group for blast-radius isolation
 RUN addgroup --system appgroup && adduser --system --group appuser
 
 # Change ownership of the app directory so appuser can write to media/ and logs
-RUN chown -R appuser:appgroup /app
+RUN chown -R appuser:appgroup /app && chown appuser:appgroup /entrypoint.sh
 
 # Switch to the powerless user
 USER appuser
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "core.asgi:application"]
+CMD ["/entrypoint.sh"]

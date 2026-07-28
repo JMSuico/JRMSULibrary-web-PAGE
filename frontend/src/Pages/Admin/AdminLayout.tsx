@@ -33,18 +33,30 @@ const useAuth = () => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      try {
-        const currentUser = await userApi.me();
-        setUser(currentUser);
-        setIsAuthenticated(true);
-      } catch (err) {
-        setIsAuthenticated(false);
+      // Retry up to 2 times with a 600ms delay between attempts.
+      // A single brief 401 during page navigation should NOT immediately kick the user out.
+      let lastError: any = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const currentUser = await userApi.me();
+          setUser(currentUser);
+          setIsAuthenticated(true);
+          return; // success — stop retrying
+        } catch (err) {
+          lastError = err;
+          if (attempt < 1) {
+            // Wait 600ms before retrying
+            await new Promise(resolve => setTimeout(resolve, 600));
+          }
+        }
       }
+      // Only mark as unauthenticated after all retries are exhausted
+      setIsAuthenticated(false);
     };
     checkAuth();
   }, []);
 
-  return { isAuthenticated, user, setUser }; 
+  return { isAuthenticated, user, setUser };
 };
 
 const useInactivityTimer = (timeoutMs: number, onTimeout: () => void) => {
