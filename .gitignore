@@ -17,7 +17,7 @@ backend/media/
 
 # ---- LARGE BINARY / MEDIA FILES (ignore everywhere) ----
 # Videos
-*.mp4
+
 *.mov
 *.avi
 *.mkv
@@ -38,7 +38,7 @@ frontend/src/Assets/assets/RESEARCH UPDATED2026
 frontend/src/Assets/assets/NEWLY ARRIVED BOOKS
 frontend/src/Assets/assets/REFERENCES UPDATED 2026
 # PDFs
-*.pdf
+
 
 # Raw photo/book scan folders
 /NEWLY ARRIVED BOOKS/
