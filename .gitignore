@@ -3,10 +3,7 @@ build/
 dist/
 coverage/
 .DS_Store
-*.log
-.env*
-!.env.example
-
+*.logs
 # Python virtual environment & cache
 backend/venv/
 **/__pycache__/
