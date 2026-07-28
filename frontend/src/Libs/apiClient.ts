@@ -1,19 +1,10 @@
 // Use relative API base url so Vite proxy (in dev) and Nginx (in prod) handles routing.
 // This ensures SameSite cookies work correctly across identical origins.
 const getApiBase = () => {
-  // Dynamically use whatever IP address or domain the user is currently accessing the app from
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    // Assuming backend is running on port 8000 and frontend on whatever port
-    return `http://${host}:8000/api`;
-  }
-  
-  // Fallback for SSR or non-browser environments
-  let base = import.meta.env.VITE_API_BASE_URL || '/api';
-  if (!base.endsWith('/api') && !base.endsWith('/api/')) {
-    base = base.endsWith('/') ? `${base}api` : `${base}/api`;
-  }
-  return base;
+  // Always use a relative path. This forces the browser to treat API calls as Same-Origin.
+  // In Docker (Nginx) and local dev (Vite), /api is configured to proxy to the backend.
+  // This solves the 'infinite login loop' caused by browsers rejecting Cross-Origin cookies on HTTP.
+  return '/api';
 };
 
 const API_BASE = getApiBase();
