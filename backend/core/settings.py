@@ -240,12 +240,23 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # Custom user model
 AUTH_USER_MODEL = "Features.Account"
 
-# CORS settings
-_env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "http://10.0.0.102:3000,http://10.0.0.102:3001,http://192.168.6.126:3000,http://192.168.6.126:3001,http://192.168.5.202:3000,http://192.168.5.202:3001")
-_allowed_origins = _env_origins + ",http://192.168.1.111:3000,http://192.168.1.111:3001,http://localhost:3000,http://localhost:3001,http://localhost:5173"
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
+# CORS settings - Permanently allow any local IP for Docker/Wi-Fi hosting
+_env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "")
+_allowed_origins = _env_origins + ",http://localhost:3000,http://localhost:3001,http://localhost:5173"
+
+# Fallback: specific domains
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip() and origin.strip() != '*']
+
+# PERMANENT FIX: Accept any http:// IP address dynamically (Allows cookies to work!)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://.*$",      # Accept any standard http:// origin (like your local WiFi IP)
+    r"^https://.*$"      # Accept any https:// origin
+]
+
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
+
+# Trust any origin for CSRF since we are local hosting
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS + ["http://127.0.0.1", "http://localhost"]
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",

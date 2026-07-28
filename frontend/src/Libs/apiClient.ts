@@ -1,15 +1,17 @@
 // Use relative API base url so Vite proxy (in dev) and Nginx (in prod) handles routing.
 // This ensures SameSite cookies work correctly across identical origins.
 const getApiBase = () => {
-  let base = import.meta.env.VITE_API_BASE_URL;
-  if (!base) {
-    // Force relative path in production so Vercel proxy handles it
-    base = '/api';
-  } else {
-    // If the user forgot to add /api to the environment variable, add it automatically
-    if (!base.endsWith('/api') && !base.endsWith('/api/')) {
-      base = base.endsWith('/') ? `${base}api` : `${base}/api`;
-    }
+  // Dynamically use whatever IP address or domain the user is currently accessing the app from
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Assuming backend is running on port 8000 and frontend on whatever port
+    return `http://${host}:8000/api`;
+  }
+  
+  // Fallback for SSR or non-browser environments
+  let base = import.meta.env.VITE_API_BASE_URL || '/api';
+  if (!base.endsWith('/api') && !base.endsWith('/api/')) {
+    base = base.endsWith('/') ? `${base}api` : `${base}/api`;
   }
   return base;
 };
