@@ -29,7 +29,7 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 - Architecture: API Controllers -> Services -> Repositories -> Models
 
 **AI Engine:**
-- Ollama (running `qwen2.5:1.5b`)
+- Ollama (running `qwen2.5:0.5b`)
 
 **Deployment:**
 - Docker & Docker Compose (fully containerized 5-layer stack)
@@ -179,7 +179,67 @@ Is it cache logic?                     → Features/Infrastructure/Cache/
 
 ---
 
-##  Project Documentation
+## 🚀 Getting Started & Installation
+
+### Option 1: Running with Docker (Recommended)
+This is the easiest way to run the project. Docker will automatically provision the database, Redis, the backend, and the frontend.
+
+**Requirements:**
+- Docker Desktop
+
+**Commands:**
+1. Clone the repository and open the root folder.
+2. Build and start the containers:
+   `ash
+   docker-compose up -d --build
+   `
+3. The frontend is accessible at http://localhost:3000
+4. The backend is accessible at http://localhost:8000
+
+### Option 2: Running Without Docker (Local Bare Metal)
+If you prefer running the services directly on your machine without virtualization, follow these steps.
+
+**Requirements:**
+- Node.js 22+ (For Frontend)
+- Python 3.11+ (For Backend)
+- PostgreSQL or Microsoft SQL Server (For Database)
+- Redis (For Celery Background Tasks)
+- Ollama (For AI Assistant - Qwen 2.5)
+
+**Commands:**
+1. **Frontend:**
+   `ash
+   cd frontend
+   npm install
+   npm run dev
+   `
+2. **Backend:**
+   `ash
+   cd backend
+   python -m venv venv
+   .\venv\Scripts\activate
+   pip install -r requirements.txt
+   python manage.py runserver
+   `
+3. **Celery Worker (Run in a separate terminal):**
+   `ash
+   cd backend
+   .\venv\Scripts\activate
+   celery -A core worker -l info
+   `
+
+---
+
+## 📚 Interactive API Documentation (Scalar V1)
+We use a modern, interactive API documentation interface (Scalar V1) instead of traditional Swagger.
+To view and test the API endpoints:
+1. Ensure the system is running (via Docker or Local).
+2. Open your browser to: **http://localhost:8000/api/docs/**
+3. Raw OpenAPI schema: **http://localhost:8000/api/schema/**
+
+---
+
+## 📁 Project Documentation
 For more in-depth guides, please refer to the markdown files in the project root:
 - `DevSetup.md`: Complete local and Docker setup guide.
 - `SETUP.md`: Developer workflow setup.
