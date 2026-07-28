@@ -388,4 +388,5 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API endpoints for the JRMSU Katipunan Campus Library Landing Page and CMS.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
 }

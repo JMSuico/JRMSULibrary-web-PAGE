@@ -757,8 +757,8 @@ To manage Terminal-Created Admins, a dedicated terminal command is now available
   ```
 
 
-## Interactive API Documentation (Scalar V1)
+## 📚 Interactive API Documentation (Scalar V1)
 To view the automatically generated API documentation and test endpoints directly from your browser:
-1. Ensure the Docker containers are running (docker-compose up -d).
-2. Open your browser and navigate to: **http://localhost:8000/api/docs/**
-3. The raw OpenAPI schema is available at: **http://localhost:8000/api/schema/**
+1. Ensure the Docker containers are running (`docker-compose up -d`).
+2. Open your browser and navigate to: **`http://localhost:8000/api/docs/`**
+3. The raw OpenAPI schema is available at: **`http://localhost:8000/api/schema/`**

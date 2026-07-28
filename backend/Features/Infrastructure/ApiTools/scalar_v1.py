@@ -1,5 +1,7 @@
 from django.http import HttpResponse
+from django.contrib.auth.decorators import user_passes_test
 
+@user_passes_test(lambda u: u.is_superuser)
 def scalar_v1_view(request):
     html = """
     <!doctype html>
