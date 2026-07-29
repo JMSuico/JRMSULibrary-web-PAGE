@@ -16,7 +16,7 @@ export const UndoDeleteToast: React.FC<UndoDeleteToastProps> = ({ undoState, onU
   if (!undoState) return null;
 
   return createPortal(
-    <div className="fixed bottom-6 right-6 z-[10000] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card">
+    <div className="fixed bottom-6 right-6 z-[99999] bg-white rounded-lg shadow-xl border border-gray-100 p-4 w-80 flex flex-col gap-3 slide-in-from-bottom-5 animate-modal-card" style={{ zIndex: 999999 }}>
       <div className="flex justify-between items-start">
         <div className="flex-1">
            <p className="font-semibold text-gray-800 text-sm">Action pending...</p>

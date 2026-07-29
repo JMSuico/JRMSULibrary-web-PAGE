@@ -609,7 +609,7 @@ export function ResearchReferencesManager() {
 
       {/* Sync Toast Notification */}
       {syncState.message && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="fixed bottom-6 right-6 z-[99999] animate-in slide-in-from-bottom-5 fade-in duration-300" style={{ zIndex: 999999 }}>
           <div className={`shadow-lg rounded-xl border p-4 flex items-center gap-3 ${syncState.isCancelled ? 'bg-red-50 border-red-200' : syncState.isActive ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`}>
             {syncState.isActive ? (
               <Loader2 className="animate-spin text-blue-600" size={24} />

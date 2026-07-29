@@ -54,8 +54,8 @@ class BatchService(IBatchService):
         batch = self.batch_repo.get_batch_by_id(batch_id)
         if not batch:
             raise ValueError("Batch not found")
-        if batch.status != BatchStatus.OPEN:
-            raise ValueError("Cannot edit books in a closed or archived batch")
+        # Allow editing books in any batch status — admins must be able to
+        # correct data errors in imported/migrated books even in closed batches.
             
         book = self.book_repo.get_by_id(book_id)
         if not book or str(book.batch_id) != str(batch_id):

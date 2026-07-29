@@ -438,10 +438,10 @@ export function EResourcesManager() {
                 <DragDropFileUpload
                   accept="*/*"
                   multiple={false}
-                  maxSizeMB={100}
+                  maxSizeMB={20}
                   onFilesSelected={(files) => setSelectedFile(files[0])}
                   label="Click to upload file or drag and drop"
-                  subLabel="Maximum file size: 100MB"
+                  subLabel="Maximum file size: 20MB"
                 />
                 {selectedFile && (
                   <p className="text-sm font-medium text-green-600 mt-2">

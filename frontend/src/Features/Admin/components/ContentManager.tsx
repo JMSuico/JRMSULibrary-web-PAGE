@@ -926,7 +926,7 @@ export function ContentManager() {
                   {renderConnectors()}
 
                   {staffList.length > 0 && (
-                    <div className="flex flex-col items-center lg:hidden my-2 text-gold-light">
+                    <div className="flex flex-col items-center md:hidden my-2 text-gold-light">
                       <div className="w-0.5 h-6 bg-gold-light"></div>
                       <span className="material-symbols-outlined text-lg leading-none -mt-1">arrow_downward</span>
                     </div>
@@ -936,7 +936,7 @@ export function ContentManager() {
                     {staffList.map((person, idx) => (
                       <React.Fragment key={person.id || idx}>
                         {idx > 0 && (
-                          <div className="flex flex-col items-center lg:hidden my-2 text-gold-light">
+                          <div className="flex flex-col items-center md:hidden my-2 text-gold-light col-span-full">
                             <div className="w-0.5 h-6 bg-gold-light"></div>
                             <span className="material-symbols-outlined text-lg leading-none -mt-1">arrow_downward</span>
                           </div>
