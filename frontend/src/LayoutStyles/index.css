@@ -90,15 +90,33 @@
   --spacing-gutter: 24px;
 }
 
-/* Body background â€” library image visible through sections */
+/* Body background — library image visible through sections */
 body {
+  background-color: var(--color-navy);
   background-image: url('/assets/JRMSU library lib.jpg');
   background-attachment: fixed;
-  background-size: cover;
-  background-position: center;
+  background-position: center center;
   background-repeat: no-repeat;
   position: relative;
   min-height: 100vh;
+}
+
+/* Mobile & Tablet: Cover the screen to avoid empty gaps on tall devices */
+@media (max-width: 1023px) {
+  body {
+    background-size: cover;
+    background-position: center center;
+  }
+}
+
+/* Desktop (Landscape): Prevent massive zooming/cropping of collages. 
+   Makes the image display steadily across the full width of the screen. */
+@media (min-width: 1024px) {
+  body {
+    /* 100% auto ensures the entire width is visible without aggressive zoom */
+    background-size: 100% auto;
+    background-position: center top;
+  }
 }
 
 /* Sections with 75% white blended transparency overlay */
