@@ -1,23 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: 1. Request Administrator Privileges (Required for changing IP)
->nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
-if '%errorlevel%' NEQ '0' (
-    echo Requesting administrative privileges...
-    goto UACPrompt
-) else ( goto gotAdmin )
-
-:UACPrompt
-    echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
-    echo UAC.ShellExecute "%~s0", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
-    "%temp%\getadmin.vbs"
-    exit /B
-
-:gotAdmin
-    if exist "%temp%\getadmin.vbs" ( del "%temp%\getadmin.vbs" )
-    pushd "%CD%"
-    CD /D "%~dp0"
+CD /D "%~dp0"
 
 echo ========================================================
 echo   JRMSU LIBRARY - 1-CLICK PERMANENT SETUP
@@ -163,8 +147,17 @@ if %errorlevel% neq 0 (
     goto wait_docker
 )
 
-echo Docker is ready! Running docker-compose up -d --build...
-docker-compose up -d --build
+echo Docker is ready! Checking if project images already exist...
+set "IMAGE_EXISTS="
+for /f "delims=" %%i in ('docker images -q jrmsulibrarylandingpage-backend 2^>nul') do set "IMAGE_EXISTS=%%i"
+
+if "!IMAGE_EXISTS!"=="" (
+    echo First-time setup detected! Building images (this will take a few minutes)...
+    docker-compose up -d --build
+) else (
+    echo Images already built! Starting project instantly...
+    docker-compose up -d
+)
 
 echo.
 echo ========================================================
