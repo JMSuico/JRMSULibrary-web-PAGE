@@ -1053,7 +1053,7 @@ export function EmailMessage() {
       )}
       {/* Background Bulk Send Toast */}
       {queueState.isActive && !bulkReplyModal && createPortal(
-        <div className="fixed bottom-6 right-6 z-[60] bg-white rounded-lg shadow-xl border border-blue-100 p-4 w-80 flex flex-col gap-3 animate-modal-overlay">
+        <div className="fixed bottom-6 right-6 z-[99999] bg-white rounded-lg shadow-xl border border-blue-100 p-4 w-80 flex flex-col gap-3 animate-modal-overlay" style={{ zIndex: 999999 }}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
