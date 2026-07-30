@@ -68,8 +68,6 @@ services:
       VITALSOURCE_PASSWORD: ${VITALSOURCE_PASSWORD}
       SCHOLAAR_USERNAME: ${SCHOLAAR_USERNAME}
       SCHOLAAR_PASSWORD: ${SCHOLAAR_PASSWORD}
-    ports:
-      - "8000:8000"
     volumes:
       - ./backend:/app
       - ./backend/media:/app/media
@@ -142,8 +140,6 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
-    ports:
-      - "11435:11434"
     volumes:
       - ollama_data:/root/.ollama
 
