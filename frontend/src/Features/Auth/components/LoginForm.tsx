@@ -4,6 +4,7 @@ import { CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ForgotPasswordModal } from '@/src/Features/Auth/components/ForgotPasswordModal';
+import { ensureCsrfToken } from '@/src/Libs/apiClient';
 
 export function LoginForm() {
   const navigate = useNavigate();
@@ -51,6 +52,7 @@ export function LoginForm() {
     const actualPassword = (document.getElementById('password') as HTMLInputElement)?.value || password;
     
     try {
+      await ensureCsrfToken(); // Ensure CSRF token is present before POST
       await userApi.login({ username: actualUsername, password: actualPassword });
       
       if (rememberMe) {
