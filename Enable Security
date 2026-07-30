@@ -1,0 +1,45 @@
+# Security Audit & Vercel Deployment Plan
+
+I have performed a deep dive into your architecture, including `settings.py`, your `.bat` files, your frontend `package.json`, and both of your Security Implementation markdown files. 
+
+Because you want to deploy to Vercel and ensure hackers cannot exploit plugins or bypass security, I looked for anything that was "temporarily disabled" or overly permissive.
+
+> [!CAUTION]
+> **I found a CRITICAL vulnerability that was temporarily added to fix local Wi-Fi issues, which would allow hackers to take over the system if deployed to Vercel.**
+
+Here is exactly what I found and my plan to fix it without breaking any functional code.
+
+## 1. The Critical CORS Vulnerability (Must Fix)
+In `backend/core/settings.py`, I found this temporary code:
+```python
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://.*$",      # Accept any standard http:// origin
+    r"^https://.*$"      # Accept any https:// origin
+]
+CORS_ALLOW_CREDENTIALS = True
+```
+**The Threat:** This tells the server to trust *literally any website on the internet*. If you deploy this to production, a hacker can host `https://evil-website.com`. If you visit their site while logged into the Library Admin Panel, their site can secretly use your browser cookies to delete books, create rogue admin accounts, or wipe the database. 
+**The Fix:** I will remove the regex wildcards and replace them with strict, environment-driven origins. We will tell Django to *only* trust your specific Vercel URL and your exact Localhost IPs.
+
+## 2. Preventing the "Login Loop" on Vercel vs Local
+**The Issue:** The famous "Login Loop" (where you log in successfully but instantly get kicked back to the login page) happens because modern browsers block cookies if `SameSite=None` is used without HTTPS (`Secure=True`). 
+**The Threat:** If you force `Secure=True` in the code, your local Wi-Fi users (who use HTTP) will get locked out. If you force `Secure=False`, Vercel (which uses HTTPS) will block the cookies.
+**The Fix:** Your architecture already has a brilliant toggle called `DISABLE_SSL_REDIRECT`. I will ensure that:
+- When building on the local PC, it uses `Lax` cookies (perfect for HTTP).
+- When deployed to Vercel/Render, you simply set `DISABLE_SSL_REDIRECT=False` in your Render dashboard, and it automatically switches to military-grade HTTPS cookies without changing a single line of code!
+
+## 3. Supply Chain & Plugin Hardening
+**The Threat:** Hackers frequently use vulnerabilities in parsing plugins (like `pdfjs-dist` or `xlsx`) to execute Cross-Site Scripting (XSS) or Prototype Pollution. Even if you update them, new "zero-day" exploits happen.
+**The Fix:** 
+- I will ensure Django's `Content-Security-Policy (CSP)` strictly isolates these plugins so they cannot communicate with hacker-controlled external servers.
+- I will verify that `ALLOWED_HOSTS` in `docker-compose.yml` is locked down to prevent Host Header Injection.
+- I will ensure `X-Content-Type-Options: nosniff` is strictly enforced so hackers cannot disguise executable scripts as uploaded images.
+
+## 4. Unnecessary Express.js in React
+**The Finding:** I noticed `express` is listed in your React frontend `package.json`. Express is a backend framework, but Vite compiles React to static files. Including Express in the frontend bundle increases the attack surface for supply chain vulnerabilities for no reason.
+**The Fix:** I will safely remove `express` from the frontend dependencies.
+
+---
+
+## User Review Required
+Do I have your permission to execute these changes? I will carefully patch `settings.py`, `package.json`, and `docker-compose.yml` to lock these down. **This will secure the app for Vercel without breaking your local PC login.**

@@ -247,10 +247,13 @@ _allowed_origins = _env_origins + ",http://localhost:3000,http://localhost:3001,
 # Fallback: specific domains
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip() and origin.strip() != '*']
 
-# PERMANENT FIX: Accept any http:// IP address dynamically (Allows cookies to work!)
+# SECURE FIX: Only allow private local network IP addresses (LAN) for local Wi-Fi testing.
+# This strictly prevents malicious external websites from making cross-origin requests.
+# For Vercel deployment, add the actual Vercel URL to the ALLOWED_CORS_ORIGINS .env variable.
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://.*$",      # Accept any standard http:// origin (like your local WiFi IP)
-    r"^https://.*$"      # Accept any https:// origin
+    r"^http://192\.168\.\d+\.\d+(:\d+)?$",
+    r"^http://10\.\d+\.\d+\.\d+(:\d+)?$",
+    r"^http://172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+(:\d+)?$",
 ]
 
 CORS_ALLOW_CREDENTIALS = True

@@ -31,3 +31,4 @@ bleach==6.4.0
 whitenoise
 
 drf-spectacular==0.28.0
+python-magic==0.4.27
