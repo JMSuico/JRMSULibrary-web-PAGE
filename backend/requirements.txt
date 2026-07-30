@@ -36,3 +36,4 @@ mssql==2.4.10
 pyodbc==4.0.38
 
 drf-spectacular==0.28.0
+python-magic==0.4.27
