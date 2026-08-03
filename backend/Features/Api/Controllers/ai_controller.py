@@ -58,17 +58,14 @@ class AIViewSet(viewsets.ViewSet):
                     validated_history.append({'sender': sender, 'text': clean_text})
             chat_history = validated_history
 
-        # Extract Client IP for personalized caching
-        client_ip = request.META.get('HTTP_X_FORWARDED_FOR')
-        if client_ip:
-            client_ip = client_ip.split(',')[0]
-        else:
-            client_ip = request.META.get('REMOTE_ADDR', '0.0.0.0')
+        seen_answers = request.data.get('seen_answers', [])
+        if not isinstance(seen_answers, list):
+            seen_answers = []
 
         # Return stream response
         def event_stream():
             try:
-                for chunk in self.service.generate_chat_stream(user_message, chat_history, client_ip):
+                for chunk in self.service.generate_chat_stream(user_message, chat_history, seen_answers):
                     yield chunk
             except Exception as e:
                 print(f"Ollama AI Error: {e}")

@@ -5,6 +5,34 @@ export interface ChatMessage {
   text: string;
 }
 
+function getSeenAnswers(): string[] {
+  const cacheStr = localStorage.getItem('ai_seen_answers');
+  const cacheDate = localStorage.getItem('ai_seen_date');
+  const todayDate = new Date().toDateString(); 
+
+  // Midnight wipe: if the saved date doesn't match today's date, clear it.
+  if (cacheDate !== todayDate) {
+    localStorage.removeItem('ai_seen_answers');
+    localStorage.setItem('ai_seen_date', todayDate);
+    return [];
+  }
+  
+  if (!cacheStr) return [];
+  try {
+    return JSON.parse(cacheStr);
+  } catch(e) {
+    return [];
+  }
+}
+
+function addSeenAnswer(answer: string) {
+  const seen = getSeenAnswers();
+  if (!seen.includes(answer)) {
+    seen.push(answer);
+    localStorage.setItem('ai_seen_answers', JSON.stringify(seen));
+  }
+}
+
 export const aiApi = {
   /**
    * Send a message to the backend AI service (Ollama)
@@ -14,7 +42,7 @@ export const aiApi = {
   chat: async (message: string, history: ChatMessage[]): Promise<{ response: string }> => {
     return apiClient('/ai/chat/', {
       method: 'POST',
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, history, seen_answers: getSeenAnswers() }),
     });
   },
 
@@ -56,7 +84,7 @@ export const aiApi = {
         'X-CSRFToken': csrf
       },
       credentials: 'include',
-      body: JSON.stringify({ message, history })
+      body: JSON.stringify({ message, history, seen_answers: getSeenAnswers() })
     });
 
     if (!response.ok) {
@@ -69,12 +97,19 @@ export const aiApi = {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
+    let fullAnswer = '';
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        if (fullAnswer.trim()) {
+          addSeenAnswer(fullAnswer.trim());
+        }
+        break;
+      }
       const chunk = decoder.decode(value, { stream: true });
       if (chunk) {
+        fullAnswer += chunk;
         onChunk(chunk);
       }
     }
