@@ -1,0 +1,563 @@
+﻿JOSE RIZAL MEMORIAL STATE UNIVERSITY
+A Research Proposal
+AI-ASSISTED LIBRARY
+MANAGEMENT SYSTEM
+WITH SECURE QR ACCESS AND RESERVATIONS
+Presented by:
+Jhon Mark A. Suico  â€¢  James Adrian M. Tabamo
+Jhon Ernie L. Alimpong  â€¢  Kitford Michael A. Retes
+--- SLIDE BREAK ---
+Core Feature 4 â€” Analytics Dashboard &amp; Digital Shelf Map
+Analytics Dashboard
+Borrowing Frequency Visualization (Illustrative)
+Mon
+Tue
+Wed
+Thu
+Fri
+Sat
+Sun
+Borrowing frequency &amp; trend over time
+Reservation volume and approval rates
+User access patterns and peak periods
+Transaction summaries and overdue tracking
+Collection use data for acquisition planning
+Digital Shelf Map
+Library Floor Layout (Illustrative)
+Section 1
+Science
+Section 2
+Arts
+Section 3
+History
+Section 4
+Tech
+Section 5
+Fiction
+Visual &amp; interactive map of library collection
+Physical arrangement by shelf, section, category
+Helps users locate books before going to the shelf
+Scoped to JRMSU Katipunan Campus interior
+Paired with AI assistant for complete navigation support
+--- SLIDE BREAK ---
+Multi-Platform Architecture
+Web Application
+React + Vite
+Users:
+Students &amp; Librarians
+Device:
+Any browser-capable device
+Browser-based access â€” no local install needed
+Full range of patron and staff functions
+Login, catalog, reservation, account mgmt
+Admin operations and reporting
+Desktop Application
+Electron
+Users:
+Librarians
+Device:
+Windows workstations
+Library workstation installation
+Circulation processing &amp; record management
+QR verification at the counter
+Administrative workflows
+Mobile Application
+React Native + Expo
+Users:
+Students
+Device:
+Android devices
+Student-facing functions on personal devices
+Login, reservation viewing, borrowing updates
+Push notifications for due dates &amp; holds
+No library terminal needed
+--- SLIDE BREAK ---
+Technical Architecture â€” Backend &amp; Security Design
+Layer
+Technology
+Role in System
+Models / ORM
+Django + MySQL
+Define and store database structure for users, books, transactions
+Repositories / Services
+Python (Django)
+Separate data access from business logic; preserve maintainability
+Helpers / API Controllers
+Django REST
+Handle auth, permissions, request processing, response delivery
+Frontend Clients
+React, Electron, RN
+Deliver web, desktop, and mobile interfaces
+Management Commands
+Custom manage.py
+Migration creation, DB updates, superuser creation, cleanup
+Security &amp;
+Integrity
+HMAC-SHA256
+Tokens signed at generation, re-validated at scan
+Idempotency Keys
+Prevents duplicate borrow, return, reservation actions
+Session Binding
+QR tied to one physical copy â€” no cross-use possible
+Role Enums
+Admin, Librarian, Student defined as constants
+CopyBookID Schema
+One QR per physical copy â€” unambiguous inventory
+--- SLIDE BREAK ---
+Significance of the Study
+Students
+Web access to catalog, reservations, and borrowing history
+Confirm book availability and hold materials without a physical trip
+QR-based transactions reduce counter delays
+AI assistant answers routine queries without staff intervention
+Librarians
+Eliminates manual logbook reconstruction and partial record piecing
+Transactions logged at point of scanning â€” real-time accuracy
+Analytics dashboard surfaces borrowing patterns and collection use
+Reservations and returns tracked automatically in real time
+University Administration
+Scalable digital platform for all library operations
+Structured basis for record control and evidence-based decisions
+ISO/IEC 25010 evaluation data supports administrative planning
+Foundation for future system expansion across campuses
+Future Researchers
+Demonstrates QR auth + reservations + AI can work in regional context
+Not limited to well-funded urban institutions â€” replicable design
+System built with extension in mind for deeper analytics
+Open research path: shelf navigation, advanced AI, multi-campus
+--- SLIDE BREAK ---
+Scope &amp; Delimitations of the Study
+âœ“  INCLUDED IN SCOPE
+Web-based access and responsive UI
+User login, registration &amp; account management
+Catalog management and book browsing
+Reservation processing and deadline tracking
+Borrow and return transactions via QR
+User account management and role control
+Reporting functions and analytics dashboard
+AI assistant for library inquiries
+Digital shelf map (library interior)
+ISO/IEC 25010 quality evaluation
+âœ—  OUTSIDE SCOPE
+IoT hardware integration
+Biometric authentication
+CCTV automation systems
+TOTP (Time-based One-Time Password) auth
+Multi-campus deployment
+Acquisition and purchasing modules
+AI trained from scratch (uses predefined scope)
+Advanced indoor navigation capabilities
+iOS mobile application (Android only)
+Institutional cross-linking or inter-library loan
+--- SLIDE BREAK ---
+Review of Related Literature â€” Key Findings
+Foreign Literature
+Izah &amp; Ferguson (2024)
+Mobile library platforms widen catalog and service access
+Fan et al. (2021)
+Digitizing borrowing/return workflows reduces service friction
+Khan &amp; Shahzad (2024)
+Reliability and security are core LMS requirements, not add-ons
+Alzahrani et al. (2019)
+Information quality, system quality, and service quality drive satisfaction
+QR Authentication Studies
+Seeth (2024)
+QR access control must balance security with operational efficiency
+Abbas &amp; Wang (2025)
+Multi-step auth strengthens multi-factor identity validation
+Alsuhibany (2025)
+Tamper-proof generation and fraud-resistant QR verification is achievable
+Zhang et al. (2025)
+Real-world QR login systems have documented security vulnerabilities
+AI &amp; Library Studies
+Chase (2024)
+Academic libraries can deploy chatbots with minimal technical resources
+Li &amp; Coates (2024)
+AI guides users to resources but accuracy requires oversight
+Adetayo (2023)
+AI chatbots cover technical services and reader assistance
+Del Castillo et al. (2025)
+Library directors accept AI when its boundaries are clearly defined
+Local Literature
+Ayo et al. (2023)
+ILMS (Philippines) proved centralized web systems reduce fragmentation
+ISO/IEC 25010 (2023)
+Measurable quality characteristics: functionality, usability, reliability
+Kim et al. (2024)
+Learnability, efficiency, and error tolerance are reliable UX indicators
+Kuhar et al. (2022)
+Structured questionnaires capture digital library UX with sufficient precision
+--- SLIDE BREAK ---
+Research Methodology â€” Design &amp; Approach
+Research Design
+Developmental Research Design
+paired with Descriptive-Quantitative Evaluation
+Development follows an iterative vertical slice workflow â€” one complete workflow at a time, from interface down to data, before the next begins. This keeps the system testable at every stage.
+Research Environment
+Backend:
+Django + Python + MySQL
+Web:
+React + Vite
+Desktop:
+Electron (Windows)
+Mobile:
+React Native + Expo (Android)
+Development Workflows (Vertical Slice Approach)
+1
+Authentication
+2
+Reservation
+3
+Borrow/Return
+4
+AI Assistant
+5
+Analytics
+--- SLIDE BREAK ---
+Research Respondents &amp; Sampling
+Group 1 â€” Library Staff
+Method: Total Enumeration (All available library staff)
+Primary administrative operators of the system
+Responsible for daily circulation management
+Responsible for catalog management
+Excluding any staff would underrepresent the administrative user group
+Student Eligibility Criteria (Group 2):
+Currently enrolled
+At least one documented library transaction on record
+Capable of navigating a web or mobile interface
+Group 2 â€” Students
+Method: Stratified Random Sampling by Year Level
+Stratification Variable: Year Level
+Student familiarity with library services shifts across academic years â€” a first-year student evaluates the reservation workflow differently than a fourth-year who has used it before.
+Sample Size Formula â€” Slovin's Formula
+n = N / (1 + NÂ·eÂ²)
+n = sample size  |  N = population  |  e = 0.05 (5% margin of error)
+Proportional allocation across strata â€” treats the student population as distributed across year levels, not undifferentiated.
+--- SLIDE BREAK ---
+Research Instrument, Validation &amp; Scoring
+Researcher-Made Questionnaire â€” ISO/IEC 25010 Anchored
+Section 1
+Respondent Profile
+Name, year level, role
+Section 2
+Functionality
+Login, catalog, reservation, borrow/return, QR, reporting
+Section 3
+Usability
+Ease of use, learnability, visual clarity, task efficiency
+Section 4
+Reliability
+System stability, performance under repeated use, error handling
+Two-Stage Validation
+Stage 1
+Expert Panel (5 members: 2 IT faculty, 2 library science professionals, 1 statistician). Items rated on clarity, relevance, and alignment with research objectives. 4-point scale â€” no neutral midpoint.
+Stage 2
+Pilot Testing â€” Cronbach's Alpha â‰¥ 0.70 threshold. Ensures items within each section are consistent and measure the same construct reliably.
+Scoring Procedure â€” Weighted Mean Interpretation
+Weighted Mean Range
+Verbal Interpretation
+Acceptability Level
+4.50 â€“ 5.00
+Strongly Agree
+Highly Acceptable
+3.50 â€“ 4.49
+Agree
+Acceptable
+2.50 â€“ 3.49
+Neutral
+Moderately Acceptable
+1.50 â€“ 2.49
+Disagree
+Not Acceptable
+1.00 â€“ 1.49
+Strongly Disagree
+Highly Not Acceptable
+--- SLIDE BREAK ---
+Data Gathering Procedure
+Data collection unfolds across three sequential stages:
+Stage 1
+Guided Demonstration
+Respondents go through a guided demo before questionnaire distribution
+Coverage: login/registration, catalog browsing, reservation, borrow/return, QR authentication
+Ensures all respondents have seen each feature before evaluating it
+Stage 2
+Questionnaire Administration
+ISO/IEC 25010-anchored researcher-made questionnaire distributed
+Respondents rate each item on a 5-point Likert scale
+Items cover functionality, usability, and reliability dimensions
+Stage 3
+Data Analysis
+Weighted mean scores computed for each item: WM = Î£(f Ã— w) / N
+Results interpreted using the verbal/acceptability scale
+Descriptive statistics summarize findings across all respondent groups
+--- SLIDE BREAK ---
+Presentation Overview
+01
+Introduction &amp; Background
+The problem with JRMSU Katipunan's manual library
+02
+Research Framework
+IPO model, schema, and study schema
+03
+System Features
+QR Authentication, Reservations, AI Chatbot, Analytics
+04
+Multi-Platform Architecture
+Web, Desktop, and Mobile clients
+05
+Research Methodology
+Design, respondents, instruments
+06
+Significance &amp; Scope
+Who benefits and study boundaries
+07
+Related Literature
+Foreign and local studies synthesis
+08
+Ethical Considerations
+Data handling and respondent rights
+09
+Timeline
+Calendar of activities and development phases
+--- SLIDE BREAK ---
+Ethical Considerations
+Before Data Collection
+No respondent participates without prior informed consent
+Participation is strictly voluntary â€” freedom to decline at any time
+Right to withdraw made clear before demonstration and questionnaire
+During the Study
+Respondent identities not recorded in any traceable form
+Clarifications limited to system-related questions only
+No probing into personal circumstances of respondents
+Data Usage &amp; Access
+Collected data used exclusively for academic evaluation
+No response data shared outside the research team
+Access to study records restricted to authorized team members only
+What Gets Collected
+Name, year level, and role â€” for profile purposes only
+No sensitive personal information beyond respondent profile
+Evaluation forms disposed of appropriately after study concludes
+--- SLIDE BREAK ---
+Calendar of Activities â€” Development Timeline
+Phase
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+Jul
+Aug
+Sep
+Planning &amp; Requirements Analysis
+System Design &amp; Architecture
+QR Authentication Development
+Reservation Module Development
+Borrow/Return Module Development
+AI Assistant Development
+Analytics Dashboard Development
+Integration &amp; System Testing
+User Evaluation &amp; Data Gathering
+Reporting &amp; Final Documentation
+--- SLIDE BREAK ---
+Literature Synthesis â€” The Research Gap
+What the literature does NOT yet provide:
+A system that integrates all components â€” secure QR auth + AI-supported inquiry + reservation automation + analytics + digital shelf mapping â€” in a single web-based platform purpose-built for a regional campus library.
+Secure QR
+Authentication
+Studied separately
+(Seeth, Abbas, Wang, etc.)
+AI-Supported
+Inquiry Handling
+Studied separately
+(Chase, Li, Adetayo, etc.)
+Reservation
+Automation
+Studied separately
+(Fan, Izah, Ayo, etc.)
+Borrowing
+Analytics
+Studied separately
+(Bawack, Xu, etc.)
+Digital
+Shelf Map
+Studied separately
+(Yu et al., 2019)
++ + + + = ???
+This Study's Answer:
+Design, develop, and evaluate a unified AI-Assisted Library Management System with Secure QR Access and Reservations for the JRMSU Katipunan Campus â€” all components, one integrated platform, evaluated under ISO/IEC 25010 using descriptive-quantitative methods.
+--- SLIDE BREAK ---
+Summary &amp; Conclusion
+Unified Platform
+Replaces the manual logbook system at JRMSU Katipunan Campus with an integrated, multi-platform LMS.
+Secure QR Access
+HMAC-SHA256 signed tokens ensure verified, traceable borrowing and access transactions.
+Advance Reservations
+Students can hold materials before physically claiming them â€” eliminating wasted trips.
+AI Chatbot
+Library-scoped conversational assistant handles routine queries without staff intervention.
+Analytics &amp; Maps
+Dashboard surfaces real-time circulation data; shelf map guides users directly to materials.
+ISO/IEC 25010 Evaluation
+System acceptability assessed through functionality, usability, and reliability criteria.
+--- SLIDE BREAK ---
+Thank You
+Questions &amp; Comments Welcome
+AI-Assisted Library Management System
+with Secure QR Access and Reservations
+Jhon Mark A. Suico
+James Adrian M. Tabamo
+Jhon Ernie L. Alimpong
+Kitford Michael A. Retes
+--- SLIDE BREAK ---
+Background of the Study
+The Current State of
+JRMSU Katipunan Campus Library
+Materials are checked in and out through a physical logbook
+No mechanism exists for advance reservations
+Patron identity is not digitally verified at the point of transaction
+No reliable way to track a book's location before a patron arrives
+Records are difficult to retrieve and easy to corrupt
+Librarian monitoring is fragmented and tied to physical presence
+No AI-assisted functionality for inquiry support or trend analysis
+The Research Gap
+No existing system reviewed for this study combines all three core components in a single integrated platform:
+QR-Based Access
+&amp; Borrowing Auth
+Advance
+Reservation Module
+AI-Assisted
+Patron Chatbot
+--- SLIDE BREAK ---
+Statement of the Problem
+This study aims to design, develop, and evaluate the AI-Assisted Library Management System with Secure QR Access and Reservations for the JRMSU Katipunan Campus.
+Research Questions
+RQ1
+How do the current library circulation and access processes operate in the JRMSU Katipunan Campus library?
+RQ2
+What operational issues are encountered in the existing library circulation and access management processes?
+RQ3
+How can the proposed AI-Assisted Library Management System optimize library circulation and access management?
+RQ4
+What is the level of acceptability of the proposed system in terms of functionality, usability, and reliability?
+--- SLIDE BREAK ---
+Conceptual Framework â€” Input-Process-Output (IPO) Model
+INPUT
+Library User Data
+(Students, Librarians, Admin)
+Book/Material Data
+(Catalog, Copies, QR Codes)
+System Requirements
+(Functional, Non-Functional)
+Existing Library Processes
+(Manual Borrowing, etc.)
+ISO/IEC 25010
+Quality Standards
+PROCESS
+Planning
+Requirements Analysis
+System Design
+QR Auth Development
+Reservation Module Dev
+AI Assistant Development
+Analytics Dashboard Dev
+Testing &amp; Evaluation
+Respondent Evaluation
+(ISO/IEC 25010)
+OUTPUT
+Web-Based Library System
+Secure QR Authentication
+Reservation Workflow
+AI-Assisted Inquiry
+Analytics Dashboard
+Digital Shelf Map
+â†º  FEEDBACK LOOP (Continuous Improvement)
+--- SLIDE BREAK ---
+Schema of the Study â€” System Architecture &amp; Workflows
+CLIENT PLATFORMS
+Web App
+React + Vite
+Desktop App
+Electron
+Mobile App
+React Native Expo
+5 SYSTEM WORKFLOWS
+QR Authentication
+Validation â€¢ Session Binding â€¢ Access Verification
+Reservation
+Book Search â€¢ Request â€¢ Librarian Notification
+Borrow/Return
+QR Scan â€¢ Transaction Logging â€¢ Due Date
+AI Assistant
+Natural Language Queries â€¢ Guided Responses
+Analytics
+Stats â€¢ Reservation Analytics â€¢ Activity Monitoring
+SYSTEM OUTPUTS
+Multi-Platform Library System
+Analytics Dashboard
+Digital Shelf Map
+AI Inquiry Responses
+Accurate Circulation Records
+Verified QR Transactions
+EVALUATION  â€”  ISO/IEC 25010 Quality Model
+Functionality: Completeness, correctness, appropriateness
+Usability: Learnability, operability, error protection
+Reliability: Stability, performance, fault tolerance
+--- SLIDE BREAK ---
+Core Feature 1 â€” Secure QR Authentication
+SECURE QR
+AUTHENTICATION
+HMAC-SHA256
+Token Signing
+Each QR is dynamically signed
+and tied to one physical copy.
+Forged or reused codes are
+rejected before any transaction.
+Authentication Workflow
+A registered user presents their QR code â†’ system validates via HMAC-SHA256 â†’ session binding â†’ access is granted only after verification clears.
+Transaction Traceability
+Each scan ties back to a specific registered account and a specific book copy (CopyBookID schema). Every transaction is logged with user ID, book ID, date/time, due date, and status.
+Anti-Duplication
+Idempotency keys prevent duplicate submissions for borrow, return, and reservation actions â€” addressed at implementation level, not through procedural workarounds.
+Security Design Principle
+QR codes function as dynamic verification tokens, not static identifiers. One-time code generation, session binding, and server-side validation prevent forgery and replay attacks.
+--- SLIDE BREAK ---
+Core Feature 2 â€” Intelligent Reservation Module
+Student
+Browses Catalog
+Submits
+Reservation
+Librarian
+Notified
+Copy Held
+Under Reserve
+Student Claims
+Within Deadline
+Real-Time Availability
+Students can confirm whether a title is in and hold materials without first making a physical trip. QR-based transaction workflow reduces counter delays.
+Reservation Status Tracking
+The system records each reservation request, notifies the librarian, and holds the copy under reserved status until the claiming deadline or cancellation.
+Automated Notifications
+Librarians receive instant notifications for each new reservation. Students get confirmation and deadline reminders to complete their claims.
+Transaction Safeguards
+Idempotency keys prevent duplicate reservation submissions. The system enforces claiming deadlines and automatically releases unredeemed holds.
+--- SLIDE BREAK ---
+Core Feature 3 â€” AI-Assisted Library Chatbot
+A library-oriented conversational module â€” not a general-purpose chatbot â€” built specifically to respond to user inquiries
+about catalog availability, borrowing procedures, reservations, and library services.
+What It Handles
+Catalog availability queries, borrowing procedures, reservation status checks, library service navigation. Operates within predefined response categories tied directly to library operations.
+Who Can Use It
+Both students and librarians can use the AI assistant. It handles routine queries without requiring staff intervention, freeing librarians for higher-priority work.
+Scope &amp; Boundaries
+The assistant operates within fixed response categories â€” it is NOT a general-purpose AI. It does not make autonomous decisions and stays within defined library-related scope.
+Supported by Literature
+Chase (2024)
+Academic libraries can build AI chatbots without extensive technical infrastructure â€” lowering the barrier for adoption.
+Li &amp; Coates (2024)
+AI tools can guide users to information resources â€” though accuracy requires human oversight.
+Adetayo (2023)
+AI chatbots cover both technical services and reader assistance in academic libraries.
+Bawack &amp; Bawack (2025)
+AI-supported analytics improve resource management and decision quality when staff remain involved.
+--- SLIDE BREAK ---

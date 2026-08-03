@@ -1,0 +1,46 @@
+# Implementation Plan: Enhancements & Fixes
+
+This plan outlines the steps to resolve the requested UI fixes, file upload enhancements, and external library integrations.
+
+## 1. Security Settings: Eye Toggle Alignment
+**Goal:** Center the password visibility toggle (eye icon) perfectly inside the password input fields.
+**Action:**
+- **Modify `SettingsPage.tsx`**: Update the absolute positioning of the `Eye` / `EyeOff` buttons. 
+- Change `top-[26px]` to `top-[50%] -translate-y-[50%]` (or adjust pixel values) so it dynamically centers relative to the input field, ensuring it looks perfect on all screen sizes.
+
+## 2. E-Resources: 100MB Upload Limit
+**Goal:** Increase the maximum allowed file upload size to 100MB.
+**Action:**
+- **Modify Backend `settings.py`**: Update `DATA_UPLOAD_MAX_MEMORY_SIZE` and `FILE_UPLOAD_MAX_MEMORY_SIZE` from 5MB to 104,857,600 bytes (100MB).
+- **Modify Frontend `DragDropFileUpload.tsx`** (if applicable): Ensure any frontend validation allows up to 100MB.
+
+## 3. Malware Scanning & Safety Verification
+**Goal:** Add a function to scan files before accepting the upload, verifying their safety.
+**Action:**
+- **Create a `MalwareScanService` in Django**: Since we don't have a dedicated antivirus daemon running (like ClamAV), I will build a robust file verification service that acts as a "Malware Scanner".
+- **Scan Process**:
+  1. Check the file's Magic Numbers (binary signature) to verify its true file type, preventing disguised executables.
+  2. Block dangerous extensions (`.exe`, `.bat`, `.sh`, `.vbs`, etc.).
+  3. Validate file integrity.
+- **Modify `eresource_controller.py`**: Intercept the upload, run the `MalwareScanService`, and only save the file if it passes verification. If it fails, return a 400 error indicating "Malware or unsafe file detected."
+
+## 4. VitalSource & Scholaar Auto-Login Fixes
+**Goal:** Fix "Refused to connect" issues and automate the login process using the provided credentials.
+**Reason for Issue:** VitalSource and Scholaar use strict `X-Frame-Options` headers, meaning modern browsers completely block them from loading inside an `<iframe src="...">`.
+**Action:**
+- **Modify `external_proxy_controller.py`**:
+  - Update the VitalSource automation to use the exact JWT login URL you provided: `https://login.vitalsource.com/?context=store...`
+  - Hardcode or default the credentials in `.env` or the script to use `jrmsukclibrary@gmail.com / Jrmsukclibrary@19` for VitalSource and `jrmsukc / scholaar` for Scholaar.
+  - Update the target URLs to point to `https://bookshelf.vitalsource.com/home/my-library` and `https://scholaar.com/University/HomePage.aspx`.
+- **Modify `CollectionPage.tsx`**:
+  - Instead of trying to force these sites into the `ExternalIframeModal` (which causes the "refused to connect" error), clicking these specific resources will open a **New Tab** pointing to our backend proxy (`/api/external-proxy/vitalsource/`).
+  - In the new tab, our proxy will run the auto-submit script, securely logging the user in and redirecting them to the library dashboard seamlessly.
+
+---
+
+> [!IMPORTANT]
+> **User Review Required**
+> - Since VitalSource and Scholaar actively block IFrames, the best workaround is to have the auto-login process open in a new tab. Is it acceptable that clicking these resources opens a new tab that automates the login?
+> - For the malware scanner, I will implement a strict file signature and extension verification system. Is this sufficient, or do you have a specific third-party scanning API you want to integrate?
+
+Please click **Proceed** to approve this plan, or let me know if you want any adjustments!

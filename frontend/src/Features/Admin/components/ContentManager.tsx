@@ -680,25 +680,47 @@ export function ContentManager() {
                     </tr>
                   </thead>
                   <tbody>
-                    {orgFiles.map((file) => (
-                      <tr key={file.id}>
-                        <td style={{ fontWeight: 500 }}>{file.name}</td>
-                        <td>
-                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                    {orgFiles.length === 0 ? (
+                      <tr className="bg-gray-50">
+                        <td style={{ fontWeight: 500 }} className="text-gray-500">
+                          Organizational Structure (Default)
+                          <div className="text-xs text-gray-400 mt-1" style={{ fontSize: '0.75rem', marginTop: '4px' }}>Local asset actively displaying on website</div>
                         </td>
                         <td>
-                          <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                            {file.is_active ? 'Active' : 'Inactive'}
+                          <img src="/assets/organizational structure library.png" alt="System Default" className="h-16 w-auto object-contain rounded border border-gray-300 opacity-70" />
+                        </td>
+                        <td>
+                          <span className="admin-badge" style={{ backgroundColor: '#e5e7eb', color: '#4b5563' }}>
+                            System Default
                           </span>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
-                            <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
+                          <div className="text-xs italic text-gray-400 text-center" style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic', textAlign: 'center' }}>
+                            Upload to override
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      orgFiles.map((file) => (
+                        <tr key={file.id}>
+                          <td style={{ fontWeight: 500 }}>{file.name}</td>
+                          <td>
+                            <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                          </td>
+                          <td>
+                            <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                              {file.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
+                              <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
