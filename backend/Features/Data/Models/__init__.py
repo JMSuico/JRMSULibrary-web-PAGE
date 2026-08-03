@@ -17,6 +17,7 @@ from .site_settings_model import SiteSettings
 from .recycle_bin_model import RecycleBin
 from .generated_report_model import GeneratedReport
 from .research_reference_model import ResearchReference
+from .ai_faq_cache_model import AIFaqCache
 
 __all__ = [
     'Account',
@@ -38,4 +39,5 @@ __all__ = [
     'SiteSettings',
     'RecycleBin',
     'GeneratedReport',
+    'AIFaqCache',
 ]

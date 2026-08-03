@@ -14,6 +14,8 @@ from pathlib import Path
 from Features.Repositories.Implementations.personnel_repository import PersonnelRepository
 from Features.Repositories.Implementations.cms_repository import ManagedLinkRepository
 from Features.Repositories.Implementations.batch_repository import BatchRepository
+from Features.Repositories.Implementations.ai_faq_repository import AIFaqRepository
+from Features.Repositories.Implementations.gallery_repository import LibraryInteriorImageRepository
 
 logger = logging.getLogger(__name__)
 
@@ -25,103 +27,78 @@ class AIService:
         self.personnel_repo = PersonnelRepository()
         self.link_repo = ManagedLinkRepository()
         self.batch_repo = BatchRepository()
-        
-        project_root = Path(settings.BASE_DIR).parent
-        self.faq_file_path = str(project_root / 'frontend' / 'src' / 'Assets' / 'FAQ cache' / 'faq_cache.json')
-        
+        self.faq_repo = AIFaqRepository()
+        self.gallery_repo = LibraryInteriorImageRepository()
     def _normalize_question(self, text: str) -> str:
         """Converts to lowercase and removes punctuation for consistent matching"""
         text = str(text).lower()
         return re.sub(r'[^a-z0-9\s]', '', text).strip()
 
-    def _get_cached_answer(self, question: str, client_ip: str):
-        if not os.path.exists(self.faq_file_path):
-            return None
-        try:
-            with open(self.faq_file_path, 'r', encoding='utf-8') as f:
-                faq_cache = json.load(f)
+    def _get_cached_answer(self, question: str, seen_answers: list = None):
+        if seen_answers is None:
+            seen_answers = []
             
+        try:
             norm_q = self._normalize_question(question)
             
-            # 1. EXACT MATCH FIRST (O(1) Ultra-Fast Lookup)
-            matched_q = None
-            if norm_q in faq_cache:
-                matched_q = norm_q
-            else:
-                # 2. FUZZY SEMANTIC MATCHING (Fallback)
-                # Check if there's a highly similar question in the cache
-                known_questions = list(faq_cache.keys())
-                matches = difflib.get_close_matches(norm_q, known_questions, n=1, cutoff=0.85)
-                if matches:
-                    matched_q = matches[0]
+            # 1. Fuzzy Semantic Matching against DB
+            # Fetch all questions to match semantically
+            # Note: For massive scale, pg_trgm could be used via raw SQL, but here we keep difflib 
+            # and limit it to the top N entries, or simply load them. 
+            faq_entries = self.faq_repo.get_all()
+            known_questions = {entry.question: entry for entry in faq_entries}
             
-            if not matched_q:
-                return None
+            matches = difflib.get_close_matches(norm_q, list(known_questions.keys()), n=1, cutoff=0.85)
+            
+            if not matches:
+                return None, None
                 
-            answers_list = faq_cache[matched_q]
+            matched_q = matches[0]
+            entry = known_questions[matched_q]
+            answers_list = entry.answers
             
             if not isinstance(answers_list, list) or not answers_list:
-                return None
+                return None, None
                 
-            # 3. STATEFUL IP TRACKING
-            # Track which answers this IP has already seen for this specific question
-            cache_key = f"faq_history_{client_ip}_{matched_q}"
-            seen_indices = cache.get(cache_key, [])
+            # 2. STATELESS TRACKING
+            # We rely on the frontend passing the specific answers it has already seen for this question.
+            unseen_indices = [i for i in range(len(answers_list)) if answers_list[i] not in seen_answers]
             
-            # Find which answers haven't been shown yet
-            unseen_indices = [i for i in range(len(answers_list)) if i not in seen_indices]
-            
-            # 3. AUTO-EXPANSION (AI FALLBACK)
             if not unseen_indices:
                 # User has seen all variations! Return None to force AI to generate a new one.
-                return None
+                return None, None
                 
-            # 4. ROUND-ROBIN RANDOM SELECTION
+            # 3. ROUND-ROBIN RANDOM SELECTION
             selected_idx = random.choice(unseen_indices)
             selected_answer = answers_list[selected_idx]
             
-            # 5. SAVE TRACKING STATE (24 Hour TTL)
-            seen_indices.append(selected_idx)
-            cache.set(cache_key, seen_indices, 86400) # 24 hours TTL
+            # Update last accessed for LRU or analytics
+            self.faq_repo.update_last_accessed(entry)
             
-            return selected_answer
+            return selected_answer, matched_q
         except Exception as e:
             logger.error(f"Error reading FAQ cache: {e}")
-            return None
+            return None, None
 
     def _save_to_cache(self, question: str, answer: str):
         # Don't cache very short or error-like responses
         if not answer or len(answer) < 10 or "I'm sorry" in answer or "I'm currently offline" in answer:
             return
             
-        faq_cache = {}
-        if os.path.exists(self.faq_file_path):
-            try:
-                with open(self.faq_file_path, 'r', encoding='utf-8') as f:
-                    faq_cache = json.load(f)
-            except Exception:
-                pass
-        
-        norm_q = self._normalize_question(question)
-        
-        # Fuzzy match to append to existing question list instead of creating a duplicate entry
-        known_questions = list(faq_cache.keys())
-        matches = difflib.get_close_matches(norm_q, known_questions, n=1, cutoff=0.85)
-        
-        if matches:
-            matched_q = matches[0]
-            # Ensure it's a list
-            if not isinstance(faq_cache[matched_q], list):
-                faq_cache[matched_q] = [faq_cache[matched_q]]
-            # Append new variant
-            faq_cache[matched_q].append(answer.strip())
-        else:
-            # Create brand new list
-            faq_cache[norm_q] = [answer.strip()]
-        
         try:
-            with open(self.faq_file_path, 'w', encoding='utf-8') as f:
-                json.dump(faq_cache, f, indent=4)
+            norm_q = self._normalize_question(question)
+            
+            faq_entries = self.faq_repo.get_all()
+            known_questions = {entry.question: entry for entry in faq_entries}
+            
+            matches = difflib.get_close_matches(norm_q, list(known_questions.keys()), n=1, cutoff=0.85)
+            
+            if matches:
+                entry = known_questions[matches[0]]
+                self.faq_repo.update_answers(entry, answer.strip())
+            else:
+                self.faq_repo.create(question=norm_q, answers=[answer.strip()])
+                
         except Exception as e:
             logger.error(f"Error saving to FAQ cache: {e}")
         
@@ -132,21 +109,27 @@ class AIService:
             personnel_text = ", ".join([f"{p.first_name} {p.last_name} ({p.role})" for p in personnel]) or "None listed"
             
             links = self.link_repo.get_all_active()
-            links_text = ", ".join([f"{l.title}" for l in links]) or "None listed"
+            links_text = ", ".join([f"{l.name}" for l in links]) or "None listed"
             
             batches = self.batch_repo.get_all_batches()
             recent_books = []
             if batches:
                 latest = batches[0]  # list — no .first(), just index 0
-                for b in latest.books.all()[:5]:
-                    recent_books.append(f"{b.title} by {b.author}")
+                for b in latest.books.all()[:10]: # Increased to top 10 recent books
+                    acc = b.accession_number if b.accession_number else "N/A"
+                    cat = b.category if b.category else "Uncategorized"
+                    recent_books.append(f"'{b.title}' by {b.author} (Category: {cat}, Accession: {acc})")
             books_text = "; ".join(recent_books) if recent_books else "No recent books"
+            
+            gallery = self.gallery_repo.get_all_active()
+            gallery_text = ", ".join([f"Area: '{img.title}' located at '{img.section_label}'" for img in gallery if img.title or img.section_label]) or "No physical sections mapped"
             
         except Exception as e:
             logger.error(f"Error fetching dynamic context: {e}")
             personnel_text = "Error fetching personnel"
             links_text = "Error fetching links"
             books_text = "Error fetching books"
+            gallery_text = "Error fetching gallery"
 
         return f"""You are Rizal, the AI assistant for the JRMSU (Jose Rizal Memorial State University) Katipunan Campus Library.
 Your goal is to help students and visitors with their library-related questions based strictly on the provided context below.
@@ -164,19 +147,21 @@ LIBRARY CONTEXT & LIVE INFORMATION:
 - Email: katipunan.library@jrmsu.edu.ph
 - Services Available: Book Borrowing, Reading Area, Discussion Rooms, Internet Access, E-Resources (VitalBooks, Scholaar, EBSCO).
 - Borrowing Limits: Students can borrow up to 3 books for 3 days. Faculty can borrow up to 5 books for 1 week.
+- UOPAC Borrow/Return Guidance: To borrow or return books, students must use the Main Campus UOPAC system. The default login is usually their Student ID. They should search the OPAC catalog, filter for Katipunan Campus, and bring their ID to the circulation desk.
 
 DYNAMIC DATABASE KNOWLEDGE:
 - Library Personnel & Developers: {personnel_text}
 - Recent E-Resource Links Added: {links_text}
 - Recently Added Books: {books_text}
+- Physical Setup & Library Sections Map: {gallery_text}
 """
 
-    def generate_chat_response(self, user_message: str, chat_history: list = None, client_ip: str = "0.0.0.0") -> str:
+    def generate_chat_response(self, user_message: str, chat_history: list = None, seen_answers: list = None) -> str:
         """
         Sends the user message and dynamic context history to Ollama and returns the response string.
         """
         # --- DYNAMIC AI CACHING FILTER ---
-        cached_answer = self._get_cached_answer(user_message, client_ip)
+        cached_answer, matched_q = self._get_cached_answer(user_message, seen_answers)
         if cached_answer:
             return cached_answer
         # ---------------------------------
@@ -223,12 +208,12 @@ DYNAMIC DATABASE KNOWLEDGE:
             logger.error(f"Error communicating with Ollama: {str(e)}")
             return "I'm sorry, an internal error occurred while processing your request."
 
-    def generate_chat_stream(self, user_message: str, chat_history: list = None, client_ip: str = "0.0.0.0"):
+    def generate_chat_stream(self, user_message: str, chat_history: list = None, seen_answers: list = None):
         """
         Sends the user message and dynamic context history to Ollama and yields the response as a stream.
         """
         # --- DYNAMIC AI CACHING FILTER ---
-        cached_answer = self._get_cached_answer(user_message, client_ip)
+        cached_answer, matched_q = self._get_cached_answer(user_message, seen_answers)
         if cached_answer:
             # Yield word by word to simulate AI typing speed
             import time
