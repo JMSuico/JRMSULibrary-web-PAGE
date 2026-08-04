@@ -301,8 +301,13 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-# Enforce strict session management
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# FIX: Do NOT expire session on browser close.
+# Mobile browsers treat tab-switching as browser close, killing the session and triggering
+# auto-logout. On Render/Vercel deployments, this caused constant re-login loops.
+# Sessions now last 8 hours (28800 seconds) — the frontend inactivity timer handles
+# logout after 10 minutes of no user interaction.
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_COOKIE_AGE = 28800  # 8 hours
 
 # For Cross-Origin Authentication (Vercel -> Render)
 if os.environ.get("DISABLE_SSL_REDIRECT", "False").lower() in ("true", "1", "yes"):

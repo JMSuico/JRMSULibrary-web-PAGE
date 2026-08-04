@@ -73,9 +73,17 @@ class UserViewSet(viewsets.ViewSet):
             cache.delete(cache_key_ts)
             
             from django.utils import timezone
-            # Enforce single device login: Strict Lockout if currently online
-            if user.last_active and (timezone.now() - user.last_active).total_seconds() < 60:
-                return Response({"error": "Account already online cant be Login!"}, status=403)
+            from datetime import timedelta
+            # Enforce single device login: Only block if the session is truly active (< 60 seconds).
+            # If the gap is >= 60 seconds, treat the old session as stale/dead (e.g., Render woke up
+            # from sleep with a stale last_active in DB, or browser crashed without calling logout).
+            if user.last_active:
+                seconds_since_active = (timezone.now() - user.last_active).total_seconds()
+                if seconds_since_active < 60:
+                    return Response({"error": "Account already online cant be Login!"}, status=403)
+                # Session is stale — clear it so the new login is clean
+                user.last_active = None
+                user.save(update_fields=['last_active'])
             
             user.last_active = timezone.now()
             user.save(update_fields=['last_active'])
@@ -135,14 +143,13 @@ class UserViewSet(viewsets.ViewSet):
         if not request.user.is_authenticated:
             return Response(status=401)
         from django.utils import timezone
-        from datetime import timedelta
         
+        # FIX: Do NOT enforce inactivity timeout server-side.
+        # Render free tier "sleeps" the backend, leaving a stale last_active in the DB.
+        # When Render wakes up, the gap would appear > 10 minutes even for an active user,
+        # causing an immediate false logout. The frontend's useInactivityTimer (10 min)
+        # is the sole source of truth for inactivity. The server simply refreshes the timestamp.
         now = timezone.now()
-        if request.user.last_active and (now - request.user.last_active) > timedelta(minutes=10):
-            from django.contrib.auth import logout
-            logout(request)
-            return Response({"error": "Session timeout due to inactivity."}, status=401)
-            
         request.user.last_active = now
         request.user.save(update_fields=['last_active'])
         return Response({"status": "ok"})
