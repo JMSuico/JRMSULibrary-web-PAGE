@@ -243,6 +243,12 @@ export default function AdministrationPage() {
             alt="JRMSU Library Organizational Structure Chart"
             className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white animate-modal-card"
             onClick={(e) => e.stopPropagation()}
+            onError={(e) => {
+              const fallback = window.location.origin + "/assets/organizational structure library.png";
+              if (e.currentTarget.src !== fallback) {
+                e.currentTarget.src = fallback;
+              }
+            }}
           />
         </div>,
         document.body

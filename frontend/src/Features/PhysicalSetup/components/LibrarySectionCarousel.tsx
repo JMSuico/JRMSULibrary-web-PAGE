@@ -91,7 +91,19 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                      onClick={() => setSelectedImage(img.src)}
                 >
                   <div className="overflow-hidden relative" style={{ aspectRatio: '4 / 3' }}>
-                    <img src={getImageUrl(img.src)} alt={img.label} className="w-full h-full object-cover block transition-transform duration-500 group-hover:scale-110" loading="lazy" draggable={false} />
+                    <img 
+                      src={getImageUrl(img.src)} 
+                      alt={img.label} 
+                      className="w-full h-full object-cover block transition-transform duration-500 group-hover:scale-110" 
+                      loading="lazy" 
+                      draggable={false} 
+                      onError={(e) => {
+                        const fallback = STATIC_FALLBACK_IMAGES[idx % STATIC_FALLBACK_IMAGES.length].src;
+                        if (!e.currentTarget.src.includes(fallback)) {
+                          e.currentTarget.src = fallback;
+                        }
+                      }}
+                    />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                        <span className="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity">zoom_in</span>
                     </div>
@@ -117,7 +129,17 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                       <tr key={realIdx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedImage(img.src)}>
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
-                          <img src={getImageUrl(img.src)} alt={img.label} className="w-16 h-10 object-cover rounded" />
+                          <img 
+                            src={getImageUrl(img.src)} 
+                            alt={img.label} 
+                            className="w-16 h-10 object-cover rounded" 
+                            onError={(e) => {
+                              const fallback = STATIC_FALLBACK_IMAGES[idx % STATIC_FALLBACK_IMAGES.length].src;
+                              if (!e.currentTarget.src.includes(fallback)) {
+                                e.currentTarget.src = fallback;
+                              }
+                            }}
+                          />
                         </td>
                         <td className="py-3 px-3 text-primary font-medium">{img.label}</td>
                       </tr>
@@ -160,6 +182,12 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
               alt="Enlarged view" 
               className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl animate-modal-card" 
               onClick={(e) => e.stopPropagation()} 
+              onError={(e) => {
+                const fallback = STATIC_FALLBACK_IMAGES[0].src;
+                if (!e.currentTarget.src.includes('PHYSICAL')) {
+                  e.currentTarget.src = fallback;
+                }
+              }}
             />
           </div>
         )}

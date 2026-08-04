@@ -165,6 +165,11 @@ export const HeroSection: React.FC = () => {
                 alt="JRMSU Library Excellence"
                 className="w-full h-full object-cover block absolute inset-0"
                 loading="lazy"
+                onError={(e) => {
+                  if (e.currentTarget.src !== window.location.origin + '/assets/JRMSU library lib.jpg') {
+                    e.currentTarget.src = '/assets/JRMSU library lib.jpg';
+                  }
+                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/60 to-transparent"></div>
               {/* Excellence in Information — upper left */}

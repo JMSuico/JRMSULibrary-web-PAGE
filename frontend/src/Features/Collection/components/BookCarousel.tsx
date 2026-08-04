@@ -124,6 +124,12 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
                       className="w-full h-full object-cover block"
                       loading="lazy"
                       draggable={false}
+                      onError={(e) => {
+                        const fallback = window.location.origin + '/assets/book-cover-placeholder.png';
+                        if (e.currentTarget.src !== fallback) {
+                          e.currentTarget.src = fallback;
+                        }
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-navy-mid">
@@ -206,6 +212,12 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
                 src={getImageUrl(expandedItem.image)} 
                 alt={expandedItem.title} 
                 className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
+                onError={(e) => {
+                  const fallback = window.location.origin + '/assets/book-cover-placeholder.png';
+                  if (e.currentTarget.src !== fallback) {
+                    e.currentTarget.src = fallback;
+                  }
+                }}
               />
             ) : expandedItem.icon ? (
               <span className="material-symbols-outlined text-[120px] text-white/50 mb-6 block w-full text-center">{expandedItem.icon}</span>

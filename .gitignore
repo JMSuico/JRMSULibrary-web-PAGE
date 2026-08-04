@@ -27,11 +27,7 @@ backend/media/
 
 # Images (large asset folders only; keep small icon/logo PNGs in code)
 *.jfif
-frontend/src/Assets/assets/Library pic converted/
 frontend/src/Assets/assets/Library pic/
-frontend/src/Assets/assets/PHYSICAL SET-UP 2026/
-frontend/src/Assets/assets/Feedback and complains mechanism/
-frontend/src/Assets/assets/Library External Services/
 frontend/src/Assets/assets/eBooks/
 frontend/src/Assets/assets/RESEARCH UPDATED2026
 frontend/src/Assets/assets/NEWLY ARRIVED BOOKS
