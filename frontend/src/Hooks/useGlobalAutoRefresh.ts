@@ -20,7 +20,14 @@ export function useGlobalAutoRefresh(intervalMs: number = 10000, onlyOnReconnect
     let isWsConnected = false;
 
     // --- 1. Instant Real-Time WebSocket Logic ---
+    // NOTE: Render and Vercel free tiers do NOT support WebSockets.
+    // Attempting to connect floods the network with 2-second reconnect attempts.
+    // We detect cloud hostnames and skip WS entirely, relying on HTTP polling instead.
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+    const isCloudFreeTier = hostname.includes('onrender.com') || hostname.includes('vercel.app');
+
     const connectWs = () => {
+      if (isCloudFreeTier) return; // Skip WebSocket on Render/Vercel free tier
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/ws/admin/`;
       ws = new WebSocket(wsUrl);
@@ -62,6 +69,7 @@ export function useGlobalAutoRefresh(intervalMs: number = 10000, onlyOnReconnect
     };
 
     connectWs();
+
 
     // --- 2. Fallback HTTP Polling Logic (Low frequency to save battery) ---
     const checkUpdate = async () => {
