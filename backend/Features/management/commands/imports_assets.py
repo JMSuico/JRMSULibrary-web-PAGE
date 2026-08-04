@@ -53,13 +53,20 @@ class Command(BaseCommand):
         # --- 1. Import eBooks from Department folder ---
         dept_source = os.path.join(source_base, 'eBooks', 'Department')
         dept_target = os.path.join(settings.MEDIA_ROOT, 'e_resources', 'eBooks', 'Department')
-        if os.path.exists(dept_source):
-            self.stdout.write(self.style.SUCCESS(f"Scanning eBooks: {dept_source}"))
-            self._import_ebooks_folder(dept_source, dept_target, None)
+        
+        # Check if running in cloud (Render automatically sets RENDER=true)
+        is_cloud = os.environ.get('RENDER') == 'true' or os.environ.get('ENVIRONMENT') == 'production'
+
+        if is_cloud:
+            self.stdout.write(self.style.WARNING(f"Cloud Environment Detected: Skipping 5GB eBooks migration to save space."))
         else:
-            self.stdout.write(self.style.WARNING(
-                f"eBooks Department directory not found at {dept_source}. Skipping eBook import."
-            ))
+            if os.path.exists(dept_source):
+                self.stdout.write(self.style.SUCCESS(f"Local Environment: Scanning eBooks in {dept_source}"))
+                self._import_ebooks_folder(dept_source, dept_target, None)
+            else:
+                self.stdout.write(self.style.WARNING(
+                    f"eBooks Department directory not found at {dept_source}. Skipping eBook import."
+                ))
 
         # --- 2. Import Library Interior images ---
         lib_source = os.path.join(source_base, 'Library pic converted')
@@ -86,13 +93,17 @@ class Command(BaseCommand):
         # --- 4. Import Newly Arrived Books ---
         new_source = os.path.join(source_base, 'NEWLY ARRIVED BOOKS')
         new_target = os.path.join(settings.MEDIA_ROOT, 'newly_arrived_books')
-        if os.path.exists(new_source):
-            self.stdout.write(self.style.SUCCESS(f"Scanning Newly Arrived Books images: {new_source}"))
-            self._import_newly_arrived_books(new_source, new_target)
+        
+        if is_cloud:
+            self.stdout.write(self.style.WARNING(f"Cloud Environment Detected: Skipping Newly Arrived Books migration."))
         else:
-            self.stdout.write(self.style.WARNING(
-                f"Newly Arrived Books directory not found at {new_source}. Skipping."
-            ))
+            if os.path.exists(new_source):
+                self.stdout.write(self.style.SUCCESS(f"Local Environment: Scanning Newly Arrived Books in {new_source}"))
+                self._import_newly_arrived_books(new_source, new_target)
+            else:
+                self.stdout.write(self.style.WARNING(
+                    f"Newly Arrived Books directory not found at {new_source}. Skipping."
+                ))
 
         # --- 5. Base Assets (Background, Org Structure, Personnel, Excellence) ---
         self.stdout.write(self.style.SUCCESS(f"Scanning base assets in: {source_base}"))
