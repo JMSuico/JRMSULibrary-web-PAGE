@@ -206,6 +206,7 @@ export const ClassicHorizontalCarousel: React.FC<Props> = ({ items, onCardClick 
                   className="max-w-full max-h-[60vh] object-contain transition-transform duration-500 hover:scale-105 cursor-zoom-in" 
                   onClick={() => window.open(selectedItem.image || selectedItem.src, '_blank')}
                   title="Click to view full screen"
+                  onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }}
                 />
               </div>
             ) : selectedItem.icon ? (

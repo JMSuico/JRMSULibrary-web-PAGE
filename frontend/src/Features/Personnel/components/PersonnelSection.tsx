@@ -189,6 +189,7 @@ export const PersonnelSection: React.FC = () => {
                         alt={chiefLibrarian.name}
                         className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
                         src={(chiefLibrarian.photo ? getImageUrl(chiefLibrarian.photo) : assets.images.chiefLibrarian)}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }}
                       />
                     </div>
                     <div className="bg-navy-dark/80 backdrop-blur-sm px-4 py-3 rounded-xl border border-gold-light/10 shadow-lg w-full">
@@ -230,7 +231,7 @@ export const PersonnelSection: React.FC = () => {
                   >
                     {person.photo ? (
                       <div className="w-20 h-20 rounded-full border-2 border-gold-light/40 overflow-hidden shadow-lg mx-auto mb-3">
-                        <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover" />
+                        <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
                       </div>
                     ) : (
                       <div className="w-20 h-20 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 shadow-lg">

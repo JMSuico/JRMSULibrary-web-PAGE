@@ -205,7 +205,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             
             {initialData && initialData.cover_image && !coverImage && (
               <div className="mb-3 flex items-center gap-3 p-2 border border-gray-200 rounded-md">
-                <img src={getImageUrl(initialData.cover_image)} alt="Current cover" className="w-10 h-14 object-cover rounded" />
+                <img src={getImageUrl(initialData.cover_image)} alt="Current cover" className="w-10 h-14 object-cover rounded" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/book-placeholder.png'; }} />
                 <span className="text-sm text-gray-600">Current cover image</span>
               </div>
             )}

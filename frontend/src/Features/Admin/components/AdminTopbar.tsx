@@ -321,7 +321,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
             onClick={() => setShowProfile(!showProfile)}
           >
             {user?.avatar_url ? (
-              <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" />
+              <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
             ) : (
               <span className="text-sm">{user?.first_name?.[0]?.toUpperCase() || 'A'}</span>
             )}
@@ -333,7 +333,7 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
             >
               <div className="w-20 h-20 rounded-full bg-navy text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden">
                 {user.avatar_url ? (
-                  <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" />
+                  <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
                 ) : (
                   user.first_name?.[0]?.toUpperCase() || 'A'
                 )}

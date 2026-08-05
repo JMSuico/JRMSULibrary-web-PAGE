@@ -85,7 +85,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                 >
                   {book.image ? (
                     <div className="w-32 h-40 rounded-lg overflow-hidden shadow-md">
-                      <img src={getImageUrl(book.image)} alt={book.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <img src={getImageUrl(book.image)} alt={book.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/book-placeholder.png'; }} />
                     </div>
                   ) : book.icon ? (
                     <span className="material-symbols-outlined text-[64px] text-primary group-hover:scale-110 transition-transform duration-500">
@@ -122,7 +122,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
                           {book.image ? (
-                            <img src={getImageUrl(book.image)} alt={book.title} className="w-8 h-8 object-cover rounded" />
+                            <img src={getImageUrl(book.image)} alt={book.title} className="w-8 h-8 object-cover rounded" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/book-placeholder.png'; }} />
                           ) : book.icon ? (
                             <span className="material-symbols-outlined text-lg text-primary">{book.icon}</span>
                           ) : null}
@@ -179,7 +179,7 @@ export const BookListModal: React.FC<BookListModalProps> = ({ books, isOpen, onC
             >
               {selectedBook.image ? (
                 <div className="w-48 h-64 mb-6 rounded-lg overflow-hidden shadow-lg mx-auto">
-                  <img src={getImageUrl(selectedBook.image)} alt={selectedBook.title} className="w-full h-full object-cover" />
+                  <img src={getImageUrl(selectedBook.image)} alt={selectedBook.title} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/book-placeholder.png'; }} />
                 </div>
               ) : selectedBook.icon ? (
                 <span className="material-symbols-outlined text-[120px] text-primary mb-6">{selectedBook.icon}</span>

@@ -36,6 +36,7 @@ const BookDetailModal: React.FC<{ item: CarouselItem; onClose: () => void }> = (
             className="w-full h-full object-cover block"
             loading="lazy"
             draggable={false}
+            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }}
           />
         </div>
       )}
@@ -145,6 +146,7 @@ export const BlueModalCarousel: React.FC<BlueModalCarouselProps> = ({
                         className="w-full h-full object-cover block"
                         loading="lazy"
                         draggable={false}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }}
                       />
                     </div>
                   )}
