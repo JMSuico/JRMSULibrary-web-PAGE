@@ -66,12 +66,17 @@ function PublicLayout() {
 
   // Fetch background image and keep it in sync with CMS changes
   useEffect(() => {
+    const STATIC_BG = '/assets/JRMSU library lib.jpg';
     const applyBackground = (bgPath: string | null | undefined) => {
-      if (bgPath) {
-        document.body.style.backgroundImage = `url(${resolveMediaUrl(bgPath)})`;
-      } else {
-        document.body.style.backgroundImage = '';
+      if (!bgPath) {
+        document.body.style.backgroundImage = `url(${STATIC_BG})`;
+        return;
       }
+      const url = resolveMediaUrl(bgPath);
+      const tester = new window.Image();
+      tester.onload = () => { document.body.style.backgroundImage = `url(${url})`; };
+      tester.onerror = () => { document.body.style.backgroundImage = `url(${STATIC_BG})`; };
+      tester.src = url;
     };
 
     settingsApi.getSettings().then(settings => {

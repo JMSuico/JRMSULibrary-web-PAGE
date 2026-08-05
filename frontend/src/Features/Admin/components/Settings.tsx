@@ -438,7 +438,7 @@ export function Settings() {
                 <div className="relative">
                   <div className="w-16 h-16 rounded-full bg-navy text-white flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden border-2 border-white ring-2 ring-gray-100">
                     {avatarPreview ? (
-                      <img src={getImageUrl(avatarPreview)} alt="Avatar" className="w-full h-full object-cover" />
+                      <img src={getImageUrl(avatarPreview)} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
                     ) : (
                       firstName?.[0]?.toUpperCase() || 'A'
                     )}

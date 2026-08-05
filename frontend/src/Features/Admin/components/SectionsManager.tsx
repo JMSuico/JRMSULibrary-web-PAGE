@@ -242,6 +242,7 @@ export function SectionsManager() {
                             alt={img.title}
                             className="rounded-md object-cover"
                             style={{ width: 64, height: 48 }}
+                            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }}
                           />
                         </td>
                         <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>{img.title || '—'}</td>
@@ -285,6 +286,7 @@ export function SectionsManager() {
                         src={getImageUrl(img.image)}
                         alt={img.title}
                         style={{ width: '100%', height: '100%', objectFit: 'cover', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }}
                       />
                       {!img.is_active && (
                         <div style={{
@@ -460,6 +462,7 @@ export function SectionsManager() {
                   src={getImageUrl(viewingImage.image)} 
                   alt={viewingImage.title} 
                   className="max-w-full max-h-[50vh] object-contain"
+                  onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }}
                 />
               </div>
               

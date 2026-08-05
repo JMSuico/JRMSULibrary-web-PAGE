@@ -705,7 +705,7 @@ export function ContentManager() {
                         <tr key={file.id}>
                           <td style={{ fontWeight: 500 }}>{file.name}</td>
                           <td>
-                            <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                            <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }} />
                           </td>
                           <td>
                             <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -762,7 +762,7 @@ export function ContentManager() {
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td>
-                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" />
+                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }} />
                         </td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -922,6 +922,7 @@ export function ContentManager() {
                               alt={chiefLibrarian.name}
                               className="w-full h-full object-cover"
                               src={getImageUrl(chiefLibrarian.photo)}
+                              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }}
                             />
                           ) : (
                             <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">No Photo</div>
@@ -990,7 +991,7 @@ export function ContentManager() {
                             {/* Card Content */}
                             {person.photo ? (
                               <div className="w-24 h-24 rounded-full border-2 border-gold-light/40 overflow-hidden shadow-lg mx-auto mb-3 mt-2">
-                                <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover relative z-0" />
+                                <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover relative z-0" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
                               </div>
                             ) : (
                               <div className="w-24 h-24 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 mt-2 shadow-lg border-2 border-gold-light/20 relative z-0">
@@ -1022,7 +1023,7 @@ export function ContentManager() {
                   <X size={24} />
                 </button>
                 <div className="p-4 flex items-center justify-center">
-                   <img src={viewingPhoto} alt="Expanded View" className="max-w-full max-h-[80vh] object-contain rounded" />
+                   <img src={viewingPhoto} alt="Expanded View" className="max-w-full max-h-[80vh] object-contain rounded" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
                 </div>
               </div>
             </div>,
@@ -1088,10 +1089,16 @@ export function ContentManager() {
             </div>
             <div className="flex-1 bg-gray-100 overflow-hidden relative">
               {viewingManualFile.file.toLowerCase().endsWith('.pdf') ? (
-                <iframe src={getImageUrl(viewingManualFile.file)} className="w-full h-full border-none bg-white" title="PDF Preview" />
+                <object data={getImageUrl(viewingManualFile.file)} type="application/pdf" className="w-full h-full border-none bg-white">
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-gray-500 p-6">
+                    <span className="material-symbols-outlined text-6xl opacity-30">description</span>
+                    <p className="text-lg text-center">PDF preview unavailable — the file may have been lost after a server restart.</p>
+                    <a href={getImageUrl(viewingManualFile.file)} target="_blank" rel="noreferrer" className="admin-btn admin-btn--primary px-6 py-2">Try Download</a>
+                  </div>
+                </object>
               ) : viewingManualFile.file.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) ? (
                 <div className="w-full h-full flex items-center justify-center p-4 bg-gray-200">
-                  <img src={getImageUrl(viewingManualFile.file)} alt="Preview" className="max-w-full max-h-full object-contain shadow-lg rounded" />
+                  <img src={getImageUrl(viewingManualFile.file)} alt="Preview" className="max-w-full max-h-full object-contain shadow-lg rounded" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }} />
                 </div>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-gray-500">
