@@ -113,7 +113,7 @@ The system is designed to run safely in both **local LAN development** (Docker o
 
 | Priority | Issue | File(s) | Fix |
 | :--- | :--- | :--- | :--- |
-| 🟢 **LOW** | Nginx has no request rate limiting | `frontend/nginx.conf` | Add `limit_req_zone` / `limit_req` for `/api/` routes. |
+| ✅ **ALL CLEAR** | Zero outstanding issues | `N/A` | **[ Productive ]** All security items have been implemented. |
 
 ---
 

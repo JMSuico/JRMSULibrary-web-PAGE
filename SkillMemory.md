@@ -347,6 +347,8 @@ frontend/src/
 | DB/Redis ports to 127.0.0.1 | ✅ Productive | Fixed |
 | Rate-limit cache (Redis) | ✅ Productive | Fixed |
 | Duplicate CACHES removed | ✅ Productive | Fixed |
+| Nginx rate limiting | ✅ Productive | Fixed |
+| Frontend npm vulns | ✅ Productive | Fixed |
 
 ### 7.9 Signature Features (Never Remove)
 - **Real-time Library Status Clock** — `HeroSection.tsx` — JetBrains Mono, gold, blinking colons, Mon-Fri 7AM-7PM PH Time
