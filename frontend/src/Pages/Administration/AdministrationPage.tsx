@@ -4,7 +4,7 @@ import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
 import { cmsApi, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { Loader2, ChevronDown, ChevronRight, FileText } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 import { FileViewerModal } from '@/src/Components/Modals/FileViewerModal';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 

@@ -10,15 +10,18 @@ import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { processInChunks } from '@/src/Libs/chunkUtils';
 import { LayoutGrid, List } from 'lucide-react';
 import { ResearchReferencesManager } from './ResearchReferencesManager';
+import { defaultExternalLinks } from '@/src/Libs/Assets/defaultLinks';
 
 import { getImageUrl } from '@/src/Libs/apiClient';
 
 export function ContentManager() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence' | 'research_references'>('content');
   const [loading, setLoading] = useState(false);
-  const { showToast } = useToast();
+  const { showToast, removeToast } = useToast();
+  const [isRemoving, setIsRemoving] = useState(false);
 
   // Tab Dragging State
   const tabsContainerRef = useRef<HTMLDivElement>(null);
@@ -65,6 +68,7 @@ export function ContentManager() {
   const [draggedLinkId, setDraggedLinkId] = useState<number | null>(null);
   const [linksPage, setLinksPage] = useState(1);
   const [linksViewMode, setLinksViewMode] = useState<'table' | 'card'>('table');
+  const [selectedLinkIds, setSelectedLinkIds] = useState<Set<number>>(new Set());
   const linksPerPage = 10;
 
   // File State
@@ -171,6 +175,62 @@ export function ContentManager() {
       }
     );
     setLinks(prev => prev.filter(l => l.id !== id));
+  };
+
+  const handleBulkDeleteLinks = () => {
+    if (selectedLinkIds.size === 0) return;
+    const count = selectedLinkIds.size;
+    const linksToDelete = links.filter(l => selectedLinkIds.has(l.id));
+
+    setLinks(prev => prev.filter(l => !selectedLinkIds.has(l.id)));
+    setSelectedLinkIds(new Set());
+
+    triggerDelete(
+      `${count} selected link(s)`,
+      async () => {
+        setIsRemoving(true);
+        const toastId = showToast(`${count} removing processing.`, 'loading');
+        try {
+          await processInChunks(
+            Array.from(selectedLinkIds),
+            10,
+            (id: number) => cmsApi.deleteLink(id),
+            (_, __, c) => {}
+          );
+          showToast(`Removed ${count} links successfully`, 'success');
+        } catch (err: any) {
+          setLinks(prev => [...prev, ...linksToDelete]);
+          showToast('Failed to remove some links', 'error');
+        } finally {
+          setIsRemoving(false);
+          removeToast(toastId);
+        }
+      },
+      () => {
+        setLinks(prev => [...prev, ...linksToDelete]);
+        showToast('Bulk link restoration undone', 'success');
+      }
+    );
+  };
+
+  const handleSeedDefaultLinks = async () => {
+    try {
+      const res = await cmsApi.importDefaultLinks();
+      showToast(res.message, res.imported > 0 ? 'success' : 'info');
+      if (res.imported > 0) loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to import default links', 'error');
+    }
+  };
+
+  const handleSeedDefaultTexts = async () => {
+    try {
+      const res = await cmsApi.importDefaultTexts();
+      showToast(res.message, res.imported > 0 ? 'success' : 'info');
+      if (res.imported > 0) loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to import default texts', 'error');
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, id: number) => {
@@ -396,6 +456,15 @@ export function ContentManager() {
         <div style={{ padding: '24px' }}>
           {activeTab === 'content' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div className="flex justify-end">
+                <button 
+                  className="admin-btn admin-btn--primary flex items-center gap-2"
+                  style={{ background: 'var(--color-navy-mid)' }}
+                  onClick={handleSeedDefaultTexts}
+                >
+                  <RefreshCw size={16} /> Import Defaults
+                </button>
+              </div>
               {contents.map((item) => (
                 <div key={item.id} style={{ border: '1px solid var(--color-surface-container-highest)', padding: '16px', borderRadius: '8px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>{item.title}</h3>
@@ -479,12 +548,44 @@ export function ContentManager() {
                     <LayoutGrid size={18} />
                   </button>
                 </div>
-                <button 
-                  className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
-                  onClick={() => { setEditingLink(null); setIsLinkModalOpen(true); }}
-                >
-                  <Plus size={16} /> Add Link
-                </button>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button
+                    className="admin-btn admin-btn--secondary text-sm w-full sm:w-auto"
+                    onClick={() => {
+                      if (selectedLinkIds.size > 0) {
+                        setSelectedLinkIds(new Set());
+                      } else {
+                        setSelectedLinkIds(new Set(currentLinks.map(l => l.id)));
+                      }
+                    }}
+                    disabled={isRemoving}
+                  >
+                    {selectedLinkIds.size > 0 ? "Unselect All" : "Select All"}
+                  </button>
+                  {selectedLinkIds.size > 0 && (
+                    <button 
+                      className="admin-btn w-full sm:w-auto" 
+                      style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
+                      onClick={handleBulkDeleteLinks}
+                      disabled={isRemoving}
+                    >
+                      <Trash2 size={16} /> Remove Selected ({selectedLinkIds.size})
+                    </button>
+                  )}
+                  <button 
+                    className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
+                    style={{ background: 'var(--color-navy-mid)' }}
+                    onClick={handleSeedDefaultLinks}
+                  >
+                    <RefreshCw size={16} /> Import Defaults
+                  </button>
+                  <button 
+                    className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
+                    onClick={() => { setEditingLink(null); setIsLinkModalOpen(true); }}
+                  >
+                    <Plus size={16} /> Add Link
+                  </button>
+                </div>
               </div>
 
               {linksViewMode === 'table' ? (
@@ -492,6 +593,19 @@ export function ContentManager() {
                   <table className="admin-table min-w-full">
                     <thead>
                       <tr>
+                        <th style={{ width: '40px', textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={currentLinks.length > 0 && currentLinks.every(l => selectedLinkIds.has(l.id))}
+                            disabled={isRemoving}
+                            onChange={(e) => {
+                              const newSelected = new Set(selectedLinkIds);
+                              if (e.target.checked) currentLinks.forEach(l => newSelected.add(l.id));
+                              else currentLinks.forEach(l => newSelected.delete(l.id));
+                              setSelectedLinkIds(newSelected);
+                            }}
+                          />
+                        </th>
                         <th>Name</th>
                         <th>URL</th>
                         <th>Category</th>
@@ -508,9 +622,22 @@ export function ContentManager() {
                           onDragStart={(e) => handleDragStart(e, link.id)}
                           onDragOver={handleDragOver}
                           onDrop={(e) => handleDrop(e, link.id)}
-                          style={{ cursor: 'move', backgroundColor: draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined }}
+                          style={{ cursor: 'move', backgroundColor: selectedLinkIds.has(link.id) ? 'var(--color-blue-50)' : (draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined) }}
                           className={draggedLinkId === link.id ? 'opacity-50' : ''}
                         >
+                          <td style={{ textAlign: 'center' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={selectedLinkIds.has(link.id)}
+                              disabled={isRemoving}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedLinkIds);
+                                if (e.target.checked) newSelected.add(link.id);
+                                else newSelected.delete(link.id);
+                                setSelectedLinkIds(newSelected);
+                              }}
+                            />
+                          </td>
                           <td style={{ fontWeight: 500 }}>
                             <div className="flex items-center gap-2">
                               <span className="material-symbols-outlined text-gray-400" style={{ cursor: 'grab' }}>drag_indicator</span>
@@ -540,12 +667,26 @@ export function ContentManager() {
                     <div 
                       key={link.id} 
                       className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all hover:shadow-md hover:border-blue-100 group"
+                      style={{ border: selectedLinkIds.has(link.id) ? '2px solid var(--color-navy)' : undefined }}
                       draggable
                       onDragStart={(e) => handleDragStart(e, link.id)}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, link.id)}
                     >
-                      <div className="flex justify-between items-start">
+                      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
+                        <input 
+                          type="checkbox" 
+                          style={{ width: 16, height: 16, cursor: 'pointer' }}
+                          checked={selectedLinkIds.has(link.id)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedLinkIds);
+                            if (e.target.checked) newSelected.add(link.id);
+                            else newSelected.delete(link.id);
+                            setSelectedLinkIds(newSelected);
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-start pl-8">
                         <div className="flex items-center gap-2">
                           <span className="material-symbols-outlined text-gray-300 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity absolute -left-2 bg-white rounded-full shadow-sm" title="Drag to reorder">drag_indicator</span>
                           <h3 className="font-bold text-gray-900 text-lg line-clamp-1 pl-2">{link.name}</h3>

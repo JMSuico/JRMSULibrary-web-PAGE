@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router';
 import { assets } from '@/src/Libs/Assets/data';
 import { settingsApi } from '@/src/Endpoints/settingsApi';
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { cmsApi, PageContent } from '@/src/Endpoints/cmsApi';
 import { Loader2 } from 'lucide-react';

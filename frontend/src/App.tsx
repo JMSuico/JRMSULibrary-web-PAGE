@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router';
 import { TopNavBar } from '@/src/Components/LayoutBars/TopNavBar';
 import { FacebookBubble } from '@/src/Components/Shared/FacebookBubble';
 import { FeedbackStickyCard } from '@/src/Features/Feedback/components/FeedbackStickyCard';

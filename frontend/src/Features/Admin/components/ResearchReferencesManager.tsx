@@ -58,7 +58,7 @@ export function ResearchReferencesManager() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
-  const { showToast } = useToast();
+  const { showToast, removeToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const scrollRef = useDraggableScroll<HTMLDivElement>();
 
@@ -210,16 +210,19 @@ export function ResearchReferencesManager() {
     triggerDelete(
       `${selectedIds.size} references`,
       async () => {
+        setIsDeletingBulk(true);
+        const toastId = showToast(`${selectedIds.size} removing processing.`, 'loading');
         try {
-          setIsDeletingBulk(true);
           await referenceApi.bulkDeleteReferences(Array.from(selectedIds));
           setSelectedIds(new Set());
           loadData();
+          showToast(`Removed ${selectedIds.size} references successfully`, 'success');
         } catch (err: any) {
-          showToast(err.message || 'Failed to delete references', 'error');
+          showToast(err.message || 'Failed to remove references', 'error');
           loadData();
         } finally {
           setIsDeletingBulk(false);
+          removeToast(toastId);
         }
       },
       () => {
@@ -285,13 +288,26 @@ export function ResearchReferencesManager() {
         {/* Action buttons */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex gap-2 items-center">
+            <button
+              className="admin-btn admin-btn--secondary text-sm"
+              onClick={() => {
+                if (selectedIds.size > 0) {
+                  setSelectedIds(new Set());
+                } else {
+                  if (data) setSelectedIds(new Set(data.results.map(r => r.id)));
+                }
+              }}
+              disabled={isDeletingBulk}
+            >
+              {selectedIds.size > 0 ? "Unselect All" : "Select All"}
+            </button>
             {selectedIds.size > 0 && (
               <button
                 onClick={handleBulkDelete}
                 disabled={isDeletingBulk}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-red-600 border border-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer disabled:bg-gray-400 disabled:border-gray-400"
               >
-                {isDeletingBulk ? <><Loader2 size={16} className="animate-spin" /> Deleting...</> : <><Trash2 size={16} /> Delete Selected ({selectedIds.size})</>}
+                {isDeletingBulk ? <><Loader2 size={16} className="animate-spin" /> Removing...</> : <><Trash2 size={16} /> Remove Selected ({selectedIds.size})</>}
               </button>
             )}
             <button
@@ -328,8 +344,9 @@ export function ResearchReferencesManager() {
               <th className="w-10 text-center">
                 <input
                   type="checkbox"
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
                   checked={data?.results.length ? selectedIds.size === data.results.length : false}
+                  disabled={isDeletingBulk}
                   onChange={handleSelectAll}
                 />
               </th>
@@ -357,8 +374,9 @@ export function ResearchReferencesManager() {
                   <td className="text-center">
                     <input
                       type="checkbox"
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
                       checked={selectedIds.has(ref.id)}
+                      disabled={isDeletingBulk}
                       onChange={() => handleSelectOne(ref.id)}
                     />
                   </td>

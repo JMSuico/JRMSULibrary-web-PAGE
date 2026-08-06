@@ -24,6 +24,7 @@ import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
 
@@ -34,7 +35,6 @@ export function SectionsManager() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const { showToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   // Modal state
@@ -44,6 +44,9 @@ export function SectionsManager() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<number>>(new Set());
+  const [isRemoving, setIsRemoving] = useState(false);
+  const { showToast, removeToast } = useToast();
 
   const fetchImages = async () => {
     try {
@@ -88,6 +91,43 @@ export function SectionsManager() {
 
     // Optimistic delete
     setImages(prev => prev.filter(img => img.id !== id));
+  };
+
+  const handleBulkDeleteSections = () => {
+    if (selectedSectionIds.size === 0) return;
+    const count = selectedSectionIds.size;
+    const imagesToDelete = images.filter(img => selectedSectionIds.has(img.id));
+
+    // Optimistic remove
+    setImages(prev => prev.filter(img => !selectedSectionIds.has(img.id)));
+    setSelectedSectionIds(new Set());
+
+    triggerDelete(
+      `${count} selected image(s)`,
+      async () => {
+        setIsRemoving(true);
+        const toastId = showToast(`${count} removing processing.`, 'loading');
+        try {
+          await processInChunks(
+            Array.from(selectedSectionIds),
+            10,
+            (id: number) => galleryApi.deleteImage(id),
+            (_, __, c) => {}
+          );
+          showToast(`Permanently removed ${count} images`, 'success');
+        } catch (err: any) {
+          setImages(prev => [...prev, ...imagesToDelete]);
+          showToast('Failed to remove some images', 'error');
+        } finally {
+          setIsRemoving(false);
+          removeToast(toastId);
+        }
+      },
+      () => {
+        setImages(prev => [...prev, ...imagesToDelete]);
+        showToast('Bulk deletion undone', 'success');
+      }
+    );
   };
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -193,6 +233,29 @@ export function SectionsManager() {
           </div>
           <div className="admin-table-toolbar__actions">
             <button
+              className="admin-btn admin-btn--secondary text-sm"
+              onClick={() => {
+                if (selectedSectionIds.size > 0) {
+                  setSelectedSectionIds(new Set());
+                } else {
+                  setSelectedSectionIds(new Set(filtered.map(img => img.id)));
+                }
+              }}
+              disabled={isRemoving}
+            >
+              {selectedSectionIds.size > 0 ? "Unselect All" : "Select All"}
+            </button>
+            {selectedSectionIds.size > 0 && (
+              <button 
+                className="admin-btn" 
+                style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
+                onClick={handleBulkDeleteSections}
+                disabled={isRemoving}
+              >
+                <Trash2 size={16} /> Remove Selected ({selectedSectionIds.size})
+              </button>
+            )}
+            <button
               className="admin-btn admin-btn--icon"
               onClick={() => setViewMode('grid')}
               aria-label="Grid view"
@@ -226,6 +289,22 @@ export function SectionsManager() {
                 <table className="admin-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={paginatedSections.length > 0 && paginatedSections.every(s => selectedSectionIds.has(s.id))}
+                          disabled={isRemoving}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedSectionIds);
+                            if (e.target.checked) {
+                              paginatedSections.forEach(s => newSelected.add(s.id));
+                            } else {
+                              paginatedSections.forEach(s => newSelected.delete(s.id));
+                            }
+                            setSelectedSectionIds(newSelected);
+                          }}
+                        />
+                      </th>
                       <th>Image</th>
                       <th>Title</th>
                       <th>Section Label</th>
@@ -235,7 +314,20 @@ export function SectionsManager() {
                   </thead>
                   <tbody>
                     {paginatedSections.map((img) => (
-                      <tr key={img.id}>
+                      <tr key={img.id} style={{ backgroundColor: selectedSectionIds.has(img.id) ? 'var(--color-blue-50)' : 'transparent' }}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={selectedSectionIds.has(img.id)}
+                            disabled={isRemoving}
+                            onChange={(e) => {
+                              const newSelected = new Set(selectedSectionIds);
+                              if (e.target.checked) newSelected.add(img.id);
+                              else newSelected.delete(img.id);
+                              setSelectedSectionIds(newSelected);
+                            }}
+                          />
+                        </td>
                         <td>
                           <img
                             src={getImageUrl(img.image)}
@@ -280,7 +372,20 @@ export function SectionsManager() {
             {viewMode === 'grid' && (
               <div className="admin-card-grid p-5">
                 {paginatedSections.map((img) => (
-                  <div className="admin-grid-card" key={img.id}>
+                  <div className="admin-grid-card relative" key={img.id} style={{ border: selectedSectionIds.has(img.id) ? '2px solid var(--color-navy)' : '1px solid var(--color-gray-200)' }}>
+                    <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
+                      <input 
+                        type="checkbox" 
+                        style={{ width: 18, height: 18, cursor: 'pointer' }}
+                        checked={selectedSectionIds.has(img.id)}
+                        onChange={(e) => {
+                          const newSelected = new Set(selectedSectionIds);
+                          if (e.target.checked) newSelected.add(img.id);
+                          else newSelected.delete(img.id);
+                          setSelectedSectionIds(newSelected);
+                        }}
+                      />
+                    </div>
                     <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: 'var(--color-gray-100)', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
                       <img
                         src={getImageUrl(img.image)}

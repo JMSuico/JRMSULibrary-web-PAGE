@@ -9,6 +9,7 @@ import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { processInChunks } from '@/src/Libs/chunkUtils';
 
 export function BatchHistory() {
   const [batches, setBatches] = useState<AcquisitionBatch[]>([]);
@@ -18,8 +19,10 @@ export function BatchHistory() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
   const [auditBatch, setAuditBatch] = useState<AcquisitionBatch | null>(null);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<number>>(new Set());
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
-  const { showToast } = useToast();
+  const [isRemoving, setIsRemoving] = useState(false);
+  const { showToast, removeToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   const loadBatches = async () => {
@@ -61,6 +64,43 @@ export function BatchHistory() {
     setBatches(prev => prev.filter(b => b.id !== batch.id));
   };
 
+  const handleBulkArchive = () => {
+    if (selectedBatchIds.size === 0) return;
+    const count = selectedBatchIds.size;
+    const batchesToArchive = batches.filter(b => selectedBatchIds.has(b.id));
+
+    // Optimistic removal
+    setBatches(prev => prev.filter(b => !selectedBatchIds.has(b.id)));
+    setSelectedBatchIds(new Set());
+
+    triggerDelete(
+      `${count} selected batch(es)`,
+      async () => {
+        setIsRemoving(true);
+        const toastId = showToast(`${count} removing processing.`, 'loading');
+        try {
+          await processInChunks(
+            Array.from(selectedBatchIds),
+            10,
+            (id: number) => batchApi.archiveBatch(id),
+            (_, __, c) => {}
+          );
+          showToast(`Archived ${count} batches successfully`, 'success');
+        } catch (err: any) {
+          showToast('Failed to archive some batches', 'error');
+          loadBatches();
+        } finally {
+          setIsRemoving(false);
+          removeToast(toastId);
+        }
+      },
+      () => {
+        setBatches(prev => [...prev, ...batchesToArchive].sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime()));
+        showToast('Bulk archive undone', 'success');
+      }
+    );
+  };
+
   const years = ['All', ...new Set(batches.map(b => new Date(b.opened_at).getFullYear().toString()))];
 
   const debouncedSearch = useDebounce(searchQuery, 400);
@@ -99,6 +139,29 @@ export function BatchHistory() {
             />
           </div>
           <div className="admin-table-toolbar__actions">
+            <button
+              className="admin-btn admin-btn--secondary text-sm"
+              onClick={() => {
+                if (selectedBatchIds.size > 0) {
+                  setSelectedBatchIds(new Set());
+                } else {
+                  setSelectedBatchIds(new Set(filteredBatches.map(b => b.id)));
+                }
+              }}
+              disabled={isRemoving}
+            >
+              {selectedBatchIds.size > 0 ? "Unselect All" : "Select All"}
+            </button>
+            {selectedBatchIds.size > 0 && (
+              <button 
+                className="admin-btn" 
+                style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
+                onClick={handleBulkArchive}
+                disabled={isRemoving}
+              >
+                <FileArchive size={16} /> Archive Selected ({selectedBatchIds.size})
+              </button>
+            )}
             <select
               className="admin-btn admin-btn--secondary"
               value={selectedYear}
@@ -113,6 +176,22 @@ export function BatchHistory() {
           <table className="admin-table w-full min-w-[800px]">
             <thead>
               <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={paginatedBatches.length > 0 && paginatedBatches.every(b => selectedBatchIds.has(b.id))}
+                    disabled={isRemoving}
+                    onChange={(e) => {
+                      const newSelected = new Set(selectedBatchIds);
+                      if (e.target.checked) {
+                        paginatedBatches.forEach(b => newSelected.add(b.id));
+                      } else {
+                        paginatedBatches.forEach(b => newSelected.delete(b.id));
+                      }
+                      setSelectedBatchIds(newSelected);
+                    }}
+                  />
+                </th>
                 <th>Batch Name</th>
                 <th>Status</th>
                 <th>Date Opened</th>
@@ -126,7 +205,20 @@ export function BatchHistory() {
                 <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
               ) : paginatedBatches.length > 0 ? (
                 paginatedBatches.map((batch) => (
-                  <tr key={batch.id}>
+                  <tr key={batch.id} style={{ backgroundColor: selectedBatchIds.has(batch.id) ? 'var(--color-blue-50)' : 'transparent' }}>
+                    <td style={{ textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedBatchIds.has(batch.id)}
+                        disabled={isRemoving}
+                        onChange={(e) => {
+                          const newSelected = new Set(selectedBatchIds);
+                          if (e.target.checked) newSelected.add(batch.id);
+                          else newSelected.delete(batch.id);
+                          setSelectedBatchIds(newSelected);
+                        }}
+                      />
+                    </td>
                     <td style={{ fontWeight: 500 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Archive size={16} color='var(--color-gray-500)' /> {batch.name}

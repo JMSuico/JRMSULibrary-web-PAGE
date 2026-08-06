@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, Navigate, useNavigate } from 'react-router';
 import { AdminSidebar } from '@/src/Features/Admin/components/AdminSidebar';
 import { AdminTopbar } from '@/src/Features/Admin/components/AdminTopbar';
 import '@/src/LayoutStyles/admin.css';

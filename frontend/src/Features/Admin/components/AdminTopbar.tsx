@@ -3,7 +3,7 @@ import { getImageUrl } from '@/src/Libs/apiClient';
 import {
   Bell, Menu, X, LogOut, Users, TrendingUp, Mail, Send, Calendar, Loader2, Key
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { notificationApi, Notification as AppNotification } from '@/src/Endpoints/notificationApi';

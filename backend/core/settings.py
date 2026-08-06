@@ -200,12 +200,7 @@ else:
     }
 
 # Centralized Caching for Cross-Server Rate Limiting
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'django_cache_table',
-    }
-}
+# Configured below via Redis
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -372,12 +367,12 @@ EMAIL_TIMEOUT = 60  # Increased to handle large 25MB attachments
 IMAP_HOST = os.environ.get('IMAP_HOST', 'imap.gmail.com')
 
 # ============================================================
-# Throttle Cache — use file-based to survive restarts
+# Throttle Cache — use Redis backend to survive restarts
 # ============================================================
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'jrmsu-library-cache',
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_CACHE_URL', 'redis://localhost:6379/1'),
     }
 }
 

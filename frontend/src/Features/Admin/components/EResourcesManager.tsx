@@ -7,12 +7,16 @@ import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
+import { processInChunks } from '@/src/Libs/chunkUtils';
 
 export function EResourcesManager() {
   const [departments, setDepartments] = useState<EResourceDepartment[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  
+  const [selectedDeptIds, setSelectedDeptIds] = useState<Set<number>>(new Set());
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(new Set());
 
   // Modals
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
@@ -22,7 +26,8 @@ export function EResourcesManager() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
-  const { showToast } = useToast();
+  const { showToast, removeToast } = useToast();
+  const [isRemoving, setIsRemoving] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -126,6 +131,45 @@ export function EResourcesManager() {
     setDepartments(prev => filterDept(prev));
   };
 
+  const handleBulkDeleteDepts = () => {
+    if (selectedDeptIds.size === 0) return;
+    const count = selectedDeptIds.size;
+    const ids = Array.from(selectedDeptIds);
+    const backup = [...departments];
+
+    const filterDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
+      return depts.filter(d => !selectedDeptIds.has(d.id)).map(d => ({
+        ...d,
+        children: d.children ? filterDept(d.children) : []
+      }));
+    };
+    
+    setDepartments(prev => filterDept(prev));
+    setSelectedDeptIds(new Set());
+
+    triggerDelete(
+      `${count} selected folder(s)`,
+      async () => {
+        setIsRemoving(true);
+        const toastId = showToast(`${count} removing processing.`, 'loading');
+        try {
+          await processInChunks(ids, 10, (id: number) => eresourceApi.deleteDepartment(id), (_, __, c) => {});
+          showToast(`Removed ${count} folders successfully`, 'success');
+        } catch (err: any) {
+          loadData();
+          showToast('Failed to remove some folders', 'error');
+        } finally {
+          setIsRemoving(false);
+          removeToast(toastId);
+        }
+      },
+      () => {
+        setDepartments(backup);
+        showToast('Bulk folder restoration undone', 'success');
+      }
+    );
+  };
+
   const handleUploadFile = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedDeptId) return;
@@ -191,6 +235,46 @@ export function EResourcesManager() {
     setDepartments(prev => removeFileFromDept(prev));
   };
 
+  const handleBulkDeleteFiles = () => {
+    if (selectedFileIds.size === 0) return;
+    const count = selectedFileIds.size;
+    const ids = Array.from(selectedFileIds);
+    const backup = [...departments];
+
+    const removeFileFromDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
+      return depts.map(d => ({
+        ...d,
+        files: d.files?.filter(f => !selectedFileIds.has(f.id)),
+        children: d.children ? removeFileFromDept(d.children) : []
+      }));
+    };
+
+    setDepartments(prev => removeFileFromDept(prev));
+    setSelectedFileIds(new Set());
+
+    triggerDelete(
+      `${count} selected file(s)`,
+      async () => {
+        setIsRemoving(true);
+        const toastId = showToast(`${count} removing processing.`, 'loading');
+        try {
+          await processInChunks(ids, 10, (id: number) => eresourceApi.deleteFile(id), (_, __, c) => {});
+          showToast(`Removed ${count} files successfully`, 'success');
+        } catch (err: any) {
+          loadData();
+          showToast('Failed to remove some files', 'error');
+        } finally {
+          setIsRemoving(false);
+          removeToast(toastId);
+        }
+      },
+      () => {
+        setDepartments(backup);
+        showToast('Bulk file restoration undone', 'success');
+      }
+    );
+  };
+
   const renderTree = (depts: EResourceDepartment[], level = 0) => {
     return depts.map(dept => {
       const isExpanded = expandedFolders.has(dept.id);
@@ -211,7 +295,20 @@ export function EResourcesManager() {
               }
             }}
           >
-            <div className="flex items-center gap-1 flex-1 overflow-hidden min-w-0">
+            <div className="flex items-center gap-1 flex-1 overflow-hidden min-w-0 pl-1">
+              <input 
+                type="checkbox"
+                className="mr-1 disabled:opacity-50"
+                checked={selectedDeptIds.has(dept.id)}
+                disabled={isRemoving}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const newSelected = new Set(selectedDeptIds);
+                  if (e.target.checked) newSelected.add(dept.id);
+                  else newSelected.delete(dept.id);
+                  setSelectedDeptIds(newSelected);
+                }}
+              />
               {/* Chevron toggles expand/collapse ONLY — stops propagation so row click still fires */}
               <span
                 className="w-5 h-5 flex items-center justify-center shrink-0 rounded hover:bg-gray-200 transition-colors"
@@ -284,12 +381,41 @@ export function EResourcesManager() {
         <div className="w-full lg:w-1/3 bg-white border border-gray-200 rounded-xl flex flex-col shadow-sm" style={{ minHeight: '600px' }}>
           <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
             <h2 className="font-semibold text-gray-800">Departments</h2>
-            <button 
-              onClick={() => { setEditingDept(null); setIsDeptModalOpen(true); }}
-              className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded text-gray-700 hover:bg-gray-50"
-            >
-              <Plus size={14} /> Add Folder
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (selectedDeptIds.size > 0) {
+                    setSelectedDeptIds(new Set());
+                  } else {
+                    const allIds = new Set<number>();
+                    const extractIds = (depts: EResourceDepartment[]) => {
+                      depts.forEach(d => { allIds.add(d.id); if (d.children) extractIds(d.children); });
+                    };
+                    extractIds(departments);
+                    setSelectedDeptIds(allIds);
+                  }
+                }}
+                disabled={isRemoving}
+                className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded text-gray-700 hover:bg-gray-50"
+              >
+                {selectedDeptIds.size > 0 ? "Unselect All" : "Select All"}
+              </button>
+              {selectedDeptIds.size > 0 && (
+                <button 
+                  onClick={handleBulkDeleteDepts}
+                  disabled={isRemoving}
+                  className="text-sm flex items-center gap-1 bg-red-50 border border-red-200 px-2 py-1 rounded text-red-700 hover:bg-red-100 disabled:opacity-50"
+                >
+                  <Trash2 size={14} /> Remove ({selectedDeptIds.size})
+                </button>
+              )}
+              <button 
+                onClick={() => { setEditingDept(null); setIsDeptModalOpen(true); }}
+                className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded text-gray-700 hover:bg-gray-50"
+              >
+                <Plus size={14} /> Add Folder
+              </button>
+            </div>
           </div>
           <div className="p-4 overflow-y-auto flex-1">
             {departments.length === 0 ? (
@@ -313,12 +439,38 @@ export function EResourcesManager() {
                   </h2>
                   <p className="text-xs text-gray-500 mt-1">{selectedDept.files?.length || 0} files in this folder</p>
                 </div>
-                <button 
-                  onClick={() => setIsFileModalOpen(true)}
-                  className="admin-btn admin-btn--primary flex items-center gap-2"
-                >
-                  <Plus size={16} /> Upload File
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (selectedFileIds.size > 0) {
+                        setSelectedFileIds(new Set());
+                      } else {
+                        const allIds = new Set<number>(selectedDept.files?.map(f => f.id) || []);
+                        setSelectedFileIds(allIds);
+                      }
+                    }}
+                    disabled={isRemoving}
+                    className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-700 hover:bg-gray-50 font-medium"
+                  >
+                    {selectedFileIds.size > 0 ? "Unselect All" : "Select All"}
+                  </button>
+                  {selectedFileIds.size > 0 && (
+                    <button 
+                      onClick={handleBulkDeleteFiles}
+                      disabled={isRemoving}
+                      className="admin-btn flex items-center gap-2 disabled:opacity-50"
+                      style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
+                    >
+                      <Trash2 size={16} /> Remove Selected ({selectedFileIds.size})
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setIsFileModalOpen(true)}
+                    className="admin-btn admin-btn--primary flex items-center gap-2"
+                  >
+                    <Plus size={16} /> Upload File
+                  </button>
+                </div>
               </div>
               <div className="p-4 overflow-y-auto" style={{ minHeight: '400px' }}>
                 {!selectedDept.files || selectedDept.files.length === 0 ? (
@@ -338,9 +490,22 @@ export function EResourcesManager() {
                         ? new Date(file.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
                         : 'Migrated file';
                       return (
-                        <div key={file.id} className={`border rounded-xl p-3 flex items-start gap-3 group transition-all hover:shadow-md ${
+                        <div key={file.id} className={`border rounded-xl p-3 flex items-start gap-3 group transition-all hover:shadow-md relative ${
                           file.is_active ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'
-                        }`}>
+                        }`} style={{ border: selectedFileIds.has(file.id) ? '2px solid var(--color-navy)' : undefined }}>
+                          <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+                            <input 
+                              type="checkbox"
+                              checked={selectedFileIds.has(file.id)}
+                              disabled={isRemoving}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedFileIds);
+                                if (e.target.checked) newSelected.add(file.id);
+                                else newSelected.delete(file.id);
+                                setSelectedFileIds(newSelected);
+                              }}
+                            />
+                          </div>
                           <div className={`shrink-0 mt-0.5 ${iconColor}`}>
                             <FileText size={22} />
                           </div>
@@ -365,8 +530,9 @@ export function EResourcesManager() {
                               >Open</a>
                               <button
                                 onClick={() => handleDeleteFile(file.id)}
-                                className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border-none"
-                              >Delete</button>
+                                disabled={isRemoving}
+                                className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border-none disabled:opacity-50"
+                              >Remove</button>
                             </div>
                           </div>
                         </div>

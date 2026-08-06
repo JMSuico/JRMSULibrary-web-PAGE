@@ -1,5 +1,11 @@
 # AGENTS.md — Committed Skills & Conventions
 
+> **READ FIRST**: Load and internalize `SkillMemory.md` (project root) at the start of EVERY session.
+> It contains all adopted skill frameworks (Superpowers, Caveman, UI-UX Pro Max, Django Expert, React Expert, Secure Code Guardian) plus the full JRMSU project architecture map. No session proceeds without reading it.
+
+---
+
+
 ## ECC-Main (Software Engineering Core)
 - **Agent-first**: always plan before execute
 - **TDD**: test-driven development where applicable
@@ -83,3 +89,48 @@ To manage Terminal-Created Admins, a dedicated terminal command is now available
   ```bash
   docker-compose exec backend python manage.py deletespecificsuperuser
   ```
+
+---
+
+## What's New: Docker + PostgreSQL Full Stack (2026)
+
+The project is now fully containerized. Actual running stack (per `docker-compose.yml`):
+
+| Service | Port | Purpose |
+|---|---|---|
+| `db` (PostgreSQL 16) | 5432 | Primary database |
+| `redis` (Redis 7) | 6379 | Celery broker + cache |
+| `backend` (Daphne/ASGI) | internal 8000 | Django REST + WebSocket |
+| `celery-worker` | internal | Background tasks |
+| `frontend-webpage` | 3000 | Public landing page |
+| `frontend-admin` | 3001 | Admin panel |
+| `ollama` (qwen2.5:0.5b) | internal 11434 | Dr. Rizal AI assistant |
+
+**Actual backend counts** (verified by deep scan, 2026-08-06):
+- **21 models** in `Features/Data/Models/`
+- **17 repositories** in `Features/Repositories/Implementations/`
+- **18 services + tasks.py** in `Features/Services/Implementations/`
+- **17 controllers** in `Features/Api/Controllers/`
+- **6 helpers** in `Features/Helpers/`
+
+**Frontend routes** (per `App.tsx`):
+- **7 public routes**: `/`, `/about`, `/services`, `/administration`, `/personnel`, `/collection`, `/physical-setup`
+- **12 admin routes**: Dashboard, Books, BatchHistory, Sections, Content, EResources, Email, Users, Analytics, Reports, Settings, RecycleBin
+
+---
+
+## Security Status (last verified: 2026-08-06)
+
+| Item | Status |
+|---|---|
+| `.env` now in `.gitignore` | ✅ Fixed 2026-08-06 |
+| Login brute-force (5/10min lockout) | ✅ Productive |
+| File upload magic-byte scanning | ✅ Productive |
+| XSS sanitization (bleach) | ✅ Productive |
+| SQL injection (ORM only, no raw SQL) | ✅ Productive |
+| HSTS, X-Frame-Options, MIME-sniff | ✅ Productive |
+| Terminal admin protection | ✅ Productive |
+| Single-device session enforcement | ✅ Productive |
+| DB port 5432 exposed to host | 🟠 HIGH — internal only for prod |
+| Redis port 6379 exposed, no password | 🟠 HIGH — internal only for prod |
+| Rate-limit cache in-memory (resets on restart) | 🟡 MEDIUM — switch to Redis backend |
