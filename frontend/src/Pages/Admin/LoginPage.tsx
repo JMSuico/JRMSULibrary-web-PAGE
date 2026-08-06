@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 import { LoginForm } from '@/src/Features/Auth/components/LoginForm';
 import { useToast } from '@/src/Hooks/useToast';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';

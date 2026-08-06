@@ -15,6 +15,7 @@ import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
 
@@ -34,6 +35,8 @@ export function BooksManager() {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
   const [activeBookDropdown, setActiveBookDropdown] = useState<number | null>(null);
+  const [selectedBookIds, setSelectedBookIds] = useState<Set<number>>(new Set());
+  const [isRemoving, setIsRemoving] = useState(false);
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -42,7 +45,7 @@ export function BooksManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const { showToast } = useToast();
+  const { showToast, removeToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   // Mouse Drag to Scroll for Recent Batches
@@ -314,6 +317,57 @@ export function BooksManager() {
     );
   };
 
+  const handleBulkDeleteBooks = () => {
+    if (!currentBatch || selectedBookIds.size === 0) return;
+    const count = selectedBookIds.size;
+    const booksToDelete = currentBatch.books?.filter(b => selectedBookIds.has(b.id)) || [];
+
+    // Optimistically remove immediately
+    setCurrentBatch(prev => prev ? {
+      ...prev,
+      books: (prev.books || []).filter(b => !selectedBookIds.has(b.id)),
+      book_count: Math.max(0, (prev.book_count || 0) - count)
+    } : prev);
+    setSelectedBookIds(new Set());
+
+    triggerDelete(
+      `${count} selected book(s)`,
+      async () => {
+        setIsRemoving(true);
+        const toastId = showToast(`${count} removing processing.`, 'loading');
+        try {
+          await processInChunks(
+            Array.from(selectedBookIds),
+            10,
+            (id: number) => batchApi.deleteBook(currentBatch.id, id),
+            (_, __, c) => {}
+          );
+          showToast(`Successfully removed ${count} books`, 'success');
+        } catch (error: any) {
+          // Revert if any API fails
+          setCurrentBatch(prev => prev ? {
+            ...prev,
+            books: [...(prev.books || []), ...booksToDelete],
+            book_count: (prev.book_count || 0) + count
+          } : prev);
+          showToast('Failed to remove some books', 'error');
+        } finally {
+          setIsRemoving(false);
+          removeToast(toastId);
+        }
+      },
+      () => {
+        // Undo: restore books to local state
+        setCurrentBatch(prev => prev ? {
+          ...prev,
+          books: [...(prev.books || []), ...booksToDelete],
+          book_count: (prev.book_count || 0) + count
+        } : prev);
+        showToast('Bulk removal undone', 'success');
+      }
+    );
+  };
+
   // Derived state for filtering
   const debouncedSearch = useDebounce(searchQuery, 400);
   const displayBooks = currentBatch?.books || [];
@@ -436,11 +490,36 @@ export function BooksManager() {
                 Status: {currentBatch.status.toUpperCase()}
               </span>
             </div>
-            {currentBatch.status === 'open' && (
-              <button className="admin-btn admin-btn--primary" onClick={() => { setEditingBook(undefined); setIsBookFormOpen(true); }}>
-                <Plus size={16} /> Add Book
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="admin-btn admin-btn--secondary text-sm"
+                onClick={() => {
+                  if (selectedBookIds.size > 0) {
+                    setSelectedBookIds(new Set());
+                  } else {
+                    setSelectedBookIds(new Set(filteredBooks.map(b => b.id)));
+                  }
+                }}
+                disabled={isRemoving}
+              >
+                {selectedBookIds.size > 0 ? "Unselect All" : "Select All"}
               </button>
-            )}
+              {selectedBookIds.size > 0 && (
+                <button 
+                  className="admin-btn" 
+                  style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }} 
+                  onClick={handleBulkDeleteBooks}
+                  disabled={isRemoving}
+                >
+                  <Trash2 size={16} /> Remove Selected ({selectedBookIds.size})
+                </button>
+              )}
+              {currentBatch.status === 'open' && (
+                <button className="admin-btn admin-btn--primary" onClick={() => { setEditingBook(undefined); setIsBookFormOpen(true); }}>
+                  <Plus size={16} /> Add Book
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="admin-table-toolbar">
@@ -472,6 +551,22 @@ export function BooksManager() {
               <table className="admin-table">
                 <thead>
                   <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={paginatedBooks.length > 0 && paginatedBooks.every(b => selectedBookIds.has(b.id))}
+                        disabled={isRemoving}
+                        onChange={(e) => {
+                          const newSelected = new Set(selectedBookIds);
+                          if (e.target.checked) {
+                            paginatedBooks.forEach(b => newSelected.add(b.id));
+                          } else {
+                            paginatedBooks.forEach(b => newSelected.delete(b.id));
+                          }
+                          setSelectedBookIds(newSelected);
+                        }}
+                      />
+                    </th>
                     <th>Title</th>
                     <th>Author</th>
                     <th>Accession No.</th>
@@ -482,7 +577,20 @@ export function BooksManager() {
                 </thead>
                 <tbody>
                   {paginatedBooks.map((book) => (
-                    <tr key={book.id}>
+                    <tr key={book.id} style={{ backgroundColor: selectedBookIds.has(book.id) ? 'var(--color-blue-50)' : 'transparent' }}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedBookIds.has(book.id)}
+                          disabled={isRemoving}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedBookIds);
+                            if (e.target.checked) newSelected.add(book.id);
+                            else newSelected.delete(book.id);
+                            setSelectedBookIds(newSelected);
+                          }}
+                        />
+                      </td>
                       <td style={{ fontWeight: 500 }}>{book.title}</td>
                       <td>{book.author}</td>
                       <td style={{ fontFamily: 'monospace' }}>{book.accession_number || 'N/A'}</td>

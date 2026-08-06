@@ -23,6 +23,9 @@ import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { processInChunks } from '@/src/Libs/chunkUtils';
+import { useDebounce } from '@/src/Hooks/useDebounce';
+import { Pagination } from '@/src/Components/Shared/Pagination';
 
 interface AttachmentUploaderProps {
   file: File;
@@ -110,6 +113,8 @@ export function EmailMessage() {
   const itemsPerPage = 10;
 
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
+  const { showToast, removeToast } = useToast();
+  const [isRemoving, setIsRemoving] = useState(false);
   const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File, id?: string }[] } | null>(null);
   const [bulkReplyModal, setBulkReplyModal] = useState<{ body: string } | null>(null);
   const [viewMessageModal, setViewMessageModal] = useState<ContactMessage | null>(null);
@@ -211,8 +216,6 @@ export function EmailMessage() {
     return () => { mounted = false; };
   }, [queueState, bulkReplyModal]);
 
-  const { showToast } = useToast();
-
   const fetchMessages = async () => {
     try {
       const data = await contactApi.getAllMessages();
@@ -297,17 +300,23 @@ export function EmailMessage() {
       triggerDelete(
         `${msgsToDelete.length} messages`,
         async () => {
+          setIsRemoving(true);
+          const toastId = showToast(`${msgsToDelete.length} removing processing.`, 'loading');
           try {
-            await Promise.all(Array.from<number>(selectedIds).map(id => contactApi.deleteMessage(id)));
+            await processInChunks(Array.from(selectedIds), 10, (id: number) => contactApi.deleteMessage(id), (_, __, c) => {});
             setSelectedIds(new Set());
+            showToast(`Removed ${msgsToDelete.length} messages successfully`, 'success');
           } catch (err: any) {
             setMessages(prev => [...prev, ...msgsToDelete]);
-            showToast(err.message || 'Failed to perform bulk delete', 'error');
+            showToast(err.message || 'Failed to perform bulk remove', 'error');
+          } finally {
+            setIsRemoving(false);
+            removeToast(toastId);
           }
         },
         () => {
           setMessages(prev => [...prev, ...msgsToDelete]);
-          showToast('Bulk deletion undone', 'success');
+          showToast('Bulk removal undone', 'success');
         }
       );
 
@@ -537,11 +546,11 @@ export function EmailMessage() {
               <button onClick={() => setBulkReplyModal({ body: '' })} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50 text-green-700">Reply All</button>
               {filterType === 'RESERVATION' && (
                 <>
-                  <button onClick={() => handleBulkAction('APPROVED')} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50 text-green-700">Approve All</button>
-                  <button onClick={() => handleBulkAction('DECLINED')} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50 text-red-700">Decline All</button>
+                  <button onClick={() => handleBulkAction('APPROVED')} disabled={isRemoving} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50 text-green-700 disabled:opacity-50">Approve All</button>
+                  <button onClick={() => handleBulkAction('DECLINED')} disabled={isRemoving} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded hover:bg-gray-50 text-red-700 disabled:opacity-50">Decline All</button>
                 </>
               )}
-              <button onClick={() => handleBulkAction('DELETE')} className="text-xs bg-red-50 border border-red-200 text-red-700 px-3 py-1.5 rounded hover:bg-red-100">Delete</button>
+              <button onClick={() => handleBulkAction('DELETE')} disabled={isRemoving} className="text-xs bg-red-50 border border-red-200 text-red-700 px-3 py-1.5 rounded hover:bg-red-100 disabled:opacity-50">Remove</button>
             </div>
           </div>
         )}
@@ -551,7 +560,8 @@ export function EmailMessage() {
             type="checkbox"
             checked={filtered.length > 0 && selectedIds.size === filtered.length}
             onChange={toggleSelectAll}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            disabled={isRemoving}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
           />
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Select All</span>
         </div>
@@ -596,7 +606,8 @@ export function EmailMessage() {
                             type="checkbox"
                             checked={selectedIds.has(msg.id)}
                             onChange={() => toggleSelection(msg.id)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-1"
+                            disabled={isRemoving}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-1 disabled:opacity-50"
                           />
                         </div>
                         <div className="flex-1 min-w-0">

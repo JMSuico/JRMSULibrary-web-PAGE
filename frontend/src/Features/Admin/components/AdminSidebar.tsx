@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import {
   LayoutDashboard,

@@ -762,3 +762,56 @@ To view the automatically generated API documentation and test endpoints directl
 1. Ensure the Docker containers are running (`docker-compose up -d`).
 2. Open your browser and navigate to: **`http://localhost:8000/api/docs/`**
 3. The raw OpenAPI schema is available at: **`http://localhost:8000/api/schema/`**
+
+---
+
+## 14) Verified Implementation State (2026-08-06 Deep Scan)
+
+This section records the **actual** file counts and structure as verified by direct scan.
+Use these numbers to validate the architecture is intact before adding new features.
+
+### Backend Verified Counts
+
+| Layer | Location | Count |
+|---|---|---|
+| Models | `Features/Data/Models/` | 21 files |
+| Repositories | `Features/Repositories/Implementations/` | 17 files |
+| Services | `Features/Services/Implementations/` | 18 files + `tasks.py` |
+| Controllers | `Features/Api/Controllers/` | 17 files |
+| Helpers | `Features/Helpers/` | 6 files |
+| Serializers | `Features/Api/Serializers/` | present |
+| Routes | `Features/Api/Routes/` | `api_router.py` |
+| Management Commands | `Features/management/commands/` | present |
+
+### Frontend Verified Route Count
+
+| Type | Count | Routes |
+|---|---|---|
+| Public | 7 | `/`, `/about`, `/services`, `/administration`, `/personnel`, `/collection`, `/physical-setup` |
+| Admin | 12 | Dashboard, Books, BatchHistory, Sections, Content, EResources, Email, Users, Analytics, Reports, Settings, RecycleBin |
+| Isolated | 1 | `/admin/login` (no layout shell) |
+
+### Runtime (Docker)
+
+```
+docker-compose up -d   →  7 services start
+  db              PostgreSQL 16   :5432
+  redis           Redis 7         :6379
+  backend         Daphne/ASGI     :8000 (internal)
+  celery-worker   Celery          (internal)
+  frontend-webpage  Nginx/React   :3000
+  frontend-admin    Nginx/React   :3001
+  ollama          qwen2.5:0.5b    :11434 (internal)
+  ollama-init     (runs once, pulls model, exits)
+```
+
+### Known Items Requiring Attention
+
+| Priority | Item | Action Needed |
+|---|---|---|
+| 🟠 HIGH | DB port 5432 exposed to host | Remove `ports:` from `db` service for prod |
+| 🟠 HIGH | Redis port 6379 exposed, no password | Remove `ports:` from `redis` for prod |
+| 🟡 MEDIUM | Rate-limit counter stored in-memory | Switch to Redis-backed cache in `settings.py` |
+| 🟡 MEDIUM | `Middleware/` dir in `Features/` is empty | Middleware lives in `core/middleware.py` — update this SKILL.md diagram if the dir is removed |
+
+*This section is auto-updated by deep-scan analysis. Do not edit manually.*

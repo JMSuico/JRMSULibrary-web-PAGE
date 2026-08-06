@@ -15,6 +15,12 @@ backend/venv/
 # Django media files (user uploads - never commit)
 backend/media/
 
+# ---- ENVIRONMENT / SECRETS (NEVER COMMIT) ----
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
 # ---- LARGE BINARY / MEDIA FILES (ignore everywhere) ----
 # Videos
 
@@ -59,3 +65,4 @@ objects.txt
 !AGENTS.md
 !implementationDockerandKubernates.md
 !SECURITY.md
+!SkillMemory.md

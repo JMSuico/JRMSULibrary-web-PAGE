@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { NewlyAcquiredBooks } from '@/src/Features/Collection/components/NewlyAcquiredBooks';
 import { ResearchReferencesTable } from '@/src/Features/Collection/components/ResearchReferencesTable';
 import { TreeView } from '@/src/Components/Shared/TreeView';
 import { FileViewerModal } from '@/src/Components/Modals/FileViewerModal';
+import { defaultExternalLinks } from '@/src/Libs/Assets/defaultLinks';
 import { eBooksTree } from '@/src/Libs/Assets/treeData';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 import { eresourceApi, EResourceDepartment } from '@/src/Endpoints/eresourceApi';
@@ -128,6 +129,8 @@ export default function CollectionPage() {
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string; } | null>(null);
+
+  const displayLinks = onlineLinks.length > 0 ? onlineLinks : (defaultExternalLinks as any as ManagedLink[]);
 
   const load = async () => {
     setLoadingResources(true);
@@ -373,10 +376,10 @@ export default function CollectionPage() {
               <div className="text-center text-red-500 py-12">
                 Error: {errorMsg}
               </div>
-            ) : onlineLinks.length > 0 ? (
+            ) : displayLinks.length > 0 ? (
               <div className="space-y-12">
                 {(Object.entries(
-                  onlineLinks.reduce((acc, link) => {
+                  displayLinks.reduce((acc, link) => {
                     const cat = link.category || 'Other Resources';
                     if (!acc[cat]) acc[cat] = [];
                     acc[cat].push(link);

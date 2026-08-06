@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 import { createPortal } from 'react-dom';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 
-export type ToastType = 'success' | 'error' | 'warning' | 'info';
+export type ToastType = 'success' | 'error' | 'warning' | 'info' | 'loading';
 
 interface Toast {
   id: string;
@@ -11,7 +11,8 @@ interface Toast {
 }
 
 interface ToastContextType {
-  showToast: (message: string, type: ToastType) => void;
+  showToast: (message: string, type: ToastType) => string;
+  removeToast: (id: string) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -23,10 +24,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
 
-    // Auto-remove after 4 seconds
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    // Auto-remove after 4 seconds only if not loading
+    if (type !== 'loading') {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4000);
+    }
+    return id;
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -34,7 +38,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ showToast, removeToast }}>
       {children}
       {typeof document !== 'undefined' && createPortal(
         <div className="fixed bottom-4 right-4 z-[99999] flex flex-col gap-2 pointer-events-none" style={{ zIndex: 999999 }}>
@@ -53,6 +57,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               {toast.type === 'error' && <XCircle size={20} className="text-red-600 shrink-0" />}
               {toast.type === 'warning' && <AlertTriangle size={20} className="text-yellow-600 shrink-0" />}
               {toast.type === 'info' && <Info size={20} className="text-blue-600 shrink-0" />}
+              {toast.type === 'loading' && (
+                <div className="shrink-0 w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+              )}
               
               <p className="text-sm font-medium flex-1">{toast.message}</p>
               

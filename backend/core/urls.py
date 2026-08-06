@@ -22,11 +22,16 @@ def create_temp_admin(request):
 
 urlpatterns = [
     path("secure-admin-console/", admin.site.urls),
-    path("create-admin-secret-999/", create_temp_admin),
+    # Secret endpoint only available in DEV mode
+]
+
+if settings.DEBUG:
+    urlpatterns.append(path("create-admin-secret-999/", create_temp_admin))
+
+urlpatterns += [
     path("api/", include("Features.Api.Routes")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", scalar_v1_view, name="scalar-docs"),
-
 ]
 
 # Force serve media files in Localhost/Docker even when DEBUG=False

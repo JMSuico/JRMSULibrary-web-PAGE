@@ -111,6 +111,8 @@ class Command(BaseCommand):
         self._import_org_structure(source_base)
         self._import_personnel(source_base)
         self._import_excellence(source_base)
+        self._import_external_links()
+        self._import_page_texts()
 
         self.stdout.write(self.style.SUCCESS("Import completed successfully!"))
 
@@ -360,3 +362,88 @@ class Command(BaseCommand):
             mf = ManagedFile(category='Excellence', name='Excellence in Information', is_active=True)
             mf.file.save("JRMSU_library_lib.jpg", File(f), save=True)
         self.stdout.write(self.style.SUCCESS("    + Excellence in Information image migrated successfully!"))
+
+    def _import_external_links(self):
+        from Features.Data.Models.managed_link_model import ManagedLink
+        
+        default_links = [
+            # Open Access Journals
+            { 'name': 'Agriculture', 'url': 'https://www.mdpi.com/journal/agriculture', 'category': 'Open Access Journals' },
+            { 'name': 'List of Scientific Journals', 'url': 'https://en.wikipedia.org/wiki/Lists_of_academic_journals', 'category': 'Open Access Journals' },
+            { 'name': 'List of Academic Journal', 'url': 'https://en.wikipedia.org/wiki/Lists_of_academic_journals', 'category': 'Open Access Journals' },
+            { 'name': 'Worldcat', 'url': 'https://search.worldcat.org/', 'category': 'Open Access Journals' },
+            { 'name': 'Google Books', 'url': 'https://books.google.com/?hl=en', 'category': 'Open Access Journals' },
+            { 'name': 'Online Free E-Books', 'url': 'https://www.free-ebooks.net/', 'category': 'Open Access Journals' },
+            { 'name': 'Gutenberg', 'url': 'https://www.gutenberg.org/', 'category': 'Open Access Journals' },
+            { 'name': 'Scribd', 'url': 'https://www.scribd.com/', 'category': 'Open Access Journals' },
+            { 'name': 'GetFreeEbooks', 'url': 'https://getfreeebooks.com/', 'category': 'Open Access Journals' },
+            { 'name': 'DOST Publication', 'url': 'https://www.dost.gov.ph/index.php?option=com_content&task=view&id=712&Itemid=201', 'category': 'Open Access Journals' },
+            { 'name': 'Highwire Press', 'url': 'https://www.highwirepress.com/', 'category': 'Open Access Journals' },
+            { 'name': 'IPL Magazines', 'url': 'https://www.ipl.org/', 'category': 'Open Access Journals' },
+            
+            # Resources
+            { 'name': 'Science Direct', 'url': 'https://www.sciencedirect.com/', 'category': 'Resources' },
+            { 'name': 'Philippine Elib', 'url': 'https://www.elib.gov.ph/', 'category': 'Resources' },
+            { 'name': 'ERIC Education Research', 'url': 'https://eric.ed.gov/', 'category': 'Resources' },
+            { 'name': 'Gale Database', 'url': 'https://link.gale.com/apps/menu?userGroupName=phusm&prodId=MENU', 'category': 'Resources' },
+            { 'name': 'Philippine E-Journals', 'url': 'https://ejournals.ph/', 'category': 'Resources' },
+            { 'name': 'Springer Nature Link', 'url': 'https://link.springer.com/', 'category': 'Resources' },
+            { 'name': 'E-Library USA', 'url': 'https://docs.google.com/forms/d/e/1FAIpQLSdK93TrYAkWrl32xWxlOItfYFTTgUQPY_Ws2ZhxfuVMvojpiA/viewform', 'category': 'Resources' },
+            { 'name': 'ProQuest', 'url': 'https://www.proquest.com/', 'category': 'Resources' },
+            { 'name': 'Student Handbooks', 'url': 'https://drive.google.com/file/d/18erQ6LSfT3Jia84n77WBPOb1JfzI-tQj/view', 'category': 'Resources' },
+            
+            # Acquired E-Resources
+            { 'name': 'Bookshelf (VitalSource)', 'url': 'https://www.vitalsource.com/', 'category': 'Acquired E-Resources' },
+            { 'name': 'Scholaar', 'url': 'https://scholaar.com/', 'category': 'Acquired E-Resources' },
+        ]
+
+        if ManagedLink.objects.exists():
+            self.stdout.write("    External Links already seeded. Skipping.")
+            return
+
+        for link_data in default_links:
+            ManagedLink.objects.create(
+                name=link_data['name'],
+                url=link_data['url'],
+                category=link_data['category'],
+                is_active=True
+            )
+        self.stdout.write(self.style.SUCCESS(f"    + {len(default_links)} External Links migrated successfully!"))
+
+    def _import_page_texts(self):
+        from Features.Data.Models.page_content_model import PageContent
+        
+        defaults = [
+            {
+                'slug': 'about_history',
+                'title': 'History of JRMSU Katipunan Campus',
+                'content': '<p>Jose Rizal Memorial State University was established by virtue of RA 9852 with Congresswoman Cecilia G. Jalosjos-Carreon as principal author, Congressman Cesar Jalosjos as co-author. It was approved by President Gloria Macapagal-Arroyo on December 15, 2009. It was formerly the Jose Rizal Memorial State College by virtue of RA 8193 sponsored by Congressman Romeo G. Jalosjos of the 1st District of Zamboanga del Norte which was approved on June 11, 1996 by the President of the Republic, Fidel V. Ramos. It was a consolidation of the Rizal Memorial Vocational School (RMNVS) in Dapitan City, the Zamboanga del Norte School of Arts and Trades (ZNSAT) in Dipolog City, and the Siocon National Vocational School (SNVS) in the Municipality of Siocon. In 2002, two higher education institutions (HEIs) within Zamboanga del Norte, namely the Katipunan National Agricultural School (KNAS) in the municipality of Katipunan and the Zamboanga del Norte Agricultural College (ZNAC) in the Municipality of Tampilisan, were integrated into then JRMSC pursuant to CHED Memorandum Order No. 27 series of 2000 thus comprising the fourth and fifth campuses, respectively of JRMSU.</p><p>The first President was Dr. Felipe O. Ligan who was appointed in 1997. On June 7, 2002 CHED Special Order No. 35, s. 2002 appointed Dr. Henry A. Sojor as the OIC President of the Jose Rizal Memorial State College in concurrent capacity as President of Central Visayas Polytechnic College in Dumaguete City now Negros Oriental State University.</p><p>In the span of two years and eight months, the Board of Trustee then deemed it best for the College to have its permanent leader. Thus, on March 1, 2005, Dr. Edgar S. Balbuena assumed office as second President of JRMSC pursuant to BOT Resolution No. 04, series of 2005 Chairmaned by Fr. Rolando V. Rosa, OP.</p><p>With the appointment of Dr. Balbuena, the College charted a new course. With his extraordinary leadership it took only four years and nine months for the College to be elevated to the status of a University. Indeed the growth of the University means a continuing and growing commitment for academic excellence and quality, research, and productivity, community involvement and partnership for national development and global competitiveness. Evidently, he emerged as a dynamo, leading the people of Zamboanga del Norte and adjacent provinces towards improved quality life.</p>'
+            },
+            {
+                'slug': 'about_quality',
+                'title': 'JRMSU Library Quality Objectives',
+                'content': '<ul><li>Increase the acquisition of print, digital, and multimedia resources by 10% annually to ensure modern, relevant, and accessible materials that support instruction, research, extension, and production.</li><li>Increase library user engagement by 10% and ensure the 100% provision of adaptive, inclusive, and transformative library facilities that foster creativity, critical thinking, and lifelong learning.</li><li>Forge at least one (1) local and one (1) international formal partnership or collaboration each year, and implement at least one (1) joint program or activity with academic institutions, government agencies, or library networks to strengthen resource sharing, collaboration, and service innovation.</li><li>Ensure that 100% of library personnel participate in at least two (2) capacity-building or professional development activities per year, strengthening their skills in technology, research support, customer service, and library management.</li><li>Achieve a minimum of 90% overall user satisfaction rating in the annual library survey by continuously delivering equitable, technology-driven, and user-centered services.</li></ul>'
+            },
+            {
+                'slug': 'our_services',
+                'title': 'Our 17 Library Services',
+                'content': '<p>Library User Education</p><p>Informal Reference Service</p><p>Readers Advisory Services</p><p>Technical Services</p><p>Audio-Visual Services</p><p>Circulation Services</p><p>Ask-a-Librarian / #AskRIZAL</p><p>Photo/Scan Me Service</p><p>OPAC Service</p><p>Printing Service</p><p>Property Counter Service</p><p>Selective Dissemination of Information</p><p>Current Awareness Services</p><p>Referral Information Service (RIS)</p><p>File Transfer Service</p><p>Internet / e-Library / Free Wi-Fi</p><p>Online Databases Service</p>'
+            },
+            {
+                'slug': 'personnel_text',
+                'title': 'Librarian\'s Corner Text',
+                'content': '<p>From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence.</p><p>The Library of Jose Rizal Memorial State University Katipunan Campus is committed to supporting the University\'s Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources and services. In adherence to the standards, the library continuously enhances its collections, facilities, and technological services to meet the evolving needs of its academic community. It also promotes information literacy, strengthens research support, and fosters collaborative linkages to contribute to institutional development. The library remains dedicated to delivering quality services and nurturing a culture of lifelong learning among its users.</p><p>Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!</p>'
+            }
+        ]
+
+        if PageContent.objects.exists():
+            self.stdout.write("    Page Texts already seeded. Skipping.")
+            return
+
+        for text_data in defaults:
+            PageContent.objects.create(
+                slug=text_data['slug'],
+                title=text_data['title'],
+                content=text_data['content']
+            )
+        self.stdout.write(self.style.SUCCESS(f"    + {len(defaults)} Page Texts migrated successfully!"))

@@ -8,6 +8,7 @@ import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
+import { processInChunks } from '@/src/Libs/chunkUtils';
 
 export function Reports() {
   const [reportType, setReportType] = useState('summary');
@@ -23,10 +24,12 @@ export function Reports() {
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<number>>(new Set());
+  const [isRemoving, setIsRemoving] = useState(false);
   const limit = 5;
 
   const debouncedSearch = useDebounce(searchQuery, 400);
-  const { showToast } = useToast();
+  const { showToast, removeToast } = useToast();
 
   const handleArchive = async (id: number) => {
     try {
@@ -62,6 +65,38 @@ export function Reports() {
 
     // Optimistically hide it from UI
     setHistory(prev => prev.filter(h => h.id !== id));
+  };
+
+  const handleBulkDeleteReports = () => {
+    if (selectedReportIds.size === 0) return;
+    const count = selectedReportIds.size;
+    const reportsToDelete = history.filter(h => selectedReportIds.has(h.id));
+
+    // Optimistically hide
+    setHistory(prev => prev.filter(h => !selectedReportIds.has(h.id)));
+    setSelectedReportIds(new Set());
+
+    triggerDelete(
+      `${count} selected report(s)`,
+      async () => {
+        setIsRemoving(true);
+        const toastId = showToast(`${count} removing processing.`, 'loading');
+        try {
+          await processInChunks(Array.from(selectedReportIds), 10, (id: number) => reportApi.deleteReport(id), (_, __, c) => {});
+          showToast(`Removed ${count} reports successfully`, 'success');
+        } catch (err: any) {
+          fetchHistory();
+          showToast('Failed to permanently remove some reports', 'error');
+        } finally {
+          setIsRemoving(false);
+          removeToast(toastId);
+        }
+      },
+      () => {
+        setHistory(prev => [...prev, ...reportsToDelete].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+        showToast('Bulk report restoration undone', 'success');
+      }
+    );
   };
 
   const fetchHistory = async () => {
@@ -292,15 +327,27 @@ export function Reports() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8 print:hidden">
         <div className="flex justify-between items-end mb-4">
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><History size={20} /> Generated Reports History</h2>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            <input
-              type="text"
-              placeholder="Search reports..."
-              className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-navy w-64"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="flex items-center gap-2">
+            {selectedReportIds.size > 0 && (
+              <button 
+                onClick={handleBulkDeleteReports}
+                disabled={isRemoving}
+                className="admin-btn disabled:opacity-50"
+                style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
+              >
+                <Trash2 size={16} /> Remove Selected ({selectedReportIds.size})
+              </button>
+            )}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Search reports..."
+                className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-navy w-64"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
@@ -308,6 +355,20 @@ export function Reports() {
           <table className="admin-table">
             <thead>
               <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input 
+                    type="checkbox"
+                    checked={history.length > 0 && history.every(h => selectedReportIds.has(h.id))}
+                    disabled={isRemoving}
+                    className="disabled:opacity-50"
+                    onChange={(e) => {
+                      const newSet = new Set(selectedReportIds);
+                      if (e.target.checked) history.forEach(h => newSet.add(h.id));
+                      else history.forEach(h => newSet.delete(h.id));
+                      setSelectedReportIds(newSet);
+                    }}
+                  />
+                </th>
                 <th>Title</th>
                 <th>Type</th>
                 <th>Date Range</th>
@@ -332,7 +393,21 @@ export function Reports() {
                 </tr>
               ) : (
                 history.map((h) => (
-                  <tr key={h.id}>
+                  <tr key={h.id} style={{ backgroundColor: selectedReportIds.has(h.id) ? 'var(--color-blue-50)' : undefined }}>
+                    <td style={{ textAlign: 'center' }}>
+                      <input 
+                        type="checkbox"
+                        checked={selectedReportIds.has(h.id)}
+                        disabled={isRemoving}
+                        className="disabled:opacity-50"
+                        onChange={(e) => {
+                          const newSet = new Set(selectedReportIds);
+                          if (e.target.checked) newSet.add(h.id);
+                          else newSet.delete(h.id);
+                          setSelectedReportIds(newSet);
+                        }}
+                      />
+                    </td>
                     <td className="font-medium text-gray-900">{h.title}</td>
                     <td><span className="bg-blue-50 text-navy px-2 py-1 rounded-md text-xs font-semibold uppercase">{h.report_type}</span></td>
                     <td>{h.date_range.replace('-', ' ').toUpperCase()}</td>
@@ -356,8 +431,9 @@ export function Reports() {
                         </button>
                         <button
                           onClick={() => handleDelete(h.id)}
-                          className="admin-btn admin-btn--outline flex items-center gap-1 !py-1 !px-2 text-xs text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200"
-                          title="Delete"
+                          disabled={isRemoving}
+                          className="admin-btn admin-btn--outline flex items-center gap-1 !py-1 !px-2 text-xs text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200 disabled:opacity-50"
+                          title="Remove"
                         >
                           <Trash2 size={14} />
                         </button>

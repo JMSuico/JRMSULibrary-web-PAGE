@@ -38,6 +38,9 @@ export const cmsApi = {
       body: JSON.stringify(data),
     });
   },
+  importDefaultTexts: async (): Promise<{ message: string, imported: number }> => {
+    return apiClient('/content/import-defaults/', { method: 'POST' });
+  },
 
   // Managed Links
   getAllLinks: async (): Promise<ManagedLink[]> => {
@@ -57,6 +60,9 @@ export const cmsApi = {
   },
   deleteLink: async (id: number): Promise<void> => {
     return apiClient(`/links/${id}/`, { method: 'DELETE' });
+  },
+  importDefaultLinks: async (): Promise<{ message: string, imported: number }> => {
+    return apiClient('/links/import-defaults/', { method: 'POST' });
   },
 
   // Managed Files
