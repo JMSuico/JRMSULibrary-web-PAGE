@@ -24,8 +24,6 @@ import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
-import { useDebounce } from '@/src/Hooks/useDebounce';
-import { Pagination } from '@/src/Components/Shared/Pagination';
 
 interface AttachmentUploaderProps {
   file: File;
