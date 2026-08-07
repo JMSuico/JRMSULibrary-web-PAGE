@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import { usePdfExport } from '@/src/Hooks/usePdfExport';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
@@ -14,7 +15,7 @@ export function Reports() {
   const [reportType, setReportType] = useState('summary');
   const [dateRange, setDateRange] = useState('this-month');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
+  const { isPdfGenerating, exportPdf } = usePdfExport();
   const [reportData, setReportData] = useState<ReportSummary | null>(null);
   const [activeReportInfo, setActiveReportInfo] = useState<{title: string, period: string, type: string} | null>(null);
   
@@ -151,68 +152,6 @@ export function Reports() {
 
   const handlePrint = () => {
     window.print();
-  };
-
-  const exportPdf = async () => {
-    const el = document.getElementById('report-preview-area');
-    if (!el) return;
-
-    let clone: HTMLElement | null = null;
-    try {
-      setIsPdfGenerating(true);
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-        import('jspdf'),
-        import('html2canvas-pro'),
-      ]);
-
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      // Fix for html2canvas failing on CSS variables (var(--color-navy))
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        foreignObjectRendering: false,
-        imageTimeout: 0,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      if (canvas.width === 0 || canvas.height === 0) {
-        throw new Error('Canvas rendering failed (zero width/height).');
-      }
-      
-      const imgProps = pdf.getImageProperties(imgData);
-      const imgWidth = pdfWidth;
-      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-      
-      let heightLeft = imgHeight;
-      let position = 0;
-      
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
-      
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pdfHeight;
-      }
-      
-      const rPeriod = activeReportInfo?.period || dateRange;
-      pdf.save(`jrmsu-library-report-${rPeriod}-${new Date().toISOString().slice(0, 10)}.pdf`);
-      showToast('PDF downloaded successfully', 'success');
-    } catch (err: any) {
-      console.error(err);
-      showToast('Failed to generate PDF: ' + err.message, 'error');
-    } finally {
-      if (clone && document.body.contains(clone)) {
-        document.body.removeChild(clone);
-      }
-      setIsPdfGenerating(false);
-    }
   };
 
   const handleExportCSV = () => {
@@ -471,7 +410,7 @@ export function Reports() {
               <button onClick={handleExportCSV} className="admin-btn admin-btn--outline flex items-center gap-2">
                 <Download size={16} /> Export CSV
               </button>
-              <button onClick={exportPdf} disabled={isPdfGenerating} className="admin-btn admin-btn--primary flex items-center gap-2 bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60">
+              <button onClick={() => exportPdf('report-preview-area', 'jrmsu-library-report', activeReportInfo?.period || dateRange)} disabled={isPdfGenerating} className="admin-btn admin-btn--primary flex items-center gap-2 bg-red-600 hover:bg-red-700 border-none text-white disabled:opacity-60">
                 {isPdfGenerating ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : 'Export as PDF'}
               </button>
               <button onClick={handlePrint} className="admin-btn admin-btn--primary flex items-center gap-2">

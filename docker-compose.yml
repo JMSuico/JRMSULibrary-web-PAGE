@@ -23,9 +23,16 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ─── Layer 3: Backend ──────────────────────────────────────────────────
   backend:
+    deploy:
+      replicas: 3
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -35,7 +42,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -58,6 +65,7 @@ services:
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
       REDIS_CACHE_URL: "redis://redis:6379/1"
+      USE_REDIS: "True"
       # SMTP — Gmail App Password
       EMAIL_HOST: "smtp.gmail.com"
       EMAIL_PORT: "587"
@@ -90,7 +98,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       DB_ENGINE: postgresql
       DB_NAME: jrmsu_library
@@ -103,6 +111,8 @@ services:
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
       REDIS_CACHE_URL: "redis://redis:6379/1"
+      USE_REDIS: "True"
+      USE_CELERY: "True"
       EMAIL_HOST: "smtp.gmail.com"
       EMAIL_PORT: "587"
       EMAIL_HOST_USER: "katipunan.library@jrmsu.edu.ph"

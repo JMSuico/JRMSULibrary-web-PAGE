@@ -13,6 +13,7 @@ import { Pagination } from '@/src/Components/Shared/Pagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 import { LayoutGrid, List } from 'lucide-react';
 import { ResearchReferencesManager } from './ResearchReferencesManager';
+import { PersonnelManager } from './PersonnelManager';
 import { defaultExternalLinks } from '@/src/Libs/Assets/defaultLinks';
 
 import { getImageUrl } from '@/src/Libs/apiClient';
@@ -324,64 +325,6 @@ export function ContentManager() {
   if (loading && contents.length === 0) {
     return <div className="p-8 text-center text-gray-500">Loading CMS...</div>;
   }
-
-  const handleDeletePersonnel = async (id: number) => {
-    const personToDelete = personnelList.find(p => p.id === id);
-    if (!personToDelete) return;
-
-    // Optimistic delete
-    setPersonnelList(prev => prev.filter(p => p.id !== id));
-
-    triggerDelete(
-      personToDelete.name,
-      async () => {
-        try {
-          await personnelApi.deletePersonnel(id);
-        } catch (e: any) {
-          setPersonnelList(prev => [...prev, personToDelete].sort((a,b) => a.order - b.order));
-          showToast(e.message || 'Failed to delete personnel', 'error');
-        }
-      },
-      () => {
-        setPersonnelList(prev => [...prev, personToDelete].sort((a,b) => a.order - b.order));
-        showToast('Personnel restoration undone', 'success');
-      }
-    );
-  };
-
-  const handlePersonnelSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    
-    try {
-      if (personnelPhoto) {
-        formData.append('photo', personnelPhoto);
-      }
-
-      if (editingPersonnelId) {
-        const updated = await personnelApi.updatePersonnel(editingPersonnelId, formData);
-        setPersonnelList(prev => prev.map(p => p.id === editingPersonnelId ? updated : p));
-        showToast('Personnel updated successfully', 'success');
-      } else {
-        const created = await personnelApi.createPersonnel(formData);
-        setPersonnelList(prev => [...prev, created].sort((a, b) => a.order - b.order));
-        showToast('Personnel created successfully', 'success');
-      }
-      setIsPersonnelModalOpen(false);
-      setEditingPersonnelId(null);
-      setPersonnelPhoto(null);
-      setPersonnelPhotoPreview(null);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to save personnel', 'error');
-    }
-  };
-
-  const openEditPersonnel = (person: any) => {
-    setEditingPersonnelId(person.id);
-    setPersonnelPhoto(null);
-    setPersonnelPhotoPreview(person.photo ? (getImageUrl(person.photo)) : null);
-    setIsPersonnelModalOpen(true);
-  };
 
   return (
     <>

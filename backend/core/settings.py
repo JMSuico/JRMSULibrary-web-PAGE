@@ -369,12 +369,20 @@ IMAP_HOST = os.environ.get('IMAP_HOST', 'imap.gmail.com')
 # ============================================================
 # Throttle Cache — use Redis backend to survive restarts
 # ============================================================
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': os.environ.get('REDIS_CACHE_URL', 'redis://localhost:6379/1'),
+if os.environ.get('USE_REDIS', 'False').lower() == 'true':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': os.environ.get('REDIS_CACHE_URL', 'redis://localhost:6379/1'),
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }
 
 # ============================================================
 # External Library Credentials (for auto-login proxy)
