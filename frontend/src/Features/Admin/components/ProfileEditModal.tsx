@@ -63,6 +63,7 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
   };
 
   const handleSave = async () => {
+    if (saving) return;
     setError(null);
     setSuccessMsg(null);
     setSaving(true);

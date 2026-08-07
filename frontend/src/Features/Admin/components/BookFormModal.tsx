@@ -8,7 +8,7 @@ import { BatchBook } from '@/src/Endpoints/batchApi';
 interface BookFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: FormData) => void;
+  onSubmit: (data: FormData) => void | Promise<void>;
   initialData?: BatchBook;
 }
 
@@ -20,6 +20,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
   const [accessionNumber, setAccessionNumber] = useState('');
   const [category, setCategory] = useState('');
   const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [savedCategories, setSavedCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState('');
@@ -77,8 +78,11 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
+
     const formData = new FormData();
     formData.append('title', title);
     formData.append('author', author);
@@ -87,7 +91,11 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
     if (coverImage) {
       formData.append('cover_image', coverImage);
     }
-    onSubmit(formData);
+    try {
+      await onSubmit(formData);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return createPortal(
@@ -225,18 +233,21 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             )}
           </div>
           
-          <div className="mt-6 flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 mt-4">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 rounded-lg transition-colors cursor-pointer"
+              disabled={isSaving}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-navy text-white rounded-md hover:bg-blue-800 font-medium transition-colors"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer shadow-sm flex items-center gap-2"
+              disabled={isSaving}
             >
+              {isSaving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
               {initialData ? 'Save Changes' : 'Add Book'}
             </button>
           </div>

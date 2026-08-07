@@ -106,7 +106,7 @@ export function Dashboard() {
             {(() => {
               const chartData = (() => {
                 const counts: Record<string, number> = {};
-                data.recent_books.forEach(b => {
+                (data.recent_books || []).forEach(b => {
                   counts[b.dateAdded] = (counts[b.dateAdded] || 0) + 1;
                 });
                 return Object.entries(counts)
@@ -202,7 +202,7 @@ export function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {data.recent_books.length === 0 ? (
+            {!(data.recent_books && data.recent_books.length > 0) ? (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: 'var(--color-gray-500)' }}>
                   No recent books added.
@@ -211,7 +211,7 @@ export function Dashboard() {
             ) : (
               (() => {
                 // Ensure sorting is newest first (descending)
-                const sortedBooks = data.recent_books.slice().sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
+                const sortedBooks = (data.recent_books || []).slice().sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
                 const itemsPerPage = 10;
                 // We use currentPage for both main table and modal to keep it simple, or introduce a separate state.
                 // Let's just paginate based on a local state if needed, or re-use currentPage since modal is overlay.
@@ -233,13 +233,13 @@ export function Dashboard() {
         </div>
         
         {/* Main Table Pagination */}
-        {data.recent_books.length > 10 && (
+        {(data.recent_books || []).length > 10 && (
           <div style={{ padding: '0 20px 20px 20px' }}>
             <Pagination 
               currentPage={currentPage}
-              totalPages={Math.ceil(data.recent_books.length / 10)}
+              totalPages={Math.ceil((data.recent_books || []).length / 10)}
               onPageChange={setCurrentPage}
-              totalItems={data.recent_books.length}
+              totalItems={(data.recent_books || []).length}
               itemsPerPage={10}
             />
           </div>
@@ -284,7 +284,7 @@ export function Dashboard() {
                 </thead>
                 <tbody>
                   {(() => {
-                    const filteredBooks = data.recent_books
+                    const filteredBooks = (data.recent_books || [])
                       .slice()
                       .sort((a, b) => a.dateAdded.localeCompare(b.dateAdded))
                       .filter(b =>

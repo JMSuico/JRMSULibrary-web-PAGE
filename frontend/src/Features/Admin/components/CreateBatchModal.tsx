@@ -6,22 +6,29 @@ import { AcquisitionBatch } from '@/src/Endpoints/batchApi';
 interface CreateBatchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<AcquisitionBatch>) => void;
+  onSubmit: (data: Partial<AcquisitionBatch>) => void | Promise<void>;
 }
 
 export function CreateBatchModal({ isOpen, onClose, onSubmit }: CreateBatchModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ name, description, remarks });
-    setName('');
-    setDescription('');
-    setRemarks('');
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onSubmit({ name, description, remarks });
+      setName('');
+      setDescription('');
+      setRemarks('');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return createPortal(
@@ -75,18 +82,21 @@ export function CreateBatchModal({ isOpen, onClose, onSubmit }: CreateBatchModal
             </div>
           </div>
           
-          <div className="mt-6 flex justify-end gap-3">
+          <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors cursor-pointer text-sm"
+              disabled={saving}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-navy text-white rounded-md hover:bg-blue-800 font-medium transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm cursor-pointer flex items-center gap-2 text-sm"
+              disabled={saving}
             >
+              {saving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
               Create Batch
             </button>
           </div>
