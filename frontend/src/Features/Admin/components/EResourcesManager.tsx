@@ -25,6 +25,9 @@ export function EResourcesManager() {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
+  const [isSavingDept, setIsSavingDept] = useState(false);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const { showToast, removeToast } = useToast();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -57,6 +60,10 @@ export function EResourcesManager() {
 
   const handleSaveDept = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSavingDept) return;
+    setIsSavingDept(true);
+    showToast('Saving department...', 'info');
+
     const fd = new FormData(e.currentTarget);
     const parentIdStr = fd.get('parent') as string;
     const payload = {
@@ -75,6 +82,8 @@ export function EResourcesManager() {
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to save department', 'error');
+    } finally {
+      setIsSavingDept(false);
     }
   };
 
@@ -177,6 +186,9 @@ export function EResourcesManager() {
       showToast('Please select a file to upload', 'error');
       return;
     }
+    if (isUploadingFile) return;
+    setIsUploadingFile(true);
+    showToast('Uploading file...', 'info');
 
     const fd = new FormData(e.currentTarget);
     fd.append('department', selectedDeptId.toString());
@@ -190,6 +202,8 @@ export function EResourcesManager() {
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to upload file', 'error');
+    } finally {
+      setIsUploadingFile(false);
     }
   };
 
@@ -577,8 +591,11 @@ export function EResourcesManager() {
                 <p className="text-xs text-gray-500 mt-1">Select a parent folder to nest this department inside it.</p>
               </div>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsDeptModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg">Save</button>
+                <button type="button" onClick={() => setIsDeptModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg" disabled={isSavingDept}>Cancel</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg flex items-center gap-2" disabled={isSavingDept}>
+                  {isSavingDept ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
+                  Save
+                </button>
               </div>
             </form>
           </div>
@@ -620,8 +637,11 @@ export function EResourcesManager() {
                 <span className="text-sm font-medium text-gray-700">File is Active</span>
               </label>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg" disabled={!selectedFile}>Upload</button>
+                <button type="button" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg" disabled={isUploadingFile}>Cancel</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg flex items-center gap-2" disabled={!selectedFile || isUploadingFile}>
+                  {isUploadingFile ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
+                  Upload
+                </button>
               </div>
             </form>
           </div>

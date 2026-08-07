@@ -148,8 +148,10 @@ export function Settings() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setSaving(true);
     setSavedStatus(false);
+    showToast('Saving settings...', 'info');
     
     if (activeTab === 'general' || activeTab === 'carousel') {
       try {

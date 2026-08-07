@@ -60,6 +60,7 @@ export function ContentManager() {
   const [contents, setContents] = useState<PageContent[]>([]);
   const [editedContents, setEditedContents] = useState<Record<string, string>>({});
   const [editingContentId, setEditingContentId] = useState<string | null>(null);
+  const [isSavingContent, setIsSavingContent] = useState(false);
   
   // Link State
   const [links, setLinks] = useState<ManagedLink[]>([]);
@@ -118,12 +119,17 @@ export function ContentManager() {
 
   // --- Content Handlers ---
   const handleSaveContent = async (slug: string, content: string) => {
+    if (isSavingContent) return;
+    setIsSavingContent(true);
+    showToast('Saving content...', 'info');
     try {
       await cmsApi.updateContent(slug, { content });
       showToast('Content saved successfully', 'success');
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to save content', 'error');
+    } finally {
+      setIsSavingContent(false);
     }
   };
 
@@ -139,7 +145,9 @@ export function ContentManager() {
       is_active: fd.get('is_active') === 'on'
     };
 
+    if (isSavingLink) return;
     setIsSavingLink(true);
+    showToast('Saving link...', 'info');
     try {
       if (editingLink) {
         await cmsApi.updateLink(editingLink.id, payload);
@@ -283,6 +291,7 @@ export function ContentManager() {
     }
     if (isUploadingFile) return;
     setIsUploadingFile(true);
+    showToast('Uploading file...', 'info');
     
     const fd = new FormData(e.currentTarget);
     
@@ -441,13 +450,14 @@ export function ContentManager() {
                         </button>
                         <button 
                           className="admin-btn admin-btn--primary flex items-center gap-2"
+                          disabled={isSavingContent}
                           onClick={async () => {
                              let val = editedContents[item.slug] ?? item.content;
                              await handleSaveContent(item.slug, val);
                              setEditingContentId(null);
                           }}
                         >
-                          <Save size={16} /> Save Changes
+                          {isSavingContent ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <Save size={16} />} Save Changes
                         </button>
                       </div>
                     ) : (

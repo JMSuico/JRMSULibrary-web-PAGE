@@ -132,7 +132,9 @@ export function SectionsManager() {
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSaving) return;
     setIsSaving(true);
+    showToast('Saving image...', 'info');
 
     const fd = new FormData();
     const form = e.currentTarget;
@@ -531,6 +533,7 @@ export function SectionsManager() {
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+                disabled={isSaving}
               >
                 Cancel
               </button>
@@ -538,9 +541,10 @@ export function SectionsManager() {
                 type="submit"
                 form="section-image-form"
                 disabled={isSaving}
-                className="px-4 py-2 text-sm font-medium text-white bg-navy hover:bg-navy-dark rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-navy hover:bg-navy-dark rounded-lg shadow-sm transition cursor-pointer flex items-center gap-2"
               >
-                {isSaving ? 'Saving...' : editingImage ? 'Update Image' : 'Upload Image'}
+                {isSaving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
+                {editingImage ? 'Update Image' : 'Upload Image'}
               </button>
             </div>
           </div>

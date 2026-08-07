@@ -100,6 +100,10 @@ export function ResearchReferencesManager() {
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
+    showToast('Saving reference...', 'info');
+    
     const fd = new FormData(e.currentTarget);
     const catValue = fd.get('category') as string;
     const deptValue = fd.get('department') as string;
@@ -122,7 +126,6 @@ export function ResearchReferencesManager() {
       access_link: accessType === 'link' ? fd.get('access_link') as string : null,
     };
 
-    setIsSaving(true);
     try {
       let savedRef: ResearchReference;
       

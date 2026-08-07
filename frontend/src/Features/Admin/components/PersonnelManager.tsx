@@ -14,6 +14,7 @@ export function PersonnelManager({ active }: { active: boolean }) {
   const [personnelPhoto, setPersonnelPhoto] = useState<File | null>(null);
   const [personnelPhotoPreview, setPersonnelPhotoPreview] = useState<string | null>(null);
   const [editingPersonnelId, setEditingPersonnelId] = useState<number | null>(null);
+  const [isSavingPersonnel, setIsSavingPersonnel] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const { showToast } = useToast();
@@ -59,6 +60,10 @@ export function PersonnelManager({ active }: { active: boolean }) {
 
   const handlePersonnelSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSavingPersonnel) return;
+    setIsSavingPersonnel(true);
+    showToast('Saving personnel...', 'info');
+
     const formData = new FormData(e.currentTarget);
     
     try {
@@ -81,6 +86,8 @@ export function PersonnelManager({ active }: { active: boolean }) {
       setPersonnelPhotoPreview(null);
     } catch (err: any) {
       showToast(err.message || 'Failed to save personnel', 'error');
+    } finally {
+      setIsSavingPersonnel(false);
     }
   };
 
@@ -362,8 +369,11 @@ export function PersonnelManager({ active }: { active: boolean }) {
                 )}
               </div>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => { setIsPersonnelModalOpen(false); setPersonnelPhoto(null); setPersonnelPhotoPreview(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg">Save</button>
+                <button type="button" onClick={() => { setIsPersonnelModalOpen(false); setPersonnelPhoto(null); setPersonnelPhotoPreview(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg" disabled={isSavingPersonnel}>Cancel</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-900 rounded-lg flex items-center gap-2" disabled={isSavingPersonnel}>
+                  {isSavingPersonnel ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
+                  Save
+                </button>
               </div>
             </form>
           </div>

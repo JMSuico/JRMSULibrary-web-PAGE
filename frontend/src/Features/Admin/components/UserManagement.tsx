@@ -90,7 +90,9 @@ export function UserManagement() {
 
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSaving) return;
     setIsSaving(true);
+    showToast('Saving user...', 'info');
 
     const form = e.currentTarget;
     const data: Partial<User> & { password?: string } = {
@@ -439,14 +441,17 @@ export function UserManagement() {
               <button 
                 onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                disabled={isSaving}
               >
                 Cancel
               </button>
               <button 
                 type="submit" 
                 form="user-form"
-                className="px-4 py-2 text-sm font-medium text-white bg-navy hover:bg-navy-dark rounded-lg shadow-sm transition"
+                disabled={isSaving}
+                className="px-4 py-2 text-sm font-medium text-white bg-navy hover:bg-navy-dark rounded-lg shadow-sm transition flex items-center gap-2"
               >
+                {isSaving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : null}
                 {editingUser ? 'Update Admin' : 'Create Admin'}
               </button>
             </div>
