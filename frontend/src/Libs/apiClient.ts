@@ -77,19 +77,10 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
   if (options.body instanceof FormData) {
     delete (headers as any)['Content-Type'];
 
-    // VERCEL 4.5MB LIMIT BYPASS
-    // Vercel's free tier has a hard limit of 4.5MB for request bodies passing through its proxy.
-    // To allow 10MB+ image uploads, we must bypass the proxy and send FormData directly to the Render backend.
-    if (!endpoint.startsWith('http')) {
-      const isLocalhost = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' || 
-        window.location.hostname === '127.0.0.1' || 
-        window.location.hostname.startsWith('192.168.') ||
-        window.location.hostname.startsWith('10.')
-      );
-      const directApiBase = isLocalhost ? '/api' : 'https://jrmsulibrary-web-page.onrender.com/api';
-      url = `${directApiBase}${endpoint}`;
-    }
+    // Removed Vercel 4.5MB bypass.
+    // Making direct Cross-Origin requests to Render prevents the browser from sending 
+    // the Vercel-bound session cookies, resulting in a 401 Unauthorized auto-logout.
+    // All requests must pass through the relative /api proxy to maintain the session.
   }
 
   const response = await fetch(url, {
