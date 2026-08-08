@@ -31,10 +31,15 @@ class EResourceDepartmentService(IEResourceDepartmentService):
         item = self._repo.get_by_id(id)
         if item:
             snapshot = EResourceDepartmentSerializer(item).data
+            num_files = len(snapshot.get('files', []))
+            folder_name = item.name or f"Department {id}"
+            if num_files > 0:
+                folder_name += f" ({num_files} files inside)"
+                
             self._recycle_repo.create(
                 original_id=id,
                 source_module='ERESOURCE_DEPT',
-                item_name=item.name or f"Department {id}",
+                item_name=folder_name,
                 data_snapshot=snapshot,
                 user_id=user_id
             )

@@ -4,6 +4,7 @@ import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoint
 import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
@@ -160,13 +161,13 @@ export function EResourcesManager() {
       `${count} selected folder(s)`,
       async () => {
         setIsRemoving(true);
-        const toastId = showToast(`${count} removing processing.`, 'loading');
+        const toastId = showToast(`${count} items processing in background...`, 'loading');
         try {
-          await processInChunks(ids, 10, (id: number) => eresourceApi.deleteDepartment(id), (_, __, c) => {});
-          showToast(`Removed ${count} folders successfully`, 'success');
+          await bulkApi.delete('ERESOURCE_DEPT', ids as number[]);
+          showToast(`${count} folders successfully queued for deletion`, 'success');
         } catch (err: any) {
           loadData();
-          showToast('Failed to remove some folders', 'error');
+          showToast('Failed to queue deletion', 'error');
         } finally {
           setIsRemoving(false);
           removeToast(toastId);
@@ -270,13 +271,13 @@ export function EResourcesManager() {
       `${count} selected file(s)`,
       async () => {
         setIsRemoving(true);
-        const toastId = showToast(`${count} removing processing.`, 'loading');
+        const toastId = showToast(`${count} items processing in background...`, 'loading');
         try {
-          await processInChunks(ids, 10, (id: number) => eresourceApi.deleteFile(id), (_, __, c) => {});
-          showToast(`Removed ${count} files successfully`, 'success');
+          await bulkApi.delete('ERESOURCE_FILE', ids as number[]);
+          showToast(`${count} files successfully queued for deletion`, 'success');
         } catch (err: any) {
           loadData();
-          showToast('Failed to remove some files', 'error');
+          showToast('Failed to queue deletion', 'error');
         } finally {
           setIsRemoving(false);
           removeToast(toastId);

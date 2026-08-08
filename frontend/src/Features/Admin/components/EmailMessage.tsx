@@ -24,6 +24,7 @@ import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
+import { bulkApi } from '@/src/Endpoints/bulkApi';
 
 interface AttachmentUploaderProps {
   file: File;
@@ -299,14 +300,14 @@ export function EmailMessage() {
         `${msgsToDelete.length} messages`,
         async () => {
           setIsRemoving(true);
-          const toastId = showToast(`${msgsToDelete.length} removing processing.`, 'loading');
+          const toastId = showToast(`${msgsToDelete.length} items processing in background...`, 'loading');
           try {
-            await processInChunks(Array.from(selectedIds), 10, (id: number) => contactApi.deleteMessage(id), (_, __, c) => {});
+            await bulkApi.delete('CONTACT', Array.from(selectedIds));
             setSelectedIds(new Set());
-            showToast(`Removed ${msgsToDelete.length} messages successfully`, 'success');
+            showToast(`${msgsToDelete.length} messages successfully queued for deletion`, 'success');
           } catch (err: any) {
             setMessages(prev => [...prev, ...msgsToDelete]);
-            showToast(err.message || 'Failed to perform bulk remove', 'error');
+            showToast('Failed to queue deletion', 'error');
           } finally {
             setIsRemoving(false);
             removeToast(toastId);

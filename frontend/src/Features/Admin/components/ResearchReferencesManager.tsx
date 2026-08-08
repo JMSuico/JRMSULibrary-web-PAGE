@@ -7,6 +7,7 @@ import {
   RESEARCH_DEPARTMENTS,
   ResearchDepartment,
 } from '@/src/Endpoints/referenceApi';
+import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { Search, Plus, Edit2, Trash2, X, Save, Upload } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
@@ -212,22 +213,21 @@ export function ResearchReferencesManager() {
 
     triggerDelete(
       `${selectedIds.size} references`,
-      async () => {
-        setIsDeletingBulk(true);
-        const toastId = showToast(`${selectedIds.size} removing processing.`, 'loading');
-        try {
-          await referenceApi.bulkDeleteReferences(Array.from(selectedIds));
-          setSelectedIds(new Set());
-          loadData();
-          showToast(`Removed ${selectedIds.size} references successfully`, 'success');
-        } catch (err: any) {
-          showToast(err.message || 'Failed to remove references', 'error');
-          loadData();
-        } finally {
-          setIsDeletingBulk(false);
-          removeToast(toastId);
-        }
-      },
+        async () => {
+          setIsDeletingBulk(true);
+          const toastId = showToast(`${selectedIds.size} items processing in background...`, 'loading');
+          try {
+            await bulkApi.delete('RESEARCH_REF', Array.from(selectedIds));
+            setSelectedIds(new Set());
+            showToast(`${selectedIds.size} references successfully queued for deletion`, 'success');
+          } catch (err: any) {
+            loadData();
+            showToast('Failed to queue deletion', 'error');
+          } finally {
+            setIsDeletingBulk(false);
+            removeToast(toastId);
+          }
+        },
       () => {
         showToast('Bulk deletion undone', 'success');
         loadData();

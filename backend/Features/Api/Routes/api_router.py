@@ -21,6 +21,7 @@ from Features.Api.Controllers.external_proxy_controller import (
 )
 from Features.Api.Controllers.ai_controller import AIViewSet
 from Features.Api.Controllers.csrf_controller import get_csrf_token
+from Features.Api.Controllers.bulk_controller import BulkActionViewSet
 from Features.Api.Controllers.reference_controller import ResearchReferenceViewSet
 
 
@@ -30,6 +31,7 @@ router = DefaultRouter()
 
 # Health endpoints
 router.register(r'health', HealthCheckViewSet, basename='health')
+router.register(r'system/bulk-actions', BulkActionViewSet, basename='bulk-actions')
 
 # CMS endpoints
 router.register(r'batches', AcquisitionBatchViewSet, basename='batch')
