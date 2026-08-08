@@ -137,8 +137,10 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
   }
 
   // If this was a mutation (POST, PUT, PATCH, DELETE), instantly tell all components to refresh!
+  // Exception: Do not refresh if status is 202 (Accepted), because it means the task is still processing in the background (Celery).
+  // Triggering a refresh immediately would fetch stale data and ruin the optimistic UI.
   const method = (options.method || 'GET').toUpperCase();
-  if (method !== 'GET' && typeof window !== 'undefined') {
+  if (method !== 'GET' && typeof window !== 'undefined' && response.status !== 202) {
     window.dispatchEvent(new CustomEvent('cms_updated'));
   }
 

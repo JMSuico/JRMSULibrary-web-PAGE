@@ -118,3 +118,10 @@ The system is designed to run safely in both **local LAN development** (Docker o
 ---
 
 *Last updated: 2026-08-06. All critical and high-priority infrastructure, caching, and network security vulnerabilities from the initial audit have been successfully resolved and deployed.*
+
+
+## Universal Bulk Operations (Celery Background Tasks)
+- **Denial of Service (DoS) Prevention:** The /api/system/bulk-actions/ endpoints operate asynchronously using Celery. This prevents malicious actors or compromised staff accounts from exhausting database connections or HTTP worker threads by submitting huge batch deletions. The API instantly returns an HTTP 202, leaving heavy I/O to background queues.
+- **Strict Role Authorization:** All bulk operation endpoints are strictly guarded by permissions.IsAdminUser, preventing standard authenticated users from bypassing individual delete limits.
+- **Database Transaction Safety:** Background celery tasks execute deletions wrapped within 	ransaction.atomic() to guarantee atomic state operations, preventing orphaned records if a batch deletion crashes halfway.
+- **Audit & Recycle Safety:** All bulk-deleted items are safely archived in the Recycle Bin before actual deletion. The background processor handles snapshot generation, meaning even massive deletions are safely reversible.

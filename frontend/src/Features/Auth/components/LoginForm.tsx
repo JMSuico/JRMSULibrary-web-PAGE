@@ -19,6 +19,8 @@ export function LoginForm() {
   const [rememberMe, setRememberMe] = useState(false);
   const { showToast } = useToast();
 
+  const [verificationState, setVerificationState] = useState<'idle' | 'solving' | 'verified'>('idle');
+
   // Initialize Captcha and Remember Me
   useEffect(() => {
     setCaptchaNum1(Math.floor(Math.random() * 10) + 1);
@@ -39,7 +41,19 @@ export function LoginForm() {
     }
   }, []);
 
-  const isHuman = captchaInput === (captchaNum1 + captchaNum2).toString();
+  useEffect(() => {
+    if (verificationState === 'solving' && captchaInput === (captchaNum1 + captchaNum2).toString()) {
+      setTimeout(() => setVerificationState('verified'), 300);
+    }
+  }, [captchaInput, captchaNum1, captchaNum2, verificationState]);
+
+  const handleVerifyClick = () => {
+    if (verificationState === 'idle') {
+      setVerificationState('solving');
+    }
+  };
+
+  const isHuman = verificationState === 'verified';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +82,11 @@ export function LoginForm() {
       window.location.href = '/admin';
     } catch (err: any) {
       showToast(err.message || 'Invalid credentials', 'error');
+      // If login fails, force them to re-verify for security against brute force
+      setVerificationState('idle');
+      setCaptchaInput('');
+      setCaptchaNum1(Math.floor(Math.random() * 10) + 1);
+      setCaptchaNum2(Math.floor(Math.random() * 10) + 1);
     } finally {
       setIsLoading(false);
     }
@@ -132,39 +151,53 @@ export function LoginForm() {
       </div>
 
       {/* Math Captcha Verification */}
-      <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col gap-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700 select-none">
-            Human Verification
-          </span>
+      <div className={`p-4 bg-gray-50 border rounded-xl flex flex-col gap-3 shadow-sm transition-all duration-300 ${verificationState === 'verified' ? 'border-green-300 bg-green-50/30' : 'border-gray-200'}`}>
+        <div 
+          className={`flex items-center justify-between select-none ${verificationState === 'idle' ? 'cursor-pointer hover:opacity-80' : ''}`} 
+          onClick={handleVerifyClick}
+        >
+          <div className="flex items-center gap-3">
+            {verificationState === 'idle' && (
+              <div className="w-6 h-6 border-2 border-gray-300 bg-white rounded flex items-center justify-center transition-colors"></div>
+            )}
+            {verificationState === 'solving' && (
+              <Loader2 className="w-6 h-6 text-navy animate-spin" />
+            )}
+            {verificationState === 'verified' && (
+              <CheckCircle className="w-6 h-6 text-green-500 animate-in zoom-in" />
+            )}
+            <span className={`text-sm font-medium ${verificationState === 'verified' ? 'text-green-700' : 'text-gray-700'}`}>
+              {verificationState === 'idle' ? 'Verify you are human' : verificationState === 'solving' ? 'Please solve the problem' : 'Verification complete'}
+            </span>
+          </div>
           <div className="flex flex-col items-center justify-center">
-            <ShieldCheck className="w-5 h-5 text-navy" />
-            <span className="text-[9px] text-navy mt-1 uppercase tracking-wider font-semibold">Secure</span>
+            <ShieldCheck className={`w-5 h-5 ${verificationState === 'verified' ? 'text-green-500' : 'text-navy'}`} />
+            <span className={`text-[9px] mt-1 uppercase tracking-wider font-semibold ${verificationState === 'verified' ? 'text-green-500' : 'text-navy'}`}>Secure</span>
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-lg font-mono font-bold text-gray-800 tracking-widest select-none">
-            {captchaNum1} + {captchaNum2} =
+        {verificationState === 'solving' && (
+          <div className="flex items-center gap-3 mt-2 animate-in fade-in slide-in-from-top-2">
+            <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-lg font-mono font-bold text-gray-800 tracking-widest select-none">
+              {captchaNum1} + {captchaNum2} =
+            </div>
+            <input
+              type="number"
+              value={captchaInput}
+              onChange={(e) => setCaptchaInput(e.target.value)}
+              className={`w-20 px-3 py-2 border rounded-lg text-lg font-mono text-center focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+                captchaInput === (captchaNum1 + captchaNum2).toString() 
+                  ? 'border-green-500 bg-green-50 text-green-700 focus:ring-green-500' 
+                  : captchaInput.length > 0 
+                    ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-500'
+                    : 'border-gray-300 bg-white text-gray-900 focus:ring-navy'
+              }`}
+              placeholder="?"
+              required
+              autoFocus
+            />
           </div>
-          <input
-            type="number"
-            value={captchaInput}
-            onChange={(e) => setCaptchaInput(e.target.value)}
-            className={`w-20 px-3 py-2 border rounded-lg text-lg font-mono text-center focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
-              captchaInput === (captchaNum1 + captchaNum2).toString() 
-                ? 'border-green-500 bg-green-50 text-green-700 focus:ring-green-500' 
-                : captchaInput.length > 0 
-                  ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-500'
-                  : 'border-gray-300 bg-white text-gray-900 focus:ring-navy'
-            }`}
-            placeholder="?"
-            required
-          />
-          {captchaInput === (captchaNum1 + captchaNum2).toString() && (
-            <CheckCircle className="w-6 h-6 text-green-500 animate-in zoom-in" />
-          )}
-        </div>
+        )}
       </div>
 
       <div className="flex justify-between items-center -mt-3 px-1">

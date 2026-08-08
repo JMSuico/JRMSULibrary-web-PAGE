@@ -4,6 +4,7 @@ import { recycleApi, RecycleBinItem } from '@/src/Endpoints/recycleApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import { useDebounce } from '@/src/Hooks/useDebounce';
+import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 
 export function RecycleBin() {
@@ -54,14 +55,15 @@ export function RecycleBin() {
     if (selectedIds.length === 0) return;
     try {
       setIsRemoving(true);
-      const toastId = showToast(`${selectedIds.length} items restoring.`, 'loading');
-      await Promise.all(selectedIds.map(id => recycleApi.restore(id)));
-      showToast(`${selectedIds.length} items restored successfully`, 'success');
+      const count = selectedIds.length;
+      setItems(prev => prev.filter(i => !selectedIds.includes(i.id)));
+      const toastId = showToast(`${count} items restoring in background...`, 'loading');
+      await bulkApi.restore(selectedIds);
+      showToast(`${count} items queued for restoration`, 'success');
       setSelectedIds([]);
-      fetchItems();
       removeToast(toastId);
     } catch (err: any) {
-      showToast('Failed to restore some items', 'error');
+      showToast('Failed to queue restoration', 'error');
       fetchItems();
     } finally {
       setIsRemoving(false);
@@ -77,14 +79,15 @@ export function RecycleBin() {
       onConfirm: async () => {
         try {
           setIsRemoving(true);
-          const toastId = showToast(`${selectedIds.length} items deleting.`, 'loading');
-          await Promise.all(selectedIds.map(id => recycleApi.deletePermanently(id)));
-          showToast(`${selectedIds.length} items deleted permanently`, 'success');
+          const count = selectedIds.length;
+          setItems(prev => prev.filter(i => !selectedIds.includes(i.id)));
+          const toastId = showToast(`${count} items deleting in background...`, 'loading');
+          await bulkApi.hardDelete(selectedIds);
+          showToast(`${count} items queued for permanent deletion`, 'success');
           setSelectedIds([]);
-          fetchItems();
           removeToast(toastId);
         } catch (err: any) {
-          showToast('Failed to delete some items', 'error');
+          showToast('Failed to queue permanent deletion', 'error');
           fetchItems();
         } finally {
           setIsRemoving(false);
