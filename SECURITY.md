@@ -121,7 +121,15 @@ The system is designed to run safely in both **local LAN development** (Docker o
 
 
 ## Universal Bulk Operations (Celery Background Tasks)
-- **Denial of Service (DoS) Prevention:** The /api/system/bulk-actions/ endpoints operate asynchronously using Celery. This prevents malicious actors or compromised staff accounts from exhausting database connections or HTTP worker threads by submitting huge batch deletions. The API instantly returns an HTTP 202, leaving heavy I/O to background queues.
-- **Strict Role Authorization:** All bulk operation endpoints are strictly guarded by permissions.IsAdminUser, preventing standard authenticated users from bypassing individual delete limits.
-- **Database Transaction Safety:** Background celery tasks execute deletions wrapped within 	ransaction.atomic() to guarantee atomic state operations, preventing orphaned records if a batch deletion crashes halfway.
+- **Denial of Service (DoS) Prevention:** The `/api/system/bulk-actions/` endpoints operate asynchronously using Celery. This prevents malicious actors or compromised staff accounts from exhausting database connections or HTTP worker threads by submitting huge batch deletions. The API instantly returns an HTTP 202, leaving heavy I/O to background queues.
+- **Strict Role Authorization:** All bulk operation endpoints are strictly guarded by `permissions.IsAdminUser`, preventing standard authenticated users from bypassing individual delete limits.
+- **Database Transaction Safety:** Background celery tasks execute deletions wrapped within `transaction.atomic()` to guarantee atomic state operations, preventing orphaned records if a batch deletion crashes halfway.
 - **Audit & Recycle Safety:** All bulk-deleted items are safely archived in the Recycle Bin before actual deletion. The background processor handles snapshot generation, meaning even massive deletions are safely reversible.
+
+
+## Dependency & Supply Chain Security (Anti-Hacking)
+- **No Outdated Dependencies:** All libraries, modules, and plugins must be actively maintained. The use of deprecated, abandoned, or outdated packages with known CVEs (vulnerabilities) is strictly forbidden, as they are primary targets for brute-force and zero-day hacking.
+- **Strict Version Pinning:** Backend packages (equirements-docker.txt) and frontend packages (package.json) use exact version locking to prevent unexpected upgrades from malicious actors (dependency confusion attacks).
+- **Production Node_Modules Exclusion:** The frontend uses a multi-stage Docker build. Vulnerable development dependencies inside 
+ode_modules are completely destroyed before deployment, ensuring hackers cannot exploit hidden frontend library flaws in production.
+- **Browser Plugin Lockdown:** The backend Permissions-Policy header explicitly blocks malicious browser extensions and plugins from silently accessing hardware (camera/microphone/geolocation) while the user is logged into the Admin Panel.

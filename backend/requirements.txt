@@ -35,3 +35,7 @@ pyodbc==4.0.38
 
 drf-spectacular==0.28.0
 python-magic==0.4.27
+
+# Cloud Storage
+django-storages[s3]==1.14.2
+boto3==1.34.14

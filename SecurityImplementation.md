@@ -151,3 +151,10 @@ While the core frameworks (Django, React, Postgres) are highly secure, certain t
 2. **Backend Audits**: Run `pip-audit` to scan Python packages and ensure Celery/Redis drivers are secure.
 3. **AI Hardening**: Enforce strict context limitations and output sanitization (via `bleach`) for Ollama responses to prevent injected scripts from rendering as raw HTML on the frontend.
 4. **Local Execution Only**: Ensure plugins are bundled locally without relying on external CDNs to prevent external JS hijacking.
+
+
+### Verified Implementations (Anti-Hacking)
+- **Strict Version Pinning:** Backend dependencies (equirements-docker.txt) strictly use == version locks to mathematically block Dependency Confusion attacks from upstream.
+- **Multi-Stage Docker Builds (Immutable Infrastructure):** Frontend vulnerable dev dependencies inside 
+ode_modules are completely destroyed during build. Only raw static HTML/JS is moved to production, rendering frontend dependency exploits impossible.
+- **Rootless Execution:** Backend runs as unprivileged ppuser. A compromised backend plugin cannot execute host-level malware.
