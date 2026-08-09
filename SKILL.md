@@ -815,3 +815,11 @@ docker-compose up -d   →  7 services start
 | 🟡 MEDIUM | `Middleware/` dir in `Features/` is empty | Middleware lives in `core/middleware.py` — update this SKILL.md diagram if the dir is removed |
 
 *This section is auto-updated by deep-scan analysis. Do not edit manually.*
+
+
+### Background Tasks & Optimistic UI Architecture
+The system employs a Celery-backed hybrid architecture for heavy operations (like Bulk Deletion).
+1. **Frontend Optimistic UI:** useUndoDelete creates a 5-second window where UI state is optimistically updated and can be reversed locally without API hits.
+2. **Background Processing:** If not undone, an asynchronous Celery task (generic_bulk_delete_task) processes the heavy I/O via HTTP 202 Accepted.
+3. **Data Integrity:** piClient.ts intentionally skips global reloads (cms_updated) on 202 statuses to prevent fetching stale database states before the background task finishes.
+

@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     "django_filters",
     "corsheaders",
     "channels",
+    "storages",
     # Local
     "Features",
 ]
@@ -327,6 +328,19 @@ TIME_ZONE = "Asia/Manila"
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Supabase S3 Storage (Enabled if USE_S3_STORAGE is True)
+USE_S3_STORAGE = os.environ.get("USE_S3_STORAGE", "False").lower() in ("true", "1", "yes")
+if USE_S3_STORAGE:
+    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
+    AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL")
+    AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME", "ap-southeast-1")
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = "public-read"
+    AWS_S3_CUSTOM_DOMAIN = f"{os.environ.get('SUPABASE_PROJECT_REF')}.supabase.co/storage/v1/object/public/{AWS_STORAGE_BUCKET_NAME}"
+    DEFAULT_FILE_STORAGE = "storages.backends.s3.S3Storage"
 
 # File Upload Security Limits (Prevent DoS via disk exhaustion)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520  # 20 MB
