@@ -133,3 +133,9 @@ The system is designed to run safely in both **local LAN development** (Docker o
 - **Production Node_Modules Exclusion:** The frontend uses a multi-stage Docker build. Vulnerable development dependencies inside 
 ode_modules are completely destroyed before deployment, ensuring hackers cannot exploit hidden frontend library flaws in production.
 - **Browser Plugin Lockdown:** The backend Permissions-Policy header explicitly blocks malicious browser extensions and plugins from silently accessing hardware (camera/microphone/geolocation) while the user is logged into the Admin Panel.
+
+## File Upload Security (Anti-Malware)
+- **Deep MIME Whitelisting:** The system absolutely forbids relying on file extensions for security (e.g. checking if a file ends in `.pdf`). All uploads (User Avatars, CMS Images, Book Covers, Contact Attachments) are strictly routed through the `MalwareScannerHelper`. This uses `python-magic` to read the true binary header bytes of the file, rejecting any spoofs or hidden executable scripts.
+- **Fail-Closed Architecture:** If the malware scanner's underlying C-libraries crash or are missing from the OS, the system immediately throws a `ValidationError` and blocks ALL uploads. This "fail-closed" design ensures that a broken dependency does not silently expose the API to hackers.
+- **Cross-Platform Compatibility:** The scanner utilizes environmental markers in `requirements.txt` to dynamically utilize `python-magic-bin` on Windows machines and standard `python-magic` on Linux/Docker servers to prevent configuration crashes.
+- **Multipart S3 Protection:** To prevent Denial of Service (DoS) during massive E-Resource uploads, the `boto3` chunking configuration (`AWS_S3_MULTIPART_THRESHOLD`) is strictly locked to 100MB, preventing Supabase S3 chunk ingestion failures.
