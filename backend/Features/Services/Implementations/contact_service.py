@@ -78,8 +78,7 @@ class ContactService(ContactServiceInterface):
                 if f.size > 10 * 1024 * 1024:
                     raise ValueError(f"File {f.name} is too large. Maximum size is 10MB.")
                 
-                if not MalwareScannerHelper.verify_file_safety(f):
-                    raise ValueError(f"File {f.name} was blocked by security policies.")
+                MalwareScannerHelper.verify_file_safety(f)
 
                 ContactAttachment.objects.create(
                     contact_message=message,
@@ -231,8 +230,7 @@ class ContactService(ContactServiceInterface):
         if file.size > 10 * 1024 * 1024:
             raise ValueError(f"File {file.name} is too large. Maximum size is 10MB.")
             
-        if not MalwareScannerHelper.verify_file_safety(file):
-            raise ValueError(f"File {file.name} was blocked by security policies.")
+        MalwareScannerHelper.verify_file_safety(file)
         
         fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'temp_attachments'))
         filename = f"{uuid.uuid4()}.{ext}" if ext else str(uuid.uuid4())

@@ -43,6 +43,10 @@ class BatchService(IBatchService):
         if batch.status != BatchStatus.OPEN:
             raise ValueError("Cannot add books to a closed or archived batch")
             
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'cover_image' in files:
+            MalwareScannerHelper.verify_image_safety(files['cover_image'])
+            
         data_copy = dict(data)
         data_copy['batch_id'] = batch_id
         book = self.book_repo.create(data_copy, files)
@@ -60,6 +64,10 @@ class BatchService(IBatchService):
         book = self.book_repo.get_by_id(book_id)
         if not book or str(book.batch_id) != str(batch_id):
             return None
+            
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'cover_image' in files:
+            MalwareScannerHelper.verify_image_safety(files['cover_image'])
             
         updated_book = self.book_repo.update(book_id, data, files)
         self.batch_repo.record_history(batch_id, "Book Updated", f"Updated book: {updated_book.title}", user_id)

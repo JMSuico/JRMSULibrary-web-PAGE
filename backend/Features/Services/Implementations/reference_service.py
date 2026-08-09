@@ -17,6 +17,10 @@ class ResearchReferenceService:
         return None
 
     def create_reference(self, data, request=None):
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'access_file' in data and data['access_file']:
+            MalwareScannerHelper.verify_document_safety(data['access_file'])
+            
         serializer = ResearchReferenceSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             ref = self.repo.create(serializer.validated_data)
@@ -27,6 +31,10 @@ class ResearchReferenceService:
         ref = self.repo.get_by_id(reference_id)
         if not ref:
             return False, "Reference not found"
+
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'access_file' in data and data['access_file'] and not isinstance(data['access_file'], str):
+            MalwareScannerHelper.verify_document_safety(data['access_file'])
 
         # Handle file replacement/cleanup
         if 'access_file' in data:

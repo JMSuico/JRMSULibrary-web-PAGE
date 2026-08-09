@@ -16,9 +16,15 @@ class PersonnelService(IPersonnelService):
         return self._repo.get_by_id(personnel_id)
 
     def create_personnel(self, data: dict) -> Any:
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'photo' in data and data['photo']:
+            MalwareScannerHelper.verify_image_safety(data['photo'])
         return self._repo.create(data)
 
     def update_personnel(self, personnel_id: int, data: dict) -> Optional[Any]:
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'photo' in data and data['photo']:
+            MalwareScannerHelper.verify_image_safety(data['photo'])
         return self._repo.update(personnel_id, data)
 
     def delete_personnel(self, personnel_id: int, user_id: int = None) -> bool:

@@ -338,6 +338,7 @@ if USE_S3_STORAGE:
     AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL")
     AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME", "ap-southeast-1")
     AWS_S3_FILE_OVERWRITE = False
+    AWS_S3_MULTIPART_THRESHOLD = 104857600  # 100 MB (Fixes Supabase boto3 5MB chunking bug)
     AWS_DEFAULT_ACL = "public-read"
     AWS_S3_CUSTOM_DOMAIN = f"{os.environ.get('SUPABASE_PROJECT_REF')}.supabase.co/storage/v1/object/public/{AWS_STORAGE_BUCKET_NAME}"
     DEFAULT_FILE_STORAGE = "storages.backends.s3.S3Storage"
