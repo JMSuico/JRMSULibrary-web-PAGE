@@ -201,13 +201,17 @@ class UserViewSet(viewsets.ViewSet):
         if not avatar_file:
             return Response({"error": "No avatar file provided"}, status=400)
         
-        # Validate file extension
-        ext = avatar_file.name.split('.')[-1].lower()
-        if ext not in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
-            return Response({"error": "Invalid image format. Allowed formats: jpg, jpeg, png, webp, gif"}, status=400)
+        # Validate file strictly using Magic Bytes whitelist
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        from rest_framework.exceptions import ValidationError
+        try:
+            MalwareScannerHelper.verify_image_safety(avatar_file)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
 
         # Rename file to UUID to avoid browser caching issues when updating
         import uuid
+        ext = avatar_file.name.split('.')[-1].lower()
         avatar_file.name = f"{uuid.uuid4().hex}.{ext}"
 
         # Delete old avatar file if it exists

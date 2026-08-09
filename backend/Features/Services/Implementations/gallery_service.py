@@ -20,9 +20,15 @@ class LibraryInteriorImageService(ILibraryInteriorImageService):
         return self._repo.get_by_id(image_id)
 
     def create(self, data: dict):
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'image' in data and data['image']:
+            MalwareScannerHelper.verify_image_safety(data['image'])
         return self._repo.create(data)
 
     def update(self, image_id: int, data: dict):
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        if 'image' in data and data['image']:
+            MalwareScannerHelper.verify_image_safety(data['image'])
         return self._repo.update(image_id, data)
 
     def delete(self, image_id: int, user_id: int = None) -> bool:
