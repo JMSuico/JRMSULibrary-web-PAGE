@@ -368,7 +368,39 @@ While the core frameworks (Django, React, Postgres) are highly secure, certain t
 
 
 ### 4.3 Verified Implementations (Completed)
-- **Strict Version Pinning:** Backend dependencies (equirements-docker.txt) strictly use == version locks to mathematically block Dependency Confusion attacks from upstream.
+- **Strict Version Pinning:** Backend dependencies (equirements-docker.txt) strictly use == version locks to mathematically block Dependency Confusion attacks from upstream.
 - **Multi-Stage Docker Builds (Immutable Infrastructure):** Frontend vulnerable dev dependencies inside 
 ode_modules are completely destroyed during build. Only raw static HTML/JS is moved to production, rendering frontend dependency exploits impossible.
-- **Rootless Execution:** Backend runs as unprivileged ppuser. A compromised backend plugin cannot execute host-level malware.
+- **Rootless Execution:** Backend runs as unprivileged  ppuser. A compromised backend plugin cannot execute host-level malware.
+
+---
+
+## 5. Phase 3: Final Production Security Overhaul (August 2026)
+
+### 5.1 Advanced MIME Whitelisting (python-magic)
+**Finding:** 
+Previously, the `MalwareScannerHelper` relied on a blacklist of dangerous file extensions (e.g., `.exe`, `.bat`).
+**Vulnerability:** 
+Hackers could easily spoof extensions (e.g., renaming `virus.exe` to `avatar.jpg`) to bypass the blacklist and upload malware.
+**Implementation:** 
+The security architecture has been completely refactored to use a strict **MIME Whitelist** powered by `python-magic`. 
+- The system now reads the binary DNA (Magic Bytes) of the file header to determine its true identity.
+- It strictly enforces 3 domains: `verify_image_safety`, `verify_document_safety`, and `verify_file_safety`.
+- **System-Wide Integration:** This security was universally applied to ALL upload endpoints, large and small: User Avatars, Book Covers, CMS Images, Personnel Photos, Gallery Banners, E-Resources, and Contact Attachments.
+
+### 5.2 "Fail-Closed" Security Architecture
+**Finding:** 
+If the underlying `libmagic` C-library crashed or was misconfigured, the backend was programmed to print a warning and return `True` (allowing the file).
+**Vulnerability:** 
+A "Fail-Open" configuration meant a broken dependency silently disabled all malware scanning.
+**Implementation:** 
+The scanner has been modified to strictly **Fail-Closed**. Any failure in `python-magic` throws a `ValidationError` which violently rejects the upload and returns the explicit error message to the user/developer. 
+Additionally, `requirements.txt` was updated with environment markers (`sys_platform`) to dynamically install `python-magic-bin` for Windows (local development) and `python-magic` for Linux (Docker/Production), ensuring cross-platform stability.
+
+### 5.3 S3 Multipart Upload Chunking Bug (5MB Limit)
+**Finding:** 
+Large file uploads (E-Resources over 5MB) were causing the API to crash with a 400 Bad Request error.
+**Vulnerability:** 
+The `boto3` library automatically attempts to chunk files larger than 5MB into multipart uploads. Supabase's S3 compatibility layer did not handle these chunks properly under the default Django configuration.
+**Implementation:** 
+Added `AWS_S3_MULTIPART_THRESHOLD = 100 * 1024 * 1024` (100MB) to `settings.py`. This forces `boto3` to bypass chunking and upload the entire file in a single stream, completely fixing the massive file upload crash while maintaining the 50MB and 20MB application-level soft limits.
