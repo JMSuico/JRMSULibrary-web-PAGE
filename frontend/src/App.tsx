@@ -104,10 +104,14 @@ function PublicLayout() {
       {isLoaderDone && <PrivacyConsentModal />}
       <TopNavBar />
       <FeedbackStickyCard />
-      <FacebookBubble />
-      <RizalAssistant />
-      {/* Messenger-style preview snippet — activates on first visit after privacy consent */}
-      <RizalPreviewBubble />
+      {isLoaderDone && (
+        <>
+          <FacebookBubble />
+          <RizalAssistant />
+          {/* Messenger-style preview snippet — activates on first visit after privacy consent */}
+          <RizalPreviewBubble />
+        </>
+      )}
       <main className="flex-1 relative z-0 flex flex-col">
         <Suspense fallback={<PageSkeleton />}>
           <PageTransition>

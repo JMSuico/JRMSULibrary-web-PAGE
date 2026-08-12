@@ -990,7 +990,7 @@ section::before {
   /* === 3D Bubble Animation (Social/AI) === */
   .bubble-3d-container {
     transform-style: preserve-3d;
-    transition: all 0.5s ease-in-out;
+    transition: transform 0.5s ease-in-out, background-color 0.5s ease-in-out, box-shadow 0.5s ease-in-out;
   }
 
   .bubble-3d-container:hover {
@@ -1001,7 +1001,7 @@ section::before {
   }
 
   .bubble-3d-btn {
-    transition: all 0.5s ease-in-out;
+    transition: transform 0.5s ease-in-out;
   }
 
   .bubble-3d-container:hover .bubble-3d-btn {

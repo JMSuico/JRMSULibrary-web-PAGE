@@ -4,9 +4,9 @@ import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
 export const FacebookBubble: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { ref, style, isDragging } = useDraggableBubble({
-    storageKey: 'fb_bubble_pos',
+    storageKey: 'fb_bubble_pos_v2',
     defaultSide: 'right',
-    defaultBottomPx: 120,
+    defaultBottomPx: 140,
   });
 
   return (
