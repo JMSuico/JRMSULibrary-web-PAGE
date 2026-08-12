@@ -13,7 +13,6 @@ interface ChatMessage {
   text: string;
 }
 
-import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
 
 const CACHE_KEY = 'rizal_chat_history';
 const CACHE_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
