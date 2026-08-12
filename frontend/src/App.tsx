@@ -2,8 +2,9 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router';
 import { TopNavBar } from '@/src/Components/LayoutBars/TopNavBar';
 import { FacebookBubble } from '@/src/Components/Shared/FacebookBubble';
-import { FeedbackStickyCard } from '@/src/Features/Feedback/components/FeedbackStickyCard';
 import { RizalAssistant } from '@/src/Features/AIAssistant/components/RizalAssistant';
+import { FeedbackStickyCard } from '@/src/Features/Feedback/components/FeedbackStickyCard';
+import { RizalPreviewBubble } from '@/src/Features/AIAssistant/components/RizalPreviewBubble';
 import { Footer } from '@/src/Components/LayoutBars/Footer';
 import { PageSkeleton } from '@/src/Components/Shared/SkeletonLoader';
 import { ToastProvider } from '@/src/Hooks/useToast';
@@ -102,9 +103,11 @@ function PublicLayout() {
       )}
       {isLoaderDone && <PrivacyConsentModal />}
       <TopNavBar />
-      <FacebookBubble />
       <FeedbackStickyCard />
+      <FacebookBubble />
       <RizalAssistant />
+      {/* Messenger-style preview snippet — activates on first visit after privacy consent */}
+      <RizalPreviewBubble />
       <main className="flex-1 relative z-0 flex flex-col">
         <Suspense fallback={<PageSkeleton />}>
           <PageTransition>

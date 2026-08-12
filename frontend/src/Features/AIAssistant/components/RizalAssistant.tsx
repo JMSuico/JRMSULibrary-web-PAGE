@@ -4,6 +4,7 @@ import { contactApi } from '@/src/Endpoints/contactApi';
 import { feedbackApi } from '@/src/Endpoints/feedbackApi';
 import { aiApi } from '@/src/Endpoints/aiApi';
 import { ensureCsrfToken } from '@/src/Libs/apiClient';
+import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
 
 type ChatFlowState = 'suggestions' | 'email-form' | 'reservation-form' | 'rate-form' | 'credential-request-form';
 
@@ -12,6 +13,8 @@ interface ChatMessage {
   text: string;
 }
 
+import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
+
 const CACHE_KEY = 'rizal_chat_history';
 const CACHE_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -19,6 +22,17 @@ export const RizalAssistant: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoMode, setVideoMode] = useState<'waving' | 'reading'>('waving');
+
+  // Draggable magnetic bubble
+  const { ref: bubbleRef, style: bubbleStyle, isDragging, side, bottomPx } = useDraggableBubble({
+    storageKey: 'rizal_bubble_pos',
+    defaultSide: 'right',
+    defaultBottomPx: 24,
+    emitMoveEvent: true,
+  });
+
+  // If the bubble is dragged to the top half of the screen, the modal should pop downwards
+  const isTopHalf = bottomPx > (window.innerHeight / 2);
 
   // Chatbot state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
@@ -508,7 +522,7 @@ export const RizalAssistant: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-[9999]">
+    <div ref={bubbleRef} style={bubbleStyle}>
       {/* Chat Panel — opens directly as chatbot, no options menu */}
       {isExpanded && (
         <>
@@ -520,7 +534,7 @@ export const RizalAssistant: React.FC = () => {
           )}
           <div className={`${isFullscreen
               ? 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] w-[95vw] sm:w-[90vw] max-w-[800px] h-[90vh] sm:h-[85vh] max-h-[900px]'
-              : 'absolute bottom-[115%] right-0 z-50 w-[calc(100vw-2rem)] sm:w-80 max-w-[360px] max-h-[80vh] sm:max-h-[520px]'
+              : `absolute ${isTopHalf ? 'top-[115%]' : 'bottom-[115%]'} ${side === 'left' ? 'left-0' : 'right-0'} z-50 w-[calc(100vw-2rem)] sm:w-80 max-w-[360px] max-h-[80vh] sm:max-h-[520px]`
             } bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-modal-card flex flex-col transition-all duration-300`}>
 
             {/* Header */}
@@ -642,13 +656,14 @@ export const RizalAssistant: React.FC = () => {
       )}
 
       {/* AI Assistant Bubble */}
-      <div className="relative float-bubble bubble-3d-container w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-blue-400 bg-white shadow-xl flex items-center justify-center">
+      <div className="relative float-bubble bubble-3d-container w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-400 bg-white shadow-xl flex items-center justify-center">
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => !isDragging && setIsExpanded(!isExpanded)}
           className="bubble-3d-btn w-full h-full rounded-full overflow-hidden cursor-pointer flex items-center justify-center"
           aria-label="Open RIZAL Assistant"
         >
           <video
+            id="rizal-video"
             key={videoSrc}
             autoPlay
             loop
