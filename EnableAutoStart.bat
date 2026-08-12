@@ -23,38 +23,28 @@ echo ========================================================
 echo   JRMSU LIBRARY - 1-CLICK PERMANENT SETUP
 echo ========================================================
 echo.
-echo Step 1: Freezing IP Address to 192.168.9.195
-echo Scanning for active network connection...
-
-set "temp_ps1=%temp%\SetIP.ps1"
+echo Step 1: Detecting Current Network IP Address...
+set "temp_ps1=%temp%\GetIP.ps1"
 echo try { > "!temp_ps1!"
 echo     $netAdapter = Get-NetAdapter ^| Where-Object { $_.Status -eq 'Up' -and $_.Name -notmatch 'vEthernet^|Virtual^|Loopback' } ^| Select-Object -First 1; >> "!temp_ps1!"
 echo     if (-not $netAdapter) { Write-Host 'No active Wi-Fi or Ethernet connection found!' -ForegroundColor Yellow; exit 0; } >> "!temp_ps1!"
-echo     Write-Host ('Found Adapter: ' + $netAdapter.Name); >> "!temp_ps1!"
 echo     $ipConfig = Get-NetIPConfiguration -InterfaceAlias $netAdapter.Name; >> "!temp_ps1!"
-echo     $prefix = 24; >> "!temp_ps1!"
-echo     $gateway = '192.168.9.1'; >> "!temp_ps1!"
-echo     if ($ipConfig.IPv4Address) { $prefix = $ipConfig.IPv4Address.PrefixLength; } >> "!temp_ps1!"
-echo     $ip = '192.168.9.195'; >> "!temp_ps1!"
-echo     $currentIp = $null; >> "!temp_ps1!"
-echo     if ($ipConfig.IPv4Address) { $currentIp = $ipConfig.IPv4Address.IPAddress; } >> "!temp_ps1!"
-echo     if ($currentIp -eq $ip) { >> "!temp_ps1!"
-echo         Write-Host '[SUCCESS] IP Address is ALREADY locked to 192.168.9.195!' -ForegroundColor Green; >> "!temp_ps1!"
-echo     } else { >> "!temp_ps1!"
-echo         Write-Host ('Forcing IP to: ' + $ip); >> "!temp_ps1!"
-echo         Write-Host ('Using Gateway: ' + $gateway); >> "!temp_ps1!"
-echo         Write-Host 'Applying permanent static configuration...'; >> "!temp_ps1!"
-echo         Remove-NetIPAddress -InterfaceAlias $netAdapter.Name -Confirm:$false -ErrorAction SilentlyContinue ^| Out-Null; >> "!temp_ps1!"
-echo         New-NetIPAddress -InterfaceAlias $netAdapter.Name -IPAddress $ip -PrefixLength $prefix -DefaultGateway $gateway -ErrorAction SilentlyContinue ^| Out-Null; >> "!temp_ps1!"
-echo         Set-DnsClientServerAddress -InterfaceAlias $netAdapter.Name -ServerAddresses ('8.8.8.8', '8.8.4.4') -ErrorAction SilentlyContinue ^| Out-Null; >> "!temp_ps1!"
-echo         Write-Host '[SUCCESS] IP Address 192.168.9.195 is now locked in permanently!' -ForegroundColor Green; >> "!temp_ps1!"
+echo     if ($ipConfig.IPv4Address) { >> "!temp_ps1!"
+echo         $currentIp = $ipConfig.IPv4Address.IPAddress; >> "!temp_ps1!"
+echo         Write-Host ('[SUCCESS] Your current local IP is: ' + $currentIp) -ForegroundColor Green; >> "!temp_ps1!"
+echo         Set-Content -Path "%~dp0CurrentIP.txt" -Value $currentIp; >> "!temp_ps1!"
 echo     } >> "!temp_ps1!"
-echo } catch { >> "!temp_ps1!"
-echo     Write-Host ('Note: Could not force IP automatically. ' + $_.Exception.Message) -ForegroundColor Yellow; >> "!temp_ps1!"
-echo } >> "!temp_ps1!"
+echo } catch { } >> "!temp_ps1!"
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "!temp_ps1!"
 del "!temp_ps1!"
+
+set "LOCAL_IP=localhost"
+if exist "%~dp0CurrentIP.txt" (
+    for /f "usebackq delims=" %%A in ("%~dp0CurrentIP.txt") do set "LOCAL_IP=%%A"
+    del "%~dp0CurrentIP.txt"
+)
+
 
 echo.
 echo Step 1.5: Locating "JRMSU LIBRARY LANDING PAGE" Folder...
@@ -170,12 +160,14 @@ echo.
 echo ========================================================
 echo [SUCCESS] ALL PERMANENT SETTINGS APPLIED!
 echo ========================================================
-echo 1. Your IP is strictly locked to 192.168.9.195
-echo 2. The project folder location is saved permanently
-echo 3. Docker and WSL will automatically start on every boot
-echo 4. The library system will ALWAYS be accessible at:
-echo    http://192.168.9.195:3000
+echo 1. The project folder location is saved permanently
+echo 2. Docker and WSL will automatically start on every boot
+echo 3. The library system is now running and accessible!
+echo 4. You can access it on this computer at:
+echo    http://localhost:3000
+echo    Or from other devices on your Wi-Fi at:
+echo    http://!LOCAL_IP!:3000
 echo ========================================================
-echo You never need to click this file again. 
+echo You can safely close this window now.
 echo.
 pause
