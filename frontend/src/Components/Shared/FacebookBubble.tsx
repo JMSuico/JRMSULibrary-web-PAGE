@@ -1,14 +1,24 @@
 import React, { useState } from 'react';
+import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
 
 export const FacebookBubble: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const { ref, style, isDragging } = useDraggableBubble({
+    storageKey: 'fb_bubble_pos',
+    defaultSide: 'right',
+    defaultBottomPx: 120,
+  });
 
   return (
     <>
-      {/* Floating Bubble */}
-      <div className="group fixed bottom-24 right-4 sm:right-6 z-[60] w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-lg cursor-pointer float-bubble bubble-3d-container flex items-center justify-center bg-facebook">
+      {/* Floating Bubble — draggable + magnetic edge snap */}
+      <div
+        ref={ref}
+        style={style}
+        className="group w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg float-bubble bubble-3d-container flex items-center justify-center bg-facebook relative"
+      >
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={() => !isDragging && setIsOpen(true)}
           className="bubble-3d-btn w-full h-full flex items-center justify-center cursor-pointer border-none bg-transparent"
           aria-label="Open Facebook Page"
         >
