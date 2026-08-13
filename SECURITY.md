@@ -22,6 +22,7 @@ The system is designed to run safely in both **local LAN development** (Docker o
 | **Single-Device Session Lock** | **[ Productive ]** | `user_controller.py` | Prevents multiple simultaneous logins for the same account; actively monitors the `last_active` heartbeat. |
 | **Secret Admin Recovery Endpoint** | **[ Productive ]** | `core/urls.py` L25 | Restricted to `DEBUG=True` mode only. Production access is completely blocked. |
 | **Password Strength Validation** | **[ Productive ]** | `Helpers/password_validators.py` | Uses `CustomPasswordValidator` to enforce strong password requirements (replaces weak Django defaults). |
+| **IDOR & Unauthenticated Access Block** | **[ Productive ]** | `permissions.py` / Views | Administrative endpoints (e.g., `/api/batches/`) return `403 Forbidden` to unauthenticated sessions. Access control is strictly segregated. |
 
 ---
 
@@ -32,6 +33,7 @@ The system is designed to run safely in both **local LAN development** (Docker o
 | **Deep Malware Scanning** | **[ Productive ]** | Upload services | Uses `libmagic1` + `python-magic` to inspect file magic bytes. A hacker cannot bypass this by renaming `.exe` to `.pdf`. |
 | **File Extension Whitelisting** | **[ Productive ]** | Upload services | Explicitly blocks all executable scripts (`.sh`, `.bat`, `.js`, etc.) and restricts uploads to safe formats (Images, PDFs, Word Docs) based on category. |
 | **Upload Size Limit** | **[ Productive ]** | `settings.py` L337-338, `nginx.conf` L6 | Django enforces 20 MB max (`DATA_UPLOAD_MAX_MEMORY_SIZE`, `FILE_UPLOAD_MAX_MEMORY_SIZE`). Nginx enforces a 25 MB limit (`client_max_body_size`) as the first line of defense. |
+| **WAF File Extension Filtering** | **[ Productive ]** | `nginx.conf` | Nginx proactively returns `404` for common attack vectors (`.jsp`, `.php`, `.env`, `.git`) preventing the requests from even reaching Django. |
 
 ---
 
@@ -83,6 +85,8 @@ The system is designed to run safely in both **local LAN development** (Docker o
 | **Hardware Access Revocation** | **[ Productive ]** | `middleware.py` L46 | `Permissions-Policy` completely disables Microphone, Camera, and Geolocation access globally from all browser plugins. |
 | **DoS via Integer Parsing (CVE-2022-43027)** | **[ Productive ]** | `settings.py` L23 | `sys.set_int_max_str_digits(4300)` caps integer-to-string conversions to prevent algorithmic complexity denial-of-service attacks. |
 | **IPv6 Network Unreachable Mitigation** | **[ Productive ]** | `settings.py` L26-30 | Forces all socket connections to IPv4-only, preventing `[Errno 101] Network is unreachable` errors on networks that advertise IPv6 without routing it. |
+| **React Frontend XSS Escaping** | **[ Productive ]** | React SPA | Verified via pentest: Raw HTML payloads (`<script>`) stored in the DB are treated strictly as strings by React, neutralizing Stored XSS. |
+| **Character Length Validation** | **[ Productive ]** | Models / React Forms | Strict `max_length` attributes (e.g., 200, 500 chars) are enforced at both the React form level and the Django database level to prevent buffer overflows and long-string DoS. |
 
 ---
 

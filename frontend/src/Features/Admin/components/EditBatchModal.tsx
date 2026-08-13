@@ -62,6 +62,7 @@ export function EditBatchModal({ isOpen, batch, onClose, onSubmit }: EditBatchMo
               <input
                 type="text"
                 required
+                maxLength={200}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -73,6 +74,7 @@ export function EditBatchModal({ isOpen, batch, onClose, onSubmit }: EditBatchMo
               <textarea
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 rows={3}
+                maxLength={500}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />

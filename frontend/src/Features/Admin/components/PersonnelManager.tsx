@@ -343,11 +343,11 @@ export function PersonnelManager({ active }: { active: boolean }) {
               )}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
-                <input required type="text" name="name" defaultValue={editingPersonnelId ? personnelList.find(p => p.id === editingPersonnelId)?.name : ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <input required type="text" name="name" maxLength={200} defaultValue={editingPersonnelId ? personnelList.find(p => p.id === editingPersonnelId)?.name : ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Role (e.g. Staff, Library)</label>
-                <input required type="text" name="title" defaultValue={editingPersonnelId ? personnelList.find(p => p.id === editingPersonnelId)?.title : ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <input required type="text" name="title" maxLength={200} defaultValue={editingPersonnelId ? personnelList.find(p => p.id === editingPersonnelId)?.title : ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Photo (Max 10MB)</label>
