@@ -514,23 +514,23 @@ export function ResearchReferencesManager() {
                 {/* Title */}
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Title *</label>
-                  <input type="text" name="title" defaultValue={editingRef?.title} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="Enter title" />
+                  <input type="text" name="title" maxLength={500} defaultValue={editingRef?.title} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="Enter title" />
                 </div>
 
                 {/* Author */}
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Author</label>
-                  <input type="text" name="author" defaultValue={editingRef?.author || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="Enter author(s)" />
+                  <input type="text" name="author" maxLength={500} defaultValue={editingRef?.author || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="Enter author(s)" />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Accession No.</label>
-                  <input type="text" name="acc_no" defaultValue={editingRef?.acc_no || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. 12345" />
+                  <input type="text" name="acc_no" maxLength={255} defaultValue={editingRef?.acc_no || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. 12345" />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Call Number</label>
-                  <input type="text" name="call_number" defaultValue={editingRef?.call_number || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. QA 76.73" />
+                  <input type="text" name="call_number" maxLength={255} defaultValue={editingRef?.call_number || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. QA 76.73" />
                 </div>
 
                 <div>
@@ -540,17 +540,17 @@ export function ResearchReferencesManager() {
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Copyright Year</label>
-                  <input type="text" name="copyright" defaultValue={editingRef?.copyright || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. 2023" />
+                  <input type="text" name="copyright" maxLength={255} defaultValue={editingRef?.copyright || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. 2023" />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Status</label>
-                  <input type="text" name="resource_status" defaultValue={editingRef?.resource_status || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. Available, Lost, Damaged" />
+                  <input type="text" name="resource_status" maxLength={255} defaultValue={editingRef?.resource_status || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. Available, Lost, Damaged" />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Inventory Year</label>
-                  <input type="text" name="inventory_year" defaultValue={editingRef?.inventory_year || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. 2026" />
+                  <input type="text" name="inventory_year" maxLength={100} defaultValue={editingRef?.inventory_year || ''} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="e.g. 2026" />
                 </div>
 
                 <div className="col-span-1 md:col-span-2 pt-4 border-t border-gray-100 mt-2">
@@ -572,7 +572,7 @@ export function ResearchReferencesManager() {
 
                   {accessType === 'link' && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                      <input type="url" name="access_link" defaultValue={editingRef?.access_link || ''} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="https://example.com/document" />
+                      <input type="url" name="access_link" maxLength={1000} defaultValue={editingRef?.access_link || ''} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm" placeholder="https://example.com/document" />
                     </div>
                   )}
 
@@ -595,7 +595,7 @@ export function ResearchReferencesManager() {
 
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Remarks</label>
-                  <textarea name="remarks" defaultValue={editingRef?.remarks || ''} rows={3} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-sm" placeholder="Any additional notes..." />
+                  <textarea name="remarks" maxLength={5000} defaultValue={editingRef?.remarks || ''} rows={3} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-sm" placeholder="Any additional notes..." />
                 </div>
               </div>
 

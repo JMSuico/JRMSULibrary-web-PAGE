@@ -116,6 +116,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             <input
               type="text"
               required
+              maxLength={300}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -127,6 +128,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
             <input
               type="text"
               required
+              maxLength={200}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={author}
               onChange={(e) => setAuthor(e.target.value)}
@@ -139,6 +141,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
               <input
                 type="text"
                 required
+                maxLength={100}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={accessionNumber}
                 onChange={(e) => setAccessionNumber(e.target.value)}
@@ -179,6 +182,7 @@ export function BookFormModal({ isOpen, onClose, onSubmit, initialData }: BookFo
                   <input
                     type="text"
                     placeholder="New category name"
+                    maxLength={100}
                     className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}

@@ -159,7 +159,7 @@ export const RizalPreviewBubble: React.FC = () => {
         minWidth: '240px', 
         maxWidth: '300px',
         bottom: `${bottomPx}px`,
-        zIndex: 2147483646 // Just underneath the main RIZAL bubble (2147483647)
+        zIndex: 59 // Just underneath the main RIZAL bubble (60)
       }}
     >
       <div

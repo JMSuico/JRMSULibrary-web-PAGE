@@ -165,11 +165,11 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div>
               <label className={labelClass}>First Name</label>
-              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} />
+              <input type="text" maxLength={150} value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} />
             </div>
             <div>
               <label className={labelClass}>Last Name</label>
-              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} />
+              <input type="text" maxLength={150} value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} />
             </div>
           </div>
 
@@ -177,11 +177,11 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
           <div className="space-y-3 mb-6">
             <div>
               <label className={labelClass}>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} />
+              <input type="email" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} className={inputClass} />
             </div>
             <div>
               <label className={labelClass}>Username</label>
-              <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} />
+              <input type="text" maxLength={50} value={username} onChange={e => setUsername(e.target.value)} className={inputClass} />
             </div>
           </div>
 

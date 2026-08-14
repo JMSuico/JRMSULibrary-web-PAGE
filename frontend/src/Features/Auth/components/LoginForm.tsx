@@ -110,6 +110,7 @@ export function LoginForm() {
             className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all peer"
             placeholder=" "
             required
+            maxLength={50}
           />
           <label
             htmlFor="username"
@@ -128,6 +129,7 @@ export function LoginForm() {
             className="w-full px-4 pt-6 pb-2 pr-12 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all peer"
             placeholder=" "
             required
+            maxLength={128}
           />
           <label
             htmlFor="password"
