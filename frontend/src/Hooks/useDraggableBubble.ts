@@ -129,7 +129,6 @@ export function useDraggableBubble({
     moved: false,
     pointerId: -1,
     canDrag: false,
-    snapTimer: null as ReturnType<typeof setTimeout> | null,
   });
 
   // ── Snap helper ─────────────────────────────────────────────────────────────
@@ -166,8 +165,8 @@ export function useDraggableBubble({
       );
 
       // Collision avoidance (Smart Snapping)
-      const bubbles = Array.from(document.querySelectorAll('[data-target-side], .float-bubble'));
-      const otherBubbles = bubbles.filter(b => b !== el && b.hasAttribute('data-target-side'));
+      const bubbles = Array.from(document.querySelectorAll('.float-bubble'));
+      const otherBubbles = bubbles.filter(b => b !== el);
       
       for (const bubble of otherBubbles) {
         const targetSide = bubble.getAttribute('data-target-side');
@@ -184,33 +183,18 @@ export function useDraggableBubble({
           const otherHeight = (bubble as HTMLElement).offsetHeight || 64;
           const otherTop = otherBottom + otherHeight;
           const thisTop = clampedBottom + bubbleH;
-          const gap = 16; // 16px gap minimum between bubbles
+          const gap = 32; // Enforce a 32px gap minimum
           
           // Check for overlap
           if (clampedBottom < otherTop + gap && thisTop > otherBottom - gap) {
-            // Overlap detected! Determine the smartest direction to push.
-            const thisCenter = clampedBottom + bubbleH / 2;
-            const otherCenter = otherBottom + otherHeight / 2;
-
+            // Overlap detected! Try to push it up first.
             let pushedUp = otherTop + gap;
-            let pushedDown = otherBottom - bubbleH - gap;
-
-            if (thisCenter < otherCenter) {
-              // Dragged bubble is mostly below the other bubble, try to push it DOWN
-              if (pushedDown >= BOTTOM_MARGIN_PX) {
-                clampedBottom = pushedDown;
-              } else {
-                // Not enough room below, fallback to pushing UP
-                clampedBottom = pushedUp;
-              }
+            if (pushedUp + bubbleH > vh - BOTTOM_MARGIN_PX) {
+              // Not enough room above, push down instead
+              let pushedDown = otherBottom - bubbleH - gap;
+              clampedBottom = Math.max(BOTTOM_MARGIN_PX, pushedDown);
             } else {
-              // Dragged bubble is mostly above the other bubble, try to push it UP
-              if (pushedUp + bubbleH <= vh - BOTTOM_MARGIN_PX) {
-                clampedBottom = pushedUp;
-              } else {
-                // Not enough room above, fallback to pushing DOWN
-                clampedBottom = Math.max(BOTTOM_MARGIN_PX, pushedDown);
-              }
+              clampedBottom = pushedUp;
             }
           }
         }
@@ -234,20 +218,16 @@ export function useDraggableBubble({
       el.style.bottom = `${clampedBottom}px`;
 
       // ── Step 4: Sync React state after animation — resting position persisted ─
-      dragState.current.snapTimer = setTimeout(() => {
+      const timer = setTimeout(() => {
         setSide(snappedSide);
         setBottomPx(clampedBottom);
+        // Clear direct style overrides — the useEffect([side,bottomPx]) will
+        // re-apply them from React state immediately after, with no transition.
         const elRef = ref.current;
         if (elRef) {
           elRef.style.transition = '';
-          elRef.style.bottom = `${clampedBottom}px`;
-          if (snappedSide === 'left') {
-            elRef.style.left = `${EDGE_MARGIN_PX}px`;
-            elRef.style.right = 'auto';
-          } else {
-            elRef.style.left = 'auto';
-            elRef.style.right = `${EDGE_MARGIN_PX}px`;
-          }
+          elRef.style.left = '';
+          elRef.style.bottom = '';
         }
       }, SNAP_DURATION_MS + 20);
 
@@ -258,8 +238,8 @@ export function useDraggableBubble({
           new CustomEvent('rizal-bubble-moved', { detail: { side: snappedSide, bottomPx: clampedBottom } })
         );
       }
-      
-      // We don't return clearTimeout here since we manually manage snapTimer in dragState
+
+      return () => clearTimeout(timer);
     },
     [storageKey, emitMoveEvent] // stable — setSide/setBottomPx are stable setters
   );
@@ -288,23 +268,7 @@ export function useDraggableBubble({
     const el = ref.current;
     if (!el) return;
     
-    if (dragState.current.snapTimer) {
-      clearTimeout(dragState.current.snapTimer);
-      dragState.current.snapTimer = null;
-    }
-    
-    // Ignore drag if clicking inside a modal or interactive element
-    // BUT allow dragging if the target is the main bubble button itself
     const target = e.target as Element;
-    if (
-      target.closest('.animate-modal-card') ||
-      ['INPUT', 'TEXTAREA', 'SELECT', 'A', 'OPTION'].includes(target.tagName) ||
-      (target.closest('button') && !target.closest('.bubble-3d-btn')) ||
-      target.closest('form')
-    ) {
-      return; // Do not initiate drag
-    }
-    
     if (target.setPointerCapture) {
       target.setPointerCapture(e.pointerId);
     }
