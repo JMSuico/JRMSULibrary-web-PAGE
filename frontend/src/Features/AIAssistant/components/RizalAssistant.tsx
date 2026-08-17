@@ -13,8 +13,6 @@ interface ChatMessage {
   text: string;
 }
 
-import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
-
 const CACHE_KEY = 'rizal_chat_history';
 const CACHE_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -532,10 +530,12 @@ export const RizalAssistant: React.FC = () => {
               onClick={() => setIsFullscreen(false)}
             />
           )}
-          <div className={`${isFullscreen
+          <div className={`no-drag ${isFullscreen
               ? 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] w-[95vw] sm:w-[90vw] max-w-[800px] h-[90vh] sm:h-[85vh] max-h-[900px]'
               : `absolute ${isTopHalf ? 'top-[115%]' : 'bottom-[115%]'} ${side === 'left' ? 'left-0' : 'right-0'} z-50 w-[calc(100vw-2rem)] sm:w-80 max-w-[360px] max-h-[80vh] sm:max-h-[520px]`
-            } bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-modal-card flex flex-col transition-all duration-300`}>
+            } bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 animate-modal-card flex flex-col transition-all duration-300`}
+            style={{ touchAction: 'auto', userSelect: 'auto' }}
+          >
 
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-900 to-blue-600 p-4 text-white relative flex items-center justify-between shrink-0">

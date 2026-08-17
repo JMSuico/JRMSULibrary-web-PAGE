@@ -165,6 +165,22 @@ services:
     environment:
       - OLLAMA_HOST=ollama:11434
 
+  # ─── Layer 6: Ngrok Tunnel (Public URL) ────────────────────────────────
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    depends_on:
+      - frontend-webpage
+    environment:
+      # TODO: Paste your actual Ngrok authtoken here from ngrok.com
+      NGROK_AUTHTOKEN: "3I1hpoQIjAx9I4prAxQeDx8uKrB_55ai6V9gEzFav3NN3s4Jq"
+    command:
+      - "http"
+      - "frontend-webpage:80"
+    ports:
+      - "4040:4040"
+
+
 volumes:
   db_data:
   ollama_data:

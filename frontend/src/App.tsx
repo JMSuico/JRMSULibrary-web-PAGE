@@ -101,13 +101,16 @@ function PublicLayout() {
       {!isLoaderDone && (
         <InitialLoader onComplete={() => setIsLoaderDone(true)} />
       )}
-      {isLoaderDone && <PrivacyConsentModal />}
       <TopNavBar />
-      <FeedbackStickyCard />
-      <FacebookBubble />
-      <RizalAssistant />
-      {/* Messenger-style preview snippet — activates on first visit after privacy consent */}
-      <RizalPreviewBubble />
+      {isLoaderDone && (
+        <>
+          <PrivacyConsentModal />
+          <FeedbackStickyCard />
+          <FacebookBubble />
+          <RizalAssistant />
+          <RizalPreviewBubble />
+        </>
+      )}
       <main className="flex-1 relative z-0 flex flex-col">
         <Suspense fallback={<PageSkeleton />}>
           <PageTransition>
