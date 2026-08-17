@@ -21,13 +21,15 @@
 //   const { ref, style, isDragging, side } = useDraggableBubble({ storageKey: 'fb_bubble_pos' });
 //   <div ref={ref} style={style}>...</div>
 
-import { useRef, useState, useEffect, useCallback, RefObject, CSSProperties } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, RefObject, CSSProperties } from 'react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 /** Distance from each screen edge when bubble is snapped (px) */
 const EDGE_MARGIN_PX = 24;
 /** Minimum distance from viewport top and bottom (px) */
 const BOTTOM_MARGIN_PX = 24;
+/** Minimum distance from viewport top to protect header (px) */
+const TOP_MARGIN_PX = 96;
 /** Minimum drag movement before mouseup is treated as drag vs. click (px) */
 const DRAG_THRESHOLD_PX = 6;
 /** Spring easing for magnetic snap animation */
@@ -104,14 +106,14 @@ export function useDraggableBubble({
   const [bottomPx, setBottomPx] = useState<number>(savedPos.bottomPx);
 
   // Set initial resting position to DOM on mount so collision logic sees it
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (ref.current) {
       if (!ref.current.hasAttribute('data-target-bottom')) {
         ref.current.setAttribute('data-target-side', side);
         ref.current.setAttribute('data-target-bottom', bottomPx.toString());
       }
     }
-  }, []);
+  }, [side, bottomPx]);
 
   // isDragging is only used for cursor styling in the React style prop
   const [isDragging, setIsDragging] = useState(false);
@@ -158,15 +160,15 @@ export function useDraggableBubble({
       const snappedSide: Side = currentLeft + bubbleW / 2 < mid ? 'left' : 'right';
       const snapLeft = snappedSide === 'left' ? EDGE_MARGIN_PX : vw - bubbleW - EDGE_MARGIN_PX;
 
-      // Clamp bottom so the bubble always stays fully visible
+      // Clamp bottom so the bubble always stays fully visible and below the header
       let clampedBottom = Math.max(
         BOTTOM_MARGIN_PX,
-        Math.min(currentBottom, vh - bubbleH - BOTTOM_MARGIN_PX)
+        Math.min(currentBottom, vh - bubbleH - TOP_MARGIN_PX)
       );
 
       // Collision avoidance (Smart Snapping)
       const bubbles = Array.from(document.querySelectorAll('.float-bubble'));
-      const otherBubbles = bubbles.filter(b => b !== el);
+      const otherBubbles = bubbles.filter(b => b !== el && !el.contains(b));
       
       for (const bubble of otherBubbles) {
         const targetSide = bubble.getAttribute('data-target-side');
@@ -183,18 +185,21 @@ export function useDraggableBubble({
           const otherHeight = (bubble as HTMLElement).offsetHeight || 64;
           const otherTop = otherBottom + otherHeight;
           const thisTop = clampedBottom + bubbleH;
-          const gap = 32; // Enforce a 32px gap minimum
+          const gap = 16; // Enforce a 16px gap minimum
           
           // Check for overlap
           if (clampedBottom < otherTop + gap && thisTop > otherBottom - gap) {
-            // Overlap detected! Try to push it up first.
-            let pushedUp = otherTop + gap;
-            if (pushedUp + bubbleH > vh - BOTTOM_MARGIN_PX) {
-              // Not enough room above, push down instead
-              let pushedDown = otherBottom - bubbleH - gap;
-              clampedBottom = Math.max(BOTTOM_MARGIN_PX, pushedDown);
+            // Overlap detected! Determine whether it's easier to push up or down
+            const pushUpDistance = (otherTop + gap) - clampedBottom;
+            const pushDownDistance = thisTop - (otherBottom - gap);
+
+            if (pushDownDistance < pushUpDistance && otherBottom - bubbleH - gap >= BOTTOM_MARGIN_PX) {
+               clampedBottom = otherBottom - bubbleH - gap; // Push down
+            } else if (otherTop + gap + bubbleH <= vh - TOP_MARGIN_PX) {
+               clampedBottom = otherTop + gap; // Push up
             } else {
-              clampedBottom = pushedUp;
+               // If both are blocked (unlikely), default to just above bottom margin
+               clampedBottom = Math.max(BOTTOM_MARGIN_PX, otherBottom - bubbleH - gap);
             }
           }
         }
@@ -221,13 +226,20 @@ export function useDraggableBubble({
       const timer = setTimeout(() => {
         setSide(snappedSide);
         setBottomPx(clampedBottom);
-        // Clear direct style overrides — the useEffect([side,bottomPx]) will
-        // re-apply them from React state immediately after, with no transition.
+        // Explicitly set the DOM styles here instead of clearing them.
+        // This guarantees the bubble locks into position even if React bails out
+        // of rendering (e.g., if the user drops the bubble in its exact original spot).
         const elRef = ref.current;
         if (elRef) {
           elRef.style.transition = '';
-          elRef.style.left = '';
-          elRef.style.bottom = '';
+          elRef.style.bottom = `${clampedBottom}px`;
+          if (snappedSide === 'left') {
+            elRef.style.left = `${EDGE_MARGIN_PX}px`;
+            elRef.style.right = 'auto';
+          } else {
+            elRef.style.left = 'auto';
+            elRef.style.right = `${EDGE_MARGIN_PX}px`;
+          }
         }
       }, SNAP_DURATION_MS + 20);
 
@@ -246,7 +258,7 @@ export function useDraggableBubble({
 
   // ── Apply resting position from React state ──────────────────────────────────
   // Runs on mount (initial position) and after every snap (resting position sync).
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el || isDraggingRef.current) return;
     
@@ -269,6 +281,8 @@ export function useDraggableBubble({
     if (!el) return;
     
     const target = e.target as Element;
+    // Do not initiate drag if clicking on an interactive modal inside the container
+    if (target.closest('.no-drag')) return;
     if (target.setPointerCapture) {
       target.setPointerCapture(e.pointerId);
     }
@@ -328,9 +342,9 @@ export function useDraggableBubble({
     let newLeft = dragState.current.startLeft + dx;
     let newBottom = dragState.current.startBottom - dy;
 
-    // Clamp coordinates during drag so it never goes off screen
+    // Clamp coordinates during drag so it never goes off screen or over header
     newLeft = Math.max(EDGE_MARGIN_PX, Math.min(newLeft, vw - bubbleW - EDGE_MARGIN_PX));
-    newBottom = Math.max(BOTTOM_MARGIN_PX, Math.min(newBottom, vh - bubbleH - BOTTOM_MARGIN_PX));
+    newBottom = Math.max(BOTTOM_MARGIN_PX, Math.min(newBottom, vh - bubbleH - TOP_MARGIN_PX));
 
     el.style.transition = 'none';
     el.style.left = `${newLeft}px`;
