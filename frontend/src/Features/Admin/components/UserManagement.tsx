@@ -374,22 +374,22 @@ export function UserManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">First Name</label>
-                    <input required maxLength={50} defaultValue={editingUser?.first_name} name="first_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
+                    <input required defaultValue={editingUser?.first_name} name="first_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Last Name</label>
-                    <input required maxLength={50} defaultValue={editingUser?.last_name} name="last_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
+                    <input required defaultValue={editingUser?.last_name} name="last_name" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
-                  <input required maxLength={254} defaultValue={editingUser?.email} name="email" type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
+                  <input required defaultValue={editingUser?.email} name="email" type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Username</label>
-                  <input required maxLength={150} defaultValue={editingUser?.username} name="username" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
+                  <input required defaultValue={editingUser?.username} name="username" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy" />
                 </div>
 
                 <div>
@@ -399,7 +399,6 @@ export function UserManagement() {
                   <div className="relative">
                     <input 
                       required={!editingUser} 
-                      maxLength={128}
                       name="password" 
                       type={showPassword ? "text" : "password"}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy pr-10" 

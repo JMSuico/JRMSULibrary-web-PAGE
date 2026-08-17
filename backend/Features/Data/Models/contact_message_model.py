@@ -20,14 +20,14 @@ class ContactMessage(models.Model):
     name = models.CharField(max_length=200)
     email = models.EmailField()
     subject = models.CharField(max_length=255, blank=True, null=True)
-    message = models.TextField(max_length=1000)
+    message = models.TextField()
     message_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='EMAIL')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='UNREAD')
     
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False) # Keep for backwards compatibility, but use status going forward
     
-    reply_text = models.TextField(max_length=1000, blank=True, null=True)
+    reply_text = models.TextField(blank=True, null=True)
     replied_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:

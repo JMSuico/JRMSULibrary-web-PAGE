@@ -322,19 +322,19 @@ export function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className={labelClass}>First Name</label>
-                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} disabled={!isEditing} maxLength={150} required />
+                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Last Name</label>
-                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} disabled={!isEditing} maxLength={150} required />
+                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Email Address</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} disabled={!isEditing} maxLength={254} required />
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Username</label>
-                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} disabled={!isEditing} maxLength={150} required />
+                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                 </div>
 
@@ -382,23 +382,23 @@ export function Settings() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className={labelClass}>Library Name</label>
-                        <input type="text" name="library_name" value={formData.library_name} onChange={handleChange} className={inputClass} maxLength={150} required disabled={!isEditing} />
+                        <input type="text" name="library_name" value={formData.library_name} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Contact Email</label>
-                        <input type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} className={inputClass} maxLength={254} required disabled={!isEditing} />
+                        <input type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Alternate Email</label>
-                        <input type="email" name="alternate_email" value={formData.alternate_email || ''} onChange={handleChange} className={inputClass} maxLength={254} disabled={!isEditing} />
+                        <input type="email" name="alternate_email" value={formData.alternate_email || ''} onChange={handleChange} className={inputClass} disabled={!isEditing} />
                       </div>
                       <div className="md:col-span-2">
                         <label className={labelClass}>Address</label>
-                        <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputClass} maxLength={1000} required disabled={!isEditing} />
+                        <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputClass} required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Phone Number</label>
-                        <input type="text" name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className={inputClass} maxLength={50} disabled={!isEditing} />
+                        <input type="text" name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className={inputClass} disabled={!isEditing} />
                       </div>
                     </div>
                     
@@ -408,7 +408,7 @@ export function Settings() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
                         <label className={labelClass}>Monday - Friday</label>
-                        <input type="text" name="opening_hours_mon_fri" value={formData.opening_hours_mon_fri} onChange={handleChange} className={inputClass} placeholder="e.g. 7:00 AM - 7:00 PM" maxLength={100} required disabled={!isEditing} />
+                        <input type="text" name="opening_hours_mon_fri" value={formData.opening_hours_mon_fri} onChange={handleChange} className={inputClass} placeholder="e.g. 7:00 AM - 7:00 PM" required disabled={!isEditing} />
                       </div>
                       <div>
                         <label className={labelClass}>Saturday</label>
@@ -542,7 +542,7 @@ export function Settings() {
                     <div>
                       <label className={labelClass}>Current Password <span className="text-xs text-gray-400 font-normal ml-2">(Required to set new password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showCurrentPassword ? "text" : "password"} name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} placeholder="Current Password" maxLength={128} disabled={!isEditing} />
+                        <input type={showCurrentPassword ? "text" : "password"} name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} placeholder="Current Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showCurrentPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -551,7 +551,7 @@ export function Settings() {
                     <div>
                       <label className={labelClass}>New Password <span className="text-xs text-gray-400 font-normal ml-2">(New password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showNewPassword ? "text" : "password"} name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} placeholder="New Password" maxLength={128} disabled={!isEditing} />
+                        <input type={showNewPassword ? "text" : "password"} name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} placeholder="New Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showNewPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -560,7 +560,7 @@ export function Settings() {
                     <div>
                       <label className={labelClass}>Confirm New Password <span className="text-xs text-gray-400 font-normal ml-2">(Repeat new password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showConfirmPassword ? "text" : "password"} name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} placeholder="Confirm New Password" maxLength={128} disabled={!isEditing} />
+                        <input type={showConfirmPassword ? "text" : "password"} name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} placeholder="Confirm New Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showConfirmPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>

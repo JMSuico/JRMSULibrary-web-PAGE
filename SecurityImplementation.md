@@ -343,16 +343,3 @@ Large file uploads (E-Resources over 5MB) were causing the API to crash with a 4
 The `boto3` library automatically attempts to chunk files larger than 5MB into multipart uploads. Supabase's S3 compatibility layer did not handle these chunks properly under the default Django configuration.
 **Implementation:** 
 Added `AWS_S3_MULTIPART_THRESHOLD = 100 * 1024 * 1024` (100MB) to `settings.py`. This forces `boto3` to bypass chunking and upload the entire file in a single stream, completely fixing the massive file upload crash while maintaining the 50MB and 20MB application-level soft limits.
-
----
-
-## 15. Penetration Testing (August 2026 Updates)
-
-Following a comprehensive vulnerability assessment and penetration test using tools like **Burp Suite Professional**, **Nikto**, and **Gobuster**, the following mitigations have been deployed:
-
-1. **WAF & File Extension Filtering**: Nginx was hardened to return `404 Not Found` for sensitive file extensions (`.php`, `.jsp`, `.env`, `.git`), reducing the attack surface against automated scanners.
-2. **Buffer Overflow & String DoS Mitigation**: Hard `maxLength` limits were injected into both React forms and Django database models, preventing massive payload injection.
-3. **Stored XSS Verification**: Validated that malicious HTML (`<script>`) stored in the database is safely escaped and neutralized by the React frontend layer before rendering.
-4. **Access Control (IDOR)**: Confirmed that API endpoints (like `/api/batches/`) correctly return `403 Forbidden` for unauthenticated requests, preventing unauthorized data extraction.
-5. **Directory Traversal Defense**: Gobuster scanning confirmed that the React SPA fallback routing does not inadvertently leak backend `.env` or configuration directories to the public web.
-

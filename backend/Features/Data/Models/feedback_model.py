@@ -6,7 +6,7 @@ class Feedback(models.Model):
     name = models.CharField(max_length=200)
     email = models.EmailField()
     category = models.CharField(max_length=100)
-    message = models.TextField(max_length=1000)
+    message = models.TextField()
     rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)], null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=500, null=True, blank=True)
