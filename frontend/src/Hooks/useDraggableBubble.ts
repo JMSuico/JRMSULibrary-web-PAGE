@@ -399,7 +399,7 @@ export function useDraggableBubble({
     cursor: isDragging ? 'grabbing' : 'grab',
     touchAction: 'none',
     userSelect: 'none',
-    zIndex: 60,
+    zIndex: 2147483647,
   };
 
   return { ref, style, isDragging, side, bottomPx };

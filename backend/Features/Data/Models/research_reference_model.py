@@ -28,7 +28,7 @@ class ResearchReference(models.Model):
     title = models.CharField(max_length=500)
     author = models.CharField(max_length=500, null=True, blank=True)
     copyright = models.CharField(max_length=255, null=True, blank=True)
-    remarks = models.TextField(max_length=1000, null=True, blank=True)
+    remarks = models.TextField(null=True, blank=True)
     resource_status = models.CharField(max_length=255, null=True, blank=True)
     inventory_year = models.CharField(
         max_length=100,
