@@ -173,7 +173,7 @@ services:
       - frontend-webpage
     environment:
       # TODO: Paste your actual Ngrok authtoken here from ngrok.com
-      NGROK_AUTHTOKEN: "3I1hpoQIjAx9I4prAxQeDx8uKrB_55ai6V9gEzFav3NN3s4Jq"
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     command:
       - "http"
       - "frontend-webpage:80"
