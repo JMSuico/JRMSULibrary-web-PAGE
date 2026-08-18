@@ -19,7 +19,7 @@ const PHRASES: string[] = [
   "What's on your mind right now?",
 ];
 
-export const RizalPreviewBubble: React.FC = () => {
+export const RizalPreviewBubble: React.FC<{ isHidden?: boolean }> = ({ isHidden = false }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
@@ -76,7 +76,7 @@ export const RizalPreviewBubble: React.FC = () => {
 
   // --- Video Sync Logic ---
   useEffect(() => {
-    if (isChatOpen || isDismissed) {
+    if (isChatOpen || isDismissed || isHidden) {
       setIsVisible(false);
       return;
     }

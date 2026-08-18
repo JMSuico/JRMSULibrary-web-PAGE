@@ -256,7 +256,15 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 CORS_ALLOW_CREDENTIALS = True
 
 # Trust any origin for CSRF since we are local hosting
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS + ["http://127.0.0.1", "http://localhost"]
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS + [
+    "http://127.0.0.1", 
+    "http://localhost",
+    "https://*.ngrok-free.dev",
+    "https://*.ngrok-free.app",
+    "https://*.ngrok.io",
+    "https://*.ngrok.app",
+    "https://dosage-dormitory-shadily.ngrok-free.dev"
+]
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",

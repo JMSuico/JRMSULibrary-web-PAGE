@@ -23,7 +23,7 @@ class AIService:
     def __init__(self):
         # Use OLLAMA_URL env var if available (useful for Docker to reach host), else fallback
         self.ollama_url = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434/api/chat')
-        self.model_name = 'qwen2.5:0.5b'
+        self.model_name = 'qwen3:0.6b'
         self.personnel_repo = PersonnelRepository()
         self.link_repo = ManagedLinkRepository()
         self.batch_repo = BatchRepository()

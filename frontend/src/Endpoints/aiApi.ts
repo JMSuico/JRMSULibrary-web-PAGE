@@ -1,4 +1,42 @@
 import { apiClient } from '@/src/Libs/apiClient';
+import faqCacheRaw from '@/src/Assets/FAQ cache/faq_cache.json';
+
+const faqCache: Record<string, string[]> = faqCacheRaw as Record<string, string[]>;
+
+const STOP_WORDS = new Set(["a", "an", "the", "is", "are", "am", "was", "were", "do", "does", "did", "to", "in", "for", "on", "with", "as", "by", "at", "from", "of", "and", "or", "but", "it", "this", "that", "these", "those", "you", "your", "i", "my", "we", "our", "he", "she", "they", "them", "what", "where", "when", "why", "how", "can", "could", "will", "would", "should"]);
+
+function tokenize(text: string): string[] {
+  return text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 0 && !STOP_WORDS.has(w));
+}
+
+function findBestCachedAnswer(message: string): string | null {
+  const userTokens = tokenize(message);
+  if (userTokens.length === 0) return null;
+
+  let bestMatch: string | null = null;
+  let highestScore = 0;
+
+  for (const [question, answers] of Object.entries(faqCache)) {
+    const qTokens = tokenize(question);
+    if (qTokens.length === 0) continue;
+
+    let matchCount = 0;
+    for (const qt of qTokens) {
+      if (userTokens.some(ut => ut === qt || ut.includes(qt) || qt.includes(ut))) {
+        matchCount++;
+      }
+    }
+
+    const score = matchCount / qTokens.length;
+    if (score >= 0.6 && score > highestScore) {
+      highestScore = score;
+      bestMatch = answers[Math.floor(Math.random() * answers.length)];
+    }
+  }
+
+  return bestMatch;
+}
+
 
 export interface ChatMessage {
   sender: 'user' | 'rizal';
@@ -53,6 +91,25 @@ export const aiApi = {
    * @param onChunk Callback triggered when a new chunk of text arrives
    */
   chatStream: async (message: string, history: ChatMessage[], onChunk: (chunk: string) => void): Promise<void> => {
+    // 1. Semantic Cache Intercept
+    const cachedAnswer = findBestCachedAnswer(message);
+    if (cachedAnswer) {
+      // Simulate network delay
+      await new Promise(r => setTimeout(r, 400));
+      
+      // Simulate streaming word-by-word
+      const words = cachedAnswer.split(/(\s+)/); // Preserve whitespace
+      for (const word of words) {
+        if (word) {
+          onChunk(word);
+          // Randomize typing speed for realism (10ms to 40ms per chunk)
+          await new Promise(r => setTimeout(r, Math.random() * 30 + 10));
+        }
+      }
+      return;
+    }
+
+    // 2. API Fallback (Ollama)
     // API base must match how apiClient resolves URLs
     let API_BASE = import.meta.env.VITE_API_BASE_URL;
     if (!API_BASE) {

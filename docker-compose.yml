@@ -161,7 +161,7 @@ services:
     restart: "no"
     depends_on:
       - ollama
-    entrypoint: ["sh", "-c", "sleep 10 && ollama pull qwen2.5:0.5b"]
+    entrypoint: ["sh", "-c", "sleep 10 && ollama pull qwen3:0.6b"]
     environment:
       - OLLAMA_HOST=ollama:11434
 

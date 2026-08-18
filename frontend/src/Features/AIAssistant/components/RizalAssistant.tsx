@@ -16,7 +16,11 @@ interface ChatMessage {
 const CACHE_KEY = 'rizal_chat_history';
 const CACHE_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-export const RizalAssistant: React.FC = () => {
+interface RizalAssistantProps {
+  isHidden?: boolean;
+}
+
+export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoMode, setVideoMode] = useState<'waving' | 'reading'>('waving');
@@ -520,6 +524,9 @@ export const RizalAssistant: React.FC = () => {
   };
 
   return (
+    // Stay mounted in DOM at all times so the drag hook pre-calculates position.
+    // Use opacity to hide/show instead of unmounting, to prevent position jumps.
+    <div className={`transition-opacity duration-500 ${isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
     <div ref={bubbleRef} style={bubbleStyle}>
       {/* Chat Panel — opens directly as chatbot, no options menu */}
       {isExpanded && (
@@ -680,6 +687,7 @@ export const RizalAssistant: React.FC = () => {
           RIZAL
         </span>
       </div>
+    </div>
     </div>
   );
 };
