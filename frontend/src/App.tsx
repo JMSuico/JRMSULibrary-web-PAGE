@@ -55,6 +55,8 @@ const LoginPage = lazy(() => import('@/src/Pages/Admin/LoginPage'));
 function PublicLayout() {
   const location = useLocation();
   const [isLoaderDone, setIsLoaderDone] = useState(false);
+  // Tracks whether the Privacy Modal is currently visible, so bubbles can stay hidden.
+  const [isModalVisible, setIsModalVisible] = useState(false);
 
 
   // Poll for global CMS changes every 15 seconds. If detected, reload the page.
@@ -102,11 +104,14 @@ function PublicLayout() {
         <InitialLoader onComplete={() => setIsLoaderDone(true)} />
       )}
       <TopNavBar />
-      <PrivacyConsentModal />
+      <PrivacyConsentModal
+        isLoaderDone={isLoaderDone}
+        onVisibilityChange={setIsModalVisible}
+      />
       <FeedbackStickyCard />
-      <FacebookBubble />
-      <RizalAssistant />
-      <RizalPreviewBubble />
+      <FacebookBubble isHidden={!isLoaderDone || isModalVisible} />
+      <RizalAssistant isHidden={!isLoaderDone || isModalVisible} />
+      <RizalPreviewBubble isHidden={!isLoaderDone || isModalVisible} />
       <main className="flex-1 relative z-0 flex flex-col">
         <Suspense fallback={<PageSkeleton />}>
           <PageTransition>

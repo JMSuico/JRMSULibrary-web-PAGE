@@ -2,20 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ShieldCheck, FileText, CheckCircle } from 'lucide-react';
 
-export const PrivacyConsentModal: React.FC = () => {
+interface PrivacyConsentModalProps {
+  isLoaderDone: boolean;
+  onVisibilityChange?: (visible: boolean) => void;
+}
+
+export const PrivacyConsentModal: React.FC<PrivacyConsentModalProps> = ({ isLoaderDone, onVisibilityChange }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'privacy' | 'terms'>('privacy');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // Only start the timer AFTER the InitialLoader has fully finished.
+  // This ensures the sequence is: Loader → (loader done) → 300ms pause → Privacy Modal.
+  useEffect(() => {
+    if (!isLoaderDone) return;
     const hasConsented = localStorage.getItem('jrmsu_privacy_consent');
     if (!hasConsented) {
-      // Short delay after the initial loader completes
       const timer = setTimeout(() => setIsVisible(true), 300);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isLoaderDone]);
+
+  // Notify parent whenever our visibility changes so it can hide bubbles.
+  useEffect(() => {
+    onVisibilityChange?.(isVisible);
+  }, [isVisible, onVisibilityChange]);
 
   const handleUnderstand = () => {
     localStorage.setItem('jrmsu_privacy_consent', 'true');

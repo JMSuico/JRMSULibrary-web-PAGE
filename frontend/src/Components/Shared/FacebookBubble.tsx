@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
 
-export const FacebookBubble: React.FC = () => {
+interface FacebookBubbleProps {
+  isHidden?: boolean;
+}
+
+export const FacebookBubble: React.FC<FacebookBubbleProps> = ({ isHidden = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { ref, style, isDragging } = useDraggableBubble({
     storageKey: 'fb_bubble_pos',
@@ -10,7 +14,9 @@ export const FacebookBubble: React.FC = () => {
   });
 
   return (
-    <>
+    // Stay mounted in DOM at all times so the drag hook can pre-calculate position.
+    // Use opacity to hide/show instead of unmounting, to prevent position jumps.
+    <div className={`transition-opacity duration-500 ${isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
       {/* Floating Bubble — draggable + magnetic edge snap */}
       <div
         ref={ref}
@@ -69,6 +75,6 @@ export const FacebookBubble: React.FC = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
