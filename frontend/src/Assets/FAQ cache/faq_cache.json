@@ -1,5 +1,242 @@
 {
     "who is the dev": [
-        "I am RIZAL. I'm not a member of the Katipunan Library's development team and cannot make changes to the existing system without your consent. However, if you have any questions or need assistance with something, feel free to ask!"
+        "I am RIZAL, an AI assistant. I was developed to help JRMSU students navigate the library's resources efficiently.",
+        "I was developed by the JRMSU Katipunan Library development team to assist you with library inquiries."
+    ],
+    "hi": [
+        "Hello! I am RIZAL. How can I help you today?",
+        "Hi there! Welcome to the JRMSU Library. What do you need help with?",
+        "Greetings! How may I assist you with your research or library needs today?"
+    ],
+    "hello": [
+        "Hello! I am RIZAL. How can I help you today?",
+        "Hi there! Welcome to the JRMSU Library. What do you need help with?",
+        "Greetings! How may I assist you with your research or library needs today?"
+    ],
+    "hey": [
+        "Hey! How's it going? Need any help with library resources?",
+        "Hello! How can I assist you today?"
+    ],
+    "wassup": [
+        "Not much, just here ready to help you find some books! What's on your mind?",
+        "Hello! Let me know if you need any help with the library today."
+    ],
+    "good morning": [
+        "Good morning! Welcome to the library. How can I help you start your day?",
+        "Morning! Looking for a specific book or a place to study?"
+    ],
+    "good afternoon": [
+        "Good afternoon! How can I assist you with your studies today?",
+        "Afternoon! Need help finding any resources?"
+    ],
+    "good evening": [
+        "Good evening! Please note our library hours. How can I help you before we close?",
+        "Evening! What can I help you find today?"
+    ],
+    "how are you": [
+        "I'm functioning perfectly and ready to help you! What do you need?",
+        "I'm doing great! Always happy to assist JRMSU students. How can I help you?"
+    ],
+    "who are you": [
+        "I am RIZAL, your AI library assistant for the JRMSU Katipunan Campus.",
+        "My name is RIZAL. I'm a virtual assistant designed to help you navigate the library's collections and services."
+    ],
+    "what are you": [
+        "I am an artificial intelligence assistant created specifically for the JRMSU Library.",
+        "I'm an AI chatbot. My purpose is to answer your library-related questions instantly!"
+    ],
+    "what is your name": [
+        "My name is RIZAL.",
+        "You can call me RIZAL. I'm the library's AI assistant."
+    ],
+    "where is the library": [
+        "The library is located at the JRMSU Katipunan Campus. Please check the campus map or ask the guards for specific directions to the building.",
+        "We are situated within the JRMSU Katipunan Campus."
+    ],
+    "what are the library hours": [
+        "The library is open Monday to Friday, from 7:00 AM to 7:00 PM Philippine Time.",
+        "Our standard operating hours are 7:00 AM to 7:00 PM, Monday through Friday."
+    ],
+    "is the library open today": [
+        "The library is generally open Monday to Friday, 7 AM to 7 PM. Please check the top navigation bar or our Facebook page for any special holiday closures.",
+        "We operate Monday-Friday, 7 AM to 7 PM. If today is a weekend or holiday, we might be closed."
+    ],
+    "is the library open on weekends": [
+        "No, the library is typically closed on Saturdays and Sundays.",
+        "We are only open Monday through Friday."
+    ],
+    "how to borrow books": [
+        "To borrow a book, you need your validated JRMSU ID. Bring the book to the circulation desk to have it checked out.",
+        "Find the book you want using the OPAC or browse the shelves, then bring it to the librarian at the front desk with your Student ID."
+    ],
+    "can i borrow books": [
+        "Yes, absolutely! All currently enrolled JRMSU students with a valid ID can borrow books.",
+        "Yes, as long as you have your validated student ID, you can borrow materials from the circulation desk."
+    ],
+    "how many books can i borrow": [
+        "Generally, undergraduate students can borrow up to 3 books at a time. Please consult the librarian for specific limits based on your course.",
+        "You can usually check out up to 3 books. For graduate students or faculty, the limit may be higher."
+    ],
+    "how long can i borrow a book": [
+        "Circulation books can usually be borrowed for 3 days and may be renewed if no one else has reserved them.",
+        "The standard loan period is 3 days for regular circulation books. Reserve books might have shorter loan periods."
+    ],
+    "what is the penalty for late books": [
+        "Overdue books incur a fine per day. Please return your books on time to avoid penalties and allow other students to use them.",
+        "Fines are charged for late returns. Please check with the circulation desk for the exact daily rate."
+    ],
+    "can i renew my borrowed books": [
+        "Yes, you can renew a book if it hasn't been reserved by another student. Bring the book to the desk before it's overdue.",
+        "Renewals are allowed. Please visit the circulation desk to process the renewal."
+    ],
+    "do you have computers": [
+        "Yes, we have an E-Library section with computers for research and academic purposes.",
+        "We offer computer access in the E-Library area. You'll need to log in to use them."
+    ],
+    "is there wifi": [
+        "Yes, Wi-Fi is available in the library for students. Please ask the front desk for the current access details.",
+        "We provide Wi-Fi access for academic use."
+    ],
+    "can i eat in the library": [
+        "No, eating and drinking are strictly prohibited inside the library to protect our collections and equipment.",
+        "Food and drinks are not allowed inside. Please finish your snacks before entering."
+    ],
+    "can i sleep in the library": [
+        "The library is a place for study and research. Sleeping is discouraged to maintain a productive environment and free up space for studying students.",
+        "We ask that students use the library for academic purposes rather than sleeping."
+    ],
+    "what is the dress code": [
+        "Please observe the university's standard dress code when entering the library. Sleeveless shirts, shorts, and slippers might not be allowed.",
+        "The general JRMSU campus dress code applies inside the library."
+    ],
+    "how to use opac": [
+        "You can use the OPAC (Online Public Access Catalog) terminals in the library, or use the search feature on this website to find books by title, author, or subject.",
+        "Just type the title or author into the search bar on our website to see if we have the book in our collection."
+    ],
+    "do you have e-books": [
+        "Yes! You can browse our e-resources and e-books through the Collection page on this website.",
+        "We have a growing collection of E-Resources. Check the 'Collection' or 'E-Resources' tab."
+    ],
+    "how to access e-resources": [
+        "Navigate to the 'Collection' page on our website and select the E-Resources tab to view our digital materials.",
+        "You can find links to our subscribed databases and digital books in the E-Resources section of the site."
+    ],
+    "can i reserve a discussion room": [
+        "Yes, discussion rooms can be reserved for group study. You can use the 'Book a Space' feature on our website or ask the librarian.",
+        "Discussion rooms are available. Please book them in advance through our online reservation system."
+    ],
+    "who is the head librarian": [
+        "You can find information about our library staff and the head librarian on the 'Personnel' page of our website.",
+        "Please check the 'Personnel' section of our site to meet our dedicated library staff."
+    ],
+    "how to contact the library": [
+        "You can send us a message through the Feedback form on this website, or visit our official Facebook page.",
+        "Feel free to use the contact forms here, or message the JRMSU Katipunan Library Facebook page directly."
+    ],
+    "i lost my id": [
+        "You need a valid ID to borrow books. If you lost it, please secure a replacement from the university registrar or student affairs office first.",
+        "Please report your lost ID to the appropriate university office. You will need a new ID to check out materials."
+    ],
+    "i lost a book": [
+        "If you lose a library book, you must report it immediately to the circulation desk. You will need to replace it with the same or a newer edition, or pay its current value.",
+        "Please inform the librarian right away. Lost books must be replaced or paid for."
+    ],
+    "where is the cr": [
+        "The restrooms are located outside the main library reading area. Ask our staff for specific directions if you can't find them.",
+        "Comfort rooms are available nearby. The librarian at the front desk can point you in the right direction."
+    ],
+    "are there lockers": [
+        "Baggage counters are available near the entrance where you must deposit your bags before entering the main reading areas.",
+        "You are required to leave your bags at the baggage counter near the entrance."
+    ],
+    "how to pay fines": [
+        "Fines for overdue books must be settled at the library circulation desk or the university cashier, depending on the current policy.",
+        "Please approach the circulation desk to inquire about your fines and how to pay them."
+    ],
+    "do you have past board exams": [
+        "We may have reviewers and related materials in the Filipiniana or Reserve sections. Try searching the OPAC for specific subjects.",
+        "Check our catalog for board exam reviewers, or ask the librarian to help you locate them."
+    ],
+    "do you have theses": [
+        "Yes, undergraduate and graduate theses are available in the Special Collections or Archives section. They are usually for room use only.",
+        "We keep a collection of student theses. You can read them inside the library, but they cannot be borrowed."
+    ],
+    "can i photocopy books": [
+        "Photocopying is generally allowed for portions of books, subject to copyright laws. Please ask the staff where the nearest photocopier is.",
+        "You may photocopy certain materials, but entire books cannot be copied due to copyright restrictions."
+    ],
+    "can i print documents": [
+        "Printing services may be available in the E-Library section. Please ask the staff for the current rates and availability.",
+        "Check with the E-Library attendant if printing services are currently operational."
+    ],
+    "can i use my laptop": [
+        "Yes, you are welcome to use your personal laptop in the library for academic purposes.",
+        "Laptops are allowed! There are designated reading areas where you can comfortably use your devices."
+    ],
+    "are there charging stations": [
+        "There are some outlets available in the reading areas. Please be mindful of trailing wires and do not leave your devices unattended.",
+        "You can charge your devices at designated tables with outlets."
+    ],
+    "is the library air conditioned": [
+        "Yes, the main reading areas of the library are air-conditioned to provide a comfortable study environment.",
+        "Yes, we strive to maintain a cool and conducive environment for studying."
+    ],
+    "how to get library clearance": [
+        "To get library clearance, you must return all borrowed books and settle any outstanding fines. Bring your clearance form to the circulation desk.",
+        "Ensure you have no overdue books or unpaid fines, then present your clearance form to the librarian."
+    ],
+    "who can use the library": [
+        "The library is primarily for enrolled JRMSU students, faculty, and staff. Alumni and outside researchers may use the library subject to specific rules and fees.",
+        "All bona fide students, faculty, and staff of JRMSU are welcome."
+    ],
+    "can alumni use the library": [
+        "Alumni can usually use the library for room reading. Please present your alumni ID to the librarian. Borrowing privileges might be restricted.",
+        "Yes, alumni are welcome to read inside the library. Please inquire at the desk regarding your specific privileges."
+    ],
+    "what is opac": [
+        "OPAC stands for Online Public Access Catalog. It's the digital database that lists all the books and materials available in our library.",
+        "It's our online catalog. You use it to search for books by title, author, or keyword."
+    ],
+    "can i donate books": [
+        "Yes, the library accepts book donations that align with the university's curriculum and collection development policy. Please speak with the head librarian.",
+        "We welcome donations! Kindly approach the librarian to discuss the materials you wish to donate."
+    ],
+    "help": [
+        "I'm here to help! You can ask me about library hours, borrowing policies, how to find books, or any other library-related questions.",
+        "What do you need assistance with? You can ask me about our services, rules, or how to use the website."
+    ],
+    "thank you": [
+        "You're very welcome! Let me know if you need anything else.",
+        "Happy to help! Good luck with your studies.",
+        "Anytime! Have a great day at the library."
+    ],
+    "bye": [
+        "Goodbye! Have a productive day.",
+        "See you later! Feel free to ask if you need more help.",
+        "Bye! Study hard and take care."
+    ],
+    "fuck": [
+        "Please maintain a respectful tone. The library promotes a professional and academic environment.",
+        "I'm here to help with library questions. Please use appropriate language."
+    ],
+    "shit": [
+        "Please keep our conversation respectful. How can I assist you with the library?",
+        "Let's keep things professional! Do you have a question about our library services?"
+    ],
+    "who created you": [
+        "I was created by the talented development team of the JRMSU Katipunan Library.",
+        "The developers behind the JRMSU Library website brought me to life to assist you!"
+    ],
+    "are you real": [
+        "I am a virtual AI assistant, so I'm not human, but I am very real in my ability to help you find what you need!",
+        "I'm an artificial intelligence designed specifically to help JRMSU students."
+    ],
+    "do you have fiction books": [
+        "Yes, we have a section for fiction and literature. You can search for specific novels using the OPAC.",
+        "We do have a recreational reading section that includes fiction books."
+    ],
+    "can i reserve a book online": [
+        "Currently, book reservations are handled at the circulation desk. Please visit the library to reserve a book that is currently checked out.",
+        "To reserve a physical book, please speak with the librarian at the front desk."
     ]
 }

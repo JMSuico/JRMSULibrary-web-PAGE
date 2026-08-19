@@ -30,6 +30,13 @@ export default defineConfig(() => {
         },
       },
     },
+    esbuild: {
+      drop: ['debugger' as any],
+    },
+    build: {
+      sourcemap: false,
+      minify: 'esbuild' as const,
+    },
   };
 });
 

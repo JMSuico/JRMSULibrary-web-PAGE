@@ -10,7 +10,7 @@ djangorestframework==3.17.1
 pillow==12.3.0
 python-dotenv==1.2.2
 pytz==2026.2
-sqlparse==0.5.5
+sqlparse==0.6.0
 tzdata==2026.2
 requests==2.34.2
 

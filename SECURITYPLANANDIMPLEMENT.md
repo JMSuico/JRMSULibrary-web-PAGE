@@ -11,15 +11,26 @@
 | :--- | :--- | :--- |
 | **Authentication & IsSuperUser Locks** | ✅ Productive | ackend/Features/Api/Controllers/user_controller.py : L11, L23 |
 | **Login Brute-Force Rate Limiting** | ✅ Productive | ackend/Features/Api/Controllers/user_controller.py : L15, L48 |
-| **Terminal-Created Admin Protection** | ✅ Productive | ackend/Features/signals.py : L13 <br> ackend/Features/Api/Controllers/user_controller.py : L116 |
-| **Session & CSRF Cookie Hardening** | ✅ Productive | ackend/core/settings.py : ~L320 |
-| **Clickjacking & X-Frame-Options** | ✅ Productive | ackend/core/settings.py : ~L90 |
-| **Detailed API Activity Logging** | ✅ Productive | ackend/core/middleware.py : L6 |
-| **Universal Plugin Hardware Lock (CSP/Permissions-Policy)** | ✅ Productive | ackend/core/middleware.py : L38 |
-| **Universal Algorithmic DoS Protection (sys.set_int_max)** | ✅ Productive | ackend/core/settings.py : L23 |
-| **MIME Sniffing Lockdown (X-Content-Type-Options)** | ✅ Productive | ackend/core/middleware.py : L38 |
-| **Supply Chain Protection (NPM/PIP Audits)** | ✅ Productive | rontend/package.json : L8 <br> ackend/Dockerfile : L15 |
-| **Rootless Container Execution (Docker appuser)** | ✅ Productive | ackend/Dockerfile : L28-L34 |
+| **Authentication & IsSuperUser Locks** | ✅ Productive |  ackend/Features/Api/Controllers/user_controller.py : L11, L23 |
+| **Login Brute-Force Rate Limiting** | ✅ Productive |  ackend/Features/Api/Controllers/user_controller.py : L15, L48 |
+| **Terminal-Created Admin Protection** | ✅ Productive |  ackend/Features/signals.py : L13 <br>  ackend/Features/Api/Controllers/user_controller.py : L116 |
+| **Session & CSRF Cookie Hardening** | ✅ Productive |  ackend/core/settings.py : ~L320 |
+| **Clickjacking & X-Frame-Options** | ✅ Productive |  ackend/core/settings.py : ~L90 |
+| **Detailed API Activity Logging** | ✅ Productive |  ackend/core/middleware.py : L6 |
+| **Universal Plugin Hardware Lock (CSP/Permissions-Policy)** | ✅ Productive |  ackend/core/middleware.py : L38 |
+| **Universal Algorithmic DoS Protection (sys.set_int_max)** | ✅ Productive |  ackend/core/settings.py : L23 |
+| **MIME Sniffing Lockdown (X-Content-Type-Options)** | ✅ Productive | backend/core/middleware.py : L38 |
+| **Supply Chain Protection (NPM/PIP Audits)** | ✅ Productive | frontend/package.json : L8 <br> backend/Dockerfile : L15 |
+| **Rootless Container Execution (Docker appuser)** | ✅ Productive | backend/Dockerfile : L28-L34 |
+| **Nginx Edge Headers & Scanner Probe 404s** | ✅ Productive | frontend/nginx.conf : L31-53 |
+| **Case-Insensitive & Source Map Interceptor** | ✅ Productive | frontend/nginx.conf : L37-41 |
+| **HTTP Verb Tampering & Method Override Guard** | ✅ Productive | frontend/nginx.conf & DRF Controllers |
+| **Strict CORS Origin Isolation** | ✅ Productive | backend/core/settings.py & Nginx |
+| **Client-Side Anti-Inspection & DevTools Lock** | ✅ Productive | frontend/src/Hooks/useDevToolsProtection.ts : L1-67 |
+| **Source Map Shielding & Stripping** | ✅ Productive | frontend/vite.config.ts : L33-43 |
+| **Client-Side Data & Element Masking** | ✅ Productive | frontend/src/Libs/securityEncoder.ts : L1-42 |
+| **DOM Element & Atomic Class Obfuscation** | ✅ Productive | frontend/src/Libs/domObfuscator.ts : L1-220 |
+| **Trivy Container & SAST Supply-Chain Audit** | ✅ Productive | Docker Images / Manifests (0 HIGH/CRITICAL CVEs) |
 
 ---
 
@@ -416,4 +427,5 @@ Following a comprehensive vulnerability assessment and penetration test using to
 3. **Stored XSS Verification**: Validated that malicious HTML (`<script>`) stored in the database is safely escaped and neutralized by the React frontend layer before rendering.
 4. **Access Control (IDOR)**: Confirmed that API endpoints (like `/api/batches/`) correctly return `403 Forbidden` for unauthenticated requests, preventing unauthorized data extraction.
 5. **Directory Traversal Defense**: Gobuster scanning confirmed that the React SPA fallback routing does not inadvertently leak backend `.env` or configuration directories to the public web.
+6. **Client-Side Anti-Inspection & Source Code Shielding**: Neutralized keyboard shortcuts (`F12`, `Ctrl+Shift+I/J/C`, `Ctrl+U`, `Ctrl+S`), restricted context menus on non-input UI elements, stripped `.map` files (`sourcemap: false`), and enabled production debugger anti-tampering to prevent browser-level inspection and reverse engineering.
 
