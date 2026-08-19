@@ -56,8 +56,12 @@ The system is designed to run safely in both **local LAN development** (Docker o
 | **Redis Port Exposed to Host** | **[ Productive ]** | `docker-compose.yml` L25 | Redis port `6379` is strictly bound to `127.0.0.1` (localhost), preventing any external network access. |
 | **ALLOWED_HOSTS Wildcard in Docker Env** | **[ Productive ]** | `docker-compose.yml` L51 | `ALLOWED_HOSTS: "${ALLOWED_HOSTS:-*}"` is set in the Docker compose environment, allowing safe override during production deployment via `.env`. |
 | **ALLOWED_CORS_ORIGINS Wildcard in Docker Env** | **[ Productive ]** | `docker-compose.yml` L56 | `ALLOWED_CORS_ORIGINS: "${ALLOWED_CORS_ORIGINS:-*}"` is set in Docker compose, allowing safe override during production deployment via `.env`. |
-| **Nginx Missing Security Headers on Static Assets** | **[ Productive ]** | `frontend/nginx.conf` L5-7 | Nginx is now configured to inject `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` directly to all statically served React assets. |
-| **Nginx Rate Limiting** | **[ Not Implemented ]** | `frontend/nginx.conf` | Nginx has no `limit_req_zone` or `limit_req` directives. All rate limiting is handled at the Django/DRF layer only. Nginx-level rate limiting would stop attacks before they even reach Python, reducing server load. |
+| **Nginx Security Headers on Static Assets** | **[ Productive ]** | `frontend/nginx.conf` L48-53 | Nginx is configured to inject `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Content-Security-Policy` directly to all statically served React assets with `always` enforcement. |
+| **Nginx Rate & Connection Limiting** | **[ Productive ]** | `frontend/nginx.conf` L1-5, L79-80 | Enforces `limit_req_zone` (10r/s per IP with burst=100) and `limit_conn` (200 conns/IP) at the Nginx edge to mitigate DDoS/Slowloris attacks before requests reach Python. |
+| **WAF Probe & Dotfile Blocking** | **[ Productive ]** | `frontend/nginx.conf` L31-46 | Strict Nginx location rules return `404 Not Found` for dotfiles (`.htpasswd`, `.bash_history`) and foreign script probes (`.jsp`, `.php`, `.cgi`), eliminating scanner false positives. |
+| **Case-Insensitive & Source Map Interceptor** | **[ Productive ]** | `frontend/nginx.conf` L37-41 | Case-insensitive regex (`~*`) immediately blocks uppercase probe bypasses (`.ENV`, `.PHP`, `.JsP`, `DOCKERFILE`), backup files (`.bak`, `.sql`, `.zip`, `.tar.gz`), and source maps (`.map`) with clean 404s. |
+| **HTTP Verb Tampering & Method Override Guard** | **[ Productive ]** | `frontend/nginx.conf` & DRF Controllers | `TRACE`/`TRACK` methods return `405 Not Allowed`; `X-HTTP-Method-Override` headers strictly respect DRF authentication, rejecting unauthorized calls with `403 Forbidden`. |
+| **Strict CORS Origin Isolation** | **[ Productive ]** | `settings.py` & Nginx | Disallowed origins (e.g. `https://evil-attacker.com`) are rejected during pre-flight `OPTIONS` and standard API requests, preventing cross-origin data theft. |
 
 ---
 
@@ -71,6 +75,7 @@ The system is designed to run safely in both **local LAN development** (Docker o
 | **Unpinned Whitenoise** | **[ Productive ]** | `requirements-docker.txt` | `whitenoise` is strictly pinned to `6.9.0` to prevent supply chain breakage. |
 | **Duplicate Requirements Entries** | **[ Productive ]** | `requirements.txt` | Duplicate entries in the non-Docker dev file have been cleaned up and removed. |
 | **`npm ci` Instead of `npm install` in Dockerfile** | **[ Productive ]** | `frontend/Dockerfile` L6 | Uses `npm ci` for strictly reproducible production builds from `package-lock.json`. |
+| **Trivy Container & SAST Scanning** | **[ Productive ]** | Root / Docker images | Audited via Trivy scanner: Frontend container has 0 vulnerabilities, backend & frontend manifests patched with 0 HIGH/CRITICAL CVEs (`sqlparse==0.6.0`, `pdfjs-dist@6.2.108`). |
 | **Ollama AI Model — No Authentication** | **[ Partial ]** | `docker-compose.yml` L140-154 | The Ollama service has no port exposed to the host (correct), but has no API key or authentication. Any container on the same Docker network can send requests to it. Acceptable for internal use; if the Docker network is ever shared with untrusted containers, the AI endpoint could be abused. |
 
 ---
@@ -113,6 +118,20 @@ The system is designed to run safely in both **local LAN development** (Docker o
 
 ---
 
+## 8. Client-Side Security & Anti-Inspection
+
+| Security Feature | Status | File(s) | Description |
+| :--- | :--- | :--- | :--- |
+| **DevTools Shortcut Interception** | **[ Productive ]** | `frontend/src/Hooks/useDevToolsProtection.ts` | Intercepts `F12`, `Ctrl+Shift+I/J/C`, `Ctrl+U`, and `Ctrl+S` to prevent unauthorized client-side inspection and source extraction. |
+| **Context-Menu Shielding (Exempting Inputs)** | **[ Productive ]** | `frontend/src/Hooks/useDevToolsProtection.ts` | Blocks right-click context menu on layout elements while preserving full copy/paste accessibility for `<input>` and `<textarea>` fields. |
+| **Debugger Anti-Tampering Loop** | **[ Productive ]** | `frontend/src/Hooks/useDevToolsProtection.ts` | Triggers micro-debugger cycles in production builds to deter runtime reverse-engineering when browser console is active. |
+| **Source Map Shielding** | **[ Productive ]** | `frontend/vite.config.ts` | `build.sourcemap: false` completely prevents generating `.map` files, ensuring raw `.tsx` source code is never exposed in browser developer tools. |
+| **Debugger Stripping & Minification** | **[ Productive ]** | `frontend/vite.config.ts` | `esbuild: { drop: ['debugger'] }` strips out debugger statements from production builds automatically. |
+| **Client-Side Data & Email Masking** | **[ Productive ]** | `frontend/src/Libs/securityEncoder.ts` | Provides Base64 string encoding and email address masking in the DOM to prevent automated scraper harvesting. |
+| **DOM Element & Atomic Class Obfuscation** | **[ Productive ]** | `frontend/src/Libs/domObfuscator.ts` | Obfuscates DOM elements in DevTools Inspector with Meta/StyleX atomic class tokens (`x9f619`, `x78zum5`, `x156j7k...`) and custom style variables (`--x-height`, `--x-paddingInlineEnd...`), masking project syntax while preserving 100% UI functionality. |
+
+---
+
 ## Priority Summary: Items Requiring Action Before Production
 
 | Priority | Issue | File(s) | Fix |
@@ -121,7 +140,7 @@ The system is designed to run safely in both **local LAN development** (Docker o
 
 ---
 
-*Last updated: 2026-08-06. All critical and high-priority infrastructure, caching, and network security vulnerabilities from the initial audit have been successfully resolved and deployed.*
+*Last updated: August 2026. All critical and high-priority infrastructure, caching, network, and client-side anti-inspection security items have been successfully resolved and deployed.*
 
 
 ## Universal Bulk Operations (Celery Background Tasks)

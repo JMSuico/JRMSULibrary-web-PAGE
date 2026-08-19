@@ -15,6 +15,7 @@ import { PrivacyConsentModal } from '@/src/Components/Shared/PrivacyConsentModal
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
 import { ChunkErrorBoundary } from '@/src/Components/Shared/ChunkErrorBoundary';
+import { useDevToolsProtection } from '@/src/Hooks/useDevToolsProtection';
 
 // Resolves a Django media path to a full browser-usable URL.
 // Django ImageFields return relative paths like `settings/bg.jpg`.
@@ -125,6 +126,8 @@ function PublicLayout() {
 }
 
 export default function App() {
+  useDevToolsProtection();
+
   return (
     <ChunkErrorBoundary>
       <BrowserRouter>
