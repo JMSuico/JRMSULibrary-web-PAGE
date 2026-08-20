@@ -134,11 +134,11 @@ The project is now fully containerized. Actual running stack (per `docker-compos
 
 ---
 
-## Security Status (last verified: 2026-08-06)
+## Security Status (last verified: 2026-08-20)
 
 | Item | Status |
 |---|---|
-| `.env` now in `.gitignore` | ✅ Fixed 2026-08-06 |
+| `.env` now in `.gitignore` | ✅ Fixed |
 | Login brute-force (5/10min lockout) | ✅ Productive |
 | File upload magic-byte scanning | ✅ Productive |
 | XSS sanitization (bleach) | ✅ Productive |
@@ -146,9 +146,10 @@ The project is now fully containerized. Actual running stack (per `docker-compos
 | HSTS, X-Frame-Options, MIME-sniff | ✅ Productive |
 | Terminal admin protection | ✅ Productive |
 | Single-device session enforcement | ✅ Productive |
-| DB port 5432 exposed to host | 🟠 HIGH — internal only for prod |
-| Redis port 6379 exposed, no password | 🟠 HIGH — internal only for prod |
-| Rate-limit cache in-memory (resets on restart) | 🟡 MEDIUM — switch to Redis backend |
+| Client-Side Inspect & Debugger Traps | ✅ Productive |
+| DB port 5432 exposed to host | ✅ Fixed — Docker internal only |
+| Redis port 6379 exposed, no password | ✅ Fixed — Docker internal + Password Auth |
+| Rate-limit cache in-memory (resets on restart) | ✅ Fixed — Redis cache configured |
 
 
 ## Agent Operating Rules (Recent Learnings)

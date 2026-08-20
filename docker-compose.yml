@@ -10,8 +10,6 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - db_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U jrmsu_admin -d jrmsu_library"]
       interval: 10s
@@ -21,8 +19,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -62,9 +59,9 @@ services:
       # Then, add http://<YOUR_IP>:3000 and http://<YOUR_IP>:3001 to this list!
       ALLOWED_CORS_ORIGINS: "${ALLOWED_CORS_ORIGINS:-*}"
       OLLAMA_URL: "http://ollama:11434/api/chat"
-      CELERY_BROKER_URL: "redis://redis:6379/0"
-      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
-      REDIS_CACHE_URL: "redis://redis:6379/1"
+      CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      REDIS_CACHE_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
       USE_REDIS: "True"
       # SMTP — Gmail App Password
       EMAIL_HOST: "smtp.gmail.com"
@@ -108,9 +105,9 @@ services:
       DB_PORT: 5432
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: "False"
-      CELERY_BROKER_URL: "redis://redis:6379/0"
-      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
-      REDIS_CACHE_URL: "redis://redis:6379/1"
+      CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      REDIS_CACHE_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
       USE_REDIS: "True"
       USE_CELERY: "True"
       EMAIL_HOST: "smtp.gmail.com"

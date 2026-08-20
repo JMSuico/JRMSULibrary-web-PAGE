@@ -65,4 +65,7 @@ objects.txt
 !AGENTS.md
 !implementationDockerandKubernates.md
 !SECURITY.md
-!SkillMemory.md
+!SkillMemory.md
+!DeploymentPhysicalServer.md
+!DeploymentCloudServer.md
+!PHYSICAL SERVER AND CLOUD SERVER SECURITY.md

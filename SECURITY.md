@@ -62,6 +62,9 @@ The system is designed to run safely in both **local LAN development** (Docker o
 | **Case-Insensitive & Source Map Interceptor** | **[ Productive ]** | `frontend/nginx.conf` L37-41 | Case-insensitive regex (`~*`) immediately blocks uppercase probe bypasses (`.ENV`, `.PHP`, `.JsP`, `DOCKERFILE`), backup files (`.bak`, `.sql`, `.zip`, `.tar.gz`), and source maps (`.map`) with clean 404s. |
 | **HTTP Verb Tampering & Method Override Guard** | **[ Productive ]** | `frontend/nginx.conf` & DRF Controllers | `TRACE`/`TRACK` methods return `405 Not Allowed`; `X-HTTP-Method-Override` headers strictly respect DRF authentication, rejecting unauthorized calls with `403 Forbidden`. |
 | **Strict CORS Origin Isolation** | **[ Productive ]** | `settings.py` & Nginx | Disallowed origins (e.g. `https://evil-attacker.com`) are rejected during pre-flight `OPTIONS` and standard API requests, preventing cross-origin data theft. |
+| **Server Token Masking (server_tokens off)** | **[ Productive ]** | `frontend/nginx.conf` L44 | Hides Nginx version (`1.31.3`) from the `Server` response header to prevent version-targeted reconnaissance. |
+| **Cross-Origin Isolation Headers (COOP, CORP, X-Permitted)** | **[ Productive ]** | `frontend/nginx.conf` L50-52 | Injects `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, and `X-Permitted-Cross-Domain-Policies: none` to isolate browsing context and prevent cross-origin data leaks. |
+| **Cloud Demo Edge Headers & SPA Routing** | **[ Productive ]** | `frontend/vercel.json`, `vercel.json` | Configures Vercel Edge CDN with the full security header baseline (HSTS, CSP, X-Frame-Options, nosniff, COOP, CORP, X-Permitted) and clean SPA rewrites for demo deployments. |
 
 ---
 
@@ -162,3 +165,13 @@ ode_modules are completely destroyed before deployment, ensuring hackers cannot 
 - **Fail-Closed Architecture:** If the malware scanner's underlying C-libraries crash or are missing from the OS, the system immediately throws a `ValidationError` and blocks ALL uploads. This "fail-closed" design ensures that a broken dependency does not silently expose the API to hackers.
 - **Cross-Platform Compatibility:** The scanner utilizes environmental markers in `requirements.txt` to dynamically utilize `python-magic-bin` on Windows machines and standard `python-magic` on Linux/Docker servers to prevent configuration crashes.
 - **Multipart S3 Protection:** To prevent Denial of Service (DoS) during massive E-Resource uploads, the `boto3` chunking configuration (`AWS_S3_MULTIPART_THRESHOLD`) is strictly locked to 100MB, preventing Supabase S3 chunk ingestion failures.
+
+## Client-Side Anti-Reconnaissance & Inspect Hardening
+- **Console Leak Suppression:** In production builds, the frontend forces all `console.*` methods to empty no-op functions upon startup, while `esbuild` physically strips them from the compiled Javascript bundles. This prevents 35+ backend WebSocket addresses, internal API endpoints, and React state errors from leaking to attackers inspecting the DevTools console.
+- **Anti-Debugging Trap:** An adversarial `setInterval` runtime script executes `new Function('debugger')()` every 1 second in production. If a malicious actor opens the browser DevTools with standard "Pause on exceptions" enabled, the browser instantly freezes in an inescapable execution loop, making reverse-engineering highly difficult.
+- **UI Interaction Blockers:** Global event listeners block the right-click `contextmenu` and all developer keyboard shortcuts (`F12`, `Ctrl+Shift+I/J/U`). While determined hackers can bypass frontend listeners, this completely prevents casual end-users and bots from accessing "Inspect Element" or "View Source".
+- **DOM Obfuscation:** The React component tree dynamically hashes and rotates its CSS classes via `domObfuscator.ts` using a MutationObserver, severely complicating automated scraping or targeted CSS injection attacks.
+
+## Infrastructure Isolation & Database Hardening
+- **Zero-Exposure Network Topology:** The Postgres and Redis databases are completely isolated within Docker's internal virtual bridge network (`127.0.0.1` host port mappings are strictly removed in `docker-compose.yml`). The databases are completely invisible to the host operating system, rendering external port-scanning or direct unauthorized queries impossible.
+- **Internal Authentication:** The Redis cache (which houses mission-critical rate-limiting and user session data) forces strong password authentication (`REDIS_PASSWORD`) internally. Even in a catastrophic scenario where an attacker achieves RCE (Remote Code Execution) inside the Django backend container, they cannot dump the cache memory without extracting the password.

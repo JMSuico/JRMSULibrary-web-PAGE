@@ -174,6 +174,9 @@ While the core frameworks (Django, React, Postgres) are highly secure, certain t
 | **Case-Insensitive & Source Map Interceptor** | ✅ Productive | frontend/nginx.conf : L37-41 |
 | **HTTP Verb Tampering & Method Override Guard** | ✅ Productive | frontend/nginx.conf & DRF Controllers |
 | **Strict CORS Origin Isolation** | ✅ Productive | backend/core/settings.py & Nginx |
+| **Server Token Masking (server_tokens off)** | ✅ Productive | frontend/nginx.conf : L44 |
+| **Cross-Origin Isolation Headers (COOP, CORP, X-Permitted)** | ✅ Productive | frontend/nginx.conf : L50-52 |
+| **Cloud Demo Edge Headers & SPA Routing** | ✅ Productive | frontend/vercel.json, vercel.json |
 | **Client-Side Anti-Inspection & DevTools Lock** | ✅ Productive | frontend/src/Hooks/useDevToolsProtection.ts : L1-67 |
 | **Source Map Shielding & Stripping** | ✅ Productive | frontend/vite.config.ts : L33-43 |
 | **Client-Side Data & Element Masking** | ✅ Productive | frontend/src/Libs/securityEncoder.ts : L1-42 |
