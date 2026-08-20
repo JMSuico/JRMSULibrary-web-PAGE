@@ -1,7 +1,8 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig, type UserConfig } from 'vite';
+import type { Drop } from 'esbuild';
 
 export default defineConfig(() => {
   return {
@@ -31,11 +32,19 @@ export default defineConfig(() => {
       },
     },
     esbuild: {
-      drop: ['debugger' as any],
+      drop: ['debugger', 'console'] as Drop[],
+      legalComments: 'none' as const,
     },
     build: {
       sourcemap: false,
       minify: 'esbuild' as const,
+      rollupOptions: {
+        output: {
+          chunkFileNames: 'assets/c-[hash].js',
+          entryFileNames: 'assets/e-[hash].js',
+          assetFileNames: 'assets/a-[hash].[ext]',
+        },
+      },
     },
   };
 });
