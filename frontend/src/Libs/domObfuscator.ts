@@ -254,63 +254,16 @@ let rafHandle: number | null = null;
 export const initDomObfuscator = () => {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  ensureAtomicStyleSheet();
+  // DOM Class Obfuscation has been DISABLED for production stability.
+  // In production builds (especially over Ngrok or CDNs), browsers block JavaScript
+  // from reading CSS rules (CSSOM) due to strict Cross-Origin Resource Sharing (CORS).
+  // When this happens, the obfuscator renames the HTML classes but fails to copy the 
+  // CSS rules, resulting in a completely broken, unstyled page.
+  
+  // The critical Security features (Anti-Debugging & Console Stripping) remain ACTIVE below.
 
-  // Initial bulk scan
-  if (document.body) {
-    obfuscateSubtree(document.body);
-  }
-
-  // High-performance batched MutationObserver
-  if (!observer) {
-    const pendingNodes = new Set<HTMLElement>();
-
-    const flushPending = () => {
-      rafHandle = null;
-      if (isMutating) return;
-
-      pendingNodes.forEach(node => {
-        if (node && node.isConnected) {
-          obfuscateElement(node);
-        }
-      });
-      pendingNodes.clear();
-    };
-
-    observer = new MutationObserver((mutations) => {
-      if (isMutating) return;
-
-      for (const mutation of mutations) {
-        if (mutation.type === 'childList') {
-          for (let i = 0; i < mutation.addedNodes.length; i++) {
-            const node = mutation.addedNodes[i];
-            if (node instanceof HTMLElement) {
-              pendingNodes.add(node);
-              // Also add children
-              const children = node.querySelectorAll<HTMLElement>('*');
-              children.forEach(c => pendingNodes.add(c));
-            }
-          }
-        } else if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          if (mutation.target instanceof HTMLElement) {
-            pendingNodes.add(mutation.target);
-          }
-        }
-      }
-
-      if (pendingNodes.size > 0 && !rafHandle) {
-        rafHandle = requestAnimationFrame(flushPending);
-      }
-    });
-
-    observer.observe(document.documentElement || document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-  }
-
+  // Mutation Observer Disabled for Stability
+  
   // Runtime Integrity: Prevent DevTools Console Prototype Pollution & Script Hijacking
   try {
     if (typeof Object.freeze === 'function' && typeof window !== 'undefined') {
