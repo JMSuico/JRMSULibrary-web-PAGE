@@ -3,8 +3,9 @@
 
 from Features.Repositories.Implementations.settings_repository import SettingsRepository
 from Features.Data.Models.site_settings_model import SiteSettings
+from Features.Services.Interfaces.i_settings_service import ISettingsService
 
-class SettingsService:
+class SettingsService(ISettingsService):
     def __init__(self, repository: SettingsRepository = None):
         self.repository = repository or SettingsRepository()
 

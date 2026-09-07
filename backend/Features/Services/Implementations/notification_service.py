@@ -15,7 +15,10 @@ VISITOR_MILESTONES = [100, 300, 500, 800, 1000, 1300, 1500, 1800, 2000, 2500, 30
 class NotificationService(INotificationService):
     """Aggregates notifications from multiple data sources via repositories."""
 
-    def __init__(self, repo: INotificationRepository):
+    def __init__(self, repo: INotificationRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.notification_repository import NotificationRepository
+            repo = NotificationRepository()
         self._repo = repo
 
     def get_all_notifications(self) -> Dict[str, Any]:

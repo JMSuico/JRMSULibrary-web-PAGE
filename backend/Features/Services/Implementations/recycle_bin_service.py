@@ -9,10 +9,19 @@ from Features.Repositories.Interfaces import (
 
 class RecycleBinService(IRecycleBinService):
     def __init__(self, 
-                 repo: IRecycleBinRepository, 
+                 repo: IRecycleBinRepository = None, 
                  book_repo: INewlyAcquiredBookRepository = None,
                  gallery_repo: ILibraryInteriorImageRepository = None,
                  report_repo=None):
+        if repo is None:
+            from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
+            repo = RecycleBinRepository()
+        if book_repo is None:
+            from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
+            book_repo = NewlyAcquiredBookRepository()
+        if gallery_repo is None:
+            from Features.Repositories.Implementations.gallery_repository import LibraryInteriorImageRepository
+            gallery_repo = LibraryInteriorImageRepository()
         self._repo = repo
         self._book_repo = book_repo
         self._gallery_repo = gallery_repo

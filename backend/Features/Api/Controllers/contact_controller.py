@@ -7,7 +7,6 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from Features.Api.Serializers.contact_serializer import ContactMessageSerializer
-from Features.Repositories.Implementations.contact_repository import ContactRepository
 from Features.Services.Implementations.contact_service import ContactService
 from Features.Services.Implementations.tasks import process_single_reply_task, process_bulk_reply_task
 
@@ -58,7 +57,7 @@ class ContactMessageViewSet(viewsets.ViewSet):
 
     def retrieve(self, request, pk=None):
         try:
-            message = self.service.repository.get_by_id(pk)
+            message = self.service.get_message_by_id(pk)
             return Response(ContactMessageSerializer(message).data)
         except Exception:
             return Response(status=status.HTTP_404_NOT_FOUND)

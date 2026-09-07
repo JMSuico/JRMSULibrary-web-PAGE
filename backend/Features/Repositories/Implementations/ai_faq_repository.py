@@ -1,7 +1,8 @@
 from Features.Data.Models import AIFaqCache
+from Features.Repositories.Interfaces.i_ai_faq_repository import IAIFaqRepository
 import difflib
 
-class AIFaqRepository:
+class AIFaqRepository(IAIFaqRepository):
     """
     Repository for interacting with the AIFaqCache model.
     """

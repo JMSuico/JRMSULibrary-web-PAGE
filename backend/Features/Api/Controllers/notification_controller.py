@@ -7,8 +7,6 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 
 from Features.Services.Implementations.notification_service import NotificationService
-from Features.Repositories.Implementations.notification_repository import NotificationRepository
-
 
 class NotificationViewSet(viewsets.ViewSet):
     """Exposes GET /api/notifications/all/ for admin notification panel."""
@@ -16,7 +14,7 @@ class NotificationViewSet(viewsets.ViewSet):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = NotificationService(NotificationRepository())
+        self.service = NotificationService()
 
     @action(detail=False, methods=['get'])
     def all(self, request):

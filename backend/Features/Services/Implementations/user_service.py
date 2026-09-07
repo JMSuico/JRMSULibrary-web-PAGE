@@ -3,7 +3,10 @@ from Features.Services.Interfaces.i_user_service import IUserService
 from Features.Repositories.Interfaces.i_user_repository import IUserRepository
 
 class UserService(IUserService):
-    def __init__(self, repo: IUserRepository):
+    def __init__(self, repo: IUserRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.user_repository import UserRepository
+            repo = UserRepository()
         self._repo = repo
 
     def get_all(self):

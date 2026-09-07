@@ -24,6 +24,15 @@ class PageContentRepository(IPageContentRepository):
             return content
         return None
 
+    def seed_defaults(self, defaults: list) -> int:
+        imported_count = 0
+        existing_slugs = set(PageContent.objects.values_list('slug', flat=True))
+        for d in defaults:
+            if d['slug'] not in existing_slugs:
+                PageContent.objects.create(slug=d['slug'], title=d['title'], content=d['content'])
+                imported_count += 1
+        return imported_count
+
 class PageImageRepository(IPageImageRepository):
     def get_all_active(self) -> List[Any]:
         return list(PageImage.objects.filter(is_active=True))
@@ -38,8 +47,22 @@ class ManagedLinkRepository(IManagedLinkRepository):
     def get_by_id(self, id: int):
         return ManagedLink.objects.filter(id=id).first()
 
+    def get_max_order(self) -> int:
+        max_link = ManagedLink.objects.all().order_by('-order').first()
+        return max_link.order if max_link else 0
+
     def create(self, data: dict):
         return ManagedLink.objects.create(**data)
+
+    def import_defaults(self, links: list) -> int:
+        imported_count = 0
+        existing_names = set(ManagedLink.objects.values_list('name', flat=True))
+        for name, url, category in links:
+            if name not in existing_names:
+                max_order = self.get_max_order()
+                ManagedLink.objects.create(name=name, url=url, category=category, order=max_order + 1)
+                imported_count += 1
+        return imported_count
 
     def update(self, id: int, data: dict):
         ManagedLink.objects.filter(id=id).update(**data)

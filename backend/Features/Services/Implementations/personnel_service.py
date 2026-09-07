@@ -6,7 +6,10 @@ from Features.Repositories.Implementations.recycle_bin_repository import Recycle
 from Features.Api.Serializers.personnel_serializer import PersonnelSerializer
 
 class PersonnelService(IPersonnelService):
-    def __init__(self, repo: IPersonnelRepository):
+    def __init__(self, repo: IPersonnelRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.personnel_repository import PersonnelRepository
+            repo = PersonnelRepository()
         self._repo = repo
 
     def get_personnel_list(self) -> List[Any]:

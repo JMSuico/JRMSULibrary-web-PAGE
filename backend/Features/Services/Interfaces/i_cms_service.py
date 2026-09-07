@@ -15,6 +15,10 @@ class IPageContentService(ABC):
     def update_content(self, slug: str, data: dict) -> Optional[Any]:
         pass
 
+    @abstractmethod
+    def seed_defaults(self, defaults: list) -> int:
+        pass
+
 class IPageImageService(ABC):
     @abstractmethod
     def get_all_images(self) -> List[Any]:
@@ -32,6 +36,12 @@ class IManagedLinkService(ABC):
         pass
     @abstractmethod
     def create(self, data: dict) -> Any:
+        pass
+    @abstractmethod
+    def create_with_auto_order(self, data: dict) -> Any:
+        pass
+    @abstractmethod
+    def import_defaults(self, links: list) -> int:
         pass
     @abstractmethod
     def update(self, id: int, data: dict) -> Optional[Any]:

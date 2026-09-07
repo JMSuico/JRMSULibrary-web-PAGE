@@ -6,7 +6,10 @@ from Features.Repositories.Implementations.recycle_bin_repository import Recycle
 from Features.Api.Serializers.cms_serializers import LibraryInteriorImageSerializer
 
 class LibraryInteriorImageService(ILibraryInteriorImageService):
-    def __init__(self, repo: ILibraryInteriorImageRepository):
+    def __init__(self, repo: ILibraryInteriorImageRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.gallery_repository import LibraryInteriorImageRepository
+            repo = LibraryInteriorImageRepository()
         self._repo = repo
         self._recycle_repo = RecycleBinRepository()
 

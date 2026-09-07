@@ -10,10 +10,8 @@ from Features.Api.Serializers.batch_serializer import (
     AcquisitionBatchSerializer,
     AcquisitionBatchDetailSerializer,
     BatchHistorySerializer,
-    BatchHistorySerializer,
     BatchBookSerializer
 )
-from Features.Data.Models.acquisition_batch_model import AcquisitionBatch
 
 class AcquisitionBatchViewSet(viewsets.ViewSet):
     def __init__(self, **kwargs):

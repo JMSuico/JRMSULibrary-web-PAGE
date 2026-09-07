@@ -6,7 +6,6 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from Features.Api.Serializers.user_serializer import UserSerializer, UserCreateUpdateSerializer
 from Features.Services.Implementations.user_service import UserService
-from Features.Repositories.Implementations.user_repository import UserRepository
 
 class IsSuperUser(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -27,7 +26,7 @@ class UserViewSet(viewsets.ViewSet):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = UserService(UserRepository())
+        self.service = UserService()
 
     def _serialize(self, user, request=None):
         return UserSerializer(user, context={"request": request}).data

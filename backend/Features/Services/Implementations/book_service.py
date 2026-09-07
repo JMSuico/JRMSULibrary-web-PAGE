@@ -4,7 +4,10 @@ from Features.Services.Interfaces import INewlyAcquiredBookService
 from Features.Repositories.Interfaces import INewlyAcquiredBookRepository
 
 class NewlyAcquiredBookService(INewlyAcquiredBookService):
-    def __init__(self, book_repository: INewlyAcquiredBookRepository):
+    def __init__(self, book_repository: INewlyAcquiredBookRepository = None):
+        if book_repository is None:
+            from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
+            book_repository = NewlyAcquiredBookRepository()
         self._repo = book_repository
 
     def get_all_books(self) -> List[Any]:

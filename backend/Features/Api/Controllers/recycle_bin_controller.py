@@ -3,11 +3,6 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from Features.Services.Implementations.recycle_bin_service import RecycleBinService
-from Features.Repositories.Implementations import (
-    RecycleBinRepository, 
-    NewlyAcquiredBookRepository, 
-    LibraryInteriorImageRepository
-)
 from Features.Api.Serializers.recycle_bin_serializer import RecycleBinSerializer
 
 class RecycleBinViewSet(viewsets.ViewSet):
@@ -15,11 +10,7 @@ class RecycleBinViewSet(viewsets.ViewSet):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = RecycleBinService(
-            RecycleBinRepository(),
-            NewlyAcquiredBookRepository(),
-            LibraryInteriorImageRepository()
-        )
+        self.service = RecycleBinService()
 
     def list(self, request):
         module = request.query_params.get('module')

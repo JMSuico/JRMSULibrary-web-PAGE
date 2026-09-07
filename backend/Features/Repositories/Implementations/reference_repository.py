@@ -1,8 +1,9 @@
 from django.db.models import Q
 from Features.Data.Models.research_reference_model import ResearchReference
+from Features.Repositories.Interfaces.i_reference_repository import IResearchReferenceRepository
 
 
-class ResearchReferenceRepository:
+class ResearchReferenceRepository(IResearchReferenceRepository):
     def get_all(self):
         return ResearchReference.objects.all().order_by('-created_at')
 
