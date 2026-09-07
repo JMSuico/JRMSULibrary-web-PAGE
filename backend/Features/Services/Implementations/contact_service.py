@@ -96,6 +96,9 @@ class ContactService(ContactServiceInterface):
 
         return message
 
+    def get_message_by_id(self, message_id: int):
+        return self.repository.get_by_id(message_id)
+
     def reply_to_message(self, message_id: int, reply_body: str, send_to_chatbot: bool = False) -> dict:
         """
         Sends an email reply to the user and marks the message as REPLIED.

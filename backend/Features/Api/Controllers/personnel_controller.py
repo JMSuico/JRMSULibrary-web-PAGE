@@ -2,7 +2,6 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from Features.Api.Serializers.personnel_serializer import PersonnelSerializer
-from Features.Repositories.Implementations.personnel_repository import PersonnelRepository
 from Features.Services.Implementations.personnel_service import PersonnelService
 
 class PersonnelViewSet(viewsets.ViewSet):
@@ -10,7 +9,7 @@ class PersonnelViewSet(viewsets.ViewSet):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = PersonnelService(PersonnelRepository())
+        self.service = PersonnelService()
 
     def list(self, request):
         personnel = self.service.get_personnel_list()

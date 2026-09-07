@@ -12,7 +12,10 @@ from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
 from rest_framework.exceptions import ValidationError
 
 class PageContentService(IPageContentService):
-    def __init__(self, repo: IPageContentRepository):
+    def __init__(self, repo: IPageContentRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.cms_repository import PageContentRepository
+            repo = PageContentRepository()
         self._repo = repo
 
     def get_all_content(self) -> List[Any]:
@@ -24,15 +27,24 @@ class PageContentService(IPageContentService):
     def update_content(self, slug: str, data: dict) -> Optional[Any]:
         return self._repo.update(slug, data)
 
+    def seed_defaults(self, defaults: list) -> int:
+        return self._repo.seed_defaults(defaults)
+
 class PageImageService(IPageImageService):
-    def __init__(self, repo: IPageImageRepository):
+    def __init__(self, repo: IPageImageRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.cms_repository import PageImageRepository
+            repo = PageImageRepository()
         self._repo = repo
 
     def get_all_images(self) -> List[Any]:
         return self._repo.get_all_active()
 
 class ManagedLinkService(IManagedLinkService):
-    def __init__(self, repo: IManagedLinkRepository):
+    def __init__(self, repo: IManagedLinkRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.cms_repository import ManagedLinkRepository
+            repo = ManagedLinkRepository()
         self._repo = repo
         self._recycle_repo = RecycleBinRepository()
 
@@ -47,6 +59,15 @@ class ManagedLinkService(IManagedLinkService):
 
     def create(self, data: dict):
         return self._repo.create(data)
+
+    def create_with_auto_order(self, data: dict):
+        if 'order' not in data or data.get('order') is None:
+            max_order = self._repo.get_max_order()
+            data['order'] = max_order + 1
+        return self._repo.create(data)
+
+    def import_defaults(self, links: list) -> int:
+        return self._repo.import_defaults(links)
 
     def update(self, id: int, data: dict):
         return self._repo.update(id, data)
@@ -66,7 +87,10 @@ class ManagedLinkService(IManagedLinkService):
 
 
 class ManagedFileService(IManagedFileService):
-    def __init__(self, repo: IManagedFileRepository):
+    def __init__(self, repo: IManagedFileRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.cms_repository import ManagedFileRepository
+            repo = ManagedFileRepository()
         self._repo = repo
         self._recycle_repo = RecycleBinRepository()
 

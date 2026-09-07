@@ -15,6 +15,10 @@ class IPageContentRepository(ABC):
     def update(self, slug: str, data: dict) -> Optional[Any]:
         pass
 
+    @abstractmethod
+    def seed_defaults(self, defaults: list) -> int:
+        pass
+
 class IPageImageRepository(ABC):
     @abstractmethod
     def get_all_active(self) -> List[Any]:
@@ -30,7 +34,15 @@ class IManagedLinkRepository(ABC):
         pass
 
     @abstractmethod
+    def get_max_order(self) -> int:
+        pass
+
+    @abstractmethod
     def create(self, data: dict) -> Any:
+        pass
+
+    @abstractmethod
+    def import_defaults(self, links: list) -> int:
         pass
 
     @abstractmethod

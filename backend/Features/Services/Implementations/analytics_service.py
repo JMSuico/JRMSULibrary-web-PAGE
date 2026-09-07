@@ -4,7 +4,10 @@ from Features.Services.Interfaces import ISiteVisitService
 from Features.Repositories.Interfaces import ISiteVisitRepository
 
 class SiteVisitService(ISiteVisitService):
-    def __init__(self, repo: ISiteVisitRepository):
+    def __init__(self, repo: ISiteVisitRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.analytics_repository import SiteVisitRepository
+            repo = SiteVisitRepository()
         self._repo = repo
 
     def get_all_visits(self) -> List[Any]:

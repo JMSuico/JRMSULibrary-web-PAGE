@@ -2,8 +2,9 @@
 # Abstract data access for SiteSettings. Ensures a singleton pattern.
 
 from Features.Data.Models.site_settings_model import SiteSettings
+from Features.Repositories.Interfaces.i_settings_repository import ISettingsRepository
 
-class SettingsRepository:
+class SettingsRepository(ISettingsRepository):
     def get_settings(self) -> SiteSettings:
         # Always return the first record, create it if it doesn't exist
         settings, _ = SiteSettings.objects.get_or_create(id=1)

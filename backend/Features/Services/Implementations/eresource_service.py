@@ -8,7 +8,10 @@ from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
 from rest_framework.exceptions import ValidationError
 
 class EResourceDepartmentService(IEResourceDepartmentService):
-    def __init__(self, repo: IEResourceDepartmentRepository):
+    def __init__(self, repo: IEResourceDepartmentRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.eresource_repository import EResourceDepartmentRepository
+            repo = EResourceDepartmentRepository()
         self._repo = repo
         self._recycle_repo = RecycleBinRepository()
 
@@ -47,7 +50,10 @@ class EResourceDepartmentService(IEResourceDepartmentService):
 
 
 class EResourceFileService(IEResourceFileService):
-    def __init__(self, repo: IEResourceFileRepository):
+    def __init__(self, repo: IEResourceFileRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.eresource_repository import EResourceFileRepository
+            repo = EResourceFileRepository()
         self._repo = repo
         self._recycle_repo = RecycleBinRepository()
 

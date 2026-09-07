@@ -1,23 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
-import { cmsApi, PageContent } from '@/src/Endpoints/cmsApi';
+import { useAboutContent } from '@/src/Hooks/useAboutContent';
 import { Loader2 } from 'lucide-react';
-
-function extractTextBlocksFromHtml(html: string): string[] {
-  if (!html) return [];
-  // Parse HTML and extract inner text of li or p elements
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const items = Array.from(doc.querySelectorAll('li, p'))
-    .map(el => el.textContent?.trim() || '')
-    .filter(text => text.length > 0);
-  
-  // If no structured tags were found, fallback to just splitting by line breaks or returning the raw text
-  if (items.length === 0) {
-    return [doc.body.textContent?.trim() || ''];
-  }
-  return items;
-}
 
 const tabs = [
   { id: 'history', label: 'History of JRMSU Katipunan Campus' },
@@ -28,24 +13,7 @@ export default function AboutPage() {
   const location = useLocation();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [activeTab, setActiveTab] = useState('history');
-  const [historyContent, setHistoryContent] = useState<PageContent | null>(null);
-  const [objectivesContent, setObjectivesContent] = useState<PageContent | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        const contents = await cmsApi.getAllContent();
-        setHistoryContent(contents.find(c => c.slug === 'about_history') || null);
-        setObjectivesContent(contents.find(c => c.slug === 'about_quality') || null);
-      } catch (err) {
-        console.error('Failed to load About page content', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchContent();
-  }, []);
+  const { historyContent, objectivesContent, loading, extractTextBlocksFromHtml } = useAboutContent();
 
   useEffect(() => {
     if (location.hash) {

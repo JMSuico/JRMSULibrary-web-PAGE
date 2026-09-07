@@ -1,8 +1,9 @@
 from Features.Repositories.Implementations.reference_repository import ResearchReferenceRepository
 from Features.Api.Serializers.reference_serializer import ResearchReferenceSerializer
+from Features.Services.Interfaces.i_reference_service import IResearchReferenceService
 
 
-class ResearchReferenceService:
+class ResearchReferenceService(IResearchReferenceService):
     def __init__(self):
         self.repo = ResearchReferenceRepository()
 

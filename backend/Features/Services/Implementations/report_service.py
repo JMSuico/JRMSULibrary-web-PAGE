@@ -6,9 +6,12 @@ from Features.Services.Implementations.recycle_bin_service import RecycleBinServ
 from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
 
 class ReportService(IReportService):
-    def __init__(self, repo: IReportRepository):
+    def __init__(self, repo: IReportRepository = None):
+        if repo is None:
+            from Features.Repositories.Implementations.report_repository import ReportRepository
+            repo = ReportRepository()
         self._repo = repo
-        self._recycle_service = RecycleBinService(RecycleBinRepository())
+        self._recycle_service = RecycleBinService()
 
     def generate_and_save_report(self, title: str, report_type: str, date_range: str, generated_by: Any, report_data: dict) -> Any:
         return self._repo.create_report(title, report_type, date_range, generated_by, report_data)

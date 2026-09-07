@@ -9,12 +9,6 @@ from Features.Api.Serializers.cms_serializers import (
     ManagedLinkSerializer, ManagedFileSerializer
 )
 
-from Features.Repositories.Implementations import (
-    NewlyAcquiredBookRepository, LibraryInteriorImageRepository,
-    EResourceDepartmentRepository, EResourceFileRepository,
-    PageContentRepository, PageImageRepository,
-    ManagedLinkRepository, ManagedFileRepository
-)
 from Features.Services.Implementations import (
     NewlyAcquiredBookService, LibraryInteriorImageService,
     EResourceDepartmentService, EResourceFileService,
@@ -25,7 +19,7 @@ class NewlyAcquiredBookViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = NewlyAcquiredBookService(NewlyAcquiredBookRepository())
+        self.service = NewlyAcquiredBookService()
     def list(self, request):
         return Response(NewlyAcquiredBookSerializer(self.service.get_all_books(), many=True).data)
     def retrieve(self, request, pk=None):
@@ -56,7 +50,7 @@ class LibraryInteriorImageViewSet(viewsets.ViewSet):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = LibraryInteriorImageService(LibraryInteriorImageRepository())
+        self.service = LibraryInteriorImageService()
 
     def get_permissions(self):
         if self.action == 'list':
@@ -97,7 +91,7 @@ class EResourceDepartmentViewSet(viewsets.ViewSet):
     # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = EResourceDepartmentService(EResourceDepartmentRepository())
+        self.service = EResourceDepartmentService()
 
     def get_permissions(self):
         if self.action == 'list':
@@ -136,7 +130,7 @@ class EResourceFileViewSet(viewsets.ViewSet):
     # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = EResourceFileService(EResourceFileRepository())
+        self.service = EResourceFileService()
 
     def get_permissions(self):
         if self.action == 'list':
@@ -182,14 +176,13 @@ class PageContentViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = PageContentService(PageContentRepository())
+        self.service = PageContentService()
     def list(self, request):
         content = self.service.get_all_content()
         return Response(PageContentSerializer(content, many=True).data)
 
     @action(detail=False, methods=['post'], url_path='import-defaults')
     def import_defaults(self, request):
-        from Features.Data.Models.page_content_model import PageContent
         defaults = [
             {
                 'slug': 'about_history',
@@ -213,14 +206,8 @@ class PageContentViewSet(viewsets.ViewSet):
             }
         ]
         
-        imported_count = 0
-        existing_slugs = set(PageContent.objects.values_list('slug', flat=True))
+        imported_count = self.service.seed_defaults(defaults)
         
-        for d in defaults:
-            if d['slug'] not in existing_slugs:
-                PageContent.objects.create(slug=d['slug'], title=d['title'], content=d['content'])
-                imported_count += 1
-                
         if imported_count == 0:
             return Response({'message': 'All defaults are already imported.', 'imported': 0}, status=200)
             
@@ -242,7 +229,7 @@ class PageImageViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = PageImageService(PageImageRepository())
+        self.service = PageImageService()
     def list(self, request):
         return Response(PageImageSerializer(self.service.get_all_images(), many=True).data)
 
@@ -251,7 +238,7 @@ class ManagedLinkViewSet(viewsets.ViewSet):
     # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = ManagedLinkService(ManagedLinkRepository())
+        self.service = ManagedLinkService()
 
     def get_permissions(self):
         if self.action == 'list':
@@ -269,18 +256,12 @@ class ManagedLinkViewSet(viewsets.ViewSet):
         data = request.data.copy()
         ser = ManagedLinkSerializer(data=data)
         if ser.is_valid():
-            # Auto index order if not provided
-            if 'order' not in ser.validated_data or ser.validated_data['order'] is None:
-                from Features.Data.Models.managed_link_model import ManagedLink
-                max_order = ManagedLink.objects.all().order_by('-order').first()
-                ser.validated_data['order'] = (max_order.order + 1) if max_order else 1
-            item = self.service.create(ser.validated_data)
+            item = self.service.create_with_auto_order(ser.validated_data)
             return Response(ManagedLinkSerializer(item).data, status=201)
         return Response(ser.errors, status=400)
 
     @action(detail=False, methods=['post'], url_path='import-defaults')
     def import_defaults(self, request):
-        from Features.Data.Models.managed_link_model import ManagedLink
         LINKS = [
             # Open Access Journal
             ('Agriculture', 'https://www.mdpi.com/journal/agriculture', 'Open Access Journal'),
@@ -312,16 +293,8 @@ class ManagedLinkViewSet(viewsets.ViewSet):
             ('Scholaar', 'https://scholaar.com/', 'Acquired E-Resources'),
         ]
         
-        imported_count = 0
-        existing_names = set(ManagedLink.objects.values_list('name', flat=True))
+        imported_count = self.service.import_defaults(LINKS)
         
-        for name, url, category in LINKS:
-            if name not in existing_names:
-                max_order = ManagedLink.objects.all().order_by('-order').first()
-                new_order = (max_order.order + 1) if max_order else 1
-                ManagedLink.objects.create(name=name, url=url, category=category, order=new_order)
-                imported_count += 1
-                
         if imported_count == 0:
             return Response({'message': 'All default links are already imported.', 'imported': 0}, status=200)
             
@@ -347,7 +320,7 @@ class ManagedFileViewSet(viewsets.ViewSet):
     # Removed incorrect parser_classes
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.service = ManagedFileService(ManagedFileRepository())
+        self.service = ManagedFileService()
 
     def get_permissions(self):
         if self.action == 'list':

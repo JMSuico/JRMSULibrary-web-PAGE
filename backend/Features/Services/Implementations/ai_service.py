@@ -16,10 +16,11 @@ from Features.Repositories.Implementations.cms_repository import ManagedLinkRepo
 from Features.Repositories.Implementations.batch_repository import BatchRepository
 from Features.Repositories.Implementations.ai_faq_repository import AIFaqRepository
 from Features.Repositories.Implementations.gallery_repository import LibraryInteriorImageRepository
+from Features.Services.Interfaces.i_ai_service import IAIService
 
 logger = logging.getLogger(__name__)
 
-class AIService:
+class AIService(IAIService):
     def __init__(self):
         # Use OLLAMA_URL env var if available (useful for Docker to reach host), else fallback
         self.ollama_url = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434/api/chat')

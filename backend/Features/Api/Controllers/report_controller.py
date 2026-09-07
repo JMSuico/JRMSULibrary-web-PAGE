@@ -11,14 +11,9 @@ from Features.Services.Implementations.batch_service import BatchService
 from Features.Services.Implementations.contact_service import ContactService
 from Features.Services.Implementations.feedback_service import FeedbackService
 from Features.Services.Implementations.tasks import generate_report_task
-from Features.Repositories.Implementations.analytics_repository import SiteVisitRepository
-from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
-from Features.Repositories.Implementations.contact_repository import ContactRepository
 from Features.Services.Implementations.book_service import NewlyAcquiredBookService
 from Features.Services.Implementations.report_service import ReportService
-from Features.Repositories.Implementations.report_repository import ReportRepository
 from Features.Services.Implementations.recycle_bin_service import RecycleBinService
-from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
 
 class IsSuperUser(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -29,12 +24,12 @@ class ReportViewSet(viewsets.ViewSet):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.visit_service = SiteVisitService(SiteVisitRepository())
-        self.book_service = NewlyAcquiredBookService(NewlyAcquiredBookRepository())
+        self.visit_service = SiteVisitService()
+        self.book_service = NewlyAcquiredBookService()
         self.contact_service = ContactService()
         self.feedback_service = FeedbackService()
-        self.report_service = ReportService(ReportRepository())
-        self.recycle_service = RecycleBinService(RecycleBinRepository())
+        self.report_service = ReportService()
+        self.recycle_service = RecycleBinService()
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
