@@ -20,8 +20,10 @@ export const PrivacyConsentModal: React.FC<PrivacyConsentModalProps> = ({ isLoad
   // This ensures the sequence is: Loader → (loader done) → 300ms pause → Privacy Modal.
   useEffect(() => {
     if (!isLoaderDone) return;
-    const hasConsented = localStorage.getItem('jrmsu_privacy_consent');
-    if (!hasConsented) {
+    const today = new Date().toDateString();
+    const consentDate = localStorage.getItem('jrmsu_privacy_consent_date');
+    // Resets daily at midnight for reminder purposes and anti-jail validation
+    if (consentDate !== today) {
       const timer = setTimeout(() => setIsVisible(true), 300);
       return () => clearTimeout(timer);
     }
@@ -33,6 +35,8 @@ export const PrivacyConsentModal: React.FC<PrivacyConsentModalProps> = ({ isLoad
   }, [isVisible, onVisibilityChange]);
 
   const handleUnderstand = () => {
+    const today = new Date().toDateString();
+    localStorage.setItem('jrmsu_privacy_consent_date', today);
     localStorage.setItem('jrmsu_privacy_consent', 'true');
     setIsVisible(false);
   };

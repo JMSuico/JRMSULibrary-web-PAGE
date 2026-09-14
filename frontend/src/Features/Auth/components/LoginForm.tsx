@@ -30,10 +30,13 @@ export function LoginForm() {
     if (remembered) {
       try {
         const parsed = JSON.parse(remembered);
-        if (parsed.username && parsed.password) {
+        if (parsed.username) {
           setUsername(parsed.username);
-          setPassword(parsed.password);
           setRememberMe(true);
+        }
+        // If an old session saved a plaintext password, immediately sanitize it from localStorage
+        if (parsed.password) {
+          localStorage.setItem('jrmsu_admin_remember_me', JSON.stringify({ username: parsed.username }));
         }
       } catch (e) {
         // ignore JSON parse errors
@@ -70,7 +73,7 @@ export function LoginForm() {
       await userApi.login({ username: actualUsername, password: actualPassword });
       
       if (rememberMe) {
-        localStorage.setItem('jrmsu_admin_remember_me', JSON.stringify({ username: actualUsername, password: actualPassword }));
+        localStorage.setItem('jrmsu_admin_remember_me', JSON.stringify({ username: actualUsername }));
       } else {
         localStorage.removeItem('jrmsu_admin_remember_me');
       }

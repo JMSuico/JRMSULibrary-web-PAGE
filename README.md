@@ -87,6 +87,41 @@ python manage.py deletespecificsuperuser
 
 ---
 
+## 👥 Client User (Client-Side) vs. Admin User (Admin Portal)
+
+The JRMSU Library platform enforces a strict separation of concerns, security boundaries, and data capabilities between anonymous public visitors (**Client Users**) and authorized library staff (**Admin Users**):
+
+### High-Level Comparison
+
+| Feature / Aspect | Client User (Client-Side / Public) | Admin User (Admin Portal) |
+|---|---|---|
+| **Target Users** | Students, Faculty, Researchers, Public Guests | Chief Librarian, Library Staff, System Administrators |
+| **Port / Base Route** | Port `3000` / Routes: `/`, `/about`, `/collection`, `/services`, `/personnel`, `/physical-setup` | Port `3001` or `/admin/*` (`/admin/dashboard`, `/admin/books`, `/admin/users`, etc.) |
+| **Authentication** | **No login required** (Anonymous public access) | **Strict authentication required** (Username + Password) |
+| **Session Lifecycle** | Stateless — no persistent session in DB | Stateful — Django session cookie + 30s Heartbeat |
+| **Inactivity Logout** | None (public catalog browsing stays active indefinitely) | **Auto-logs out after 10 minutes** of inactivity |
+| **Single-Device Rule**| Unlimited public visitors can browse simultaneously | **Single-device lock** (Concurrent active logins blocked) |
+| **Data Privileges** | **Read-Only** + Public Inquiries & Ratings | **Full CRUD** (Create, Read, Update, Soft-Delete, Restore) |
+| **CMS & Settings** | View-only | Full text block editing, banner uploads, operating hours |
+| **Audit Logging** | Anonymous visitor metrics aggregation | **Every action logged** with username, IP, and timestamp |
+
+### Key Architectural Differences
+
+1. **Client-Side (Public Landing Page):**
+   - **Frictionless Access:** Public visitors access book collections, newly acquired carousels, and research paper catalogs with zero barrier to entry.
+   - **Dr. Rizal AI Assistant:** Public users can query the local Ollama AI research assistant (`POST /api/ai/ask/`) with automatic fallback to cached institutional FAQs.
+   - **Public Submissions:** Allows submitting reference inquiries with file attachments (`POST /api/contact/`) and student satisfaction feedback ratings (`POST /api/feedback/`), both protected by rate limits (`AnonRateThrottle`) and HTML sanitization (`input_sanitizer.py`).
+
+2. **Admin Portal (Administrative Management):**
+   - **Inactivity Timer Auto-Logout (`useInactivityTimer`):** Listens to keyboard/mouse/touch interactions. If 10 minutes (600,000 ms) pass with no activity, it cleanly terminates the Django session and redirects to `/admin/login?timeout=1`.
+   - **Single-Device Active Session Guard:** Prevents credential sharing or multi-tab hijacking. If an account was active within 60 seconds on another machine, second login attempts return `HTTP 403 Forbidden: "Account already online cant be Login!"`.
+   - **Brute-Force Lockout:** Automatically locks accounts in Redis for 10 minutes (600 seconds) after 5 consecutive failed login attempts.
+   - **Terminal Admin Protection:** Sysadmin accounts created via the command line (`createsuperuser` / `createsuperuser_custom`) are permanently protected and cannot be edited, suspended, or deleted through the web UI.
+   - **Smart Sync Excel Engine:** Slices large institutional spreadsheets into chunks of 30 records, utilizing tuple fingerprinting to avoid duplicates and offloading atomic database writes to Celery workers over Redis.
+   - **Soft-Delete Recycle Bin:** Deleted records (books, files, personnel) are retained as JSON snapshots in the Recycle Bin with a 30-day automatic purge window, allowing instant one-click restoration.
+
+---
+
 ##  Architecture & Flowchains
 
 All code in this project follows a strict **Vertical Slice** (Frontend) and **Layered Model-First** (Backend) architecture as defined in `SKILL.md`.

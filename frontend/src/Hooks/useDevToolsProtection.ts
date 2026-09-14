@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { initDomObfuscator, obfuscateSubtree } from '@/src/Libs/domObfuscator';
+import { initDomObfuscator } from '@/src/Libs/domObfuscator';
 
 /**
  * Global lifecycle listener for DOM element encoding, atomic class obfuscation,
@@ -9,16 +9,8 @@ import { initDomObfuscator, obfuscateSubtree } from '@/src/Libs/domObfuscator';
  */
 export const useDevToolsProtection = () => {
   useEffect(() => {
-    // 1. Initialize DOM Element Encoding & Atomic Class Obfuscation
+    // 1. Initialize Runtime Anti-Debugging & Security Traps
     initDomObfuscator();
-
-    // Re-run on layout events
-    const handleLayoutChange = () => {
-      obfuscateSubtree(document.body);
-    };
-
-    window.addEventListener('popstate', handleLayoutChange);
-    window.addEventListener('resize', handleLayoutChange);
 
     // 2. Protect Page Source Saving (Ctrl+S / Cmd+S) and block DevTools shortcuts.
     //    Also blocks F12, Ctrl+Shift+I (Elements), Ctrl+Shift+J (Console), Ctrl+U (View Source).
@@ -56,8 +48,6 @@ export const useDevToolsProtection = () => {
 
     // Cleanup
     return () => {
-      window.removeEventListener('popstate', handleLayoutChange);
-      window.removeEventListener('resize', handleLayoutChange);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('contextmenu', handleContextMenu);
     };

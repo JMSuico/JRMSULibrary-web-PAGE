@@ -58,7 +58,7 @@ def process_bulk_delete_task(ids, user_id=None):
     service = ResearchReferenceService()
     success, result = service.bulk_delete_references(ids, user_id=user_id)
     return result
-# [Layer: Services/Implementations] â¬   tasks_bulk.py
+# [Layer: Services/Implementations] - tasks_bulk.py
 from celery import shared_task
 from django.db import transaction
 

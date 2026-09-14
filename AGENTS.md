@@ -153,7 +153,9 @@ The project is now fully containerized. Actual running stack (per `docker-compos
 
 
 ## Agent Operating Rules (Recent Learnings)
-- **PowerShell Encoding Alert:** Never use Add-Content without explicit -Encoding utf8 parameter when modifying Python files. PowerShell defaults to UTF-16LE, which injects null bytes ( x00) and crashes ASGI/Django servers with SyntaxError: source code string cannot contain null bytes. Always use explicit encodings or code-edit tools.
-- **Optimistic UI vs Async APIs:** Ensure  piClient.ts does not dispatch global reload events (cms_updated) on 202 Accepted HTTP status codes. Firing reload events immediately on asynchronous operations fetches stale database states before background tasks complete, ruining the Optimistic UI.
-
+- **PowerShell Encoding Alert:** Never use Add-Content without explicit -Encoding utf8 parameter when modifying Python files. PowerShell defaults to UTF-16LE, which injects null bytes (\x00) and crashes ASGI/Django servers with SyntaxError: source code string cannot contain null bytes. Always use explicit encodings or code-edit tools.
+- **Optimistic UI vs Async APIs:** Ensure apiClient.ts does not dispatch global reload events (cms_updated) on 202 Accepted HTTP status codes. Firing reload events immediately on asynchronous operations fetches stale database states before background tasks complete, ruining the Optimistic UI.
 - **Supply Chain Security:** Never install outdated, deprecated, or vulnerable third-party modules. Only use actively maintained libraries. Outdated plugins are primary targets for hacking and brute-force exploits.
+- **Mermaid 11+ Syntax Strictness (CRITICAL):** In Mermaid diagrams, ALWAYS use `flowchart TD` or `flowchart LR` (avoid legacy `graph TD`). NEVER use raw, unquoted special characters (`#`, `&`, `:`, `()`, `/`, or spaces) inside node labels or subgraph titles. Enclose every node label and subgraph title in double quotes: `["..."]` (e.g., `I2["Idea 2: Image Recognition & Security"]` and `subgraph GroupName ["Title Here"]`). Avoid `<br/>` HTML tags and parentheses `()` inside node labels (use clean hyphens `-` instead). Ensure subgraphs are linked with at least one connecting edge (`-->`) to prevent disconnected graph parser failures.
+
+
