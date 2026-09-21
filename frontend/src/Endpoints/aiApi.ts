@@ -90,6 +90,22 @@ export const aiApi = {
    * @param history The recent chat history for context
    * @param onChunk Callback triggered when a new chunk of text arrives
    */
+  /**
+   * Auto-draft a contextual email reply using AI (Staff only)
+   */
+  draftReply: async (data: {
+    sender_name?: string;
+    sender_email?: string;
+    subject?: string;
+    message_text?: string;
+    inquiry_type?: string;
+  }): Promise<{ draft: string }> => {
+    return apiClient('/ai/draft-reply/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   chatStream: async (message: string, history: ChatMessage[], onChunk: (chunk: string) => void): Promise<void> => {
     // 1. Semantic Cache Intercept
     const cachedAnswer = findBestCachedAnswer(message);

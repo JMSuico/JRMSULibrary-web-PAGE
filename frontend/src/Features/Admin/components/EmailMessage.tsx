@@ -25,6 +25,7 @@ import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
+import { aiApi } from '@/src/Endpoints/aiApi';
 
 interface AttachmentUploaderProps {
   file: File;
@@ -118,6 +119,31 @@ export function EmailMessage() {
   const [bulkReplyModal, setBulkReplyModal] = useState<{ body: string } | null>(null);
   const [viewMessageModal, setViewMessageModal] = useState<ContactMessage | null>(null);
   const [actionLoading, setActionLoading] = useState<{ id: number, action: string } | null>(null);
+  const [isDraftingAI, setIsDraftingAI] = useState(false);
+
+  const handleAutoDraftReply = async () => {
+    if (!replyModal) return;
+    setIsDraftingAI(true);
+    try {
+      const res = await aiApi.draftReply({
+        sender_name: replyModal.message.name,
+        sender_email: replyModal.message.email,
+        subject: replyModal.message.subject,
+        message_text: replyModal.message.message,
+        inquiry_type: replyModal.message.message_type
+      });
+      if (res && res.draft) {
+        setReplyModal(prev => prev ? { ...prev, body: res.draft } : null);
+        showToast('AI reply draft generated!', 'success');
+      }
+    } catch (err) {
+      const fallback = `Dear ${replyModal.message.name || 'Patron'},\n\nThank you for reaching out to the JRMSU Katipunan Campus Library regarding "${replyModal.message.subject || 'your inquiry'}".\n\nWe have received your message and are available to assist you. The library is open Monday through Friday, 8:00 AM to 5:00 PM.\n\nWarm regards,\nJRMSU-Katipunan Campus Library Staff`;
+      setReplyModal(prev => prev ? { ...prev, body: fallback } : null);
+      showToast('Generated standard response draft', 'info');
+    } finally {
+      setIsDraftingAI(false);
+    }
+  };
   const [isSendingReply, setIsSendingReply] = useState(false);
 
   // Background Sends UI State
@@ -788,6 +814,20 @@ export function EmailMessage() {
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      disabled={isDraftingAI}
+                      onClick={handleAutoDraftReply}
+                      className="text-[10px] sm:text-xs px-2 py-1 bg-emerald-50 text-emerald-700 font-medium rounded hover:bg-emerald-100 border border-emerald-200 transition-colors flex items-center gap-1 disabled:opacity-50"
+                      title="Auto-draft contextual reply with AI"
+                    >
+                      {isDraftingAI ? (
+                        <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                      )}
+                      Auto-Draft
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         const vitalText = `Here are the institutional credentials for VitalSource Bookshelf:\n\nEmail: jrmsukclibrary@gmail.com\nPassword: Jrmsukclibrary@19\n\nPlease visit https://bookshelf.vitalsource.com/signin to login.`;
                         setReplyModal({ ...replyModal, body: replyModal.body ? replyModal.body + '\n\n' + vitalText : vitalText });
@@ -817,6 +857,7 @@ export function EmailMessage() {
                   disabled={isSendingReply}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none disabled:opacity-60"
                   placeholder="Type your reply here..."
+                  maxLength={1000}
                   value={replyModal.body}
                   onChange={(e) => setReplyModal({ ...replyModal, body: e.target.value })}
                 />
@@ -946,6 +987,7 @@ export function EmailMessage() {
                   disabled={queueState.isActive}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-60"
                   placeholder="Type your bulk reply here..."
+                  maxLength={1000}
                   value={bulkReplyModal.body}
                   onChange={(e) => setBulkReplyModal({ body: e.target.value })}
                 />

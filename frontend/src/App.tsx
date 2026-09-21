@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+﻿import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router';
 import { TopNavBar } from '@/src/Components/LayoutBars/TopNavBar';
 import { FacebookBubble } from '@/src/Components/Shared/FacebookBubble';
@@ -16,6 +16,7 @@ import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
 import { ChunkErrorBoundary } from '@/src/Components/Shared/ChunkErrorBoundary';
 import { useDevToolsProtection } from '@/src/Hooks/useDevToolsProtection';
+import '@/src/Libs/offlineQueue';
 
 // Resolves a Django media path to a full browser-usable URL.
 // Django ImageFields return relative paths like `settings/bg.jpg`.
@@ -177,3 +178,4 @@ export default function App() {
     </ChunkErrorBoundary>
   );
 }
+

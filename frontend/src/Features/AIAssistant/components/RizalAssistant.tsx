@@ -367,10 +367,10 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       return (
         <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
           <form onSubmit={handleEmailFormSubmit} className="space-y-2">
-            <input required type="text" placeholder="Name" value={formName} onChange={e => setFormName(e.target.value)} className={inputClass} />
-            <input required type="email" placeholder="Email" value={formEmail} onChange={e => setFormEmail(e.target.value)} className={inputClass} />
-            <input required type="text" placeholder="Subject" value={formSubject} onChange={e => setFormSubject(e.target.value)} className={inputClass} />
-            <textarea required placeholder="Message" rows={3} value={formMessage} onChange={e => setFormMessage(e.target.value)} className={`${inputClass} resize-none`} />
+            <input required type="text" placeholder="Name" maxLength={200} value={formName} onChange={e => setFormName(e.target.value)} className={inputClass} />
+            <input required type="email" placeholder="Email" maxLength={254} value={formEmail} onChange={e => setFormEmail(e.target.value)} className={inputClass} />
+            <input required type="text" placeholder="Subject" maxLength={255} value={formSubject} onChange={e => setFormSubject(e.target.value)} className={inputClass} />
+            <textarea required placeholder="Message" rows={3} maxLength={1000} value={formMessage} onChange={e => setFormMessage(e.target.value)} className={`${inputClass} resize-none`} />
 
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-blue-600 transition-colors">
@@ -491,7 +491,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                 ))}
               </div>
             </div>
-            <textarea placeholder="Any comments? (optional)" rows={2} value={formMessage} onChange={e => setFormMessage(e.target.value)} className={`${inputClass} resize-none`} />
+            <textarea placeholder="Any comments? (optional)" rows={2} maxLength={1000} value={formMessage} onChange={e => setFormMessage(e.target.value)} className={`${inputClass} resize-none`} />
             <div className="flex gap-2">
               <button type="button" onClick={handleCancelForm} className="flex-1 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors cursor-pointer">Cancel</button>
               <button type="submit" disabled={isSubmitting} className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50">
@@ -645,6 +645,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
+                  maxLength={500}
                   placeholder="Ask me anything..."
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-navy-mid/30 focus:ring-1 focus:ring-navy-mid/30 transition-all"
                   disabled={isTyping}

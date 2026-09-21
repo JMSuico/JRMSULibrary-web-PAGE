@@ -72,3 +72,23 @@ class AIViewSet(viewsets.ViewSet):
                 yield "I'm currently experiencing high load or connection issues. Please try asking again in a few moments."
 
         return StreamingHttpResponse(event_stream(), content_type='text/plain')
+
+    @action(detail=False, methods=['post'], url_path='draft-reply', permission_classes=[permissions.IsAuthenticated])
+    def draft_reply(self, request):
+        """
+        POST /api/ai/draft-reply/
+        Generates an AI-assisted draft email reply for library staff.
+        """
+        message_data = {
+            'sender_name': request.data.get('sender_name', '').strip(),
+            'sender_email': request.data.get('sender_email', '').strip(),
+            'subject': request.data.get('subject', '').strip(),
+            'message_text': request.data.get('message_text', '').strip(),
+            'inquiry_type': request.data.get('inquiry_type', 'general')
+        }
+
+        try:
+            draft = self.service.generate_email_reply_draft(message_data)
+            return Response({'draft': draft}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': f'Failed to generate draft: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

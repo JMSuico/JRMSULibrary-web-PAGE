@@ -57,7 +57,6 @@ CELERY_CONCURRENCY=1
 
 # External Services (If needed)
 EMAIL_HOST_PASSWORD=your_gmail_app_password
-NGROK_AUTHTOKEN=your_ngrok_token
 ```
 
 ## 4. What to Adjust: Network Settings (IP Address)
@@ -179,3 +178,58 @@ CELERY_CONCURRENCY=1
 
 # Ngrok token (Only needed if running a public tunnel on a local PC, not needed for cloud/physical servers)
 # NGROK_AUTHTOKEN=your_ngrok_token_here
+
+
+---
+
+## 7. Cloudflare Named Tunnel Setup (`www.jrmsukclibrary.com`)
+
+The physical library server uses a permanent **Cloudflare Named Tunnel** via the Windows Service `Cloudflared`. This eliminates the need for port-forwarding on the campus router and provides a free, permanent SSL certificate.
+
+### Cloudflare Hostname Routing:
+- **Public Domain:** `www.jrmsukclibrary.com` (or root `jrmsukclibrary.com`)
+- **Service URL:** `http://localhost:3000` *(Never append `/admin` in Cloudflare; Cloudflare passes all subpaths automatically).*
+- **Admin Access:** Staff access the dashboard at `https://www.jrmsukclibrary.com/admin`.
+
+---
+
+## 8. Low-Bandwidth (500 kbps) Campus Internet Optimization
+
+If the Katipunan campus library operates on a constrained internet line (~500 kbps):
+
+1. **Cloudflare CDN Edge Caching:**  
+   Heavy assets (React JS bundles, CSS files, school logos, and book cover images) are cached by Cloudflare in regional edge nodes (Manila/Cebu). Outside students download them from Cloudflare, preserving your 500 kbps line exclusively for tiny API and AI chat JSON payloads (<2 KB each).
+2. **Localhost Uploads for Librarians:**  
+   When uploading large thesis PDFs (10MB–25MB) or high-res gallery images, librarians should log in directly on the physical PC via:  
+   👉 **`http://localhost:3001/admin`**  
+   This executes at local SSD bus speed, bypassing the internet entirely and uploading in 1 second.
+3. **Internal Campus Wi-Fi Browsing:**  
+   Students inside the physical library can access the server via its LAN IP:  
+   👉 **`http://192.168.x.x:3000`**  
+   This provides full 100 Mbps LAN speed with zero outside internet consumption.
+
+---
+
+## 9. 3-Tier Database Standby & Operational Runbook
+
+```
+[Primary DB (db)] ──(Streaming WAL)──► [Local Standby (db-standby)]
+       │
+       └──(migrate-local-to-cloud.ps1)──► [Cloud Supabase DB]
+```
+
+- **Emergency Standby Failover:**  
+  ```powershell
+  .\failover-to-standby.ps1
+  ```
+  Promotes `db-standby` to active Primary in under 5 seconds if `db` crashes.
+- **Local-to-Cloud State Migration:**  
+  ```powershell
+  .\migrate-local-to-cloud.ps1
+  ```
+  Pipes local PostgreSQL records directly to Supabase over TLS.
+- **Daily Automated Backups:**  
+  ```powershell
+  .\backup-db.ps1
+  ```
+  Dumps database and zips `./backend/media/` into `.\backups\`.

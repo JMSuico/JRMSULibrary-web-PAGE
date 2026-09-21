@@ -498,6 +498,7 @@ export function SectionsManager() {
                   <input
                     name="title"
                     type="text"
+                    maxLength={200}
                     defaultValue={editingImage?.title}
                     placeholder="e.g., Circulation Section"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
@@ -509,6 +510,7 @@ export function SectionsManager() {
                   <input
                     name="section_label"
                     type="text"
+                    maxLength={100}
                     defaultValue={editingImage?.section_label}
                     placeholder="e.g., Filipiniana"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"

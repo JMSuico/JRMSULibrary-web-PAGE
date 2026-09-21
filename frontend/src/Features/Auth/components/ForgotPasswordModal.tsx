@@ -83,6 +83,7 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
                 <input
                   type="email"
                   required
+                  maxLength={254}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all"
@@ -126,6 +127,7 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
                 <input
                   type="password"
                   required
+                  maxLength={128}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all"

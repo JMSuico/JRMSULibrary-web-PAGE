@@ -897,15 +897,15 @@ export function ContentManager() {
             <form onSubmit={handleSaveLink} className="p-4 flex flex-col gap-4 overflow-y-auto">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Name</label>
-                <input required type="text" name="name" defaultValue={editingLink?.name || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <input required type="text" name="name" maxLength={200} defaultValue={editingLink?.name || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">URL</label>
-                <input required type="url" name="url" defaultValue={editingLink?.url || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <input required type="url" name="url" maxLength={500} defaultValue={editingLink?.url || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Category (e.g. 'Open Access Journals', 'Resources')</label>
-                <input required type="text" name="category" defaultValue={editingLink?.category || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <input required type="text" name="category" maxLength={100} defaultValue={editingLink?.category || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Order Index</label>
@@ -978,7 +978,7 @@ export function ContentManager() {
             <form onSubmit={handleUploadFile} className="p-4 flex flex-col gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Name</label>
-                <input required type="text" name="name" className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
+                <input required type="text" name="name" maxLength={200} className="w-full px-3 py-2 border border-gray-200 rounded-lg" />
               </div>
               <input type="hidden" name="category" value={fileUploadCategory} />
               <div>

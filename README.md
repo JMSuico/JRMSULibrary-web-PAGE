@@ -9,10 +9,13 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 ##  Key Features
 - **Real-Time Philippine Time Clock:** Signature hero section clock (JetBrains Mono, gold, blinking colons) synchronized to UTC+8.
 - **E-Resources Integration:** Integrated proxy handlers for Scholaar and VitalSource.
-- **AI Research Assistant:** Powered locally by Ollama (Qwen 2.5), capable of assisting students with research queries without external API costs.
-- **Email & Reservations:** SMTP-powered reservation system.
-- **Terminal Admin Protection:** Specialized security feature that protects sysadmin accounts created via terminal from being modified or deleted by web UI users.
-- **Vertical-Slice Architecture:** Both the frontend and backend are structured for maximum scalability and feature isolation.
+- **Dr. Rizal AI Research Assistant:** Powered 100% locally by Ollama (`qwen3:0.6b`), backed by a sub-10ms Redis FAQ cache for instant responses with zero external API fees.
+- **AI Auto-Draft Email Replies:** Automated context-aware email response drafting powered by local Ollama for librarian staff efficiency.
+- **Client-Side Offline Request Caching:** Automatic queueing of user interactions during temporary connectivity drops with seamless background resynchronization.
+- **3-Tier Database Replication Suite:** Real-time local hot standby (`db-standby`), 1-click cloud sync to Supabase, automated backups, and 5-second emergency failover.
+- **Cloudflare Zero Trust Tunnel:** Production access via `www.jrmsukclibrary.com` with zero exposed router ports and edge caching for low-bandwidth (500 kbps) campus resilience.
+- **Terminal Admin Protection:** Specialized security preventing command-line-created sysadmins from being modified or deleted through web interfaces.
+- **Vertical-Slice Architecture:** Both frontend and backend structured for maximum scalability and feature isolation.
 
 ##  Technology Stack
 **Frontend:**
@@ -29,7 +32,7 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 - Architecture: API Controllers -> Services -> Repositories -> Models
 
 **AI Engine:**
-- Ollama (running `qwen2.5:0.5b`)
+- Ollama (running `qwen3:0.6b` (quantized local inference))
 
 **Deployment:**
 - Docker & Docker Compose (fully containerized 5-layer stack)
@@ -119,6 +122,33 @@ The JRMSU Library platform enforces a strict separation of concerns, security bo
    - **Terminal Admin Protection:** Sysadmin accounts created via the command line (`createsuperuser` / `createsuperuser_custom`) are permanently protected and cannot be edited, suspended, or deleted through the web UI.
    - **Smart Sync Excel Engine:** Slices large institutional spreadsheets into chunks of 30 records, utilizing tuple fingerprinting to avoid duplicates and offloading atomic database writes to Celery workers over Redis.
    - **Soft-Delete Recycle Bin:** Deleted records (books, files, personnel) are retained as JSON snapshots in the Recycle Bin with a 30-day automatic purge window, allowing instant one-click restoration.
+
+---
+
+
+---
+
+## 🛡️ Enterprise Database Replication, Cloud Standby & Operations Suite
+
+The JRMSU Library System implements a **3-Tier High Availability Architecture** designed for physical server hardware resilience and cloud disaster recovery:
+
+```
+[Primary DB (db)] ──(Streaming WAL)──► [Local Standby (db-standby)]
+       │
+       └──(migrate-local-to-cloud.ps1)──► [Cloud Supabase DB]
+```
+
+### Operational Tooling:
+- **1-Click Local-to-Cloud Migration:** `.\migrate-local-to-cloud.ps1`  
+  Pipes local PostgreSQL records over encrypted TLS directly into the remote Supabase Cloud database (`aws-0-ap-southeast-1.pooler.supabase.com`).
+- **Emergency Standby Failover:** `.\failover-to-standby.ps1`  
+  Promotes `db-standby` to active Read-Write Primary in under 5 seconds with zero data loss.
+- **Automated Timestamped Backups:** `.\backup-db.ps1`  
+  Generates a clean PostgreSQL `.sql` dump and zips `./backend/media/`, retaining 30 days of archives.
+- **Disaster Recovery Restore:** `.\restore-db.ps1 -BackupSqlFile ".\backups\<file>.sql"`  
+  1-click database restoration from any timestamped snapshot.
+- **Database Parity Verification:** `docker-compose exec backend python manage.py verify_cloud_sync`  
+  Compares record counts across all 21 models between local PC and cloud database.
 
 ---
 
