@@ -3,7 +3,7 @@
 > This document is the **permanent active memory** of all skills loaded from `C:\Users\provu\Desktop\SKILLS`.
 > Every rule here is **adopted, active, and obeyed** in all future sessions on this project.
 > Do not delete or override entries — update only when skills evolve.
-> **Last Loaded: 2026-08-15**
+> **Last Loaded: 2026-09-10** (Updated after comprehensive deep analysis)
 
 ---
 
@@ -364,6 +364,27 @@ frontend/src/
 - **Single-device session lock** — `user_controller.py` — heartbeat monitoring, `last_active`
 - **Terminal admin lock** — `is_terminal_created=True` — cannot be deleted by UI admins
 - **Smart notifications** — `notification_service.py` — aggregated from multiple event sources
+- **10-Minute Inactivity Auto-Logout** — `AdminLayout.tsx` (`useInactivityTimer`) — 600,000ms idle timer with throttled activity listener
+- **Research References Smart Sync** — `ExcelUploadModal.tsx`, `useChunkedSync.ts`, `tasks.py` — sequential chunks (size 30) + 4-tuple fingerprinting + Celery parallel worker offload
+- **Master Thesis & Architecture Artifacts (Sept 2026):**
+  - `FULL_SYSTEM_ARCHITECTURE_AND_FUNCTION_CONNECTIVITY_MAP.md` (System Master Specification)
+  - `THESIS_DOCUMENT_REVISION_GUIDE.md` (Documentary In-Text Revision Manual — Updated 2026-09-10)
+  - `AI_INTEGRATION_SPECIFICATION.md` (Full Dr. Rizal AI, Ollama, RAG & FAQ Cache Spec)
+  - `AI_FEATURES_AND_FUNCTIONS_COMPLETE.md` (Complete AI Feature Inventory with Code References — Created 2026-09-10)
+  - `PROGRAMMER_UPDATE_AND_PENDING_IDEAS.md` (12 Pending Ideas Technical Evaluation — Created 2026-09-10)
+  - `DATA_FLOW_AND_USE_CASE_DIAGRAMS.md` (Sequential Diagrams, Use Cases, SW/HW Requirements — Created 2026-09-10)
+  - `PROGRAMMER_IDEAS_AND_SYSTEM_ENHANCEMENTS.md` (Evaluation of 12 Technical Programmer Ideas)
+  - `SYSTEM_FLOW_DIAGRAMS_AND_REQUIREMENTS.md` (Use Case, Sequence Models & Hardware/Software Specs)
+
+### 7.5 Critical System Facts (Updated 2026-09-10)
+- **AI Model:** `qwen3:0.6b` (upgraded from qwen2.5:0.5b)
+- **Backend Counts:** 17 controllers, 18 services, 17 repositories, 21 models, 6 helpers
+- **Frontend Routes:** 7 public + 12 admin + 1 login = 20 total routes
+- **Docker Services:** 7 containers (db, redis, backend x3, celery-worker, frontend-webpage, frontend-admin, ollama, ollama-init, ngrok)
+- **Database:** PostgreSQL 16 (primary), MSSQL/MySQL (alternative via env config)
+- **FAQ Cache Algorithm:** difflib fuzzy matching, 0.85 cutoff, round-robin answer selection
+- **Security:** Brute-force lockout (5/10min), single-device guard, malware scan, XSS sanitization, HSTS, CSP, DevTools protection
+- **Thesis Status:** Thesis 1 milestone (September 2026), Chapter 4 pending survey data
 
 ---
 
@@ -379,6 +400,7 @@ frontend/src/
 7. **Obey explicit user constraints** — "find first, don't touch" means ZERO code changes
 8. **Update documentation** when features are added, modified, or removed
 9. **Auto-Terminal Protocol** — Automatically control the terminal and execute commands layer by layer to proceed without waiting for explicit user prompts if inactive.
+10. **Strict Mermaid 11+ Quoting** — In all Mermaid diagrams, ALWAYS use `flowchart TD` or `flowchart LR` (avoid legacy `graph TD`). ALWAYS wrap node labels and subgraph titles in double quotes: `["..."]` (e.g. `subgraph Group ["Name"]` and `N1["Label & Text"]`). Avoid `<br/>` HTML tags and parentheses `()` inside node labels (use clean hyphens `-` instead). Ensure subgraphs are linked with at least one connecting edge (`-->`) to prevent disconnected graph parser failures.
 
 ### Never Do
 1. Skip layers or mix responsibilities
@@ -389,6 +411,8 @@ frontend/src/
 6. Make parallel assumptions — stop and ask when ambiguous
 7. Apply a fix without identifying the root cause first
 8. Create duplicate functionality that already exists in the codebase
+9. Use legacy `graph TD` with disconnected subgraphs, or unquoted `#`, `&`, `:`, `()`, or raw HTML tags (`<br/>`, `<b>`) inside Mermaid node labels (causes Mermaid 11 `Syntax error in text` crashes)
+
 
 ---
 

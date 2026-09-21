@@ -663,10 +663,14 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       )}
 
       {/* AI Assistant Bubble */}
-      <div className="relative float-bubble bubble-3d-container w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-400 bg-white shadow-xl flex items-center justify-center">
+      <div
+        className="relative float-bubble bubble-3d-container w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-400 bg-white shadow-xl flex items-center justify-center shrink-0"
+        style={{ width: '80px', height: '80px', maxWidth: '80px', maxHeight: '80px', flexShrink: 0 }}
+      >
         <button
           onClick={() => !isDragging && setIsExpanded(!isExpanded)}
           className="bubble-3d-btn w-full h-full rounded-full overflow-hidden cursor-pointer flex items-center justify-center"
+          style={{ width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', borderRadius: '9999px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           aria-label="Open RIZAL Assistant"
         >
           <video
@@ -676,7 +680,10 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
             loop
             muted
             playsInline
-            className="w-full h-full object-cover"
+            width="80"
+            height="80"
+            className="w-full h-full object-cover rounded-full"
+            style={{ width: '100%', height: '100%', maxWidth: '80px', maxHeight: '80px', objectFit: 'cover', borderRadius: '9999px', display: 'block' }}
           >
             <source src={videoSrc} type="video/mp4" />
           </video>
