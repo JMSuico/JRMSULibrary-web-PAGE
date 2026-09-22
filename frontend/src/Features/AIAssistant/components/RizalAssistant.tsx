@@ -87,7 +87,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     'Discussion Room 2',
     'Tutorium Room 1',
     'Tutorium Room 2',
-    'Library Table',
+    'Multimedia Room',
   ];
 
   // Scroll chat to bottom

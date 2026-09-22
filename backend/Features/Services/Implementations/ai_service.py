@@ -147,6 +147,7 @@ LIBRARY CONTEXT & LIVE INFORMATION:
 - Location: JRMSU Katipunan Campus, Katipunan, Zamboanga del Norte, Philippines.
 - Email: katipunan.library@jrmsu.edu.ph
 - Services Available: Book Borrowing, Reading Area, Discussion Rooms, Internet Access, E-Resources (VitalBooks, Scholaar, EBSCO).
+- Available Rooms/Spaces for Reservation: Discussion Room 1, Discussion Room 2, Tutorium Room 1, Tutorium Room 2, and Multimedia Room.
 - Borrowing Limits: Students can borrow up to 3 books for 3 days. Faculty can borrow up to 5 books for 1 week.
 - UOPAC Borrow/Return Guidance: To borrow or return books, students must use the Main Campus UOPAC system. The default login is usually their Student ID. They should search the OPAC catalog, filter for Katipunan Campus, and bring their ID to the circulation desk.
 

@@ -27,6 +27,7 @@ class CSPMiddleware(MiddlewareMixin):
             "font-src 'self' data: https://fonts.gstatic.com; "
             "img-src 'self' data: blob: https:; "
             "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* wss://*; "
+            "frame-src 'self' https://maps.google.com https://www.google.com https://*.google.com https://*.googleapis.com https://*.openstreetmap.org https://*.vitalsource.com https://*.scholaar.com https:; "
             "frame-ancestors 'self' http://localhost:* http://127.0.0.1:*;"
         )
         # Apply CSP if not already set
