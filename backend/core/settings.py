@@ -239,7 +239,7 @@ AUTH_USER_MODEL = "Features.Account"
 
 # CORS settings - Permanently allow any local IP for Docker/Wi-Fi hosting
 _env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "")
-_allowed_origins = _env_origins + ",http://localhost:3000,http://localhost:3001,http://localhost:5173"
+_allowed_origins = _env_origins + ",http://localhost:3000,http://localhost:3001,http://localhost:5173,https://www.jrmsukclibrary.com,https://jrmsukclibrary.com,https://*.workers.dev,https://*.trycloudflare.com"
 
 # Fallback: specific domains
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip() and origin.strip() != '*']
@@ -259,6 +259,12 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS + [
     "http://127.0.0.1", 
     "http://localhost",
+    "https://www.jrmsukclibrary.com",
+    "https://jrmsukclibrary.com",
+    "https://*.jrmsukclibrary.com",
+    "https://*.trycloudflare.com",
+    "https://*.cloudflare.com",
+    "https://*.workers.dev",
     "https://*.ngrok-free.dev",
     "https://*.ngrok-free.app",
     "https://*.ngrok.io",

@@ -147,6 +147,7 @@ LIBRARY CONTEXT & LIVE INFORMATION:
 - Location: JRMSU Katipunan Campus, Katipunan, Zamboanga del Norte, Philippines.
 - Email: katipunan.library@jrmsu.edu.ph
 - Services Available: Book Borrowing, Reading Area, Discussion Rooms, Internet Access, E-Resources (VitalBooks, Scholaar, EBSCO).
+- Available Rooms/Spaces for Reservation: Discussion Room 1, Discussion Room 2, Tutorium Room 1, Tutorium Room 2, and Multimedia Room.
 - Borrowing Limits: Students can borrow up to 3 books for 3 days. Faculty can borrow up to 5 books for 1 week.
 - UOPAC Borrow/Return Guidance: To borrow or return books, students must use the Main Campus UOPAC system. The default login is usually their Student ID. They should search the OPAC catalog, filter for Katipunan Campus, and bring their ID to the circulation desk.
 
@@ -265,3 +266,58 @@ DYNAMIC DATABASE KNOWLEDGE:
         except Exception as e:
             logger.error(f"Error communicating with Ollama: {str(e)}")
             yield "I'm sorry, an internal error occurred while processing your request."
+
+    def generate_email_reply_draft(self, message_data: dict) -> str:
+        name = message_data.get('sender_name', 'Student/Patron')
+        subject = message_data.get('subject', 'General Inquiry')
+        message = message_data.get('message_text', '')
+
+        template_reply = (
+            f"Dear {name},\n\n"
+            f"Thank you for reaching out to the JRMSU Katipunan Campus Library regarding \"{subject}\".\n\n"
+            f"We have received your message and are pleased to assist you. If your inquiry concerns book borrowing "
+            f"or e-resources, please remember to bring your validated school ID/library credentials upon your visit. "
+            f"The library is open Monday through Friday, 8:00 AM to 5:00 PM.\n\n"
+            f"Please let us know if you have any additional questions.\n\n"
+            f"Warm regards,\n"
+            f"JRMSU-Katipunan Campus Library Staff"
+        )
+
+        prompt = (
+            f"You are a helpful and polite library staff assistant at Jose Rizal Memorial State University (JRMSU) Katipunan Campus. "
+            f"Draft a courteous, concise, and professional email reply to this student/user inquiry.\n\n"
+            f"Sender Name: {name}\n"
+            f"Subject: {subject}\n"
+            f"Inquiry: {message}\n\n"
+            f"Guidelines:\n"
+            f"- Be professional, warm, and helpful.\n"
+            f"- Reference JRMSU Katipunan Campus Library.\n"
+            f"- If inquiring about books or borrowing, remind them to bring their validated school ID/library card.\n"
+            f"- If inquiring about facilities/rooms, confirm reservation procedures.\n"
+            f"- Sign off as: 'JRMSU-Katipunan Campus Library Staff'.\n"
+            f"- Do NOT output markdown headers, just the raw email body text starting with 'Dear {name},'."
+        )
+
+        try:
+            payload = {
+                "model": self.model_name,
+                "messages": [
+                    {"role": "system", "content": "You are a professional university library assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.4,
+                    "num_predict": 300
+                }
+            }
+            resp = requests.post(self.ollama_url, json=payload, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                draft = data.get('message', {}).get('content', '').strip()
+                if draft:
+                    return draft
+        except Exception as e:
+            logger.warning(f"Ollama draft reply unavailable: {e}. Using template draft.")
+
+        return template_reply

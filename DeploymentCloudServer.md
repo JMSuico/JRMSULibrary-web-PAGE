@@ -207,3 +207,23 @@ CELERY_CONCURRENCY=1
 
 # Ngrok token (Only needed if running a public tunnel on a local PC, not needed for cloud/physical servers)
 # NGROK_AUTHTOKEN=your_ngrok_token_here
+
+
+---
+
+## 🔄 Seeding Cloud Database from Physical Campus Library PC
+
+If you have already cataloged books, registered users, and set up CMS content on the physical campus PC in Katipunan, you do NOT need to re-enter anything on the cloud server!
+
+### 1-Click Migration from Campus PC to Cloud:
+1. On the physical library PC, open PowerShell inside the project directory.
+2. Run:
+   ```powershell
+   .\migrate-local-to-cloud.ps1
+   ```
+3. Enter your Supabase Cloud DB password when prompted (or press Enter if using the pre-configured password).
+4. The script will:
+   - Safely dump the local PostgreSQL database.
+   - Stream it through an encrypted TLS pipeline directly into Supabase (`aws-0-ap-southeast-1.pooler.supabase.com`).
+   - Verify table-by-table record counts across all 21 models (`verify_cloud_sync`).
+5. Your Cloud Server deployment is now instantly hydrated with all campus data!

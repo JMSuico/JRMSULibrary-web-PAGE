@@ -108,6 +108,7 @@ export function LoginForm() {
           <input
             type="text"
             id="username"
+            maxLength={150}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="w-full px-4 pt-6 pb-2 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all peer"
@@ -126,6 +127,7 @@ export function LoginForm() {
           <input
             type={showPassword ? "text" : "password"}
             id="password"
+            maxLength={128}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-4 pt-6 pb-2 pr-12 border border-gray-300 rounded-xl bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all peer"

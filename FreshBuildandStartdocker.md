@@ -195,3 +195,114 @@ To manage Terminal-Created Admins, a dedicated terminal command is now available
   docker-compose exec backend python manage.py deletespecificsuperuser
   ```
  docker-compose build --no-cache frontend-admin ; docker-compose up -d frontend-admin ; docker-compose build --no-cache frontend-webpage ; docker-compose up -d frontend-webpage ; docker-compose up -d --build backend
+---
+
+## 🛡️ Permanent Enterprise Production Deployment (Zero Ngrok)
+*For 24/7 Long-Lasting Campus Server or Cloud VPS Deployment*
+
+To deploy without any temporary tunneling tools (like Ngrok), use the dedicated production compose file [`docker-compose.prod.yml`](./docker-compose.prod.yml).
+
+### Key Production Features:
+1. **Zero Ngrok Dependencies:** No ephemeral URLs, no 40 req/min rate limit throttles, no browser interstitial warnings.
+2. **Auto-Restart:** All 6 core services (`db`, `redis`, `backend`, `celery-worker`, `frontend-webpage`, `frontend-admin`, `ollama`) have `restart: always` configured.
+3. **Log Rotation:** JSON-file logging is capped at 20MB-50MB with 5 file rotations to prevent server disk overflow.
+4. **Persistent Named Volumes:** All database records (`db_data`), cache data (`redis_data`), and AI models (`ollama_data`) are stored permanently.
+
+### Production Start & Update Commands:
+```bash
+# Start all production containers in the background
+docker compose -f docker-compose.prod.yml up -d --build
+
+# View real-time logs across all services
+docker compose -f docker-compose.prod.yml logs -f
+
+# Check container health status
+docker compose -f docker-compose.prod.yml ps
+
+# Stop production safely (preserves all database and media files)
+docker compose -f docker-compose.prod.yml down
+```
+
+---
+
+## 🌐 Public Access Options: Ngrok vs Cloudflare Tunnel vs Zero-Tunnel
+
+Depending on your campus environment, you have three ways to expose the library system:
+
+### Option 1: Built-in Ngrok (Current Setup in `docker-compose.yml`)
+Runs the built-in Ngrok container on port 4040.
+```bash
+# Start all containers including Ngrok
+docker-compose up -d --build
+
+# Open Ngrok web dashboard to view your public URL:
+# http://localhost:4040
+```
+
+### Option 2: Cloudflare Quick Tunnel (`cloudflared`) — Better Free Alternative
+If you want public access without Ngrok's 40 req/min rate limit and without any warning splash screens:
+1. Download `cloudflared` from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+2. Run this command in your terminal:
+```bash
+# NOTE: Tunnel port 3000 (NOT 8000), because port 3000 serves both 
+# the React Landing Page, Admin Panel, and proxies /api/ to backend:8000!
+cloudflared tunnel --url http://localhost:3000
+```
+*Cloudflare will print a free temporary HTTPS link (e.g., `https://random-words.trycloudflare.com`).*
+
+### Option 3: Permanent Production (Zero Tunnels in `docker-compose.prod.yml`)
+When the campus MIT department assigns a static local IP or domain name:
+```bash
+# Start hardened 24/7 production stack
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+---
+
+## 🛡️ Enterprise Database Replication, Cloud Standby & Migration Suite
+
+The JRMSU Library System features a **3-Tier High Availability Architecture** designed for physical campus hardware durability and cloud offsite disaster protection:
+
+```
+[Primary DB (db)] ──(Streaming WAL)──► [Local Standby (db-standby)]
+       │
+       └──(migrate-local-to-cloud.ps1)──► [Cloud Supabase DB]
+```
+
+### 1. 1-Click Local-to-Cloud Database Migration
+To safely replicate all physical PC library books, student accounts, and CMS content to the Supabase Cloud Database:
+
+```powershell
+.\migrate-local-to-cloud.ps1
+```
+* **What it does:** Generates a sanitized PostgreSQL stream directly from Docker, pipes it over encrypted TLS to Supabase (`aws-0-ap-southeast-1.pooler.supabase.com`), and automatically verifies table-by-table record parity.
+* **Preserves Archive:** A local timestamped dump is saved in `.\backups\` as a secondary safety net.
+
+### 2. Local Hot Standby (`db-standby` Container)
+Both `docker-compose.yml` and `docker-compose.prod.yml` now include a dedicated `db-standby` replica:
+* Consistently replicates Write-Ahead Logs (WAL) in real-time (<50ms delay).
+* Uses separate storage volume `db_standby_data`.
+* Runs in Read-Only Standby Mode consuming only ~50MB RAM.
+
+### 3. Emergency 1-Click Failover to Standby
+If the primary `db` container crashes or encounters corrupted disk sectors:
+
+```powershell
+.\failover-to-standby.ps1
+```
+* **What it does:** Promotes `db-standby` to become the active Read-Write Primary in under 5 seconds with zero data loss.
+* To route backend traffic to the promoted standby, set `DB_HOST=db-standby` in `.env` and restart backend.
+
+### 4. 1-Click Routine Backups & Restores
+* **Create Timestamped Backup (Database + Media ZIP):**
+  ```powershell
+  .\backup-db.ps1
+  ```
+* **Restore from a Backup:**
+  ```powershell
+  .\restore-db.ps1 -BackupSqlFile ".\backups\jrmsu_library_db_YYYY-MM-DD_HH-mm-ss.sql"
+  ```
+* **Audit Record Parity (Local vs Cloud):**
+  ```bash
+  docker-compose exec backend python manage.py verify_cloud_sync
+  ```

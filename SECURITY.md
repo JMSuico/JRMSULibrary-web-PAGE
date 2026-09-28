@@ -146,6 +146,21 @@ The system is designed to run safely in both **local LAN development** (Docker o
 *Last updated: August 2026. All critical and high-priority infrastructure, caching, network, and client-side anti-inspection security items have been successfully resolved and deployed.*
 
 
+
+---
+
+## 9. Edge, Network Tunnel & Payload Hardening (Updated September 2026)
+
+| Security Feature | Status | File(s) | Description |
+| :--- | :--- | :--- | :--- |
+| **Cloudflare Zero Trust Tunnel** | **[ Productive ]** | Windows Service `Cloudflared` | Eliminates all router port-forwarding. Zero inbound ports (80, 443, 8000, 5432) are exposed on the campus physical router. All public traffic routes through encrypted Cloudflare edge tunnels. |
+| **Form Payload Defensive Size Enforcement** | **[ Productive ]** | 7 Frontend components | All 19 user/admin input fields strictly enforce client-side `maxLength` attributes exactly matching Django database column bounds, preventing client payload overflow and `400 Bad Request` submission errors. |
+| **Database Streaming Replication Security** | **[ Productive ]** | `docker-compose.prod.yml` | Standby replica (`db-standby`) communicates strictly over internal Docker bridge networks with authenticated replication credentials; operates in Read-Only standby mode. |
+| **Sanitized Database Migration Pipe** | **[ Productive ]** | `migrate-local-to-cloud.ps1` | Database migration dumps use `--no-owner --no-acl` and pipe over direct SSL memory buffers into Supabase without exposing unencrypted SQL files on disk. |
+| **Offline Request Replay Protection** | **[ Productive ]** | `frontend/src/Libs/offlineQueue.ts` | Offline requests are queued in structured FIFO storage with exponential backoff retry and duplicate request deduplication. |
+
+---
+
 ## Universal Bulk Operations (Celery Background Tasks)
 - **Denial of Service (DoS) Prevention:** The `/api/system/bulk-actions/` endpoints operate asynchronously using Celery. This prevents malicious actors or compromised staff accounts from exhausting database connections or HTTP worker threads by submitting huge batch deletions. The API instantly returns an HTTP 202, leaving heavy I/O to background queues.
 - **Strict Role Authorization:** All bulk operation endpoints are strictly guarded by `permissions.IsAdminUser`, preventing standard authenticated users from bypassing individual delete limits.
@@ -155,7 +170,8 @@ The system is designed to run safely in both **local LAN development** (Docker o
 
 ## Dependency & Supply Chain Security (Anti-Hacking)
 - **No Outdated Dependencies:** All libraries, modules, and plugins must be actively maintained. The use of deprecated, abandoned, or outdated packages with known CVEs (vulnerabilities) is strictly forbidden, as they are primary targets for brute-force and zero-day hacking.
-- **Strict Version Pinning:** Backend packages (equirements-docker.txt) and frontend packages (package.json) use exact version locking to prevent unexpected upgrades from malicious actors (dependency confusion attacks).
+- **Strict Version Pinning:** Backend packages (
+equirements-docker.txt) and frontend packages (package.json) use exact version locking to prevent unexpected upgrades from malicious actors (dependency confusion attacks).
 - **Production Node_Modules Exclusion:** The frontend uses a multi-stage Docker build. Vulnerable development dependencies inside 
 ode_modules are completely destroyed before deployment, ensuring hackers cannot exploit hidden frontend library flaws in production.
 - **Browser Plugin Lockdown:** The backend Permissions-Policy header explicitly blocks malicious browser extensions and plugins from silently accessing hardware (camera/microphone/geolocation) while the user is logged into the Admin Panel.

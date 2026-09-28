@@ -200,7 +200,7 @@ export const RizalChatBubble: React.FC = () => {
                           <option value="Discussion Room 2">Discussion Room 2</option>
                           <option value="Tutorium Room 1">Tutorium Room 1</option>
                           <option value="Tutorium Room 2">Tutorium Room 2</option>
-                          <option value="Library Table">Library Table</option>
+                          <option value="Multimedia Room">Multimedia Room</option>
                         </select>
                       )}
 

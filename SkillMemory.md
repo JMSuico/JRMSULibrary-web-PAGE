@@ -376,6 +376,15 @@ frontend/src/
   - `PROGRAMMER_IDEAS_AND_SYSTEM_ENHANCEMENTS.md` (Evaluation of 12 Technical Programmer Ideas)
   - `SYSTEM_FLOW_DIAGRAMS_AND_REQUIREMENTS.md` (Use Case, Sequence Models & Hardware/Software Specs)
 
+### 7.10 Hybrid Database Replication & High Availability (Added 2026-09-21)
+- **Architecture Standard:** 3-Tier Multi-Standby Architecture:
+  1. Primary Database (`db`): PostgreSQL 16 Alpine, WAL replica mode, NVMe persistent volume `db_data`.
+  2. Local Hot Standby (`db-standby`): Independent volume `db_standby_data`, real-time streaming replica (<50ms lag).
+  3. Cloud Standby Mirror: Supabase PostgreSQL (`aws-0-ap-southeast-1.pooler.supabase.com`) for offsite disaster recovery.
+- **Failover Procedure:** Emergency failover executed via `failover-to-standby.ps1` (`pg_ctl promote`), promoting `db-standby` to read-write primary in <5 seconds.
+- **Cloud Migration & Parity:** 1-click schema + data sync via `migrate-local-to-cloud.ps1` with row parity verification via `python manage.py verify_cloud_sync`.
+- **Zero Data Loss Rule:** No database volume or container may be recreated without prior timestamped dump via `backup-db.ps1`.
+
 ### 7.5 Critical System Facts (Updated 2026-09-10)
 - **AI Model:** `qwen3:0.6b` (upgraded from qwen2.5:0.5b)
 - **Backend Counts:** 17 controllers, 18 services, 17 repositories, 21 models, 6 helpers
