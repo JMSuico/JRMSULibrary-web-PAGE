@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /secure-admin-console/
+
+Sitemap: https://page.jrmsukc-library.online/sitemap.xml
