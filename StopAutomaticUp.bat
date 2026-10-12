@@ -8,6 +8,9 @@ echo   JRMSU KATIPUNAN CAMPUS LIBRARY - SAFE SYSTEM STOP
 echo ====================================================================
 echo.
 
+:: Clean up any lingering startup lock file
+del "%TEMP%\jrmsu_startup.lock" >nul 2>&1
+
 :: 1. Smart Project Location Discovery
 set "PROJECT_DIR="
 set "SAVED_LOC_FILE=%APPDATA%\JRMSULibrary\ProjectLocation.txt"
@@ -86,13 +89,13 @@ echo ====================================================================
 echo   [SUCCESS] SYSTEM SHUTDOWN COMPLETED SAFELY!
 echo ====================================================================
 echo.
-echo - All website and database containers are stopped.
+echo - All website and database containers are safely stopped.
 echo - The Cloudflare tunnel is offline.
-echo - Zero database data was modified or deleted.
+echo - Zero database records or volumes were modified or deleted.
 echo.
 echo To turn the system back ON anytime:
 echo Double-click AutomaticUp.bat!
 echo ====================================================================
 echo.
-pause
+timeout /t 6
 exit /b 0

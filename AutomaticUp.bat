@@ -8,7 +8,45 @@ echo   JRMSU KATIPUNAN CAMPUS LIBRARY - AUTOMATIC SYSTEM LAUNCHER
 echo ====================================================================
 echo.
 
-:: 1. Smart Project Location Discovery
+set "LOCK_FILE=%TEMP%\jrmsu_startup.lock"
+
+:: 1. Prevent duplicate rapid clicks (Debounce / Single-Instance Lock)
+if exist "!LOCK_FILE!" (
+    echo [INFO] A startup process is already in progress.
+    echo Please wait for the current launch to finish...
+    timeout /t 4 >nul
+    exit /b 0
+)
+
+:: Create lock file
+echo %date% %time% > "!LOCK_FILE!"
+
+:: 2. Check if the system is ALREADY online & running
+docker info >nul 2>&1
+if %errorlevel% equ 0 (
+    docker ps --filter "name=frontend-webpage" --filter "status=running" | findstr /i "frontend-webpage" >nul 2>&1
+    if !errorlevel! equ 0 (
+        docker ps --filter "name=cloudflared" --filter "status=running" | findstr /i "cloudflared" >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo ====================================================================
+            echo   [OK] SYSTEM IS ALREADY UP AND RUNNING!
+            echo ====================================================================
+            echo.
+            echo The JRMSU Library System is already active and healthy:
+            echo - Public Landing Page: https://page.jrmsukc-library.online
+            echo - Librarian Admin:     https://admin.jrmsukc-library.online
+            echo.
+            echo You do not need to click again.
+            echo To stop the system, double-click StopAutomaticUp.bat.
+            echo ====================================================================
+            del "!LOCK_FILE!" >nul 2>&1
+            timeout /t 5
+            exit /b 0
+        )
+    )
+)
+
+:: 3. Smart Project Location Discovery
 set "PROJECT_DIR="
 set "SAVED_LOC_FILE=%APPDATA%\JRMSULibrary\ProjectLocation.txt"
 
@@ -69,6 +107,7 @@ for %%D in (G C D E F) do (
 if "!PROJECT_DIR!"=="" (
     echo [ERROR] Could not find the JRMSULibrary-web-PAGE project folder!
     echo Please make sure the project drive is connected.
+    del "!LOCK_FILE!" >nul 2>&1
     pause
     exit /b 1
 )
@@ -79,7 +118,7 @@ echo !PROJECT_DIR!> "!SAVED_LOC_FILE!"
 echo !PROJECT_DIR!> "%~dp0ProjectLocation.txt"
 echo [OK] Project directory confirmed: !PROJECT_DIR!
 
-:: 2. Ensure Docker Desktop is Running
+:: 4. Ensure Docker Desktop is Running
 echo.
 echo [CHECK] Verifying Docker Desktop status...
 docker info >nul 2>&1
@@ -111,7 +150,7 @@ if %errorlevel% neq 0 (
 )
 echo [OK] Docker Engine is online and ready!
 
-:: 3. Launch Docker Compose Services & Cloudflare Tunnel
+:: 5. Launch Docker Compose Services & Cloudflare Tunnel
 echo.
 echo [LAUNCHING] Starting JRMSU Library System containers...
 cd /d "!PROJECT_DIR!"
@@ -121,14 +160,17 @@ echo.
 echo [LAUNCHING] Starting Cloudflare Tunnel connector...
 docker start cloudflared >nul 2>&1
 
-:: 4. Register Permanent Windows Startup (Auto-runs on PC Boot)
+:: 6. Register Permanent Windows Startup (Auto-runs on PC Boot / Restart)
 set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "STARTUP_VBS=%STARTUP_FOLDER%\JRMSU_Library_AutoStart.vbs"
 
 echo.
-echo [CONFIGURING] Setting up Windows Auto-Start on boot...
+echo [CONFIGURING] Ensuring Windows Auto-Start on PC boot...
 echo Set WshShell = CreateObject("WScript.Shell") > "%STARTUP_VBS%"
-echo WshShell.Run """%~f0""", 0, False >> "%STARTUP_VBS%"
+echo WshShell.Run """!PROJECT_DIR!\AutomaticUp.bat""", 0, False >> "%STARTUP_VBS%"
+
+:: Clean up lock file
+del "!LOCK_FILE!" >nul 2>&1
 
 echo.
 echo ====================================================================
@@ -141,5 +183,5 @@ echo 3. Windows Auto-Start:   ENABLED (Will launch automatically on boot)
 echo 4. To stop the system:   Double-click StopAutomaticUp.bat anytime.
 echo.
 echo ====================================================================
-timeout /t 10
+timeout /t 8
 exit /b 0
