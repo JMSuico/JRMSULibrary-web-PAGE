@@ -45,6 +45,7 @@ if exist "%~dp0ProjectLocation.txt" (
 for %%P in (
     "G:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE"
     "C:\Users\provu\Desktop\JRMSU LIBRARY LANDING PAGE\JRMSULibrary-web-PAGE"
+    "C:\Users\provu\Desktop\JRMSU LIBRARY LANGDING PAGE\JRMSULibrary-web-PAGE"
     "D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE"
     "C:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE"
 ) do (
@@ -77,12 +78,19 @@ if "!PROJECT_DIR!"=="" (
 :: 2. Safely Stop Docker Compose Containers
 echo [STOPPING] Gracefully shutting down JRMSU Library containers...
 cd /d "!PROJECT_DIR!"
+
 docker compose stop
+if !errorlevel! neq 0 (
+    docker-compose stop
+)
 
 :: 3. Stop Cloudflare Tunnel
 echo.
 echo [STOPPING] Stopping Cloudflare Tunnel connector...
 docker stop cloudflared >nul 2>&1
+
+:: Also remove lock file to guarantee next start is unblocked
+del "%TEMP%\jrmsu_startup.lock" >nul 2>&1
 
 echo.
 echo ====================================================================

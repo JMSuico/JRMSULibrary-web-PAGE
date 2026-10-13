@@ -12,45 +12,31 @@ set "LOCK_FILE=%TEMP%\jrmsu_startup.lock"
 
 :: 1. Prevent duplicate rapid clicks (Debounce / Single-Instance Lock)
 if exist "!LOCK_FILE!" (
-    echo [INFO] A startup process is already in progress.
-    echo Please wait for the current launch to finish...
+    :: If lockfile exists, check if it is stale (older than 60 seconds)
+    for /f "usebackq" %%T in ('powershell -NoProfile -Command "(Get-Date) - (Get-Item '%TEMP%\jrmsu_startup.lock').LastWriteTime | Select-Object -ExpandProperty TotalSeconds"') do (
+        set "LOCK_AGE=%%T"
+    )
+    if defined LOCK_AGE (
+        for /f "tokens=1 delims=." %%S in ("!LOCK_AGE!") do set "LOCK_AGE_INT=%%S"
+        if !LOCK_AGE_INT! gtr 60 (
+            del "!LOCK_FILE!" >nul 2>&1
+            goto :proceed_lock
+        )
+    )
+    echo [INFO] A startup process is already running.
+    echo Please wait for the current launch to complete...
     timeout /t 4 >nul
     exit /b 0
 )
 
-:: Create lock file
+:proceed_lock
 echo %date% %time% > "!LOCK_FILE!"
 
-:: 2. Check if the system is ALREADY online & running
-docker info >nul 2>&1
-if %errorlevel% equ 0 (
-    docker ps --filter "name=frontend-webpage" --filter "status=running" | findstr /i "frontend-webpage" >nul 2>&1
-    if !errorlevel! equ 0 (
-        docker ps --filter "name=cloudflared" --filter "status=running" | findstr /i "cloudflared" >nul 2>&1
-        if !errorlevel! equ 0 (
-            echo ====================================================================
-            echo   [OK] SYSTEM IS ALREADY UP AND RUNNING!
-            echo ====================================================================
-            echo.
-            echo The JRMSU Library System is already active and healthy:
-            echo - Public Landing Page: https://page.jrmsukc-library.online
-            echo - Librarian Admin:     https://admin.jrmsukc-library.online
-            echo.
-            echo You do not need to click again.
-            echo To stop the system, double-click StopAutomaticUp.bat.
-            echo ====================================================================
-            del "!LOCK_FILE!" >nul 2>&1
-            timeout /t 5
-            exit /b 0
-        )
-    )
-)
-
-:: 3. Smart Project Location Discovery
+:: 2. Smart Project Location Discovery
 set "PROJECT_DIR="
 set "SAVED_LOC_FILE=%APPDATA%\JRMSULibrary\ProjectLocation.txt"
 
-:: Check local folder first
+:: Check local script folder first
 if exist "%~dp0docker-compose.yml" (
     set "PROJECT_DIR=%~dp0"
     goto :found_project
@@ -80,6 +66,7 @@ if exist "%~dp0ProjectLocation.txt" (
 for %%P in (
     "G:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE"
     "C:\Users\provu\Desktop\JRMSU LIBRARY LANDING PAGE\JRMSULibrary-web-PAGE"
+    "C:\Users\provu\Desktop\JRMSU LIBRARY LANGDING PAGE\JRMSULibrary-web-PAGE"
     "D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE"
     "C:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE"
 ) do (
@@ -93,7 +80,7 @@ for %%P in (
 echo [SEARCHING] Locating project folder across all connected drives...
 for %%D in (G C D E F) do (
     if exist "%%D:\" (
-        echo Scanning %%D:\ for JRMSULibrary-web-PAGE...
+        echo Scanning drive %%D:\ for JRMSULibrary-web-PAGE...
         for /f "delims=" %%F in ('dir /s /b /ad "%%D:\*JRMSULibrary-web-PAGE*" 2^>nul') do (
             if exist "%%F\docker-compose.yml" (
                 set "PROJECT_DIR=%%F"
@@ -118,43 +105,79 @@ echo !PROJECT_DIR!> "!SAVED_LOC_FILE!"
 echo !PROJECT_DIR!> "%~dp0ProjectLocation.txt"
 echo [OK] Project directory confirmed: !PROJECT_DIR!
 
-:: 4. Ensure Docker Desktop is Running
+:: 3. Ensure Docker Desktop is Running
 echo.
-echo [CHECK] Verifying Docker Desktop status...
+echo [CHECK] Verifying Docker Engine status...
 docker info >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [STARTING] Docker Desktop is currently offline. Starting Docker Desktop...
-    
-    set "DOCKER_BIN="
-    if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
-        set "DOCKER_BIN=C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    )
-    
-    if "!DOCKER_BIN!"=="" (
-        for /f "delims=" %%I in ('powershell -NoProfile -Command "(Get-ItemProperty -ErrorAction SilentlyContinue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' | Where-Object { $_.DisplayName -match 'Docker Desktop' }).InstallLocation"') do (
-            if exist "%%I\Docker Desktop.exe" set "DOCKER_BIN=%%I\Docker Desktop.exe"
-        )
-    )
-    
-    if "!DOCKER_BIN!"=="" set "DOCKER_BIN=C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    
-    start "" "!DOCKER_BIN!"
-    
-    echo Waiting for Docker Engine to be ready (this may take up to 45 seconds)...
-    :wait_docker
-    docker info >nul 2>&1
-    if %errorlevel% neq 0 (
-        timeout /t 3 /nobreak >nul
-        goto wait_docker
+if !errorlevel! equ 0 goto :docker_online
+
+echo [STARTING] Docker Desktop is currently offline. Starting Docker Desktop...
+
+set "DOCKER_BIN="
+if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
+    set "DOCKER_BIN=C:\Program Files\Docker\Docker\Docker Desktop.exe"
+)
+
+if "!DOCKER_BIN!"=="" (
+    for /f "delims=" %%I in ('powershell -NoProfile -Command "(Get-ItemProperty -ErrorAction SilentlyContinue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' | Where-Object { $_.DisplayName -match 'Docker Desktop' }).InstallLocation"') do (
+        if exist "%%I\Docker Desktop.exe" set "DOCKER_BIN=%%I\Docker Desktop.exe"
     )
 )
+
+if "!DOCKER_BIN!"=="" set "DOCKER_BIN=C:\Program Files\Docker\Docker\Docker Desktop.exe"
+
+start "" "!DOCKER_BIN!"
+
+echo Waiting for Docker Engine to be ready (this may take up to 45 seconds)...
+set /a DOCKER_RETRY=0
+
+:wait_docker_loop
+timeout /t 3 /nobreak >nul
+docker info >nul 2>&1
+if !errorlevel! equ 0 goto :docker_online
+
+set /a DOCKER_RETRY+=1
+if !DOCKER_RETRY! lss 30 (
+    echo [WAITING] Still waiting for Docker Engine... (!DOCKER_RETRY!/30)
+    goto :wait_docker_loop
+)
+
+echo [WARNING] Docker took longer than expected to report ready. Proceeding with launch...
+
+:docker_online
 echo [OK] Docker Engine is online and ready!
+
+:: 4. Check if the system is ALREADY online & running
+docker ps --filter "name=frontend-webpage" --filter "status=running" | findstr /i "frontend-webpage" >nul 2>&1
+if !errorlevel! equ 0 (
+    docker ps --filter "name=cloudflared" --filter "status=running" | findstr /i "cloudflared" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo.
+        echo ====================================================================
+        echo   [OK] SYSTEM IS ALREADY UP AND RUNNING!
+        echo ====================================================================
+        echo - Public Landing Page: https://page.jrmsukc-library.online
+        echo - Librarian Admin:     https://admin.jrmsukc-library.online
+        echo.
+        echo You do not need to click again.
+        echo To stop the system, double-click StopAutomaticUp.bat.
+        echo ====================================================================
+        del "!LOCK_FILE!" >nul 2>&1
+        timeout /t 5
+        exit /b 0
+    )
+)
 
 :: 5. Launch Docker Compose Services & Cloudflare Tunnel
 echo.
 echo [LAUNCHING] Starting JRMSU Library System containers...
 cd /d "!PROJECT_DIR!"
+
 docker compose up -d
+if !errorlevel! neq 0 (
+    echo [RETRY] Trying with docker-compose standalone...
+    docker-compose up -d
+)
 
 echo.
 echo [LAUNCHING] Starting Cloudflare Tunnel connector...
