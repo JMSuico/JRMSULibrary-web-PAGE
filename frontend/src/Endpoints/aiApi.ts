@@ -3,13 +3,45 @@ import faqCacheRaw from '@/src/Assets/FAQ cache/faq_cache.json';
 
 const faqCache: Record<string, string[]> = faqCacheRaw as Record<string, string[]>;
 
-const STOP_WORDS = new Set(["a", "an", "the", "is", "are", "am", "was", "were", "do", "does", "did", "to", "in", "for", "on", "with", "as", "by", "at", "from", "of", "and", "or", "but", "it", "this", "that", "these", "those", "you", "your", "i", "my", "we", "our", "he", "she", "they", "them", "what", "where", "when", "why", "how", "can", "could", "will", "would", "should"]);
+const STOP_WORDS = new Set([
+  "a", "an", "the", "is", "are", "am", "was", "were", "be", "been", "being",
+  "do", "does", "did", "have", "has", "had",
+  "to", "in", "for", "on", "with", "as", "by", "at", "from", "of", "and", "or", "but",
+  "it", "this", "that", "these", "those", "there", "here",
+  "you", "your", "yours", "i", "me", "my", "mine", "myself", "we", "us", "our", "ours",
+  "he", "him", "his", "she", "her", "hers", "they", "them", "their", "theirs", "themselves",
+  "what", "where", "when", "why", "how", "can", "could", "will", "would", "should",
+  "please", "pls", "tell", "give", "show", "about", "just"
+]);
 
 function tokenize(text: string): string[] {
   return text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 0 && !STOP_WORDS.has(w));
 }
 
+function areTokensMatching(t1: string, t2: string): boolean {
+  if (t1 === t2) return true;
+  // Suffix stemming for plurals and common verb forms
+  if (t1 === t2 + 's' || t2 === t1 + 's') return true;
+  if (t1 === t2 + 'es' || t2 === t1 + 'es') return true;
+  if (t1 === t2 + 'ing' || t2 === t1 + 'ing') return true;
+  // Safe prefix stemming (both tokens must be at least 4 characters to avoid false matches like "me" in "name")
+  if (t1.length >= 4 && t2.length >= 4 && (t1.startsWith(t2) || t2.startsWith(t1))) return true;
+  return false;
+}
+
 function findBestCachedAnswer(message: string): string | null {
+  const normUserMsg = message.toLowerCase().replace(/[^\w\s]/g, '').trim();
+  if (!normUserMsg) return null;
+
+  // 1. Direct normalized exact match bypass
+  for (const [question, answers] of Object.entries(faqCache)) {
+    const normQ = question.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    if (normUserMsg === normQ) {
+      return answers[Math.floor(Math.random() * answers.length)];
+    }
+  }
+
+  // 2. Tokenized Bidirectional Similarity Match
   const userTokens = tokenize(message);
   if (userTokens.length === 0) return null;
 
@@ -20,14 +52,22 @@ function findBestCachedAnswer(message: string): string | null {
     const qTokens = tokenize(question);
     if (qTokens.length === 0) continue;
 
+    // Safety guard: Single-token FAQ questions (e.g., 'name', 'wifi') should not hijack multi-token complex user queries
+    if (qTokens.length === 1 && userTokens.length > 2) {
+      continue;
+    }
+
     let matchCount = 0;
     for (const qt of qTokens) {
-      if (userTokens.some(ut => ut === qt || ut.includes(qt) || qt.includes(ut))) {
+      if (userTokens.some(ut => areTokensMatching(ut, qt))) {
         matchCount++;
       }
     }
 
-    const score = matchCount / qTokens.length;
+    if (matchCount === 0) continue;
+
+    // Sørensen-Dice Bidirectional Coefficient: (2 * matchCount) / (|userTokens| + |qTokens|)
+    const score = (2 * matchCount) / (userTokens.length + qTokens.length);
     if (score >= 0.6 && score > highestScore) {
       highestScore = score;
       bestMatch = answers[Math.floor(Math.random() * answers.length)];

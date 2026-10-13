@@ -47,6 +47,7 @@ frontend/src/Assets/assets/REFERENCES UPDATED 2026
 
 # Temp & scratch
 objects.txt
+ProjectLocation.txt
 
 # Ignore markdown files except specific ones
 *.md
