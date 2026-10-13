@@ -57,7 +57,27 @@ Follow the flow chain direction              Reverse or bypass the chain
 Add short purpose comments to every file     Leave files without clear ownership
 Keep platform-specific code isolated         Duplicate feature logic across platforms
 Enforce all security on the backend          Rely on frontend visibility as security
+Load domain media strictly from database     Hardcode static fallback image arrays
+Use skeleton shimmers for loading states     Display stale local assets as fallbacks
 ```
+
+### 2A) Strict Dynamic-Only Media & Content Rule (NO STATICS RULE)
+
+All domain media, gallery photos, collection items, and CMS content MUST strictly originate from the database via Django REST API endpoints:
+
+1. **NO Static Image Fallback Arrays in Components**:
+   - Features must NEVER define hardcoded fallback arrays of images (e.g., `STATIC_FALLBACK_IMAGES`) to mask empty or loading database states.
+   - If the database has no records or is loading, components MUST render brand-aligned skeleton shimmers (`.skeleton-shimmer-navy`) or clean informative empty-state cards.
+   - The UI must never flash or fall back to stale local asset pictures when database records exist or are loading.
+2. **True Static Exceptions Whitelist (`frontend/src/Assets/assets/`)**:
+   - Static assets are strictly limited to permanent institutional fixtures:
+     - Official university circular seal/branding (`JRMSU-removebg-preview.png`).
+     - Dr. Rizal AI Assistant avatar greeting animations (`rizal waiving 2.mp4`).
+     - Official Union OPAC mobile app QR code (`uopac qr code.png`).
+     - Citizen's Charter infographics (`Library External Services/`, `Feedback and complains mechanism/`).
+     - Generic neutral placeholder graphics (`person-placeholder.png`, `book-placeholder.png`).
+3. **Database Seeding via Asset Migration**:
+   - Any physical setup, library section, or gallery media must be seeded or imported directly into the database (`LibraryInteriorImage` table) via admin upload or management commands (`python manage.py imports_assets`).
 
 ---
 

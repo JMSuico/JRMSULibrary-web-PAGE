@@ -12,21 +12,7 @@ interface GalleryModalItem {
   label: string;
 }
 
-// Static fallback images used only if the backend has no active entries
-const STATIC_FALLBACK_IMAGES: GalleryModalItem[] = [
-  { src: '/assets/PHYSICAL SET-UP 2026/READING AREA.jpg', label: 'Reading Area' },
-  { src: '/assets/PHYSICAL SET-UP 2026/CIRCULATION SECTION.jpg', label: 'Circulation Section' },
-  { src: '/assets/PHYSICAL SET-UP 2026/REFERENCE SECTION.jpg', label: 'Reference Section' },
-  { src: '/assets/PHYSICAL SET-UP 2026/RESEARCH SECTION.jpg', label: 'Research Section' },
-  { src: '/assets/PHYSICAL SET-UP 2026/PERIODICAL SECTION.jpg', label: 'Periodical Section' },
-  { src: '/assets/PHYSICAL SET-UP 2026/MULTIMEDIA SECTION.jpg', label: 'Multimedia Section' },
-  { src: '/assets/PHYSICAL SET-UP 2026/SPECIAL COLLECTION SECTION.jpg', label: 'Special Collection Section' },
-  { src: '/assets/PHYSICAL SET-UP 2026/SOCIAL LEARNING ZONE.jpg', label: 'Social Learning Zone' },
-  { src: '/assets/PHYSICAL SET-UP 2026/COLLABORATIVE ZONE.jpg', label: 'Collaborative Zone' },
-  { src: '/assets/PHYSICAL SET-UP 2026/READING AREA - 2ND FLOOR.jpg', label: 'Reading Area - 2nd Floor' },
-  { src: '/assets/PHYSICAL SET-UP 2026/INFORMATION COUNTER.jpg', label: 'Information Counter' },
-  { src: '/assets/PHYSICAL SET-UP 2026/WORKSTATION.jpg', label: 'Workstation' },
-];
+
 
 /** Resolve a GalleryImage from the backend into a displayable src URL */
 function resolveImageSrc(img: GalleryImage): string {
@@ -98,10 +84,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                       loading="lazy" 
                       draggable={false} 
                       onError={(e) => {
-                        const fallback = STATIC_FALLBACK_IMAGES[idx % STATIC_FALLBACK_IMAGES.length].src;
-                        if (!e.currentTarget.src.includes(fallback)) {
-                          e.currentTarget.src = fallback;
-                        }
+                        e.currentTarget.style.display = 'none';
                       }}
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -134,10 +117,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                             alt={img.label} 
                             className="w-16 h-10 object-cover rounded" 
                             onError={(e) => {
-                              const fallback = STATIC_FALLBACK_IMAGES[idx % STATIC_FALLBACK_IMAGES.length].src;
-                              if (!e.currentTarget.src.includes(fallback)) {
-                                e.currentTarget.src = fallback;
-                              }
+                              e.currentTarget.style.display = 'none';
                             }}
                           />
                         </td>
@@ -183,10 +163,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
               className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl animate-modal-card" 
               onClick={(e) => e.stopPropagation()} 
               onError={(e) => {
-                const fallback = STATIC_FALLBACK_IMAGES[0].src;
-                if (!e.currentTarget.src.includes('PHYSICAL')) {
-                  e.currentTarget.src = fallback;
-                }
+                e.currentTarget.style.display = 'none';
               }}
             />
           </div>
@@ -225,22 +202,28 @@ export const LibrarySectionCarousel: React.FC = () => {
       const data = await galleryApi.getAllImages();
       const activeImages = data.filter(img => img.is_active);
       if (activeImages.length > 0) {
-        const mapped = activeImages.map(img => ({
-          src: resolveImageSrc(img),
-          label: img.section_label || img.title || 'Library Section',
-        }));
+        const mapped = activeImages.map(img => {
+          let label = img.title || 'Library Section';
+          if (img.section_label && img.section_label !== 'Physical Setup' && img.section_label !== 'Library Interior') {
+            label = img.section_label;
+          }
+          return {
+            src: resolveImageSrc(img),
+            label,
+          };
+        });
         setSectionImages(mapped);
         try {
           localStorage.setItem('cached_section_images', JSON.stringify(mapped));
         } catch {}
       } else {
-        setSectionImages(STATIC_FALLBACK_IMAGES);
+        setSectionImages([]);
+        try {
+          localStorage.removeItem('cached_section_images');
+        } catch {}
       }
     } catch (err) {
       console.error('Failed to load gallery images', err);
-      if (sectionImages.length === 0) {
-        setSectionImages(STATIC_FALLBACK_IMAGES);
-      }
     } finally {
       setIsLoading(false);
     }
@@ -299,6 +282,12 @@ export const LibrarySectionCarousel: React.FC = () => {
                   aria-hidden="true"
                 />
               ))}
+            </div>
+          ) : sectionImages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center rounded-2xl bg-primary/40 border border-gold-light/20 max-w-xl mx-auto shadow-xl">
+              <span className="material-symbols-outlined text-4xl text-gold-light mb-3">photo_library</span>
+              <h3 className="font-headline-md text-lg font-bold text-white mb-1">No Section Pictures Available</h3>
+              <p className="text-white/70 text-sm">Library section pictures are updated directly through the administration portal.</p>
             </div>
           ) : carouselStyle === 'classic' ? (
             <>
