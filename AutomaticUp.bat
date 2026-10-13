@@ -32,10 +32,12 @@ if exist "!LOCK_FILE!" (
 :proceed_lock
 echo %date% %time% > "!LOCK_FILE!"
 
-:: 2. Smart Project Location Discovery
+:: 2. Smart Project Location Discovery (Resilient against power cut / delayed drive mount)
 set "PROJECT_DIR="
 set "SAVED_LOC_FILE=%APPDATA%\JRMSULibrary\ProjectLocation.txt"
+set /a DRIVE_SCAN_ATTEMPT=0
 
+:discover_drive_loop
 :: Check local script folder first
 if exist "%~dp0docker-compose.yml" (
     set "PROJECT_DIR=%~dp0"
@@ -90,6 +92,15 @@ for %%D in (G C D E F) do (
     )
 )
 
+if "!PROJECT_DIR!"=="" (
+    set /a DRIVE_SCAN_ATTEMPT+=1
+    if !DRIVE_SCAN_ATTEMPT! lss 3 (
+        echo [WAITING] Drive might still be mounting after power restoration... Retrying in 5s...
+        timeout /t 5 /nobreak >nul
+        goto :discover_drive_loop
+    )
+)
+
 :found_project
 if "!PROJECT_DIR!"=="" (
     echo [ERROR] Could not find the JRMSULibrary-web-PAGE project folder!
@@ -105,13 +116,13 @@ echo !PROJECT_DIR!> "!SAVED_LOC_FILE!"
 echo !PROJECT_DIR!> "%~dp0ProjectLocation.txt"
 echo [OK] Project directory confirmed: !PROJECT_DIR!
 
-:: 3. Ensure Docker Desktop is Running
+:: 3. Ensure Docker Desktop & WSL2 are Running (Cold Boot & Brownout Recovery)
 echo.
 echo [CHECK] Verifying Docker Engine status...
 docker info >nul 2>&1
 if !errorlevel! equ 0 goto :docker_online
 
-echo [STARTING] Docker Desktop is currently offline. Starting Docker Desktop...
+echo [STARTING] Docker Desktop is offline. Starting Docker Desktop and WSL2 subsystem...
 
 set "DOCKER_BIN="
 if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
@@ -128,7 +139,7 @@ if "!DOCKER_BIN!"=="" set "DOCKER_BIN=C:\Program Files\Docker\Docker\Docker Desk
 
 start "" "!DOCKER_BIN!"
 
-echo Waiting for Docker Engine to be ready (this may take up to 45 seconds)...
+echo Waiting for Docker Engine and WSL2 to initialize (this may take up to 90s after reboot)...
 set /a DOCKER_RETRY=0
 
 :wait_docker_loop
@@ -137,12 +148,12 @@ docker info >nul 2>&1
 if !errorlevel! equ 0 goto :docker_online
 
 set /a DOCKER_RETRY+=1
-if !DOCKER_RETRY! lss 30 (
-    echo [WAITING] Still waiting for Docker Engine... (!DOCKER_RETRY!/30)
+if !DOCKER_RETRY! lss 45 (
+    echo [WAITING] Initializing Docker Engine and WSL... (!DOCKER_RETRY!/45)
     goto :wait_docker_loop
 )
 
-echo [WARNING] Docker took longer than expected to report ready. Proceeding with launch...
+echo [WARNING] Docker initialization took longer than expected. Proceeding with launch...
 
 :docker_online
 echo [OK] Docker Engine is online and ready!
@@ -183,7 +194,7 @@ echo.
 echo [LAUNCHING] Starting Cloudflare Tunnel connector...
 docker start cloudflared >nul 2>&1
 
-:: 6. Register Permanent Windows Startup (Auto-runs on PC Boot / Restart)
+:: 6. Register Permanent Windows Startup (Auto-runs on PC Boot / Restart / Brownout)
 set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "STARTUP_VBS=%STARTUP_FOLDER%\JRMSU_Library_AutoStart.vbs"
 

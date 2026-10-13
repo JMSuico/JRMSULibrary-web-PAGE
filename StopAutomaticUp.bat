@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-title JRMSU Library - Safe System Shutdown
+title JRMSU Library - Safe System Shutdown & Restore to Manual
 
 echo ====================================================================
 echo   JRMSU KATIPUNAN CAMPUS LIBRARY - SAFE SYSTEM STOP
@@ -89,19 +89,36 @@ echo.
 echo [STOPPING] Stopping Cloudflare Tunnel connector...
 docker stop cloudflared >nul 2>&1
 
-:: Also remove lock file to guarantee next start is unblocked
+:: 4. RESTORE TO MANUAL RUNNING (Remove Windows AutoStart registration)
+set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+set "STARTUP_VBS=%STARTUP_FOLDER%\JRMSU_Library_AutoStart.vbs"
+
+echo.
+echo [CONFIGURING] Restoring system to MANUAL running mode...
+if exist "%STARTUP_VBS%" (
+    del "%STARTUP_VBS%" >nul 2>&1
+    echo [OK] Windows Auto-Start script removed from Startup folder.
+) else (
+    echo [OK] Windows Auto-Start is already inactive.
+)
+
+:: Also remove lock file to guarantee next start is completely unblocked
 del "%TEMP%\jrmsu_startup.lock" >nul 2>&1
 
 echo.
 echo ====================================================================
-echo   [SUCCESS] SYSTEM SHUTDOWN COMPLETED SAFELY!
+echo   [SUCCESS] SYSTEM STOPPED & RESTORED TO MANUAL RUNNING!
 echo ====================================================================
 echo.
-echo - All website and database containers are safely stopped.
-echo - The Cloudflare tunnel is offline.
-echo - Zero database records or volumes were modified or deleted.
+echo - Containers:         All website & database containers SAFELY STOPPED.
+echo - Cloudflare Tunnel:  OFFLINE.
+echo - Auto-Start Mode:    DISABLED (Restored to 100%% MANUAL RUNNING).
+echo - Data Safety:        Zero database records or volumes were modified.
 echo.
-echo To turn the system back ON anytime:
+echo When the PC reboots, the library system will NOT auto-start.
+echo You have full manual control.
+echo.
+echo To turn the system and auto-start back ON anytime:
 echo Double-click AutomaticUp.bat!
 echo ====================================================================
 echo.
