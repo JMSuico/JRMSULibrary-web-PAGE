@@ -204,25 +204,45 @@ export const LibrarySectionCarousel: React.FC = () => {
   const [expandedImage, setExpandedImage] = useState<GalleryModalItem | null>(null);
   const carouselStyle = useCarouselStyle();
 
-  // Dynamic images from backend — falls back to static if DB is empty
-  const [sectionImages, setSectionImages] = useState<GalleryModalItem[]>(STATIC_FALLBACK_IMAGES);
+  // Dynamic images from backend with Stale-While-Revalidate caching
+  const [sectionImages, setSectionImages] = useState<GalleryModalItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('cached_section_images');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('cached_section_images');
+    } catch {
+      return true;
+    }
+  });
 
   const loadData = async () => {
     try {
       const data = await galleryApi.getAllImages();
       const activeImages = data.filter(img => img.is_active);
       if (activeImages.length > 0) {
-        setSectionImages(
-          activeImages.map(img => ({
-            src: resolveImageSrc(img),
-            label: img.section_label || img.title || 'Library Section',
-          }))
-        );
+        const mapped = activeImages.map(img => ({
+          src: resolveImageSrc(img),
+          label: img.section_label || img.title || 'Library Section',
+        }));
+        setSectionImages(mapped);
+        try {
+          localStorage.setItem('cached_section_images', JSON.stringify(mapped));
+        } catch {}
       } else {
         setSectionImages(STATIC_FALLBACK_IMAGES);
       }
     } catch (err) {
       console.error('Failed to load gallery images', err);
+      if (sectionImages.length === 0) {
+        setSectionImages(STATIC_FALLBACK_IMAGES);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -269,8 +289,18 @@ export const LibrarySectionCarousel: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-6 md:p-10 bg-transparent">
-          {carouselStyle === 'classic' ? (
+        <div className="p-6 md:p-10 bg-transparent min-h-[340px]">
+          {isLoading && sectionImages.length === 0 ? (
+            <div className="flex gap-4 overflow-hidden py-4 max-w-5xl mx-auto justify-center">
+              {[1, 2, 3, 4].map(idx => (
+                <div
+                  key={idx}
+                  className="w-56 h-72 rounded-2xl skeleton-shimmer-navy shrink-0 border border-gold-light/20 shadow-lg"
+                  aria-hidden="true"
+                />
+              ))}
+            </div>
+          ) : carouselStyle === 'classic' ? (
             <>
               <ClassicHorizontalCarousel
                 items={sectionImages.map(img => ({ src: img.src, label: img.label }))}

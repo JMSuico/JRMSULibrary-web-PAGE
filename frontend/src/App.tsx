@@ -1,4 +1,4 @@
-﻿import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router';
 import { TopNavBar } from '@/src/Components/LayoutBars/TopNavBar';
 import { FacebookBubble } from '@/src/Components/Shared/FacebookBubble';
@@ -71,27 +71,37 @@ function PublicLayout() {
 
   // Fetch background image and keep it in sync with CMS changes
   useEffect(() => {
-    const STATIC_BG = '/assets/JRMSU library lib.jpg';
+    const cachedBg = localStorage.getItem('cached_bg_image');
+    if (cachedBg) {
+      document.body.style.backgroundImage = `url(${cachedBg})`;
+    }
+
     const applyBackground = (bgPath: string | null | undefined) => {
       if (!bgPath) {
-        document.body.style.backgroundImage = `url(${STATIC_BG})`;
+        localStorage.removeItem('cached_bg_image');
+        document.body.style.backgroundImage = 'none';
         return;
       }
       const url = resolveMediaUrl(bgPath);
       const tester = new window.Image();
-      tester.onload = () => { document.body.style.backgroundImage = `url(${url})`; };
-      tester.onerror = () => { document.body.style.backgroundImage = `url(${STATIC_BG})`; };
+      tester.onload = () => {
+        localStorage.setItem('cached_bg_image', url);
+        document.body.style.backgroundImage = `url(${url})`;
+      };
+      tester.onerror = () => {
+        // Leave clean navy background without crashing or flashing
+      };
       tester.src = url;
     };
 
     settingsApi.getSettings().then(settings => {
-      applyBackground(settings.background_image);
+      applyBackground(settings?.background_image);
     }).catch(console.error);
 
     // Refresh background immediately whenever the admin saves a CMS change
     const handleCmsUpdate = () => {
       settingsApi.getSettings().then(settings => {
-        applyBackground(settings.background_image);
+        applyBackground(settings?.background_image);
       }).catch(console.error);
     };
     window.addEventListener('cms_updated', handleCmsUpdate);
