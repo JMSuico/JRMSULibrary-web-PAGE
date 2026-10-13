@@ -386,7 +386,7 @@ frontend/src/
 - **Zero Data Loss Rule:** No database volume or container may be recreated without prior timestamped dump via `backup-db.ps1`.
 
 ### 7.5 Critical System Facts (Updated 2026-09-10)
-- **AI Model:** `qwen3:0.6b` (upgraded from qwen2.5:0.5b)
+- **AI Model:** `qwen2.5:0.5b` (lightweight CPU inference, zero thinking latency)
 - **Backend Counts:** 17 controllers, 18 services, 17 repositories, 21 models, 6 helpers
 - **Frontend Routes:** 7 public + 12 admin + 1 login = 20 total routes
 - **Docker Services:** 7 containers (db, redis, backend x3, celery-worker, frontend-webpage, frontend-admin, ollama, ollama-init, ngrok)
