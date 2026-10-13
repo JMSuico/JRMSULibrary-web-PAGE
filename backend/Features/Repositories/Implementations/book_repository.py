@@ -24,6 +24,17 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
     def get_recent(self, limit: int = 10):
         return list(NewlyAcquiredBook.objects.all().order_by('-date_encoded')[:limit])
 
+    def get_oldest(self, limit: int = 10):
+        return list(NewlyAcquiredBook.objects.all().order_by('date_encoded')[:limit])
+
+    def search(self, query: str = None, limit: int = 5) -> List[Any]:
+        if not query:
+            return []
+        from django.db.models import Q
+        return list(NewlyAcquiredBook.objects.filter(
+            Q(title__icontains=query) | Q(author__icontains=query) | Q(category__icontains=query)
+        )[:limit])
+
     def get_books_by_batch(self, batch_id: int) -> List[Any]:
         return list(NewlyAcquiredBook.objects.filter(batch_id=batch_id))
 

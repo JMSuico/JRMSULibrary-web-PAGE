@@ -7,8 +7,8 @@ class ResearchReferenceService(IResearchReferenceService):
     def __init__(self):
         self.repo = ResearchReferenceRepository()
 
-    def get_all_references(self, request=None, query=None, category=None, department=None):
-        qs = self.repo.search(query=query, category=category, department=department)
+    def get_all_references(self, request=None, query=None, category=None, department=None, ordering='-created_at'):
+        qs = self.repo.search(query=query, category=category, department=department, ordering=ordering)
         return ResearchReferenceSerializer(qs, many=True, context={'request': request}).data
 
     def get_reference_by_id(self, reference_id, request=None):

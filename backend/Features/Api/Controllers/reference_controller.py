@@ -27,11 +27,12 @@ class ResearchReferenceViewSet(viewsets.ViewSet):
         query = request.query_params.get('search', None)
         category = request.query_params.get('category', None)
         department = request.query_params.get('department', None)
+        ordering = request.query_params.get('ordering', '-created_at')
 
         page = int(request.query_params.get('page', 1))
         limit = int(request.query_params.get('limit', 50))
 
-        all_data = self.service.get_all_references(request=request, query=query, category=category, department=department)
+        all_data = self.service.get_all_references(request=request, query=query, category=category, department=department, ordering=ordering)
 
         # Manual slicing for pagination
         start_idx = (page - 1) * limit
