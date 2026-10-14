@@ -386,7 +386,7 @@ frontend/src/
 - **Zero Data Loss Rule:** No database volume or container may be recreated without prior timestamped dump via `backup-db.ps1`.
 
 ### 7.5 Critical System Facts (Updated 2026-09-10)
-- **AI Model:** `qwen3:0.6b` (upgraded from qwen2.5:0.5b)
+- **AI Model:** `qwen2.5:0.5b` (lightweight CPU inference, zero thinking latency)
 - **Backend Counts:** 17 controllers, 18 services, 17 repositories, 21 models, 6 helpers
 - **Frontend Routes:** 7 public + 12 admin + 1 login = 20 total routes
 - **Docker Services:** 7 containers (db, redis, backend x3, celery-worker, frontend-webpage, frontend-admin, ollama, ollama-init, ngrok)
@@ -410,6 +410,7 @@ frontend/src/
 8. **Update documentation** when features are added, modified, or removed
 9. **Auto-Terminal Protocol** — Automatically control the terminal and execute commands layer by layer to proceed without waiting for explicit user prompts if inactive.
 10. **Strict Mermaid 11+ Quoting** — In all Mermaid diagrams, ALWAYS use `flowchart TD` or `flowchart LR` (avoid legacy `graph TD`). ALWAYS wrap node labels and subgraph titles in double quotes: `["..."]` (e.g. `subgraph Group ["Name"]` and `N1["Label & Text"]`). Avoid `<br/>` HTML tags and parentheses `()` inside node labels (use clean hyphens `-` instead). Ensure subgraphs are linked with at least one connecting edge (`-->`) to prevent disconnected graph parser failures.
+11. **Strict Dynamic-Only Content (NO STATICS RULE)** — Load all domain entity media (physical setup, gallery, books, personnel) from the database via Django REST APIs. Use skeleton shimmers for loading states and clean empty-state cards when 0 records exist.
 
 ### Never Do
 1. Skip layers or mix responsibilities
@@ -421,6 +422,7 @@ frontend/src/
 7. Apply a fix without identifying the root cause first
 8. Create duplicate functionality that already exists in the codebase
 9. Use legacy `graph TD` with disconnected subgraphs, or unquoted `#`, `&`, `:`, `()`, or raw HTML tags (`<br/>`, `<b>`) inside Mermaid node labels (causes Mermaid 11 `Syntax error in text` crashes)
+10. Hardcode static fallback image arrays in frontend feature components (e.g., `STATIC_FALLBACK_IMAGES`) to mask empty/loading database states. Always use database records + skeleton shimmers.
 
 
 ---

@@ -65,7 +65,7 @@ flowchart LR
         DB["PostgreSQL db_data volume"]
         RD["Redis"]
         CW["celery-worker"]
-        OL["Ollama qwen3 0.6b"]
+        OL["Ollama qwen2.5 0.5b"]
     end
     T --> CD
     CD --> FW

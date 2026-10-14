@@ -12,7 +12,15 @@ class IResearchReferenceRepository(ABC):
         pass
 
     @abstractmethod
-    def search(self, query: Optional[str] = None, category: Optional[str] = None, department: Optional[str] = None) -> Any:
+    def get_recent(self, limit: int = 10) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def get_oldest(self, limit: int = 10) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def search(self, query: Optional[str] = None, category: Optional[str] = None, department: Optional[str] = None, ordering: Optional[str] = '-created_at') -> Any:
         pass
 
     @abstractmethod

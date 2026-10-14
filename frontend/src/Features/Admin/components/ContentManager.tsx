@@ -14,7 +14,6 @@ import { processInChunks } from '@/src/Libs/chunkUtils';
 import { LayoutGrid, List } from 'lucide-react';
 import { ResearchReferencesManager } from './ResearchReferencesManager';
 import { PersonnelManager } from './PersonnelManager';
-import { defaultExternalLinks } from '@/src/Libs/Assets/defaultLinks';
 
 import { getImageUrl } from '@/src/Libs/apiClient';
 
@@ -775,23 +774,9 @@ export function ContentManager() {
                   </thead>
                   <tbody>
                     {orgFiles.length === 0 ? (
-                      <tr className="bg-gray-50">
-                        <td style={{ fontWeight: 500 }} className="text-gray-500">
-                          Organizational Structure (Default)
-                          <div className="text-xs text-gray-400 mt-1" style={{ fontSize: '0.75rem', marginTop: '4px' }}>Local asset actively displaying on website</div>
-                        </td>
-                        <td>
-                          <img src="/assets/organizational structure library.png" alt="System Default" className="h-16 w-auto object-contain rounded border border-gray-300 opacity-70" />
-                        </td>
-                        <td>
-                          <span className="admin-badge" style={{ backgroundColor: '#e5e7eb', color: '#4b5563' }}>
-                            System Default
-                          </span>
-                        </td>
-                        <td>
-                          <div className="text-xs italic text-gray-400 text-center" style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic', textAlign: 'center' }}>
-                            Upload to override
-                          </div>
+                      <tr>
+                        <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-gray-500)' }}>
+                          No organizational structure file uploaded yet. Click "Add Image" above to upload.
                         </td>
                       </tr>
                     ) : (
@@ -799,7 +784,7 @@ export function ContentManager() {
                         <tr key={file.id}>
                           <td style={{ fontWeight: 500 }}>{file.name}</td>
                           <td>
-                            <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }} />
+                            <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                           </td>
                           <td>
                             <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -856,7 +841,7 @@ export function ContentManager() {
                       <tr key={file.id}>
                         <td style={{ fontWeight: 500 }}>{file.name}</td>
                         <td>
-                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }} />
+                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                         </td>
                         <td>
                           <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
@@ -952,7 +937,7 @@ export function ContentManager() {
                 </object>
               ) : viewingManualFile.file.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) ? (
                 <div className="w-full h-full flex items-center justify-center p-4 bg-gray-200">
-                  <img src={getImageUrl(viewingManualFile.file)} alt="Preview" className="max-w-full max-h-full object-contain shadow-lg rounded" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/file-placeholder.png'; }} />
+                  <img src={getImageUrl(viewingManualFile.file)} alt="Preview" className="max-w-full max-h-full object-contain shadow-lg rounded" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 </div>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-gray-500">

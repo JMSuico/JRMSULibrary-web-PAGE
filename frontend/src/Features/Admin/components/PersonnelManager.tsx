@@ -227,7 +227,7 @@ export function PersonnelManager({ active }: { active: boolean }) {
                       alt={chiefLibrarian.name}
                       className="w-full h-full object-cover"
                       src={getImageUrl(chiefLibrarian.photo)}
-                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   ) : (
                     <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">No Photo</div>
@@ -292,7 +292,7 @@ export function PersonnelManager({ active }: { active: boolean }) {
 
                     {person.photo ? (
                       <div className="w-24 h-24 rounded-full border-2 border-gold-light/40 overflow-hidden shadow-lg mx-auto mb-3 mt-2">
-                        <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover relative z-0" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
+                        <img src={getImageUrl(person.photo)} alt={person.name} className="w-full h-full object-cover relative z-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                       </div>
                     ) : (
                       <div className="w-24 h-24 rounded-full bg-navy-dark text-gold-light flex items-center justify-center text-xl font-bold mx-auto mb-3 mt-2 shadow-lg border-2 border-gold-light/20 relative z-0">
@@ -321,7 +321,7 @@ export function PersonnelManager({ active }: { active: boolean }) {
               <X size={24} />
             </button>
             <div className="p-4 flex items-center justify-center">
-               <img src={viewingPhoto} alt="Expanded View" className="max-w-full max-h-[80vh] object-contain rounded" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
+               <img src={viewingPhoto} alt="Expanded View" className="max-w-full max-h-[80vh] object-contain rounded" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             </div>
           </div>
         </div>,

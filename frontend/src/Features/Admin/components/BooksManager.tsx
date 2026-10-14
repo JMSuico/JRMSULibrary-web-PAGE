@@ -658,11 +658,10 @@ export function BooksManager() {
                     </div>
                   </div>
 
-                  <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
-                    {book.cover_image ? (
-                      <img src={getImageUrl(book.cover_image)} alt={book.title} style={{ height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/book-placeholder.png'; }} />
-                    ) : (
-                      <BookOpen size={40} color='var(--color-gray-400)' />
+                  <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12, position: 'relative' }}>
+                    <BookOpen size={40} color='var(--color-gray-400)' />
+                    {book.cover_image && (
+                      <img src={getImageUrl(book.cover_image)} alt={book.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     )}
                   </div>
                   <div className="admin-grid-card__body">

@@ -34,6 +34,9 @@ backend/media/
 # Images (large asset folders only; keep small icon/logo PNGs in code)
 *.jfif
 frontend/src/Assets/assets/Library pic/
+frontend/src/Assets/assets/Library pic converted/
+frontend/src/Assets/assets/PHYSICAL SET-UP 2026/
+frontend/public/assets/PHYSICAL SET-UP 2026/
 frontend/src/Assets/assets/eBooks/
 frontend/src/Assets/assets/RESEARCH UPDATED2026
 frontend/src/Assets/assets/NEWLY ARRIVED BOOKS
@@ -47,6 +50,7 @@ frontend/src/Assets/assets/REFERENCES UPDATED 2026
 
 # Temp & scratch
 objects.txt
+ProjectLocation.txt
 
 # Ignore markdown files except specific ones
 *.md

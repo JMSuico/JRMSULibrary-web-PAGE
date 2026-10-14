@@ -14,6 +14,8 @@ from pathlib import Path
 from Features.Repositories.Implementations.personnel_repository import PersonnelRepository
 from Features.Repositories.Implementations.cms_repository import ManagedLinkRepository
 from Features.Repositories.Implementations.batch_repository import BatchRepository
+from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
+from Features.Repositories.Implementations.reference_repository import ResearchReferenceRepository
 from Features.Repositories.Implementations.ai_faq_repository import AIFaqRepository
 from Features.Repositories.Implementations.gallery_repository import LibraryInteriorImageRepository
 from Features.Services.Interfaces.i_ai_service import IAIService
@@ -24,10 +26,12 @@ class AIService(IAIService):
     def __init__(self):
         # Use OLLAMA_URL env var if available (useful for Docker to reach host), else fallback
         self.ollama_url = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434/api/chat')
-        self.model_name = 'qwen3:0.6b'
+        self.model_name = 'qwen2.5:0.5b'
         self.personnel_repo = PersonnelRepository()
         self.link_repo = ManagedLinkRepository()
         self.batch_repo = BatchRepository()
+        self.book_repo = NewlyAcquiredBookRepository()
+        self.reference_repo = ResearchReferenceRepository()
         self.faq_repo = AIFaqRepository()
         self.gallery_repo = LibraryInteriorImageRepository()
     def _normalize_question(self, text: str) -> str:
@@ -103,7 +107,7 @@ class AIService(IAIService):
         except Exception as e:
             logger.error(f"Error saving to FAQ cache: {e}")
         
-    def _build_dynamic_system_prompt(self):
+    def _build_dynamic_system_prompt(self, user_message: str = ""):
         # Fetch dynamic live data from database
         try:
             personnel = self.personnel_repo.get_all()
@@ -112,16 +116,55 @@ class AIService(IAIService):
             links = self.link_repo.get_all_active()
             links_text = ", ".join([f"{l.name}" for l in links]) or "None listed"
             
-            batches = self.batch_repo.get_all_batches()
-            recent_books = []
-            if batches:
-                latest = batches[0]  # list — no .first(), just index 0
-                for b in latest.books.all()[:10]: # Increased to top 10 recent books
-                    acc = b.accession_number if b.accession_number else "N/A"
-                    cat = b.category if b.category else "Uncategorized"
-                    recent_books.append(f"'{b.title}' by {b.author} (Category: {cat}, Accession: {acc})")
-            books_text = "; ".join(recent_books) if recent_books else "No recent books"
-            
+            # 1. NEWEST & OLDEST BOOKS
+            recent_books_raw = self.book_repo.get_recent(5)
+            recent_books = [
+                f"'{b.title}' by {b.author or 'Unknown'} (Category: {b.category or 'General'}, Accession: {b.accession_number or 'N/A'})"
+                for b in recent_books_raw
+            ]
+            recent_books_text = "; ".join(recent_books) if recent_books else "None listed"
+
+            oldest_books_raw = self.book_repo.get_oldest(5)
+            oldest_books = [
+                f"'{b.title}' by {b.author or 'Unknown'} (Category: {b.category or 'General'}, Accession: {b.accession_number or 'N/A'})"
+                for b in oldest_books_raw
+            ]
+            oldest_books_text = "; ".join(oldest_books) if oldest_books else "None listed"
+
+            # 2. NEWEST & OLDEST RESEARCH & THESES WITH SOFTCOPY STATUS
+            def _format_ref(ref):
+                if getattr(ref, 'access_type', None) == 'file' and getattr(ref, 'access_file', None):
+                    softcopy = "Softcopy PDF File Available (Viewable directly on website)"
+                elif getattr(ref, 'access_type', None) == 'link' and getattr(ref, 'access_link', None):
+                    softcopy = "Softcopy Online Link Available"
+                else:
+                    softcopy = "Physical Copy Only (Room Use inside Library)"
+                cat = "Thesis" if "Thesis" in (getattr(ref, 'category', '') or '') else "Student Research"
+                return f"'{ref.title}' by {ref.author or 'Unknown'} (Category: {cat}, Call No: {ref.call_number or 'N/A'}, Softcopy: {softcopy})"
+
+            recent_refs_raw = self.reference_repo.get_recent(5)
+            recent_theses_text = "; ".join([_format_ref(r) for r in recent_refs_raw]) if recent_refs_raw else "None listed"
+
+            oldest_refs_raw = self.reference_repo.get_oldest(5)
+            oldest_theses_text = "; ".join([_format_ref(r) for r in oldest_refs_raw]) if oldest_refs_raw else "None listed"
+
+            # 3. TARGETED CATALOG ITEM SEARCH (RAG FOR USER QUERY)
+            targeted_matches = []
+            if user_message:
+                clean_q = re.sub(r'[^a-zA-Z0-9\s]', '', str(user_message)).strip()
+                stop_tokens = {'find', 'me', 'a', 'book', 'the', 'is', 'what', 'who', 'how', 'can', 'i', 'have', 'you', 'there', 'please', 'show'}
+                query_tokens = [w for w in clean_q.lower().split() if w not in stop_tokens and len(w) > 2]
+                search_term = " ".join(query_tokens)
+                if search_term:
+                    matched_refs = self.reference_repo.search(query=search_term)[:3]
+                    for r in matched_refs:
+                        targeted_matches.append(f"- [Thesis/Research Reference] {_format_ref(r)}")
+                    matched_books = self.book_repo.search(query=search_term, limit=3)
+                    for b in matched_books:
+                        targeted_matches.append(f"- [Newly Acquired Book] '{b.title}' by {b.author or 'Unknown'} (Category: {b.category or 'General'}, Accession: {b.accession_number or 'N/A'})")
+
+            targeted_matches_text = "\n".join(targeted_matches) if targeted_matches else "No specific matches found in direct keyword search."
+
             gallery = self.gallery_repo.get_all_active()
             gallery_text = ", ".join([f"Area: '{img.title}' located at '{img.section_label}'" for img in gallery if img.title or img.section_label]) or "No physical sections mapped"
             
@@ -129,7 +172,11 @@ class AIService(IAIService):
             logger.error(f"Error fetching dynamic context: {e}")
             personnel_text = "Error fetching personnel"
             links_text = "Error fetching links"
-            books_text = "Error fetching books"
+            recent_books_text = "Error fetching recent books"
+            oldest_books_text = "Error fetching oldest books"
+            recent_theses_text = "Error fetching recent theses"
+            oldest_theses_text = "Error fetching oldest theses"
+            targeted_matches_text = "None"
             gallery_text = "Error fetching gallery"
 
         return f"""You are Rizal, the AI assistant for the JRMSU (Jose Rizal Memorial State University) Katipunan Campus Library.
@@ -141,6 +188,12 @@ CRITICAL BEHAVIOR RULES:
 3. VERY IMPORTANT: If a user casually greets you (e.g. "Good morning", "Hi", "Hello", "Hey"), DO NOT reply with the exact same repetitive phrase. Always vary your greetings naturally (e.g. "Hello there!", "Good morning, how can I help you?", "Hey! Welcome to the library.", "Greetings!").
 4. Do not use markdown formatting (like **bold** or *italics*) because the chat UI displays raw text. Just use plain text with line breaks.
 5. If asked a question you don't know the answer to based on the context, politely advise them to use the 'Send an Email' option to contact the human librarian. Do not hallucinate answers.
+6. SOFTCOPY & DOCUMENT ACCESS RULES:
+   - When asked about research papers, theses, or books, reference their availability and softcopy status accurately from the context below.
+   - If a research paper or thesis indicates "Softcopy PDF File Available", inform the user they can read or download the full text online on the website under the 'Collection' -> 'Research & Thesis References' tab by clicking 'View File'.
+   - If it indicates "Softcopy Online Link Available", inform the user that a digital link is available on the website.
+   - If it indicates "Physical Copy Only", explain that it is available for physical room use inside the library (Special Collections / Archives).
+   - If asked for the newest or oldest books or theses, cite the exact titles and authors provided in the dynamic database knowledge below.
 
 LIBRARY CONTEXT & LIVE INFORMATION:
 - Operating Hours: Monday to Friday, 7:00 AM to 7:00 PM (Philippine Time). Closed on weekends and regular holidays.
@@ -154,8 +207,14 @@ LIBRARY CONTEXT & LIVE INFORMATION:
 DYNAMIC DATABASE KNOWLEDGE:
 - Library Personnel & Developers: {personnel_text}
 - Recent E-Resource Links Added: {links_text}
-- Recently Added Books: {books_text}
+- Newly Acquired Books (Newest): {recent_books_text}
+- Newly Acquired Books (Oldest Archive): {oldest_books_text}
+- Research & Thesis References (Newest): {recent_theses_text}
+- Research & Thesis References (Oldest Archive): {oldest_theses_text}
 - Physical Setup & Library Sections Map: {gallery_text}
+
+SPECIFIC SEARCH RESULTS FOR USER INQUIRY:
+{targeted_matches_text}
 """
 
     def generate_chat_response(self, user_message: str, chat_history: list = None, seen_answers: list = None) -> str:
@@ -169,7 +228,7 @@ DYNAMIC DATABASE KNOWLEDGE:
         # ---------------------------------
         
         messages = [
-            {"role": "system", "content": self._build_dynamic_system_prompt()}
+            {"role": "system", "content": self._build_dynamic_system_prompt(user_message)}
         ]
         
         # Append up to the last 6 messages for context
@@ -225,7 +284,7 @@ DYNAMIC DATABASE KNOWLEDGE:
             return
         # ---------------------------------
         
-        messages = [{"role": "system", "content": self._build_dynamic_system_prompt()}]
+        messages = [{"role": "system", "content": self._build_dynamic_system_prompt(user_message)}]
         
         if chat_history:
             for msg in chat_history[-6:]:

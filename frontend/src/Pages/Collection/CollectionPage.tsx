@@ -9,6 +9,7 @@ import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 import { ExternalIframeModal } from '@/src/Components/Modals/ExternalIframeModal';
 import { useCollectionData } from '@/src/Features/Collection/hooks/useCollectionData';
 import { Loader2, BookOpen, GraduationCap } from 'lucide-react';
+import type { ManagedLink } from '@/src/Endpoints/cmsApi';
 
 const tabOptions = [
   { id: 'newly-acquired', label: 'Newly Acquired Books' },

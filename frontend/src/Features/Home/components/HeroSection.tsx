@@ -23,7 +23,10 @@ export const HeroSection: React.FC = () => {
   const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number; satOpen: boolean; sunOpen: boolean } | null>(null);
   const [rawOpenHours, setRawOpenHours] = useState<string>('Working days MONDAY TO FRIDAY | 7AM TO 7PM');
 
-  const [excellenceImage, setExcellenceImage] = useState<string>('/assets/JRMSU library lib.jpg');
+  const [excellenceImage, setExcellenceImage] = useState<string | null>(() => {
+    return localStorage.getItem('cached_hero_excellence') || null;
+  });
+  const [isImageLoaded, setIsImageLoaded] = useState<boolean>(false);
 
   const loadData = () => {
     publicApi.getVisitorCount()
@@ -61,10 +64,17 @@ export const HeroSection: React.FC = () => {
     cmsApi.getAllFiles()
       .then(files => {
         const excellenceFile = files.find(f => f.category === 'Excellence' && f.is_active);
-        if (excellenceFile) {
+        if (excellenceFile && excellenceFile.file) {
+          const resolved = getImageUrl(excellenceFile.file);
+          localStorage.setItem('cached_hero_excellence', excellenceFile.file);
           setExcellenceImage(excellenceFile.file);
+          const tester = new window.Image();
+          tester.onload = () => setIsImageLoaded(true);
+          tester.src = resolved;
         } else {
-          setExcellenceImage('/assets/JRMSU library lib.jpg');
+          localStorage.removeItem('cached_hero_excellence');
+          setExcellenceImage(null);
+          setIsImageLoaded(false);
         }
       })
       .catch(() => null);
@@ -72,6 +82,11 @@ export const HeroSection: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    if (excellenceImage) {
+      const tester = new window.Image();
+      tester.onload = () => setIsImageLoaded(true);
+      tester.src = getImageUrl(excellenceImage);
+    }
   }, []);
 
   useCmsUpdated(loadData);
@@ -159,27 +174,43 @@ export const HeroSection: React.FC = () => {
             className={`w-full lg:w-1/2 max-w-xl hero-stagger ${isVisible ? 'visible' : ''}`}
             style={{ transitionDelay: '160ms' }}
           >
-            <div className="relative rounded-3xl overflow-hidden shadow-2xl min-h-[300px] md:min-h-[380px]">
-              <img
-                src={getImageUrl(excellenceImage)}
-                alt="JRMSU Library Excellence"
-                className="w-full h-full object-cover block absolute inset-0"
-                loading="lazy"
-                onError={(e) => {
-                  if (e.currentTarget.src !== window.location.origin + '/assets/JRMSU library lib.jpg') {
-                    e.currentTarget.src = '/assets/JRMSU library lib.jpg';
-                  }
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/60 to-transparent"></div>
+            <div className="relative rounded-3xl overflow-hidden shadow-2xl min-h-[300px] md:min-h-[380px] bg-primary">
+              {/* Layer 1: Navy Shimmer Skeleton (active while image decodes/loads) */}
+              {!isImageLoaded && (
+                <div
+                  className="absolute inset-0 skeleton-shimmer-navy"
+                  aria-hidden="true"
+                />
+              )}
+
+              {/* Layer 2: Real Database Image (Smooth cross-fade) */}
+              {excellenceImage && (
+                <img
+                  src={getImageUrl(excellenceImage)}
+                  alt="JRMSU Library Excellence"
+                  className={`w-full h-full object-cover block absolute inset-0 transition-opacity duration-500 ease-out ${
+                    isImageLoaded ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  loading="eager"
+                  onLoad={() => setIsImageLoaded(true)}
+                  onError={() => {
+                    setIsImageLoaded(false);
+                  }}
+                />
+              )}
+
+              {/* Layer 3: High-contrast gradient scrim (WCAG 2.1 AA >= 4.5:1) */}
+              <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/70 to-transparent pointer-events-none"></div>
+
+              {/* Layer 4: Typography Overlay — ALWAYS 100% VISIBLE ON FIRST PAINT */}
               {/* Excellence in Information — upper left */}
-              <div className="absolute top-0 left-0 p-5 md:p-8">
+              <div className="absolute top-0 left-0 p-5 md:p-8 z-10">
                 <span className="text-gold-light font-bold text-base md:text-lg tracking-wider uppercase drop-shadow-lg">
                   Excellence in Information
                 </span>
               </div>
               {/* Bottom text */}
-              <div className="absolute bottom-0 left-0 right-0 p-5 md:p-8 text-left">
+              <div className="absolute bottom-0 left-0 right-0 p-5 md:p-8 text-left z-10">
                 <h2 className="text-gold-light font-bold text-2xl md:text-3xl font-headline-lg mb-2 drop-shadow-lg leading-tight">
                   The Gateway to Academic Excellence
                 </h2>

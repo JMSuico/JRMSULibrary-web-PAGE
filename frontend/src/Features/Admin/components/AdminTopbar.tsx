@@ -320,22 +320,20 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
             aria-label="Admin user"
             onClick={() => setShowProfile(!showProfile)}
           >
-            {user?.avatar_url ? (
-              <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
-            ) : (
-              <span className="text-sm">{user?.first_name?.[0]?.toUpperCase() || 'A'}</span>
+            {user?.avatar_url && (
+              <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             )}
+            <span className="text-sm">{user?.first_name?.[0]?.toUpperCase() || 'A'}</span>
           </button>
           
           {showProfile && user && (
             <div 
               className="absolute right-0 top-[48px] w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col items-center p-5 animate-admin-dropdown"
             >
-              <div className="w-20 h-20 rounded-full bg-navy text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden">
-                {user.avatar_url ? (
-                  <img src={getImageUrl(user.avatar_url)} alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
-                ) : (
-                  user.first_name?.[0]?.toUpperCase() || 'A'
+              <div className="w-20 h-20 rounded-full bg-navy text-white flex items-center justify-center text-3xl font-bold mb-3 shadow-md overflow-hidden relative">
+                <span className="select-none">{user.first_name?.[0]?.toUpperCase() || 'A'}</span>
+                {user.avatar_url && (
+                  <img src={getImageUrl(user.avatar_url)} alt="Profile" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 )}
               </div>
               <h3 className="font-bold text-gray-900 text-lg">{user.first_name} {user.last_name}</h3>

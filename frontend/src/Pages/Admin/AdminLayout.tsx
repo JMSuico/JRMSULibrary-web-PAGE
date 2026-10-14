@@ -9,8 +9,6 @@ import { Loader2 } from 'lucide-react';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
 
-import bgImage from '@/src/Assets/assets/JRMSU library lib.jpg';
-
 /** Map route paths to human-readable page titles */
 const PAGE_TITLES: Record<string, string> = {
   '/admin': 'Dashboard Overview',
@@ -172,16 +170,7 @@ export default function AdminLayout() {
 
   return (
     <ToastProvider>
-      <div 
-        className="admin-layout relative min-h-screen"
-        style={{
-          backgroundImage: `linear-gradient(to right, color-mix(in srgb, var(--color-surface-container-low) 85%, transparent), color-mix(in srgb, var(--color-surface-container-low) 85%, transparent)), url("${bgImage}")`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundAttachment: 'fixed'
-        }}
-      >
-        
+      <div className="admin-layout relative min-h-screen">
         {/* Background mesh gradient is handled in admin.css via .admin-layout */}
 
         <AdminSidebar

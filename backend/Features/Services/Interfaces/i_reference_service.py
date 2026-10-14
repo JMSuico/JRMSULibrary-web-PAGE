@@ -4,7 +4,7 @@ from typing import Any, Optional, Tuple
 
 class IResearchReferenceService(ABC):
     @abstractmethod
-    def get_all_references(self, request=None, query=None, category=None, department=None) -> Any:
+    def get_all_references(self, request=None, query=None, category=None, department=None, ordering='-created_at') -> Any:
         pass
 
     @abstractmethod

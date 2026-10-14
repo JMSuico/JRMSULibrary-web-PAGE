@@ -9,7 +9,7 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 ##  Key Features
 - **Real-Time Philippine Time Clock:** Signature hero section clock (JetBrains Mono, gold, blinking colons) synchronized to UTC+8.
 - **E-Resources Integration:** Integrated proxy handlers for Scholaar and VitalSource.
-- **Dr. Rizal AI Research Assistant:** Powered 100% locally by Ollama (`qwen3:0.6b`), backed by a sub-10ms Redis FAQ cache for instant responses with zero external API fees.
+- **Dr. Rizal AI Research Assistant:** Powered 100% locally by Ollama (`qwen2.5:0.5b`), backed by a sub-10ms Redis FAQ cache for instant responses with zero external API fees.
 - **AI Auto-Draft Email Replies:** Automated context-aware email response drafting powered by local Ollama for librarian staff efficiency.
 - **Client-Side Offline Request Caching:** Automatic queueing of user interactions during temporary connectivity drops with seamless background resynchronization.
 - **3-Tier Database Replication Suite:** Real-time local hot standby (`db-standby`), 1-click cloud sync to Supabase, automated backups, and 5-second emergency failover.
@@ -32,7 +32,7 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 - Architecture: API Controllers -> Services -> Repositories -> Models
 
 **AI Engine:**
-- Ollama (running `qwen3:0.6b` (quantized local inference))
+- Ollama (running `qwen2.5:0.5b` (quantized local inference))
 
 **Deployment:**
 - Docker & Docker Compose (fully containerized 5-layer stack)

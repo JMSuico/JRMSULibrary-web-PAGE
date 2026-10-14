@@ -13,8 +13,19 @@ class ResearchReferenceRepository(IResearchReferenceRepository):
         except ResearchReference.DoesNotExist:
             return None
 
-    def search(self, query=None, category=None, department=None):
-        qs = self.get_all()
+    def get_recent(self, limit: int = 10):
+        return list(ResearchReference.objects.all().order_by('-created_at')[:limit])
+
+    def get_oldest(self, limit: int = 10):
+        return list(ResearchReference.objects.all().order_by('created_at')[:limit])
+
+    def search(self, query=None, category=None, department=None, ordering='-created_at'):
+        qs = ResearchReference.objects.all()
+        if ordering:
+            qs = qs.order_by(ordering)
+        else:
+            qs = qs.order_by('-created_at')
+
         if category and category != 'All':
             qs = qs.filter(category=category)
 

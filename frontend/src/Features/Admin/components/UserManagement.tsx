@@ -343,10 +343,9 @@ export function UserManagement() {
                 
                 <div className="flex flex-col items-center mb-4">
                   <div className="relative group w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden hover:border-navy transition-colors">
-                    {editingUser?.avatar_url ? (
-                      <img src={getImageUrl(editingUser.avatar_url)} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
-                    ) : (
-                      <Users size={24} className="text-gray-400" />
+                    <Users size={24} className="text-gray-400" />
+                    {editingUser?.avatar_url && (
+                      <img src={getImageUrl(editingUser.avatar_url)} alt="Avatar" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     )}
                     <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                       <span className="text-[10px] text-white font-bold text-center px-1">Upload<br/>Picture</span>

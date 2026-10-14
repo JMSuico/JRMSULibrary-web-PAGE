@@ -24,6 +24,14 @@ class INewlyAcquiredBookRepository(ABC):
         pass
 
     @abstractmethod
+    def get_oldest(self, limit: int = 10):
+        pass
+
+    @abstractmethod
+    def search(self, query: str = None, limit: int = 5) -> List[Any]:
+        pass
+
+    @abstractmethod
     def get_by_id(self, book_id: int) -> Optional[Any]:
         pass
 

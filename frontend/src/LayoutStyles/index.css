@@ -90,10 +90,9 @@
   --spacing-gutter: 24px;
 }
 
-/* Body background — library image visible through sections */
+/* Body background — defaults to university navy, custom background loaded dynamically */
 body {
   background-color: var(--color-navy);
-  background-image: url('/assets/JRMSU library lib.jpg');
   background-attachment: fixed;
   background-position: center center;
   background-repeat: no-repeat;
@@ -261,6 +260,31 @@ section::before {
         rgba(255, 255, 255, 0.6) 60%,
         rgba(255, 255, 255, 0));
     animation: shimmer 2s infinite;
+    will-change: transform;
+  }
+
+  /* Navy shimmer skeleton for hero media and dark cards */
+  .skeleton-shimmer-navy {
+    background-color: var(--color-primary);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .skeleton-shimmer-navy::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(90deg,
+        rgba(0, 43, 127, 0) 0,
+        rgba(0, 61, 165, 0.45) 30%,
+        rgba(201, 168, 76, 0.18) 50%,
+        rgba(0, 61, 165, 0.45) 70%,
+        rgba(0, 43, 127, 0) 100%);
+    animation: shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     will-change: transform;
   }
 
@@ -1667,5 +1691,10 @@ section::before {
   .animate-rizal-preview {
     animation: none !important;
     opacity: 1 !important;
+  }
+  .skeleton-shimmer::after,
+  .skeleton-shimmer-navy::after {
+    animation: none !important;
+    display: none !important;
   }
 }
