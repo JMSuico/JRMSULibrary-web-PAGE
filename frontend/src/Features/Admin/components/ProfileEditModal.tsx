@@ -135,11 +135,10 @@ export function ProfileEditModal({ isOpen, user, onClose, onSave }: ProfileEditM
           {/* Avatar */}
           <div className="flex flex-col items-center mb-6">
             <div className="relative group">
-              <div className="w-24 h-24 rounded-full bg-navy text-white flex items-center justify-center text-4xl font-bold shadow-lg overflow-hidden border-4 border-white ring-2 ring-gray-100">
-                {avatarPreview ? (
-                  <img src={getImageUrl(avatarPreview)} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
-                ) : (
-                  firstName?.[0]?.toUpperCase() || 'A'
+              <div className="w-24 h-24 rounded-full bg-navy text-white flex items-center justify-center text-4xl font-bold shadow-lg overflow-hidden border-4 border-white ring-2 ring-gray-100 relative">
+                <span className="select-none">{firstName?.[0]?.toUpperCase() || 'A'}</span>
+                {avatarPreview && (
+                  <img src={getImageUrl(avatarPreview)} alt="Avatar" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 )}
               </div>
               <button

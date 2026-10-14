@@ -97,23 +97,33 @@ export default function AdministrationPage() {
                 Library Organizational Structure
               </h3>
               <div className="flex flex-col items-center">
-                <button
-                  onClick={() => setOrgImageOpen(true)}
-                  className="relative w-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl border-2 border-gold-light/30 cursor-pointer hover:opacity-95 transition-opacity group"
-                  aria-label="View organizational structure image"
-                >
-                  <img
-                    src={orgChartUrl || "/assets/organizational structure library.png"}
-                    alt="JRMSU Library Organizational Structure Chart"
-                    className="w-full h-auto object-contain bg-white"
-                  />
-                  <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors flex items-center justify-center">
-                    <span className="material-symbols-outlined text-white text-5xl opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg">
-                      zoom_in
-                    </span>
+                {loading ? (
+                  <div className="w-full max-w-5xl h-96 rounded-2xl skeleton-shimmer-navy" />
+                ) : orgChartUrl ? (
+                  <>
+                    <button
+                      onClick={() => setOrgImageOpen(true)}
+                      className="relative w-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl border-2 border-gold-light/30 cursor-pointer hover:opacity-95 transition-opacity group"
+                      aria-label="View organizational structure image"
+                    >
+                      <img
+                        src={orgChartUrl}
+                        alt="JRMSU Library Organizational Structure Chart"
+                        className="w-full h-auto object-contain bg-white"
+                      />
+                      <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors flex items-center justify-center">
+                        <span className="material-symbols-outlined text-white text-5xl opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg">
+                          zoom_in
+                        </span>
+                      </div>
+                    </button>
+                    <p className="text-sm text-white/60 mt-4">Click image to enlarge</p>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-white/70 font-inter">
+                    Organizational structure chart has not been uploaded yet.
                   </div>
-                </button>
-                <p className="text-sm text-white/60 mt-4">Click image to enlarge</p>
+                )}
               </div>
             </div>
           ) : (
@@ -238,18 +248,14 @@ export default function AdministrationPage() {
           >
             <span className="material-symbols-outlined text-4xl">close</span>
           </button>
-          <img
-            src={orgChartUrl || "/assets/organizational structure library.png"}
-            alt="JRMSU Library Organizational Structure Chart"
-            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white animate-modal-card"
-            onClick={(e) => e.stopPropagation()}
-            onError={(e) => {
-              const fallback = window.location.origin + "/assets/organizational structure library.png";
-              if (e.currentTarget.src !== fallback) {
-                e.currentTarget.src = fallback;
-              }
-            }}
-          />
+          {orgChartUrl && (
+            <img
+              src={orgChartUrl}
+              alt="JRMSU Library Organizational Structure Chart"
+              className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white animate-modal-card"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
         </div>,
         document.body
       )}

@@ -295,11 +295,10 @@ export function Settings() {
                   <p className="text-sm text-gray-500">Update your account credentials and avatar.</p>
                 </div>
                 <div className="relative">
-                  <div className="w-16 h-16 rounded-full bg-navy text-white flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden border-2 border-white ring-2 ring-gray-100">
-                    {avatarPreview ? (
-                      <img src={getImageUrl(avatarPreview)} alt="Avatar" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/assets/person-placeholder.png'; }} />
-                    ) : (
-                      firstName?.[0]?.toUpperCase() || 'A'
+                  <div className="w-16 h-16 rounded-full bg-navy text-white flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden border-2 border-white ring-2 ring-gray-100 relative">
+                    <span className="select-none">{firstName?.[0]?.toUpperCase() || 'A'}</span>
+                    {avatarPreview && (
+                      <img src={getImageUrl(avatarPreview)} alt="Avatar" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     )}
                   </div>
                   <button

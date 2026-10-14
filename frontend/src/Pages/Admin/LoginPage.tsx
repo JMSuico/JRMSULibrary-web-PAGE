@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 import { LoginForm } from '@/src/Features/Auth/components/LoginForm';
 import { useToast } from '@/src/Hooks/useToast';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
+import jrmsuLogo from '@/src/Assets/assets/JRMSU-removebg-preview.png';
 
 export default function LoginPage() {
   const location = useLocation();
@@ -33,13 +34,9 @@ export default function LoginPage() {
         <div className="hidden lg:flex flex-col gap-6 p-8">
           <div className="flex items-center gap-4 mb-4">
             <img 
-              src="/assets/jrmsu-logo.png" 
+              src={jrmsuLogo} 
               alt="JRMSU Logo" 
-              className="w-20 h-20 drop-shadow-xl"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = "https://via.placeholder.com/80x80/002B7F/FFFFFF?text=Logo";
-              }}
+              className="w-20 h-20 drop-shadow-xl object-contain"
             />
             <div className="w-1 h-16 bg-gold rounded-full"></div>
             <div>
