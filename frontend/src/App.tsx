@@ -4,6 +4,7 @@ import { TopNavBar } from '@/src/Components/LayoutBars/TopNavBar';
 import { FacebookBubble } from '@/src/Components/Shared/FacebookBubble';
 import { RizalAssistant } from '@/src/Features/AIAssistant/components/RizalAssistant';
 import { FeedbackStickyCard } from '@/src/Features/Feedback/components/FeedbackStickyCard';
+import { ResearchSurveyStickyCard } from '@/src/Features/ResearchSurvey';
 import { RizalPreviewBubble } from '@/src/Features/AIAssistant/components/RizalPreviewBubble';
 import { Footer } from '@/src/Components/LayoutBars/Footer';
 import { PageSkeleton } from '@/src/Components/Shared/SkeletonLoader';
@@ -120,6 +121,7 @@ function PublicLayout() {
         isLoaderDone={isLoaderDone}
         onVisibilityChange={setIsModalVisible}
       />
+      <ResearchSurveyStickyCard isHidden={!isLoaderDone || isModalVisible} />
       <FeedbackStickyCard />
       <FacebookBubble isHidden={!isLoaderDone || isModalVisible} />
       <RizalAssistant isHidden={!isLoaderDone || isModalVisible} />
