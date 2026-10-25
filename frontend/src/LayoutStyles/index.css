@@ -1698,3 +1698,42 @@ section::before {
     display: none !important;
   }
 }
+
+
+/* ==========================================================================
+   RESEARCH SURVEY STICKY NOTE ANIMATIONS (Left-Side Pull-Bounce & Ping)
+   ========================================================================== */
+
+@keyframes pull-bounce-left {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  8% {
+    transform: translateX(14px);
+  }
+  16% {
+    transform: translateX(3px);
+  }
+  24% {
+    transform: translateX(9px);
+  }
+  32% {
+    transform: translateX(1px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  48%, 90% {
+    transform: translateX(0);
+  }
+}
+
+.animate-pull-bounce-left {
+  animation: pull-bounce-left 5.5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pull-bounce-left {
+    animation: none !important;
+  }
+}
