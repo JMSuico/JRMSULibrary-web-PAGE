@@ -228,6 +228,9 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: always
+    environment:
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=2
     volumes:
       - ollama_data:/root/.ollama
     logging:

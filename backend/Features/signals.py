@@ -21,9 +21,24 @@ def update_global_timestamp(sender, **kwargs):
         return
     
     # Don't track SiteSettings itself to prevent loops, and exclude analytics models
-    excluded_models = {'SiteSettings', 'SiteVisit', 'ContactMessage', 'Feedback', 'GeneratedReport'}
+    excluded_models = {
+        'SiteSettings', 
+        'SiteVisit', 
+        'ContactMessage', 
+        'Feedback', 
+        'GeneratedReport',
+        'AIFaqCache'  # EXCLUDE to prevent AI chat questions from triggering admin screen reload storms!
+    }
     if sender.__name__ in excluded_models:
         return
+
+    # Clear institutional context cache when core library entities change
+    if sender.__name__ in {'Personnel', 'ManagedLink', 'NewlyAcquiredBook', 'ResearchReference', 'LibraryInteriorImage'}:
+        try:
+            from django.core.cache import cache
+            cache.delete("rizal_institution_context")
+        except Exception:
+            pass
 
     # Update the timestamp
     rows_updated = SiteSettings.objects.all().update(updated_at=timezone.now())
