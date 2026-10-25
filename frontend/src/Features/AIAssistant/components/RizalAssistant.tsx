@@ -57,7 +57,49 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
   const [chatFlowState, setChatFlowState] = useState<ChatFlowState>('suggestions');
   const [chatInput, setChatInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Streaming scroll & abort controllers
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isUserNearBottomRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Track user manual scrolling: only auto-scroll if user is already near bottom
+  const handleScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    isUserNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 60;
+  };
+
+  const scrollToBottom = (force = false) => {
+    if (chatContainerRef.current && (isUserNearBottomRef.current || force)) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  };
+
+  // Scroll chat on flow state changes, modal opening, or non-typing message changes
+  useEffect(() => {
+    if (!isTyping) {
+      scrollToBottom(true);
+    }
+  }, [chatFlowState, isExpanded, isTyping]);
+
+  // Abort in-flight requests when chat modal is closed
+  useEffect(() => {
+    if (!isExpanded && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, [isExpanded]);
+
+  // Abort on component unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   // Save chat to localStorage whenever it changes
   useEffect(() => {
@@ -89,11 +131,6 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     'Tutorium Room 2',
     'Multimedia Room',
   ];
-
-  // Scroll chat to bottom
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages, chatFlowState]);
 
   const resetFormFields = () => {
     setFormName('');
@@ -178,6 +215,13 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     const userMsg = chatInput.trim();
     const currentHistory = chatMessages; // capture current state to send to backend
 
+    // Cancel any existing in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     // Add user msg + empty rizal msg placeholders
     setChatMessages(prev => [
       ...prev,
@@ -188,31 +232,66 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     setChatInput('');
     setIsTyping(true);
     setChatFlowState('suggestions'); // Ensure forms are closed when chatting
+    setVideoMode('reading'); // Switch avatar to reading mode during thought & reply
+
+    // Immediately snap to bottom to show user's sent message
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }, 0);
 
     try {
       // Send to backend which streams Ollama chunks
-      await aiApi.chatStream(userMsg, currentHistory, (chunk) => {
-        setChatMessages(prev => {
-          const newMessages = [...prev];
-          const lastMsg = newMessages[newMessages.length - 1];
-          if (lastMsg.sender === 'rizal') {
-            lastMsg.text += chunk;
+      await aiApi.chatStream(
+        userMsg,
+        currentHistory,
+        (chunk) => {
+          // Update chat messages immutably
+          setChatMessages(prev => {
+            const newMessages = [...prev];
+            const lastIdx = newMessages.length - 1;
+            if (lastIdx >= 0 && newMessages[lastIdx].sender === 'rizal') {
+              newMessages[lastIdx] = {
+                ...newMessages[lastIdx],
+                text: newMessages[lastIdx].text + chunk
+              };
+            }
+            return newMessages;
+          });
+
+          // Directly scroll to bottom without jitter if user is near bottom
+          if (chatContainerRef.current && isUserNearBottomRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
           }
-          return newMessages;
-        });
-      });
-    } catch (err) {
+        },
+        controller.signal
+      );
+    } catch (err: any) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        return;
+      }
       console.error(err);
       setChatMessages(prev => {
         const newMessages = [...prev];
-        const lastMsg = newMessages[newMessages.length - 1];
-        if (lastMsg.sender === 'rizal' && lastMsg.text === '') {
-          lastMsg.text = 'Sorry, I am having trouble connecting to my AI brain right now.';
+        const lastIdx = newMessages.length - 1;
+        if (lastIdx >= 0 && newMessages[lastIdx].sender === 'rizal' && !newMessages[lastIdx].text) {
+          newMessages[lastIdx] = {
+            ...newMessages[lastIdx],
+            text: 'Sorry, I am having trouble connecting to my AI brain right now.'
+          };
         }
         return newMessages;
       });
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsTyping(false);
+      setVideoMode('waving'); // Return avatar to greeting mode
+      if (chatContainerRef.current && isUserNearBottomRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
     }
   };
 
@@ -302,6 +381,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
         message: formMessage || `Rated ${formRating} stars`,
         rating: formRating
       });
+      incrementDailyRatingCount();
       localStorage.setItem('has_rated_today', new Date().toDateString());
       setChatMessages(prev => [...prev, {
         sender: 'rizal',
@@ -349,8 +429,6 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       setIsSubmitting(false);
     }
   };
-
-
 
   const handleCancelForm = () => {
     setChatMessages(prev => [...prev, { sender: 'rizal', text: 'No problem! Is there anything else I can help you with?' }]);
@@ -480,7 +558,6 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       return (
         <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
           <form onSubmit={handleRateFormSubmit} className="space-y-3">
-
             <div className="flex justify-center">
               <div className="chat-rating">
                 {[5, 4, 3, 2, 1].map(star => (
@@ -561,7 +638,13 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                   </span>
                 </button>
                 <button
-                  onClick={() => setIsExpanded(false)}
+                  onClick={() => {
+                    if (abortControllerRef.current) {
+                      abortControllerRef.current.abort();
+                      abortControllerRef.current = null;
+                    }
+                    setIsExpanded(false);
+                  }}
                   className="p-1.5 text-white hover:text-white/70 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                   title="Close"
                 >
@@ -571,7 +654,12 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
             </div>
 
             {/* Chat messages scroll area */}
-            <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 bg-gray-50 relative" style={{ minHeight: '200px' }}>
+            <div
+              ref={chatContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 bg-gray-50 relative"
+              style={{ minHeight: '200px' }}
+            >
 
               {/* Watermark — RIZAL intro (visible only when no user messages yet) */}
               {chatMessages.length <= 1 && chatFlowState === 'suggestions' && (
@@ -599,6 +687,9 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                     <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
                       <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${msg.sender === 'user' ? 'bg-gold-light text-navy-dark rounded-br-none' : 'bg-white border border-gray-100 text-gray-700 rounded-bl-none'} whitespace-pre-wrap`}>
                         {msg.text}
+                        {msg.sender === 'rizal' && isTyping && idx === chatMessages.length - 1 && (
+                          <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+                        )}
                       </div>
                     </div>
                   );
@@ -614,13 +705,9 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                   </div>
                 )}
 
-
-
                 {/* Inline form (rendered in chat scroll area) */}
                 {renderChatInlineForm()}
               </div>
-
-              <div ref={chatEndRef} />
             </div>
 
             {/* AI Chat Input Box */}

@@ -77,7 +77,6 @@ function findBestCachedAnswer(message: string): string | null {
   return bestMatch;
 }
 
-
 export interface ChatMessage {
   sender: 'user' | 'rizal';
   text: string;
@@ -125,12 +124,6 @@ export const aiApi = {
   },
 
   /**
-   * Send a message to the backend AI service (Ollama) and read the response as a stream.
-   * @param message The user's new message
-   * @param history The recent chat history for context
-   * @param onChunk Callback triggered when a new chunk of text arrives
-   */
-  /**
    * Auto-draft a contextual email reply using AI (Staff only)
    */
   draftReply: async (data: {
@@ -146,37 +139,40 @@ export const aiApi = {
     });
   },
 
-  chatStream: async (message: string, history: ChatMessage[], onChunk: (chunk: string) => void): Promise<void> => {
+  /**
+   * Send a message to the backend AI service (Ollama) and read the response as a real-time stream.
+   * @param message The user's new message
+   * @param history The recent chat history for context
+   * @param onChunk Callback triggered when a new chunk of text arrives
+   * @param signal Optional AbortSignal to cancel in-flight stream
+   */
+  chatStream: async (
+    message: string,
+    history: ChatMessage[],
+    onChunk: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<void> => {
     // 1. Semantic Cache Intercept
     const cachedAnswer = findBestCachedAnswer(message);
     if (cachedAnswer) {
-      // Simulate network delay
-      await new Promise(r => setTimeout(r, 400));
-      
-      // Simulate streaming word-by-word
       const words = cachedAnswer.split(/(\s+)/); // Preserve whitespace
       for (const word of words) {
+        if (signal?.aborted) return;
         if (word) {
           onChunk(word);
-          // Randomize typing speed for realism (10ms to 40ms per chunk)
-          await new Promise(r => setTimeout(r, Math.random() * 30 + 10));
+          await new Promise(r => setTimeout(r, 12)); // Smooth typing cadence (~12ms delay)
         }
       }
       return;
     }
 
-    // 2. API Fallback (Ollama)
-    // API base must match how apiClient resolves URLs
-    let API_BASE = import.meta.env.VITE_API_BASE_URL;
-    if (!API_BASE) {
-      API_BASE = '/api';
-    } else {
-      if (!API_BASE.endsWith('/api') && !API_BASE.endsWith('/api/')) {
-        API_BASE = API_BASE.endsWith('/') ? `${API_BASE}api` : `${API_BASE}/api`;
-      }
+    // 2. API Fallback (Ollama streaming via Daphne ASGI)
+    let API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+    if (!API_BASE.endsWith('/api') && !API_BASE.endsWith('/api/')) {
+      API_BASE = API_BASE.endsWith('/') ? `${API_BASE}api` : `${API_BASE}/api`;
     }
     const url = `${API_BASE}/ai/chat/`;
-    
+
     // Extract CSRF if available (same logic as apiClient)
     let csrf = '';
     if (document.cookie && document.cookie !== '') {
@@ -197,6 +193,7 @@ export const aiApi = {
         'X-CSRFToken': csrf
       },
       credentials: 'include',
+      signal,
       body: JSON.stringify({ message, history, seen_answers: getSeenAnswers() })
     });
 
@@ -205,7 +202,7 @@ export const aiApi = {
     }
 
     if (!response.body) {
-      throw new Error('ReadableStream not yet supported in this browser.');
+      throw new Error('ReadableStream not supported.');
     }
 
     const reader = response.body.getReader();
@@ -213,6 +210,10 @@ export const aiApi = {
     let fullAnswer = '';
 
     while (true) {
+      if (signal?.aborted) {
+        reader.cancel();
+        return;
+      }
       const { done, value } = await reader.read();
       if (done) {
         if (fullAnswer.trim()) {
