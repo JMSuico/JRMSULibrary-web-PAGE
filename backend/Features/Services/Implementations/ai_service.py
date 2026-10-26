@@ -912,23 +912,39 @@ class AIService(IAIService):
             )
 
         has_quality_or_vmgo = any(p in norm for p in [
-            'quality objectives', 'quality policy', 'vision and mission', 'library vision', 'library mission', 'library goals'
-        ]) or bool({'vision', 'mission'} & tokens) or ('quality' in tokens and bool({'objective', 'objectives', 'policy'} & tokens))
+            'quality objectives', 'quality policy', 'vision and mission', 'library vision', 'library mission', 'library goals',
+            'core values', 'core value', 'values for the jrmsu', 'jrmsu core values', 'library core values', 'what is the core values'
+        ]) or bool({'vision', 'mission'} & tokens) or ('quality' in tokens and bool({'objective', 'objectives', 'policy'} & tokens)) or ('core' in tokens and 'values' in tokens) or ('core' in tokens and 'value' in tokens)
 
         if has_quality_or_vmgo:
             try:
                 qual_obj = self.page_content_repo.get_by_slug('about_quality')
-                qual_text = self._strip_html(getattr(qual_obj, 'content', '')) if qual_obj else ''
+                qual_items = AIReadViewHelper.extract_html_list_items(getattr(qual_obj, 'content', '')) if qual_obj else []
             except Exception:
-                qual_text = ''
-            if qual_text:
-                return f"JRMSU Katipunan Campus Library Quality Objectives & Commitments:\n\n{qual_text[:800]}"
-            return (
-                "JRMSU Vision & Library Quality Objectives:\n"
+                qual_items = []
+
+            resp_lines = [
+                "JRMSU Katipunan Campus Library Quality Objectives & Core Commitments:\n"
+            ]
+            if qual_items:
+                for idx, item in enumerate(qual_items, 1):
+                    resp_lines.append(f"{idx}. {item}")
+            else:
+                resp_lines.append(
+                    "1. Continuous acquisition of updated print and digital information resources.\n"
+                    "2. Equitable and inclusive access to research and academic facilities.\n"
+                    "3. Modern technology integration and online database services.\n"
+                    "4. Professional development and user-centered library assistance.\n"
+                    "5. Collaborative engagement supporting university instruction, research, and production."
+                )
+
+            resp_lines.append(
+                "\n\nJRMSU Vision, Mission & Core Values:\n"
                 "- Vision: A dynamic and diverse internationally recognized university.\n"
-                "- Library Quality Commitment: To provide accessible, relevant, and updated print and digital information resources, "
-                "responsive reference assistance, and conducive learning facilities for students, faculty, and researchers."
+                "- Mission: Jose Rizal Memorial State University delivers quality education, transformative research, sustainable extension services, and innovative production.\n"
+                "- Core Values: God-centeredness, Excellence, Commitment, Integrity, Collaboration, and Accountability."
             )
+            return "\n".join(resp_lines)
 
         # ---------------------------------------------------------
         # Intent 5: Personnel / Hours Intent
@@ -1292,10 +1308,10 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
 """
 
     def _get_ollama_options(self) -> dict:
-        """Fast CPU inference options for Ollama with expanded context window."""
+        """Fast CPU inference options for Ollama with expanded token generation."""
         return {
             "num_ctx": 2048,
-            "num_predict": 220,
+            "num_predict": 1024,
             "temperature": 0.25,
             "top_k": 20,
             "top_p": 0.85,
@@ -1350,7 +1366,7 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
         }
 
         try:
-            response = self.session.post(self.ollama_url, json=payload, stream=True, timeout=60)
+            response = self.session.post(self.ollama_url, json=payload, stream=True, timeout=120)
             response.raise_for_status()
 
             full_answer = ""
@@ -1412,7 +1428,7 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                 "keep_alive": -1,
                 "options": {
                     "temperature": 0.4,
-                    "num_predict": 300
+                    "num_predict": 768
                 }
             }
             resp = self.session.post(self.ollama_url, json=payload, timeout=15)

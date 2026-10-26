@@ -1,11 +1,13 @@
 # [Layer: Api/Controllers] — user_controller.py
 
-from rest_framework import viewsets, permissions, parsers
+from rest_framework import viewsets, permissions, parsers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from Features.Api.Serializers.user_serializer import UserSerializer, UserCreateUpdateSerializer
 from Features.Services.Implementations.user_service import UserService
+from django.utils import timezone
+from Features.Data.Models.account_model import Account
 
 class IsSuperUser(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -20,7 +22,7 @@ class UserViewSet(viewsets.ViewSet):
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsSuperUser()]
-        if self.action in ['login', 'request_password_reset', 'reset_password_with_code']:
+        if self.action in ['login', 'request_password_reset', 'reset_password_with_code', 'heartbeat']:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -144,34 +146,30 @@ class UserViewSet(viewsets.ViewSet):
         
         return Response({"message": f"User {user.username} was forced to log out."})
 
-    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=False, methods=["post"], permission_classes=[permissions.AllowAny])
     def heartbeat(self, request):
-        if not request.user.is_authenticated:
-            return Response(status=401)
-        
-        # If user was logged out (last_active is None), do NOT resurrect last_active!
-        if request.user.last_active is None:
-            return Response({"status": "inactive"})
+        session = getattr(request, 'session', None)
+        is_session_terminated = (
+            not session
+            or not session.session_key
+            or session.get('force_logout', False)
+        )
 
-        from django.contrib.auth import get_user_model
-        from django.utils import timezone
+        if not request.user or not request.user.is_authenticated or is_session_terminated:
+            return Response(
+                {'status': 'inactive', 'authenticated': False},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
-        User = get_user_model()
-        user_db = User.objects.filter(pk=request.user.pk).only('last_active').first()
-        if not user_db or user_db.last_active is None:
-            request.user.last_active = None
-            return Response({"status": "inactive"})
-
-        # FIX: Do NOT enforce inactivity timeout server-side.
-        # Render free tier "sleeps" the backend, leaving a stale last_active in the DB.
-        # When Render wakes up, the gap would appear > 10 minutes even for an active user,
-        # causing an immediate false logout. The frontend's useInactivityTimer (10 min)
-        # is the sole source of truth for inactivity. The server simply refreshes the timestamp.
+        account = request.user
         now = timezone.now()
-        updated_count = User.objects.filter(pk=request.user.pk, last_active__isnull=False).update(last_active=now)
-        if updated_count > 0:
-            request.user.last_active = now
-        return Response({"status": "ok"})
+        Account.objects.filter(id=account.id).update(last_active=now)
+        account.last_active = now
+
+        return Response(
+            {'status': 'active', 'last_active': now.isoformat()},
+            status=status.HTTP_200_OK
+        )
 
     def create(self, request):
         ser = UserCreateUpdateSerializer(data=request.data)

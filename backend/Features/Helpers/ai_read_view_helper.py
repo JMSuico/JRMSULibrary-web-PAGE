@@ -295,6 +295,25 @@ class AIReadViewHelper:
     # 2. Algorithm 1: Book Catalog Partitioning & Weighted Ranking
     # -------------------------------------------------------------------------
     @staticmethod
+    def _match_token_in_text(token: str, text_lower: str, text_words: set) -> float:
+        """
+        Deterministic token matcher against a text field and its extracted word tokens.
+        - Strict whole-word match for short acronyms like 'it', 'pe', 'cs', 'ai', 'caf', 'cba'
+          (len <= 3) to prevent arbitrary substring collisions (e.g. 'with', 'open', 'basics', 'daily').
+        - Prefix or whole-word match (5.0) or substring match (1.5) for longer tokens (len > 3).
+        """
+        if not token or not text_lower:
+            return 0.0
+        if len(token) <= 3:
+            # Strict whole-word match for short acronyms like 'it', 'pe', 'cs', 'ai', 'caf', 'cba'
+            return 5.0 if token in text_words else 0.0
+        if token in text_words or any(w.startswith(token) for w in text_words):
+            return 5.0
+        if token in text_lower:
+            return 1.5
+        return 0.0
+
+    @staticmethod
     def is_imported_cover_book(book: Any) -> bool:
         """
         Returns True if the Book row is an auto-imported camera filename record
@@ -338,9 +357,9 @@ class AIReadViewHelper:
         - Scores each named book B:
           * Exact phrase match of `raw_query.lower().strip()` (if len >= 3) in `title.lower()`: +12.0
           * For each token t in `query_tokens`:
-            - t in `title.lower()`: +5.0
-            - t in `category.lower()`: +4.0
-            - t in `author.lower()`: +3.5
+            - t in `title.lower()`: +5.0 base via `_match_token_in_text`
+            - t in `category.lower()`: +4.0 scaled via `_match_token_in_text * (4.0 / 5.0)`
+            - t in `author.lower()`: +3.5 scaled via `_match_token_in_text * (3.5 / 5.0)`
             - t in `accession_number.lower()`: +6.0
         - Filters to books with `score > 0` if `query_tokens` matches any book (or returns top
           `limit` sorted by `-date_encoded` if no tokens match), sorted deterministically by
@@ -368,17 +387,18 @@ class AIReadViewHelper:
                 or ""
             ).lower()
 
+            title_words = set(re.findall(r"[a-z0-9]+", title_l))
+            category_words = set(re.findall(r"[a-z0-9]+", category_l))
+            author_words = set(re.findall(r"[a-z0-9]+", author_l))
+
             score = 0.0
             if len(clean_raw) >= 3 and clean_raw in title_l:
                 score += 12.0
 
             for tok in effective_tokens:
-                if tok in title_l:
-                    score += 5.0
-                if tok in category_l:
-                    score += 4.0
-                if tok in author_l:
-                    score += 3.5
+                score += cls._match_token_in_text(tok, title_l, title_words)
+                score += cls._match_token_in_text(tok, category_l, category_words) * (4.0 / 5.0)
+                score += cls._match_token_in_text(tok, author_l, author_words) * (3.5 / 5.0)
                 if tok in acc_l:
                     score += 6.0
 
@@ -422,9 +442,9 @@ class AIReadViewHelper:
         - Scores each ResearchReference R:
           * Exact phrase match of `raw_query.lower().strip()` (if len >= 3) in `title.lower()`: +12.0
           * For each token t in `query_tokens`:
-            - t in `title.lower()`: +5.0
-            - t in `department.lower()` or `category.lower()`: +4.0
-            - t in `author.lower()`: +3.5
+            - t in `title.lower()`: +5.0 base via `_match_token_in_text`
+            - t in `department.lower()` or `category.lower()`: +4.0 scaled via `_match_token_in_text * (4.0 / 5.0)`
+            - t in `author.lower()`: +3.5 scaled via `_match_token_in_text * (3.5 / 5.0)`
             - t in `call_number.lower()` or `acc_no.lower()`: +6.0
           * Softcopy boost: if `getattr(r, 'access_type', 'none') in ('file', 'link')`: +1.5
         - Sorts deterministically by `(-score, title.lower())` and returns up to `limit`.
@@ -453,17 +473,19 @@ class AIReadViewHelper:
             ).lower()
             access_type = str(getattr(r, "access_type", "none") or "none").lower()
 
+            category_l = f"{dept_l} {cat_l}".strip()
+            title_words = set(re.findall(r"[a-z0-9]+", title_l))
+            category_words = set(re.findall(r"[a-z0-9]+", category_l))
+            author_words = set(re.findall(r"[a-z0-9]+", author_l))
+
             token_score = 0.0
             if len(clean_raw) >= 3 and clean_raw in title_l:
                 token_score += 12.0
 
             for tok in effective_tokens:
-                if tok in title_l:
-                    token_score += 5.0
-                if tok in dept_l or tok in cat_l:
-                    token_score += 4.0
-                if tok in author_l:
-                    token_score += 3.5
+                token_score += cls._match_token_in_text(tok, title_l, title_words)
+                token_score += cls._match_token_in_text(tok, category_l, category_words) * (4.0 / 5.0)
+                token_score += cls._match_token_in_text(tok, author_l, author_words) * (3.5 / 5.0)
                 if tok in call_l or tok in acc_l:
                     token_score += 6.0
 
