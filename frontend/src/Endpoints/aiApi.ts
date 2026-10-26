@@ -31,7 +31,7 @@ function areTokensMatching(t1: string, t2: string): boolean {
 
 function findBestCachedAnswer(message: string): string | null {
   const normUserMsg = message.toLowerCase().replace(/[^\w\s]/g, '').trim();
-  if (!normUserMsg) return null;
+  if (!normUserMsg || !['hi', 'hello', 'hey', 'wassup', 'good morning', 'good afternoon', 'good evening', 'how are you', 'thank you', 'bye', 'fuck', 'shit'].includes(normUserMsg)) return null;
 
   // 1. Direct normalized exact match bypass
   for (const [question, answers] of Object.entries(faqCache)) {

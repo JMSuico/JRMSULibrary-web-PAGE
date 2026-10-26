@@ -38,8 +38,11 @@ class PageImageRepository(IPageImageRepository):
         return list(PageImage.objects.filter(is_active=True))
 
 class ManagedLinkRepository(IManagedLinkRepository):
-    def get_all_active(self):
-        return list(ManagedLink.objects.filter(is_active=True).order_by('order'))
+    def get_all_active(self) -> List[Any]:
+        return list(ManagedLink.objects.filter(is_active=True).order_by('category', 'order', 'name'))
+
+    def get_by_category(self, category: str) -> List[Any]:
+        return list(ManagedLink.objects.filter(is_active=True, category__iexact=category).order_by('order', 'name'))
         
     def get_all(self):
         return list(ManagedLink.objects.all().order_by('order'))
@@ -77,8 +80,11 @@ class ManagedLinkRepository(IManagedLinkRepository):
 
 
 class ManagedFileRepository(IManagedFileRepository):
-    def get_all_active(self):
+    def get_all_active(self) -> List[Any]:
         return list(ManagedFile.objects.filter(is_active=True).order_by('-uploaded_at'))
+
+    def get_by_category(self, category: str) -> List[Any]:
+        return list(ManagedFile.objects.filter(is_active=True, category__iexact=category).order_by('-uploaded_at'))
         
     def get_all(self):
         return list(ManagedFile.objects.all().order_by('-uploaded_at'))

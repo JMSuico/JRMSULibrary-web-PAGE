@@ -39,7 +39,7 @@ export const RizalPreviewBubble: React.FC<{ isHidden?: boolean }> = ({ isHidden 
   // --- User clicked the preview → open chat ---
   const handleClickOpen = useCallback(() => {
     setIsVisible(false);
-    window.dispatchEvent(new CustomEvent('open-rizal-chat'));
+    window.dispatchEvent(new CustomEvent('open-rizal-chat', { detail: { mode: 'general' } }));
   }, []);
 
   // --- X button ---

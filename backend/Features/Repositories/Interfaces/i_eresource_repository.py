@@ -10,6 +10,9 @@ class IEResourceDepartmentRepository(ABC):
     def get_all(self) -> List[Any]:
         pass
     @abstractmethod
+    def get_all_with_parents(self) -> List[Any]:
+        pass
+    @abstractmethod
     def get_by_id(self, id: int) -> Optional[Any]:
         pass
     @abstractmethod
@@ -28,6 +31,9 @@ class IEResourceFileRepository(ABC):
         pass
     @abstractmethod
     def get_all(self) -> List[Any]:
+        pass
+    @abstractmethod
+    def search_active_files(self, tokens: List[str], limit: int = 5) -> List[Any]:
         pass
     @abstractmethod
     def get_by_id(self, id: int) -> Optional[Any]:

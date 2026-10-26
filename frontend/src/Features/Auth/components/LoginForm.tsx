@@ -80,6 +80,9 @@ export function LoginForm() {
 
       showToast('Login successful', 'success');
       
+      // Reset activity timestamp upon successful login to prevent immediate timeout
+      localStorage.setItem('admin_last_activity', Date.now().toString());
+
       // Force a full page reload to flush any stale SPA state or chunk hashes,
       // especially if the server was recently restarted.
       window.location.href = '/admin';

@@ -12,6 +12,10 @@ class IResearchReferenceRepository(ABC):
         pass
 
     @abstractmethod
+    def get_count(self) -> int:
+        pass
+
+    @abstractmethod
     def get_recent(self, limit: int = 10) -> List[Any]:
         pass
 
@@ -21,6 +25,10 @@ class IResearchReferenceRepository(ABC):
 
     @abstractmethod
     def search(self, query: Optional[str] = None, category: Optional[str] = None, department: Optional[str] = None, ordering: Optional[str] = '-created_at') -> Any:
+        pass
+
+    @abstractmethod
+    def search_multi_token(self, tokens: list, limit: int = 5) -> List[Any]:
         pass
 
     @abstractmethod

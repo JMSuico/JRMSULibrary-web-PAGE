@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getImageUrl } from '@/src/Libs/apiClient';
+import { getImageUrl, ensureCsrfToken } from '@/src/Libs/apiClient';
 import {
   Bell, Menu, X, LogOut, Users, TrendingUp, Mail, Send, Calendar, Loader2, Key
 } from 'lucide-react';
@@ -146,6 +146,8 @@ export function AdminTopbar({ pageTitle, onToggleSidebar, user, onUserUpdate }: 
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('admin_last_activity');
+      await ensureCsrfToken();
       await userApi.logout();
       navigate('/admin/login');
     } catch (err) {

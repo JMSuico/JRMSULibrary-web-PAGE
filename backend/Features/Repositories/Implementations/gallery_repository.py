@@ -26,3 +26,9 @@ class LibraryInteriorImageRepository(ILibraryInteriorImageRepository):
             obj.delete()
             return True
         return False
+
+    def get_physical_setup_zones(self) -> List[Any]:
+        return list(LibraryInteriorImage.objects.filter(is_active=True).exclude(title__istartswith='IMG').order_by('title', 'id'))
+
+    def get_interior_photos(self) -> List[Any]:
+        return list(LibraryInteriorImage.objects.filter(is_active=True, title__istartswith='IMG').order_by('-created_at'))

@@ -107,10 +107,17 @@ class UserViewSet(viewsets.ViewSet):
         from django.contrib.auth import logout
         from django.core.cache import cache
         if request.user.is_authenticated:
-            cache.delete(f"login_attempts_{request.user.username}")
-            cache.delete(f"login_lockout_ts_{request.user.username}")
+            user_id = request.user.pk
+            username = request.user.username
+            cache.delete(f"login_attempts_{username}")
+            cache.delete(f"login_lockout_ts_{username}")
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            # Atomically update DB so all replicas immediately see last_active = None
+            User.objects.filter(pk=user_id).update(last_active=None)
             request.user.last_active = None
-            request.user.save(update_fields=['last_active'])
+            # Clear user sessions in database
+            self.service.clear_user_sessions(user_id)
         logout(request)
         return Response({"message": "Successfully logged out."})
 
@@ -141,16 +148,29 @@ class UserViewSet(viewsets.ViewSet):
     def heartbeat(self, request):
         if not request.user.is_authenticated:
             return Response(status=401)
-        from django.utils import timezone
         
+        # If user was logged out (last_active is None), do NOT resurrect last_active!
+        if request.user.last_active is None:
+            return Response({"status": "inactive"})
+
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+
+        User = get_user_model()
+        user_db = User.objects.filter(pk=request.user.pk).only('last_active').first()
+        if not user_db or user_db.last_active is None:
+            request.user.last_active = None
+            return Response({"status": "inactive"})
+
         # FIX: Do NOT enforce inactivity timeout server-side.
         # Render free tier "sleeps" the backend, leaving a stale last_active in the DB.
         # When Render wakes up, the gap would appear > 10 minutes even for an active user,
         # causing an immediate false logout. The frontend's useInactivityTimer (10 min)
         # is the sole source of truth for inactivity. The server simply refreshes the timestamp.
         now = timezone.now()
-        request.user.last_active = now
-        request.user.save(update_fields=['last_active'])
+        updated_count = User.objects.filter(pk=request.user.pk, last_active__isnull=False).update(last_active=now)
+        if updated_count > 0:
+            request.user.last_active = now
         return Response({"status": "ok"})
 
     def create(self, request):

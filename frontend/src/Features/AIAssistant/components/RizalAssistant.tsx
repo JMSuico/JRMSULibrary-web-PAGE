@@ -20,6 +20,262 @@ interface RizalAssistantProps {
   isHidden?: boolean;
 }
 
+/**
+ * Renders inline markdown tokens (links, code, bold, italic, bare URLs, emails)
+ * safely and cleanly into React nodes so raw markdown never breaks bubble display.
+ */
+const renderInlineContent = (content: string): React.ReactNode => {
+  if (!content) return null;
+
+  // Regex matching markdown links, inline code, bold, URLs, emails, and italics
+  const pattern = /(\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\))|(`([^`]+)`)|(\*\*([^*]+)\*\*)|(__([^_]+)__)|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})|(\*([^*]+)\*)|(\b_([^_]+)_\b)/g;
+
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(content.substring(lastIndex, match.index));
+    }
+
+    const key = `inline-${match.index}`;
+
+    if (match[1]) {
+      // Markdown link: [label](url)
+      nodes.push(
+        <a
+          key={key}
+          href={match[3]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline hover:text-blue-800 break-all font-medium transition-colors"
+        >
+          {match[2]}
+        </a>
+      );
+    } else if (match[4]) {
+      // Inline code: `code`
+      nodes.push(
+        <code
+          key={key}
+          className="px-1.5 py-0.5 rounded bg-black/5 font-mono text-xs text-inherit"
+        >
+          {match[5]}
+        </code>
+      );
+    } else if (match[6] || match[8]) {
+      // Bold: **text** or __text__
+      nodes.push(
+        <strong key={key} className="font-semibold text-inherit">
+          {match[7] || match[9]}
+        </strong>
+      );
+    } else if (match[10]) {
+      // Bare URL
+      nodes.push(
+        <a
+          key={key}
+          href={match[10]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline hover:text-blue-800 break-all font-medium transition-colors"
+        >
+          {match[10]}
+        </a>
+      );
+    } else if (match[11]) {
+      // Bare email
+      nodes.push(
+        <a
+          key={key}
+          href={`mailto:${match[11]}`}
+          className="text-blue-600 underline hover:text-blue-800 break-all font-medium transition-colors"
+        >
+          {match[11]}
+        </a>
+      );
+    } else if (match[12] || match[14]) {
+      // Italic: *text* or _text_
+      nodes.push(
+        <em key={key} className="italic text-inherit">
+          {match[13] || match[15]}
+        </em>
+      );
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < content.length) {
+    nodes.push(content.substring(lastIndex));
+  }
+
+  return nodes.length > 0 ? nodes : content;
+};
+
+/**
+ * Parses message text into clean structured lines/blocks (headers, bullet points, numbered lists,
+ * blockquotes, code fences, clean spacing) so raw markdown never breaks the bubble text.
+ */
+const renderMessageContent = (
+  text: string,
+  isUser: boolean,
+  showCursor: boolean
+): React.ReactNode => {
+  if (!text) {
+    return showCursor ? (
+      <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+    ) : null;
+  }
+
+  const normalized = text.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+
+  const elements: React.ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeBuffer: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const isLastLine = i === lines.length - 1;
+
+    // Code block fences (```)
+    if (rawLine.trim().startsWith('```')) {
+      if (inCodeBlock) {
+        elements.push(
+          <pre
+            key={`code-${i}`}
+            className="my-1.5 p-2 rounded-lg bg-gray-900 text-gray-100 text-xs font-mono overflow-x-auto whitespace-pre"
+          >
+            <code>{codeBuffer.join('\n')}</code>
+          </pre>
+        );
+        codeBuffer = [];
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+        codeBuffer = [];
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(rawLine);
+      if (isLastLine) {
+        elements.push(
+          <pre
+            key={`code-${i}`}
+            className="my-1.5 p-2 rounded-lg bg-gray-900 text-gray-100 text-xs font-mono overflow-x-auto whitespace-pre"
+          >
+            <code>{codeBuffer.join('\n')}</code>
+            {showCursor && (
+              <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+            )}
+          </pre>
+        );
+      }
+      continue;
+    }
+
+    // Empty line spacer
+    if (rawLine.trim() === '') {
+      elements.push(<div key={`spacer-${i}`} className="h-1.5" />);
+      if (isLastLine && showCursor) {
+        elements.push(
+          <span key={`cursor-${i}`} className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+        );
+      }
+      continue;
+    }
+
+    // Horizontal divider
+    if (/^(\-{3,}|\*{3,}|_{3,})$/.test(rawLine.trim())) {
+      elements.push(<hr key={`hr-${i}`} className="my-2 border-gray-200" />);
+      continue;
+    }
+
+    // Header (# Header)
+    const headingMatch = rawLine.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      elements.push(
+        <div key={`heading-${i}`} className="font-bold text-inherit mt-1.5 mb-0.5 first:mt-0">
+          {renderInlineContent(headingMatch[2])}
+          {isLastLine && showCursor && (
+            <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+          )}
+        </div>
+      );
+      continue;
+    }
+
+    // Blockquote (> Quote)
+    const quoteMatch = rawLine.match(/^>\s*(.+)$/);
+    if (quoteMatch) {
+      elements.push(
+        <div
+          key={`quote-${i}`}
+          className="border-l-2 border-navy-mid/40 pl-2 my-1 italic text-inherit opacity-90"
+        >
+          {renderInlineContent(quoteMatch[1])}
+          {isLastLine && showCursor && (
+            <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+          )}
+        </div>
+      );
+      continue;
+    }
+
+    // Bullet List Item (- Item, * Item, • Item)
+    const bulletMatch = rawLine.match(/^[-*•+]\s+(.+)$/);
+    if (bulletMatch) {
+      elements.push(
+        <div key={`bullet-${i}`} className="flex items-start gap-1.5 my-0.5 first:mt-0 last:mb-0">
+          <span className="text-navy-mid font-bold select-none shrink-0 mt-0.5 leading-none">•</span>
+          <div className="flex-1 min-w-0">
+            {renderInlineContent(bulletMatch[1])}
+            {isLastLine && showCursor && (
+              <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+            )}
+          </div>
+        </div>
+      );
+      continue;
+    }
+
+    // Ordered List Item (1. Item)
+    const orderedMatch = rawLine.match(/^(\d+)[.)]\s+(.+)$/);
+    if (orderedMatch) {
+      elements.push(
+        <div key={`ordered-${i}`} className="flex items-start gap-1.5 my-0.5 first:mt-0 last:mb-0">
+          <span className="text-navy-mid font-semibold text-xs select-none shrink-0 mt-0.5">
+            {orderedMatch[1]}.
+          </span>
+          <div className="flex-1 min-w-0">
+            {renderInlineContent(orderedMatch[2])}
+            {isLastLine && showCursor && (
+              <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+            )}
+          </div>
+        </div>
+      );
+      continue;
+    }
+
+    // Standard text line
+    elements.push(
+      <div key={`line-${i}`} className="leading-relaxed">
+        {renderInlineContent(rawLine)}
+        {isLastLine && showCursor && (
+          <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
+        )}
+      </div>
+    );
+  }
+
+  return <>{elements}</>;
+};
+
 export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -167,11 +423,20 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     }));
   };
 
-  // Listen for custom event from ExternalIframeModal
+  // Listen for custom event from ExternalIframeModal or preview bubble
   useEffect(() => {
     const handleOpenChat = (e: any) => {
-      const service = e.detail?.service || 'external libraries';
       setIsExpanded(true);
+
+      const service = e.detail?.service;
+      const mode = e.detail?.mode;
+
+      // If general mode or no specific service requested, simply open the chat without adding dummy messages or forcing forms
+      if (!service || mode === 'general') {
+        return;
+      }
+
+      // Specific credential request flow from external resources
       setChatMessages(prev => [
         ...prev,
         { sender: 'user', text: `I need access to ${service}.` },
@@ -682,14 +947,18 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                 {chatMessages.map((msg, idx) => {
                   // Don't render empty AI message placeholders
                   if (msg.sender === 'rizal' && msg.text === '') return null;
+                  const isCurrentStreaming = msg.sender === 'rizal' && isTyping && idx === chatMessages.length - 1;
 
                   return (
                     <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                      <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${msg.sender === 'user' ? 'bg-gold-light text-navy-dark rounded-br-none' : 'bg-white border border-gray-100 text-gray-700 rounded-bl-none'} whitespace-pre-wrap`}>
-                        {msg.text}
-                        {msg.sender === 'rizal' && isTyping && idx === chatMessages.length - 1 && (
-                          <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#C9A84C] animate-pulse align-middle" />
-                        )}
+                      <div
+                        className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm break-words [overflow-wrap:anywhere] ${
+                          msg.sender === 'user'
+                            ? 'bg-gold-light text-navy-dark rounded-br-none'
+                            : 'bg-white border border-gray-100 text-gray-700 rounded-bl-none'
+                        }`}
+                      >
+                        {renderMessageContent(msg.text, msg.sender === 'user', isCurrentStreaming)}
                       </div>
                     </div>
                   );

@@ -1,3 +1,4 @@
+from typing import List, Optional, Any
 from django.db.models import Q
 from Features.Data.Models.research_reference_model import ResearchReference
 from Features.Repositories.Interfaces.i_reference_repository import IResearchReferenceRepository
@@ -12,6 +13,9 @@ class ResearchReferenceRepository(IResearchReferenceRepository):
             return ResearchReference.objects.get(id=reference_id)
         except ResearchReference.DoesNotExist:
             return None
+
+    def get_count(self) -> int:
+        return ResearchReference.objects.count()
 
     def get_recent(self, limit: int = 10):
         return list(ResearchReference.objects.all().order_by('-created_at')[:limit])
@@ -40,6 +44,39 @@ class ResearchReferenceRepository(IResearchReferenceRepository):
                 Q(acc_no__icontains=query)
             )
         return qs
+
+    def search_multi_token(self, tokens: list, limit: int = 5) -> List[Any]:
+        if not tokens:
+            return []
+
+        if isinstance(tokens, str):
+            tokens = [tokens]
+
+        q_obj = Q()
+        valid_tokens = False
+        for token in tokens:
+            if not token:
+                continue
+            token_str = str(token).strip()
+            if not token_str:
+                continue
+            valid_tokens = True
+            q_obj |= (
+                Q(title__icontains=token_str) |
+                Q(author__icontains=token_str) |
+                Q(department__icontains=token_str) |
+                Q(category__icontains=token_str) |
+                Q(call_number__icontains=token_str) |
+                Q(acc_no__icontains=token_str)
+            )
+
+        if not valid_tokens:
+            return []
+
+        qs = ResearchReference.objects.filter(q_obj)
+        if limit is not None:
+            qs = qs[:limit]
+        return list(qs)
 
     def create(self, data):
         return ResearchReference.objects.create(**data)
