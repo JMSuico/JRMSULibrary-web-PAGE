@@ -27,3 +27,10 @@ class ILibraryInteriorImageRepository(ABC):
     def delete(self, image_id: int) -> bool:
         pass
 
+    @abstractmethod
+    def get_physical_setup_zones(self) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def get_interior_photos(self) -> List[Any]:
+        pass

@@ -30,6 +30,14 @@ class IManagedLinkRepository(ABC):
         pass
 
     @abstractmethod
+    def get_all_active(self) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def get_by_category(self, category: str) -> List[Any]:
+        pass
+
+    @abstractmethod
     def get_by_id(self, id: int) -> Optional[Any]:
         pass
 
@@ -72,4 +80,8 @@ class IManagedFileRepository(ABC):
 
     @abstractmethod
     def get_all_active(self) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def get_by_category(self, category: str) -> List[Any]:
         pass

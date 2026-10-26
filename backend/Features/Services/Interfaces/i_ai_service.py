@@ -14,3 +14,7 @@ class IAIService(ABC):
     @abstractmethod
     def generate_email_reply_draft(self, message_data: dict) -> str:
         pass
+
+    @abstractmethod
+    def get_read_view_audit_summary(self) -> dict:
+        pass

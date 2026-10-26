@@ -5,6 +5,7 @@ import { AdminTopbar } from '@/src/Features/Admin/components/AdminTopbar';
 import '@/src/LayoutStyles/admin.css';
 import { ToastProvider } from '@/src/Hooks/useToast';
 import { userApi, User } from '@/src/Endpoints/userApi';
+import { ensureCsrfToken } from '@/src/Libs/apiClient';
 import { Loader2 } from 'lucide-react';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
@@ -60,21 +61,24 @@ const useAuth = () => {
 const useInactivityTimer = (timeoutMs: number, onTimeout: () => void) => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
+  const hasTriggeredRef = useRef<boolean>(false);
 
   const checkActivity = useCallback(() => {
+    if (hasTriggeredRef.current) return;
     const storedLastActivity = localStorage.getItem('admin_last_activity');
     const lastActivity = storedLastActivity ? parseInt(storedLastActivity, 10) : lastActivityRef.current;
     
     if (Date.now() - lastActivity >= timeoutMs) {
+      hasTriggeredRef.current = true;
       if (timerRef.current) clearInterval(timerRef.current);
       onTimeout();
     }
   }, [timeoutMs, onTimeout]);
 
-  const updateActivity = useCallback(() => {
+  const updateActivity = useCallback((force = false) => {
     const now = Date.now();
     // Throttle localStorage writes to once every 2 seconds to avoid performance issues
-    if (now - lastActivityRef.current > 2000) {
+    if (force || now - lastActivityRef.current > 2000) {
       lastActivityRef.current = now;
       localStorage.setItem('admin_last_activity', now.toString());
     }
@@ -83,16 +87,18 @@ const useInactivityTimer = (timeoutMs: number, onTimeout: () => void) => {
   useEffect(() => {
     const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
     
-    // Initial setup
-    updateActivity();
+    // Initial setup - force-initialize localStorage immediately on mount
+    updateActivity(true);
     timerRef.current = setInterval(checkActivity, 5000); // Check every 5 seconds
 
+    const handleUserActivity = () => updateActivity(false);
+
     // Attach listeners
-    events.forEach(event => document.addEventListener(event, updateActivity, { passive: true }));
+    events.forEach(event => document.addEventListener(event, handleUserActivity, { passive: true }));
     
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      events.forEach(event => document.removeEventListener(event, updateActivity));
+      events.forEach(event => document.removeEventListener(event, handleUserActivity));
     };
   }, [updateActivity, checkActivity]);
 };
@@ -105,6 +111,7 @@ export interface AdminOutletContext {
 export default function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isLoggingOutRef = useRef<boolean>(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, user, setUser } = useAuth();
@@ -115,7 +122,11 @@ export default function AdminLayout() {
   useGlobalAutoRefresh(15000, false);
 
   const handleAutoLogout = useCallback(async () => {
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+    localStorage.removeItem('admin_last_activity');
     try {
+      await ensureCsrfToken();
       await userApi.logout();
     } catch (e) {
       console.warn("Auto-logout error:", e);
@@ -143,9 +154,16 @@ export default function AdminLayout() {
   // Heartbeat to keep account online
   useEffect(() => {
     if (isAuthenticated) {
-      userApi.heartbeat(); // Initial ping
+      if (!isLoggingOutRef.current) {
+        userApi.heartbeat(); // Initial ping
+      }
       const interval = setInterval(() => {
-        if (document.visibilityState === 'visible') {
+        if (isLoggingOutRef.current) return;
+
+        const storedLastActivity = localStorage.getItem('admin_last_activity');
+        const lastActivity = storedLastActivity ? parseInt(storedLastActivity, 10) : Date.now();
+
+        if (document.visibilityState === 'visible' && Date.now() - lastActivity < 600000) {
           userApi.heartbeat();
         }
       }, 30000);

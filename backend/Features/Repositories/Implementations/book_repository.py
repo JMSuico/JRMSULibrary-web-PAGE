@@ -1,6 +1,7 @@
 # [Layer: Repositories/Implementations] — book_repository.py
 from typing import List, Optional, Any
-from Features.Data.Models import NewlyAcquiredBook
+from django.db.models import Q
+from Features.Data.Models import NewlyAcquiredBook, AcquisitionBatch
 from Features.Repositories.Interfaces import INewlyAcquiredBookRepository
 
 class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
@@ -30,10 +31,51 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
     def search(self, query: str = None, limit: int = 5) -> List[Any]:
         if not query:
             return []
-        from django.db.models import Q
         return list(NewlyAcquiredBook.objects.filter(
             Q(title__icontains=query) | Q(author__icontains=query) | Q(category__icontains=query)
         )[:limit])
+
+    def search_multi_token(self, tokens: List[str], limit: int = 5) -> List[Any]:
+        if not tokens or limit <= 0:
+            return []
+        valid_tokens = [t.strip() for t in tokens if isinstance(t, str) and t.strip()]
+        if not valid_tokens:
+            return []
+        token_query = Q()
+        for token in valid_tokens:
+            token_query |= (
+                Q(title__icontains=token)
+                | Q(author__icontains=token)
+                | Q(category__icontains=token)
+                | Q(accession_number__icontains=token)
+            )
+        return list(
+            NewlyAcquiredBook.objects.exclude(
+                Q(title__istartswith='IMG') | Q(category='Imported')
+            ).filter(token_query)[:limit]
+        )
+
+    def get_inventory_summary(self) -> dict:
+        total = NewlyAcquiredBook.objects.count()
+        picture_count = NewlyAcquiredBook.objects.filter(
+            Q(title__istartswith='IMG') | Q(category='Imported')
+        ).count()
+        named_count = max(0, total - picture_count)
+        named_books = list(
+            NewlyAcquiredBook.objects.exclude(
+                Q(title__istartswith='IMG') | Q(category='Imported')
+            )[:10]
+        )
+        active_batch = AcquisitionBatch.objects.filter(is_display_batch=True).first()
+        display_batch_name = active_batch.name if active_batch else None
+
+        return {
+            "total": total,
+            "picture_count": picture_count,
+            "named_count": named_count,
+            "named_books": named_books,
+            "display_batch_name": display_batch_name,
+        }
 
     def get_books_by_batch(self, batch_id: int) -> List[Any]:
         return list(NewlyAcquiredBook.objects.filter(batch_id=batch_id))
@@ -50,7 +92,6 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
             book.cover_image = files['cover_image']
         book.save()
         return book
-
 
     def update(self, book_id: int, data: dict, files: dict = None) -> Optional[Any]:
         book = self.get_by_id(book_id)
@@ -69,4 +110,3 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
             book.delete()
             return True
         return False
-

@@ -40,36 +40,135 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 
 ---
 
-##  Quick Start (Docker - Recommended)
+## 💻 Complete Command Master Reference (With Docker & Without Docker)
 
-The fastest way to get the entire 5-layer stack (Frontend, Backend, Database, Redis, and AI) running is using Docker.
+All commands in the JRMSU Library System can be executed either inside the containerized Docker environment or natively on bare metal (Local Windows / Linux development).
 
-**1. Clone the repository and configure environments:**
-Copy `.env.docker` to `.env` in the root directory and fill in your passwords (especially the Gmail App Password for SMTP).
+### 1. System Lifecycle & Service Management
 
-**2. Build and start the containers:**
+| Action | With Docker (Recommended) | Without Docker (Local / Bare-Metal) |
+|---|---|---|
+| **Start the Full System** | `docker-compose up -d` | Run in 4 separate terminals:<br>1. Backend: `cd backend && .\venv\Scripts\activate && python manage.py runserver 8000`<br>2. Celery: `cd backend && .\venv\Scripts\activate && celery -A core worker -l info`<br>3. Webpage: `cd frontend && npm run dev`<br>4. Admin: `cd frontend && npm run dev -- --port 3001` |
+| **Stop the System** | `docker-compose down` | Press `Ctrl + C` in each running terminal window |
+| **Update All Code & Rebuild** | `docker-compose up -d --build` | Restart dev server (Vite uses instant HMR; Django auto-reloads on save) |
+| **View Live Unified Logs** | `docker-compose logs -f` | Outputs directly into your active terminal windows |
+| **View Backend Logs Only** | `docker-compose logs -f backend` | Check terminal 1 (Django console output) |
+| **View Frontend Webpage Logs** | `docker-compose logs -f frontend-webpage` | Check terminal 3 (Vite console output) |
+| **View Database Logs** | `docker-compose logs -f db` | Check Windows PostgreSQL / SQL Server service logs |
+| **Check Container Status** | `docker-compose ps` | Task Manager / `tasklist /fi "imagename eq node.exe"` |
+
+---
+
+### 2. Superadmin Management Suite
+
+The system implements strict **Terminal-Created Admin Protection**. Superadmin accounts created via terminal commands are locked at the database level and cannot be modified, suspended, or deleted through the web admin UI.
+
+| Action | With Docker | Without Docker |
+|---|---|---|
+| **Guided Superadmin Setup (Interactive)** | `docker-compose exec backend python manage.py createsuperuser_custom` | `cd backend && python manage.py createsuperuser_custom` |
+| **Standard Django Superadmin** | `docker-compose exec backend python manage.py createsuperuser` | `cd backend && python manage.py createsuperuser` |
+| **Manage / Delete Terminal Admins** | `docker-compose exec backend python manage.py deletespecificsuperuser` | `cd backend && python manage.py deletespecificsuperuser` |
+
+> [!TIP]
+> **Guided Superadmin Setup (`createsuperuser_custom`):**
+> * **Option [1]:** Automatically creates the institutional default administrator (`JRMSU-KATIPUNAN-CAMPUS-Library-Admin` / `librarian@jrmsu.edu.ph`).
+> * **Option [2]:** Interactive prompt enforcing strong institutional password policies (minimum 10 characters, mixed case, numbers, and symbols).
+>
+> **Terminal Admin Manager (`deletespecificsuperuser`):**
+> * Interactive tool to safely list, target-delete a single terminal-protected admin, or purge all terminal admins without direct SQL intervention.
+
+---
+
+### 3. Assets, Media & Session Data Import Suite
+
+The library relies on institutional eBooks, department catalogs, student PDFs, and physical setup photographs. The automated asset ingestion suite is **100% intact and available**:
+
+| Action | With Docker | Without Docker | Description |
+|---|---|---|---|
+| **Import All Assets & eBooks** | `docker-compose exec backend python manage.py imports_assets` | `cd backend && python manage.py imports_assets` | Ingests eBooks, images, and physical setup assets from `frontend/src/Assets/assets` into the media directory and DB. |
+| **Fresh Re-import (Reset Mode)** | `docker-compose exec backend python manage.py imports_assets --reset` | `cd backend && python manage.py imports_assets --reset` | **Fresh start:** Deletes all existing EResource records, clears directories, and performs a clean full re-import. |
+| **Import Agent Sessions** | `docker-compose exec backend python import-session.py` | `python import-session.py` | Portable session unpacker restoring Antigravity CLI conversational logs and database states. |
+
+---
+
+### 4. Database Migrations, Schema & Cloud Sync
+
+| Action | With Docker | Without Docker | Description |
+|---|---|---|---|
+| **Generate Migrations** | `docker-compose exec backend python manage.py makemigrations` | `cd backend && python manage.py makemigrations` | Detects model changes and generates migration files. |
+| **Apply Migrations** | `docker-compose exec backend python manage.py migrate` | `cd backend && python manage.py migrate` | Executes pending migrations against PostgreSQL/SQL Server. |
+| **Automated Schema Update** | `docker-compose exec backend python manage.py update_database` | `cd backend && python manage.py update_database` | Runs migration self-check and validates schema health. |
+| **Audit Cloud Parity** | `docker-compose exec backend python manage.py verify_cloud_sync` | `cd backend && python manage.py verify_cloud_sync` | Compares record counts across all 21 models against Supabase Cloud DB. |
+| **Purge Temp Uploads** | `docker-compose exec backend python manage.py cleanup_temp_files` | `cd backend && python manage.py cleanup_temp_files` | Removes orphaned chunk uploads and temp files older than 24 hours. |
+
+---
+
+### 5. Shell Access, Database Inspection & Debugging
+
+| Action | With Docker | Without Docker |
+|---|---|---|
+| **Enter Django Interactive Shell** | `docker-compose exec backend python manage.py shell` | `cd backend && python manage.py shell` |
+| **Open PostgreSQL CLI (`psql`)** | `docker-compose exec db psql -U jrmsu_admin -d jrmsu_library` | `psql -U jrmsu_admin -d jrmsu_library` or pgAdmin / DBeaver |
+| **Enter Backend Linux Terminal** | `docker-compose exec backend bash` | Open Command Prompt / PowerShell in `backend/` |
+| **Enter Frontend Container Shell** | `docker-compose exec frontend-webpage sh` | Open Command Prompt / PowerShell in `frontend/` |
+
+---
+
+### 6. Targeted Service Builds (Fast-Track Single Containers)
+
+When you make changes to only one part of the stack, rebuild **only that container** to avoid pulling large AI model weights or rebuilding untouched layers:
+
 ```bash
-docker-compose up --build -d
+# Rebuild only the public frontend
+docker-compose up -d --build frontend-webpage
+
+# Rebuild only the admin frontend
+docker-compose up -d --build frontend-admin
+
+# Rebuild only Django backend & Celery
+docker-compose up -d --build backend celery-worker
+
+# Rebuild core services without re-downloading Ollama AI weights
+docker-compose up -d --build backend frontend-webpage frontend-admin redis db
 ```
 
-**3. Initial Database Setup:**
+---
+
+### 7. Clean-Slate "Fresh Start" (Danger Zone)
+
+Use this when encountering persistent volume caching issues, corrupted migrations, or when preparing a clean deployment image for an external SSD:
+
 ```bash
+# 1. Stop everything, delete containers, and wipe volumes (WARNING: Deletes database data!)
+docker-compose down -v --remove-orphans
+
+# 2. Rebuild all images from scratch, ignoring cached layers
+docker-compose build --no-cache
+
+# 3. Start containers fresh in background
+docker-compose up -d --force-recreate
+
+# 4. Initialize schema, create administrator, and import eBooks
 docker-compose exec backend python manage.py migrate
-docker-compose exec backend python manage.py createsuperuser
+docker-compose exec backend python manage.py createsuperuser_custom
 docker-compose exec backend python manage.py imports_assets
 ```
 
-**4. Access the system:**
-- **Public Webpage:** http://localhost:3000
-- **Admin Dashboard:** http://localhost:3001
-- **API Endpoint:** http://localhost:8000/api
-
 ---
 
-##  Local Development (Without Docker)
-For detailed instructions on running the system natively on Windows (using SSMS 19 and Node.js directly), please refer to the [DevSetup.md](./DevSetup.md) documentation file.
+### 8. 1-Click Operational Helpers (In `CommandStart\`)
 
----
+For automated, non-technical execution on physical PCs, dedicated scripts are available in the [`CommandStart/`](./CommandStart/) folder:
+
+* **`AutomaticUp.bat`** — Multi-drive resilient 1-click launcher with instant PATH discovery and 24/7 watchdog.
+* **`StopAutomaticUp.bat`** — Graceful shutdown terminating containers and background connectors.
+* **`createsuperadmin.bat`** — 1-click prompt to generate standard superadmins.
+* **`customcreatesuperadmin.bat`** — 1-click interactive guided superadmin wizard.
+* **`db-migrate.bat`** — 1-click database migration applicator.
+* **`restore-backup.bat`** — 1-click database restore importing `jrmsu_library_master_backup.sql`.
+* **`install-tunnel-service.bat`** — Installs Cloudflare Tunnel as a permanent 24/7 Windows Service.
+* **`fix-tunnel-502.bat`** — Resolves `host.docker.internal` DNS mappings in Windows hosts file.
+
 
 ##  UI/UX Design System
 This project adheres to a strict "UI-UX Pro Max" guideline:

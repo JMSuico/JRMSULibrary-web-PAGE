@@ -4,6 +4,10 @@ from typing import List, Optional, Any
 
 class INewlyAcquiredBookRepository(ABC):
     @abstractmethod
+    def get_all_active(self) -> List[Any]:
+        pass
+
+    @abstractmethod
     def get_books_by_batch(self, batch_id: int) -> List[Any]:
         pass
 
@@ -32,15 +36,23 @@ class INewlyAcquiredBookRepository(ABC):
         pass
 
     @abstractmethod
+    def search_multi_token(self, tokens: List[str], limit: int = 5) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def get_inventory_summary(self) -> dict:
+        pass
+
+    @abstractmethod
     def get_by_id(self, book_id: int) -> Optional[Any]:
         pass
 
     @abstractmethod
-    def create(self, data: dict) -> Any:
+    def create(self, data: dict, files: Optional[dict] = None) -> Any:
         pass
 
     @abstractmethod
-    def update(self, book_id: int, data: dict) -> Optional[Any]:
+    def update(self, book_id: int, data: dict, files: Optional[dict] = None) -> Optional[Any]:
         pass
 
     @abstractmethod
