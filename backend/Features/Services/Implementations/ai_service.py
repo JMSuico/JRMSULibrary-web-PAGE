@@ -477,6 +477,15 @@ class AIService(IAIService):
                 f"and 17 Library Services open Monday to Friday (7:00 AM - 7:00 PM). "
                 f"For specialized inquiries, feel free to click 'Send an Email' below to message our Campus Librarian!"
             )
+
+        # Intercept hallucinated non-existent floor references (> 2 floors)
+        if re.search(r'\b([3-9]|\d{2,})(st|nd|rd|th)?\s+floor\b|\bfloor\s+([3-9]|\d{2,})\b', lower_out):
+            return (
+                "The JRMSU Katipunan Campus Library building features 2 floors (1st Floor and 2nd Floor). "
+                "There are no 3rd, 4th, or higher floors in our library building. "
+                "Please visit our Physical Setup page at /physical-setup to view all 37 verified library zones."
+            )
+
         return cleaned
 
     def _resolve_deterministic_database_intent(self, user_message: str) -> Optional[str]:
@@ -491,6 +500,18 @@ class AIService(IAIService):
         norm = re.sub(r'[^a-z0-9\s]', ' ', str(user_message).lower()).strip()
         tokens = set(norm.split())
         expanded_tokens = AIReadViewHelper.expand_query_tokens(user_message)
+
+        # ---------------------------------------------------------
+        # Guardrail: Non-Existent Floor Inquiries (Building has 2 floors)
+        # ---------------------------------------------------------
+        floor_match = re.search(r'\b([3-9]|\d{2,})(st|nd|rd|th)?\s+floor\b|\bfloor\s+([3-9]|\d{2,})\b', norm)
+        if floor_match:
+            matched_floor = floor_match.group(0)
+            return (
+                f"The JRMSU Katipunan Campus Library is a 2-storey facility featuring the 1st Floor and 2nd Floor. "
+                f"There is no {matched_floor}. All 37 of our mapped physical zones and reading areas are located across the 1st and 2nd floors. "
+                "You can view high-resolution photos and details of each area by visiting our Physical Setup page at /physical-setup."
+            )
 
         # ---------------------------------------------------------
         # Intent 0: Assistant Identity, Accuracy & Database Read/View Self-Audit
@@ -572,7 +593,15 @@ class AIService(IAIService):
             'reference' in tokens and not any(p in norm for p in ['for your reference', 'reference number'])
         ) or ('research' in tokens and not any(w in norm for w in ['social learning', 'learning zone', 'zone']))
 
-        if has_ref_phrase or has_ref_token:
+        # Check if user inquiry is asking for generative academic reasoning
+        is_academic_reasoning_prompt = any(p in norm for p in [
+            'formulate', 'how to write', 'how to structure', 'literature review', 'framework',
+            'methodology', 'qualitative', 'quantitative', 'rrl', 'title idea', 'title for',
+            'research title', 'capstone title', 'thesis title', 'suggest a title', 'topic idea',
+            'difference between', 'synthesize'
+        ])
+
+        if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt:
             count = self._get_reference_count()
             if count == 0:
                 return (
@@ -1260,14 +1289,7 @@ class AIService(IAIService):
 
         # Check Tier 3: Deep Academic Reasoning
         if any(trig in msg_clean for trig in tier3_triggers) or (word_count > 15 and any(w in words for w in ['how', 'what', 'research'])):
-            options = {
-                "num_ctx": 2048,
-                "num_predict": 850,
-                "temperature": 0.3,
-                "top_k": 25,
-                "top_p": 0.90,
-                "repeat_penalty": 1.15
-            }
+            options = self._get_ollama_options("TIER_3")
             inst = (
                 "TIER 3 (DEEP ACADEMIC REASONING AND RRL):\n"
                 "1. Bottom Line Up Front (BLUF): Provide the direct core answer or recommendation in the very first sentence.\n"
@@ -1277,15 +1299,8 @@ class AIService(IAIService):
             return "TIER_3", options, inst
 
         # Check Tier 2: Structured Action / Recommendation
-        if any(trig in msg_clean for trig in tier2_triggers) or (word_count > 7 and 'book' in words):
-            options = {
-                "num_ctx": 2048,
-                "num_predict": 320,
-                "temperature": 0.2,
-                "top_k": 20,
-                "top_p": 0.85,
-                "repeat_penalty": 1.15
-            }
+        if any(trig in msg_clean for trig in tier2_triggers) or (word_count > 7 and bool({'book', 'books'} & set(words))):
+            options = self._get_ollama_options("TIER_2")
             inst = (
                 "TIER 2 (STRUCTURED ACTION ANSWER):\n"
                 "1. Start with 1 direct lead sentence answering the prompt.\n"
@@ -1295,14 +1310,7 @@ class AIService(IAIService):
             return "TIER_2", options, inst
 
         # Tier 1: Instant Micro-Answer
-        options = {
-            "num_ctx": 2048,
-            "num_predict": 120,
-            "temperature": 0.1,
-            "top_k": 15,
-            "top_p": 0.75,
-            "repeat_penalty": 1.15
-        }
+        options = self._get_ollama_options("TIER_1")
         inst = (
             "TIER 1 (INSTANT MICRO-ANSWER):\n"
             "State the verified factual answer directly in 1 to 2 clear sentences. Stop immediately—do not pad with filler words or conversational fluff."
@@ -1355,22 +1363,22 @@ CRITICAL BEHAVIOR RULES:
    - Match response length strictly to query complexity:
    {tier_instructions}
    - For simple facts, give 1-2 direct sentences and stop. For deep research or capstone questions, provide structured paragraphs with verified citations.
-8. ANTI-HALLUCINATION AND FALSE PREMISE RECOVERY:
-   - If a user asks about a resource, author, floor, or policy that DOES NOT exist in our library (or asks with a false premise, e.g., '4th floor' when our building has 3 floors, or an uncataloged fake book), you MUST:
+3. ANTI-HALLUCINATION AND FALSE PREMISE RECOVERY:
+   - If a user asks about a resource, author, floor, or policy that DOES NOT exist in our library (or asks with a false premise, e.g., '4th floor' when our building has 2 floors, or an uncataloged fake book), you MUST:
      a. Politely correct or clarify the false premise immediately using verified library facts.
      b. State clearly that the requested title or item is not in our collection.
      c. Immediately offer the closest available verified alternative titles, research references, or E-Resource department folders from the database that match their topic.
      d. If newly acquired books are in visual cover-only processing, inform the user they can view cover photos in the 3D Carousel on the Home Page or ask at the Circulation Counter.
-3. VERY IMPORTANT: If a user casually greets you (e.g. "Good morning", "Hi", "Hello", "Hey"), DO NOT reply with the exact same repetitive phrase. Always vary your greetings naturally (e.g. "Hello there!", "Good morning, how can I help you?", "Hey! Welcome to the library.", "Greetings!").
-4. Do not use markdown formatting (like **bold** or *italics*) because the chat UI displays raw text. Just use plain text with line breaks.
-5. If asked a question you don't know the answer to based on the context, politely advise them to use the 'Send an Email' option to contact the human librarian at {email}. Do not hallucinate answers.
-6. SOFTCOPY & DOCUMENT ACCESS RULES:
+4. VERY IMPORTANT: If a user casually greets you (e.g. "Good morning", "Hi", "Hello", "Hey"), DO NOT reply with the exact same repetitive phrase. Always vary your greetings naturally (e.g. "Hello there!", "Good morning, how can I help you?", "Hey! Welcome to the library.", "Greetings!").
+5. Do not use markdown formatting (like **bold** or *italics*) because the chat UI displays raw text. Just use plain text with line breaks.
+6. If asked a question you don't know the answer to based on the context, politely advise them to use the 'Send an Email' option to contact the human librarian at {email}. Do not hallucinate answers.
+7. SOFTCOPY & DOCUMENT ACCESS RULES:
    - When asked about research papers, theses, or books, reference their availability and softcopy status accurately from the context below.
    - If a research paper or thesis indicates "Softcopy PDF File Available", inform the user they can read or download the full text online on the website under the 'Collection' -> 'Research & Thesis References' tab by clicking 'View File'.
    - If it indicates "Softcopy Online Link Available", inform the user that a digital link is available on the website.
    - If it indicates "Physical Copy Only", explain that it is available for physical room use inside the library (Special Collections / Archives).
    - If asked for the newest or oldest books or theses, cite the exact titles and authors provided in the dynamic database knowledge below.
-7. ROOM RESERVATION RULES:
+8. ROOM RESERVATION RULES:
    - Reservable rooms are: Discussion Room 1 & 2, Tutorium Room 1 & 2, Multimedia Room.
    - Instruct users to click the 'Reserve a Room' button right below the chat window. NEVER mention UOPAC for room reservations.
 
