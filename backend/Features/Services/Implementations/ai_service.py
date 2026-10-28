@@ -1234,7 +1234,82 @@ class AIService(IAIService):
             logger.error(f"Error fetching dynamic context: {e}")
             return "DYNAMIC DATABASE KNOWLEDGE: General library information available."
 
-    def _build_dynamic_system_prompt(self, user_message: str = "") -> str:
+    def _classify_query_complexity(self, user_message: str) -> Tuple[str, dict, str]:
+        """
+        Adaptive 3-Tier Complexity Classifier and Dynamic Generation Tuning:
+        - Tier 1: Precision Micro-Answer (0.3s-0.5s): Factual checks, Yes/No, hours, single book status (temperature 0.1, max 120 tokens).
+        - Tier 2: Structured Action Answer (0.7s-1.1s): Recommendations, procedural how-tos, 3-5 item lists (temperature 0.2, max 320 tokens).
+        - Tier 3: Deep Academic Reasoning (1.2s-2.0s, streamed): RRL formulation, capstone analysis, why/explain, thesis methodology (temperature 0.3, max 850 tokens).
+        """
+        if not user_message:
+            return "TIER_1", {"num_ctx": 2048, "num_predict": 120, "temperature": 0.1, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15}, "TIER 1 (FACTUAL MICRO-ANSWER): Give a direct 1-sentence answer immediately."
+
+        msg_clean = re.sub(r'[^a-z0-9\s]', ' ', str(user_message).lower()).strip()
+        words = msg_clean.split()
+        word_count = len(words)
+
+        tier3_triggers = {
+            'why', 'explain', 'analyze', 'analysis', 'compare', 'comparison', 'thesis', 'capstone',
+            'rrl', 'methodology', 'framework', 'literature', 'formulate', 'synthesize', 'evaluate',
+            'implication', 'pros and cons', 'difference between', 'recommend a research title'
+        }
+        tier2_triggers = {
+            'recommend', 'suggest', 'how to', 'how do i', 'steps to', 'list of', 'what books about',
+            'collection of', 'show me books', 'borrowing rules', 'available books on', 'can you recommend'
+        }
+
+        # Check Tier 3: Deep Academic Reasoning
+        if any(trig in msg_clean for trig in tier3_triggers) or (word_count > 15 and any(w in words for w in ['how', 'what', 'research'])):
+            options = {
+                "num_ctx": 2048,
+                "num_predict": 850,
+                "temperature": 0.3,
+                "top_k": 25,
+                "top_p": 0.90,
+                "repeat_penalty": 1.15
+            }
+            inst = (
+                "TIER 3 (DEEP ACADEMIC REASONING AND RRL):\n"
+                "1. Bottom Line Up Front (BLUF): Provide the direct core answer or recommendation in the very first sentence.\n"
+                "2. Systematic Reasoning: Explain the concepts, methodology, or reasoning clearly with logical progression.\n"
+                "3. Verified Database Grounding: Cite specific verified books, theses, or E-Resource course folders from the context to back up your explanation."
+            )
+            return "TIER_3", options, inst
+
+        # Check Tier 2: Structured Action / Recommendation
+        if any(trig in msg_clean for trig in tier2_triggers) or (word_count > 7 and 'book' in words):
+            options = {
+                "num_ctx": 2048,
+                "num_predict": 320,
+                "temperature": 0.2,
+                "top_k": 20,
+                "top_p": 0.85,
+                "repeat_penalty": 1.15
+            }
+            inst = (
+                "TIER 2 (STRUCTURED ACTION ANSWER):\n"
+                "1. Start with 1 direct lead sentence answering the prompt.\n"
+                "2. Provide 3-5 concise, structured bullet points citing verified database items or step-by-step procedures.\n"
+                "3. Conclude concisely with actionable guidance."
+            )
+            return "TIER_2", options, inst
+
+        # Tier 1: Instant Micro-Answer
+        options = {
+            "num_ctx": 2048,
+            "num_predict": 120,
+            "temperature": 0.1,
+            "top_k": 15,
+            "top_p": 0.75,
+            "repeat_penalty": 1.15
+        }
+        inst = (
+            "TIER 1 (INSTANT MICRO-ANSWER):\n"
+            "State the verified factual answer directly in 1 to 2 clear sentences. Stop immediately—do not pad with filler words or conversational fluff."
+        )
+        return "TIER_1", options, inst
+
+    def _build_dynamic_system_prompt(self, user_message: str = "", complexity_tier: str = "TIER_2", tier_instructions: str = "") -> str:
         institutional_context = self._get_or_build_institutional_context()
 
         # Dynamic settings lookup
@@ -1276,7 +1351,16 @@ class AIService(IAIService):
 
 CRITICAL BEHAVIOR RULES:
 1. Be polite, professional, concise, and helpful. 
-2. Always keep your answers relatively short so they fit in a chat bubble.
+2. ADAPTIVE LENGTH RULE:
+   - Match response length strictly to query complexity:
+   {tier_instructions}
+   - For simple facts, give 1-2 direct sentences and stop. For deep research or capstone questions, provide structured paragraphs with verified citations.
+8. ANTI-HALLUCINATION AND FALSE PREMISE RECOVERY:
+   - If a user asks about a resource, author, floor, or policy that DOES NOT exist in our library (or asks with a false premise, e.g., '4th floor' when our building has 3 floors, or an uncataloged fake book), you MUST:
+     a. Politely correct or clarify the false premise immediately using verified library facts.
+     b. State clearly that the requested title or item is not in our collection.
+     c. Immediately offer the closest available verified alternative titles, research references, or E-Resource department folders from the database that match their topic.
+     d. If newly acquired books are in visual cover-only processing, inform the user they can view cover photos in the 3D Carousel on the Home Page or ask at the Circulation Counter.
 3. VERY IMPORTANT: If a user casually greets you (e.g. "Good morning", "Hi", "Hello", "Hey"), DO NOT reply with the exact same repetitive phrase. Always vary your greetings naturally (e.g. "Hello there!", "Good morning, how can I help you?", "Hey! Welcome to the library.", "Greetings!").
 4. Do not use markdown formatting (like **bold** or *italics*) because the chat UI displays raw text. Just use plain text with line breaks.
 5. If asked a question you don't know the answer to based on the context, politely advise them to use the 'Send an Email' option to contact the human librarian at {email}. Do not hallucinate answers.
@@ -1307,16 +1391,13 @@ SPECIFIC SEARCH RESULTS FOR USER INQUIRY:
 FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Library. NEVER claim to be created by Alibaba Cloud or Qwen, NEVER greet the user as 'Rizal', and NEVER invent external book titles.
 """
 
-    def _get_ollama_options(self) -> dict:
-        """Fast CPU inference options for Ollama with expanded token generation."""
-        return {
-            "num_ctx": 2048,
-            "num_predict": 1024,
-            "temperature": 0.25,
-            "top_k": 20,
-            "top_p": 0.85,
-            "repeat_penalty": 1.15
-        }
+    def _get_ollama_options(self, complexity_tier: str = "TIER_2") -> dict:
+        """Adaptive inference options for Ollama tuned to query complexity."""
+        if complexity_tier == "TIER_1":
+            return {"num_ctx": 2048, "num_predict": 120, "temperature": 0.1, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15}
+        elif complexity_tier == "TIER_3":
+            return {"num_ctx": 2048, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15}
+        return {"num_ctx": 2048, "num_predict": 320, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15}
 
     def generate_chat_stream(self, user_message: str, chat_history: Optional[list] = None, seen_answers: Optional[list] = None) -> Generator[str, None, None]:
         """
@@ -1342,8 +1423,9 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                 yield word + (" " if i < len(words) - 1 else "")
             return
 
-        # Tier 3: Ollama LLM Fallback with Output Guardrail
-        messages = [{"role": "system", "content": self._build_dynamic_system_prompt(user_message)}]
+        # Tier 3: Ollama LLM Fallback with Output Guardrail and Adaptive 3-Tier Tuning
+        tier, options, tier_inst = self._classify_query_complexity(user_message)
+        messages = [{"role": "system", "content": self._build_dynamic_system_prompt(user_message, complexity_tier=tier, tier_instructions=tier_inst)}]
         if chat_history:
             for msg in chat_history[-6:]:
                 text = (msg.get('text', '') or '').strip()
@@ -1362,7 +1444,7 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             "messages": messages,
             "stream": True,
             "keep_alive": -1,
-            "options": self._get_ollama_options()
+            "options": options
         }
 
         try:
