@@ -1002,14 +1002,14 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   maxLength={500}
-                  placeholder="Ask me anything..."
+                  placeholder={isTyping ? "Type your next message..." : "Ask me anything..."}
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-navy-mid/30 focus:ring-1 focus:ring-navy-mid/30 transition-all"
-                  disabled={isTyping}
                 />
                 <button
                   type="submit"
                   disabled={!chatInput.trim() || isTyping}
-                  className="w-9 h-9 rounded-full bg-navy-mid text-white flex items-center justify-center hover:bg-navy-dark transition-colors disabled:opacity-50 disabled:hover:bg-navy-mid shrink-0"
+                  className="w-9 h-9 rounded-full bg-navy-mid text-white flex items-center justify-center hover:bg-navy-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-navy-mid shrink-0"
+                  title={isTyping ? "Please wait for Dr. Rizal to finish responding" : "Send message"}
                 >
                   <span className="material-symbols-outlined text-[18px] ml-1">send</span>
                 </button>

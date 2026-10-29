@@ -33,7 +33,7 @@ export interface ResearchSurveyConfig {
 
 export const RESEARCH_SURVEY_CONFIG: ResearchSurveyConfig = {
   // Master toggle: easily set to false when sample size quota is reached
-  enabled: import.meta.env.VITE_RESEARCH_SURVEY_ENABLED !== 'false' && true,
+  enabled: false, // Temporarily disabled while updating Google Form questions
   
   formUrl: 
     (typeof import.meta.env.VITE_RESEARCH_SURVEY_URL === 'string' && import.meta.env.VITE_RESEARCH_SURVEY_URL) || 

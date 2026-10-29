@@ -618,6 +618,194 @@ class AIReadViewVerificationTests(TestCase):
             ],
         )
 
+        # ---------------------------------------------------------------------
+        # Negative test cases for short acronyms ('it', 'pe', 'cs', 'ai'):
+        # Assert that short acronym tokens do NOT match substring noise in unrelated words.
+        # ---------------------------------------------------------------------
+        noisy_book_with = SimpleNamespace(
+            id=101,
+            title="Living With Literature",
+            author="Author One",
+            category="General",
+            accession_number="ACC-N01",
+        )
+        noisy_book_operating = SimpleNamespace(
+            id=102,
+            title="Operating Systems Concepts",
+            author="Author Two",
+            category="General",
+            accession_number="ACC-N02",
+        )
+        noisy_book_basics = SimpleNamespace(
+            id=103,
+            title="Basics of Economic Statistics",
+            author="Author Three",
+            category="General",
+            accession_number="ACC-N03",
+        )
+        noisy_book_daily = SimpleNamespace(
+            id=104,
+            title="Daily Living",
+            author="Author Four",
+            category="General",
+            accession_number="ACC-N04",
+        )
+
+        genuine_it_book = SimpleNamespace(
+            id=201,
+            title="Introduction to IT Systems",
+            author="Alan Turing",
+            category="General",
+            accession_number="ACC-IT1",
+        )
+        genuine_pe_book = SimpleNamespace(
+            id=202,
+            title="Fundamentals of PE and Sports",
+            author="John Coach",
+            category="General",
+            accession_number="ACC-PE1",
+        )
+        genuine_cs_book = SimpleNamespace(
+            id=203,
+            title="CS Programming Concepts",
+            author="Grace Hopper",
+            category="General",
+            accession_number="ACC-CS1",
+        )
+        genuine_ai_book = SimpleNamespace(
+            id=204,
+            title="AI and Machine Learning Essentials",
+            author="Marvin Minsky",
+            category="General",
+            accession_number="ACC-AI1",
+        )
+
+        # 1. Query 'it': Assert that 'it' does NOT match 'With' or 'Literature'
+        self.assertEqual(
+            AIReadViewHelper._match_token_in_text(
+                "it",
+                noisy_book_with.title.lower(),
+                set(noisy_book_with.title.lower().split()),
+            ),
+            0.0,
+            "'it' must NOT match 'With' or 'Literature'",
+        )
+        it_ranked = AIReadViewHelper.rank_and_sort_books(
+            [noisy_book_with, genuine_it_book],
+            query_tokens=["it"],
+            raw_query="it",
+            limit=5,
+        )
+        self.assertIn(genuine_it_book, it_ranked)
+        self.assertNotIn(
+            noisy_book_with,
+            it_ranked,
+            "Querying 'it' must NOT match 'Living With Literature'",
+        )
+
+        # 2. Query 'pe': Assert that 'pe' does NOT match 'Operating' or 'Concepts'
+        self.assertEqual(
+            AIReadViewHelper._match_token_in_text(
+                "pe",
+                noisy_book_operating.title.lower(),
+                set(noisy_book_operating.title.lower().split()),
+            ),
+            0.0,
+            "'pe' must NOT match 'Operating' or 'Concepts'",
+        )
+        pe_ranked = AIReadViewHelper.rank_and_sort_books(
+            [noisy_book_operating, genuine_pe_book],
+            query_tokens=["pe"],
+            raw_query="pe",
+            limit=5,
+        )
+        self.assertIn(genuine_pe_book, pe_ranked)
+        self.assertNotIn(
+            noisy_book_operating,
+            pe_ranked,
+            "Querying 'pe' must NOT match 'Operating Systems Concepts'",
+        )
+
+        # 3. Query 'cs': Assert that 'cs' does NOT match 'Basics' or 'Statistics' or 'Economics'
+        self.assertEqual(
+            AIReadViewHelper._match_token_in_text(
+                "cs",
+                noisy_book_basics.title.lower(),
+                set(noisy_book_basics.title.lower().split()),
+            ),
+            0.0,
+            "'cs' must NOT match 'Basics', 'Statistics', or 'Economics'",
+        )
+        cs_ranked = AIReadViewHelper.rank_and_sort_books(
+            [noisy_book_basics, genuine_cs_book],
+            query_tokens=["cs"],
+            raw_query="cs",
+            limit=5,
+        )
+        self.assertIn(genuine_cs_book, cs_ranked)
+        self.assertNotIn(
+            noisy_book_basics,
+            cs_ranked,
+            "Querying 'cs' must NOT match 'Basics of Economic Statistics'",
+        )
+
+        # 4. Query 'ai': Assert that 'ai' does NOT match 'Daily'
+        self.assertEqual(
+            AIReadViewHelper._match_token_in_text(
+                "ai",
+                noisy_book_daily.title.lower(),
+                set(noisy_book_daily.title.lower().split()),
+            ),
+            0.0,
+            "'ai' must NOT match 'Daily'",
+        )
+        ai_ranked = AIReadViewHelper.rank_and_sort_books(
+            [noisy_book_daily, genuine_ai_book],
+            query_tokens=["ai"],
+            raw_query="ai",
+            limit=5,
+        )
+        self.assertIn(genuine_ai_book, ai_ranked)
+        self.assertNotIn(
+            noisy_book_daily,
+            ai_ranked,
+            "Querying 'ai' must NOT match 'Daily Living'",
+        )
+
+        # 5. Also assert negative matching for research references
+        noisy_ref_with = SimpleNamespace(
+            id=301,
+            title="Living With Literature",
+            department="General",
+            category="General",
+            author="Author One",
+            call_number="CN-01",
+            acc_no="R-N01",
+            access_type="none",
+        )
+        genuine_it_ref = SimpleNamespace(
+            id=302,
+            title="IT Frameworks and Modern Computing",
+            department="General",
+            category="General",
+            author="Author Two",
+            call_number="CN-02",
+            acc_no="R-IT1",
+            access_type="file",
+        )
+        ref_it_ranked = AIReadViewHelper.rank_and_sort_references(
+            [noisy_ref_with, genuine_it_ref],
+            query_tokens=["it"],
+            raw_query="it",
+            limit=5,
+        )
+        self.assertIn(genuine_it_ref, ref_it_ranked)
+        self.assertNotIn(
+            noisy_ref_with,
+            ref_it_ranked,
+            "Querying 'it' must NOT match ResearchReference 'Living With Literature'",
+        )
+
     # -------------------------------------------------------------------------
     # 3. Algorithm 2 (`build_sorted_eresource_tree` & `match_eresource_folders`)
     # -------------------------------------------------------------------------
@@ -822,6 +1010,10 @@ class AIReadViewVerificationTests(TestCase):
             (
                 "who is the librarian?",
                 ["Kiara Keren M. Alavanza"],
+            ),
+            (
+                "what is the core values for the jrmsu and the library?",
+                ["Quality Objectives", "Vision"],
             ),
         ]
 

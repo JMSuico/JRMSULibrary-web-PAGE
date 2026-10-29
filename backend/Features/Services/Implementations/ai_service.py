@@ -477,6 +477,15 @@ class AIService(IAIService):
                 f"and 17 Library Services open Monday to Friday (7:00 AM - 7:00 PM). "
                 f"For specialized inquiries, feel free to click 'Send an Email' below to message our Campus Librarian!"
             )
+
+        # Intercept hallucinated non-existent floor references (> 2 floors)
+        if re.search(r'\b([3-9]|\d{2,})(st|nd|rd|th)?\s+floor\b|\bfloor\s+([3-9]|\d{2,})\b', lower_out):
+            return (
+                "The JRMSU Katipunan Campus Library building features 2 floors (1st Floor and 2nd Floor). "
+                "There are no 3rd, 4th, or higher floors in our library building. "
+                "Please visit our Physical Setup page at /physical-setup to view all 37 verified library zones."
+            )
+
         return cleaned
 
     def _resolve_deterministic_database_intent(self, user_message: str) -> Optional[str]:
@@ -491,6 +500,18 @@ class AIService(IAIService):
         norm = re.sub(r'[^a-z0-9\s]', ' ', str(user_message).lower()).strip()
         tokens = set(norm.split())
         expanded_tokens = AIReadViewHelper.expand_query_tokens(user_message)
+
+        # ---------------------------------------------------------
+        # Guardrail: Non-Existent Floor Inquiries (Building has 2 floors)
+        # ---------------------------------------------------------
+        floor_match = re.search(r'\b([3-9]|\d{2,})(st|nd|rd|th)?\s+floor\b|\bfloor\s+([3-9]|\d{2,})\b', norm)
+        if floor_match:
+            matched_floor = floor_match.group(0)
+            return (
+                f"The JRMSU Katipunan Campus Library is a 2-storey facility featuring the 1st Floor and 2nd Floor. "
+                f"There is no {matched_floor}. All 37 of our mapped physical zones and reading areas are located across the 1st and 2nd floors. "
+                "You can view high-resolution photos and details of each area by visiting our Physical Setup page at /physical-setup."
+            )
 
         # ---------------------------------------------------------
         # Intent 0: Assistant Identity, Accuracy & Database Read/View Self-Audit
@@ -572,7 +593,15 @@ class AIService(IAIService):
             'reference' in tokens and not any(p in norm for p in ['for your reference', 'reference number'])
         ) or ('research' in tokens and not any(w in norm for w in ['social learning', 'learning zone', 'zone']))
 
-        if has_ref_phrase or has_ref_token:
+        # Check if user inquiry is asking for generative academic reasoning
+        is_academic_reasoning_prompt = any(p in norm for p in [
+            'formulate', 'how to write', 'how to structure', 'literature review', 'framework',
+            'methodology', 'qualitative', 'quantitative', 'rrl', 'title idea', 'title for',
+            'research title', 'capstone title', 'thesis title', 'suggest a title', 'topic idea',
+            'difference between', 'synthesize'
+        ])
+
+        if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt:
             count = self._get_reference_count()
             if count == 0:
                 return (
@@ -912,23 +941,39 @@ class AIService(IAIService):
             )
 
         has_quality_or_vmgo = any(p in norm for p in [
-            'quality objectives', 'quality policy', 'vision and mission', 'library vision', 'library mission', 'library goals'
-        ]) or bool({'vision', 'mission'} & tokens) or ('quality' in tokens and bool({'objective', 'objectives', 'policy'} & tokens))
+            'quality objectives', 'quality policy', 'vision and mission', 'library vision', 'library mission', 'library goals',
+            'core values', 'core value', 'values for the jrmsu', 'jrmsu core values', 'library core values', 'what is the core values'
+        ]) or bool({'vision', 'mission'} & tokens) or ('quality' in tokens and bool({'objective', 'objectives', 'policy'} & tokens)) or ('core' in tokens and 'values' in tokens) or ('core' in tokens and 'value' in tokens)
 
         if has_quality_or_vmgo:
             try:
                 qual_obj = self.page_content_repo.get_by_slug('about_quality')
-                qual_text = self._strip_html(getattr(qual_obj, 'content', '')) if qual_obj else ''
+                qual_items = AIReadViewHelper.extract_html_list_items(getattr(qual_obj, 'content', '')) if qual_obj else []
             except Exception:
-                qual_text = ''
-            if qual_text:
-                return f"JRMSU Katipunan Campus Library Quality Objectives & Commitments:\n\n{qual_text[:800]}"
-            return (
-                "JRMSU Vision & Library Quality Objectives:\n"
+                qual_items = []
+
+            resp_lines = [
+                "JRMSU Katipunan Campus Library Quality Objectives & Core Commitments:\n"
+            ]
+            if qual_items:
+                for idx, item in enumerate(qual_items, 1):
+                    resp_lines.append(f"{idx}. {item}")
+            else:
+                resp_lines.append(
+                    "1. Continuous acquisition of updated print and digital information resources.\n"
+                    "2. Equitable and inclusive access to research and academic facilities.\n"
+                    "3. Modern technology integration and online database services.\n"
+                    "4. Professional development and user-centered library assistance.\n"
+                    "5. Collaborative engagement supporting university instruction, research, and production."
+                )
+
+            resp_lines.append(
+                "\n\nJRMSU Vision, Mission & Core Values:\n"
                 "- Vision: A dynamic and diverse internationally recognized university.\n"
-                "- Library Quality Commitment: To provide accessible, relevant, and updated print and digital information resources, "
-                "responsive reference assistance, and conducive learning facilities for students, faculty, and researchers."
+                "- Mission: Jose Rizal Memorial State University delivers quality education, transformative research, sustainable extension services, and innovative production.\n"
+                "- Core Values: God-centeredness, Excellence, Commitment, Integrity, Collaboration, and Accountability."
             )
+            return "\n".join(resp_lines)
 
         # ---------------------------------------------------------
         # Intent 5: Personnel / Hours Intent
@@ -1218,7 +1263,61 @@ class AIService(IAIService):
             logger.error(f"Error fetching dynamic context: {e}")
             return "DYNAMIC DATABASE KNOWLEDGE: General library information available."
 
-    def _build_dynamic_system_prompt(self, user_message: str = "") -> str:
+    def _classify_query_complexity(self, user_message: str) -> Tuple[str, dict, str]:
+        """
+        Adaptive 3-Tier Complexity Classifier and Dynamic Generation Tuning:
+        - Tier 1: Precision Micro-Answer (0.3s-0.5s): Factual checks, Yes/No, hours, single book status (temperature 0.1, max 120 tokens).
+        - Tier 2: Structured Action Answer (0.7s-1.1s): Recommendations, procedural how-tos, 3-5 item lists (temperature 0.2, max 320 tokens).
+        - Tier 3: Deep Academic Reasoning (1.2s-2.0s, streamed): RRL formulation, capstone analysis, why/explain, thesis methodology (temperature 0.3, max 850 tokens).
+        """
+        if not user_message:
+            return "TIER_1", {"num_ctx": 2048, "num_predict": 120, "temperature": 0.1, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15}, "TIER 1 (FACTUAL MICRO-ANSWER): Give a direct 1-sentence answer immediately."
+
+        msg_clean = re.sub(r'[^a-z0-9\s]', ' ', str(user_message).lower()).strip()
+        words = msg_clean.split()
+        word_count = len(words)
+
+        tier3_triggers = {
+            'why', 'explain', 'analyze', 'analysis', 'compare', 'comparison', 'thesis', 'capstone',
+            'rrl', 'methodology', 'framework', 'literature', 'formulate', 'synthesize', 'evaluate',
+            'implication', 'pros and cons', 'difference between', 'recommend a research title'
+        }
+        tier2_triggers = {
+            'recommend', 'suggest', 'how to', 'how do i', 'steps to', 'list of', 'what books about',
+            'collection of', 'show me books', 'borrowing rules', 'available books on', 'can you recommend'
+        }
+
+        # Check Tier 3: Deep Academic Reasoning
+        if any(trig in msg_clean for trig in tier3_triggers) or (word_count > 15 and any(w in words for w in ['how', 'what', 'research'])):
+            options = self._get_ollama_options("TIER_3")
+            inst = (
+                "TIER 3 (DEEP ACADEMIC REASONING AND RRL):\n"
+                "1. Bottom Line Up Front (BLUF): Provide the direct core answer or recommendation in the very first sentence.\n"
+                "2. Systematic Reasoning: Explain the concepts, methodology, or reasoning clearly with logical progression.\n"
+                "3. Verified Database Grounding: Cite specific verified books, theses, or E-Resource course folders from the context to back up your explanation."
+            )
+            return "TIER_3", options, inst
+
+        # Check Tier 2: Structured Action / Recommendation
+        if any(trig in msg_clean for trig in tier2_triggers) or (word_count > 7 and bool({'book', 'books'} & set(words))):
+            options = self._get_ollama_options("TIER_2")
+            inst = (
+                "TIER 2 (STRUCTURED ACTION ANSWER):\n"
+                "1. Start with 1 direct lead sentence answering the prompt.\n"
+                "2. Provide 3-5 concise, structured bullet points citing verified database items or step-by-step procedures.\n"
+                "3. Conclude concisely with actionable guidance."
+            )
+            return "TIER_2", options, inst
+
+        # Tier 1: Instant Micro-Answer
+        options = self._get_ollama_options("TIER_1")
+        inst = (
+            "TIER 1 (INSTANT MICRO-ANSWER):\n"
+            "State the verified factual answer directly in 1 to 2 clear sentences. Stop immediately—do not pad with filler words or conversational fluff."
+        )
+        return "TIER_1", options, inst
+
+    def _build_dynamic_system_prompt(self, user_message: str = "", complexity_tier: str = "TIER_2", tier_instructions: str = "") -> str:
         institutional_context = self._get_or_build_institutional_context()
 
         # Dynamic settings lookup
@@ -1260,17 +1359,26 @@ class AIService(IAIService):
 
 CRITICAL BEHAVIOR RULES:
 1. Be polite, professional, concise, and helpful. 
-2. Always keep your answers relatively short so they fit in a chat bubble.
-3. VERY IMPORTANT: If a user casually greets you (e.g. "Good morning", "Hi", "Hello", "Hey"), DO NOT reply with the exact same repetitive phrase. Always vary your greetings naturally (e.g. "Hello there!", "Good morning, how can I help you?", "Hey! Welcome to the library.", "Greetings!").
-4. Do not use markdown formatting (like **bold** or *italics*) because the chat UI displays raw text. Just use plain text with line breaks.
-5. If asked a question you don't know the answer to based on the context, politely advise them to use the 'Send an Email' option to contact the human librarian at {email}. Do not hallucinate answers.
-6. SOFTCOPY & DOCUMENT ACCESS RULES:
+2. ADAPTIVE LENGTH RULE:
+   - Match response length strictly to query complexity:
+   {tier_instructions}
+   - For simple facts, give 1-2 direct sentences and stop. For deep research or capstone questions, provide structured paragraphs with verified citations.
+3. ANTI-HALLUCINATION AND FALSE PREMISE RECOVERY:
+   - If a user asks about a resource, author, floor, or policy that DOES NOT exist in our library (or asks with a false premise, e.g., '4th floor' when our building has 2 floors, or an uncataloged fake book), you MUST:
+     a. Politely correct or clarify the false premise immediately using verified library facts.
+     b. State clearly that the requested title or item is not in our collection.
+     c. Immediately offer the closest available verified alternative titles, research references, or E-Resource department folders from the database that match their topic.
+     d. If newly acquired books are in visual cover-only processing, inform the user they can view cover photos in the 3D Carousel on the Home Page or ask at the Circulation Counter.
+4. VERY IMPORTANT: If a user casually greets you (e.g. "Good morning", "Hi", "Hello", "Hey"), DO NOT reply with the exact same repetitive phrase. Always vary your greetings naturally (e.g. "Hello there!", "Good morning, how can I help you?", "Hey! Welcome to the library.", "Greetings!").
+5. Do not use markdown formatting (like **bold** or *italics*) because the chat UI displays raw text. Just use plain text with line breaks.
+6. If asked a question you don't know the answer to based on the context, politely advise them to use the 'Send an Email' option to contact the human librarian at {email}. Do not hallucinate answers.
+7. SOFTCOPY & DOCUMENT ACCESS RULES:
    - When asked about research papers, theses, or books, reference their availability and softcopy status accurately from the context below.
    - If a research paper or thesis indicates "Softcopy PDF File Available", inform the user they can read or download the full text online on the website under the 'Collection' -> 'Research & Thesis References' tab by clicking 'View File'.
    - If it indicates "Softcopy Online Link Available", inform the user that a digital link is available on the website.
    - If it indicates "Physical Copy Only", explain that it is available for physical room use inside the library (Special Collections / Archives).
    - If asked for the newest or oldest books or theses, cite the exact titles and authors provided in the dynamic database knowledge below.
-7. ROOM RESERVATION RULES:
+8. ROOM RESERVATION RULES:
    - Reservable rooms are: Discussion Room 1 & 2, Tutorium Room 1 & 2, Multimedia Room.
    - Instruct users to click the 'Reserve a Room' button right below the chat window. NEVER mention UOPAC for room reservations.
 
@@ -1291,16 +1399,13 @@ SPECIFIC SEARCH RESULTS FOR USER INQUIRY:
 FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Library. NEVER claim to be created by Alibaba Cloud or Qwen, NEVER greet the user as 'Rizal', and NEVER invent external book titles.
 """
 
-    def _get_ollama_options(self) -> dict:
-        """Fast CPU inference options for Ollama with expanded context window."""
-        return {
-            "num_ctx": 2048,
-            "num_predict": 220,
-            "temperature": 0.25,
-            "top_k": 20,
-            "top_p": 0.85,
-            "repeat_penalty": 1.15
-        }
+    def _get_ollama_options(self, complexity_tier: str = "TIER_2") -> dict:
+        """Adaptive inference options for Ollama tuned to query complexity."""
+        if complexity_tier == "TIER_1":
+            return {"num_ctx": 2048, "num_predict": 120, "temperature": 0.1, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15}
+        elif complexity_tier == "TIER_3":
+            return {"num_ctx": 2048, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15}
+        return {"num_ctx": 2048, "num_predict": 320, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15}
 
     def generate_chat_stream(self, user_message: str, chat_history: Optional[list] = None, seen_answers: Optional[list] = None) -> Generator[str, None, None]:
         """
@@ -1326,8 +1431,9 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                 yield word + (" " if i < len(words) - 1 else "")
             return
 
-        # Tier 3: Ollama LLM Fallback with Output Guardrail
-        messages = [{"role": "system", "content": self._build_dynamic_system_prompt(user_message)}]
+        # Tier 3: Ollama LLM Fallback with Output Guardrail and Adaptive 3-Tier Tuning
+        tier, options, tier_inst = self._classify_query_complexity(user_message)
+        messages = [{"role": "system", "content": self._build_dynamic_system_prompt(user_message, complexity_tier=tier, tier_instructions=tier_inst)}]
         if chat_history:
             for msg in chat_history[-6:]:
                 text = (msg.get('text', '') or '').strip()
@@ -1346,11 +1452,11 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             "messages": messages,
             "stream": True,
             "keep_alive": -1,
-            "options": self._get_ollama_options()
+            "options": options
         }
 
         try:
-            response = self.session.post(self.ollama_url, json=payload, stream=True, timeout=60)
+            response = self.session.post(self.ollama_url, json=payload, stream=True, timeout=120)
             response.raise_for_status()
 
             full_answer = ""
@@ -1412,7 +1518,7 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                 "keep_alive": -1,
                 "options": {
                     "temperature": 0.4,
-                    "num_predict": 300
+                    "num_predict": 768
                 }
             }
             resp = self.session.post(self.ollama_url, json=payload, timeout=15)

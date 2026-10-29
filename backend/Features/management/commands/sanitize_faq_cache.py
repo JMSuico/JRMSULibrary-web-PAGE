@@ -136,6 +136,9 @@ CURATED_INSTITUTIONAL_FAQS = [
     "what are the library services",
     "what is the organizational structure",
     "what is in the librarians corner",
+    "what are the core values",
+    "what is the core values for the jrmsu and the library",
+    "what are the quality objectives",
 ]
 
 # Standard accurate answers to enforce
@@ -185,6 +188,15 @@ STANDARD_FAQ_UPDATES = {
     'what is in the librarians corner': [
         'The Librarian\'s Corner features an inspiring message from Campus Librarian Kiara Keren M. Alavanza and the JRMSU Katipunan Campus Library team: "From pages to possibilities—the JRMSU Library fosters knowledge, research, and lifelong learning in pursuit of excellence." It highlights the library\'s commitment to supporting JRMSU\'s Vision, Mission, Goals, and Objectives by providing relevant, up-to-date, and accessible information resources, enhancing collections and technological services, promoting information literacy, and strengthening research support, closing with: "Thank you for making the library part of your journey. We are always here to support your learning, research, and growth—Padayon, JRMSUans!"'
     ],
+    'what are the core values': [
+        'JRMSU Katipunan Campus Library Quality Objectives & Core Commitments:\n1. Increase the acquisition of print, digital, and multimedia resources by 10% annually to ensure modern, relevant, and accessible materials that support instruction, research, extension, and production.\n2. Increase library user engagement by 10% and ensure the 100% provision of adaptive, inclusive, and transformative library facilities that foster creativity, critical thinking, and lifelong learning.\n3. Forge at least one (1) local and one (1) international formal partnership or collaboration each year, and implement at least one (1) joint program or activity with academic institutions, government agencies, or library networks to strengthen resource sharing, collaboration, and service innovation.\n4. Ensure that 100% of library personnel participate in at least two (2) capacity-building or professional development activities per year, strengthening their skills in technology, research support, customer service, and library management.\n5. Achieve a minimum of 90% overall user satisfaction rating in the annual library survey by continuously delivering equitable, technology-driven, and user-centered services.\n\nJRMSU Institutional Core Values: God-centeredness, Excellence, Commitment, Integrity, Collaboration, and Accountability.'
+    ],
+    'what is the core values for the jrmsu and the library': [
+        'JRMSU Katipunan Campus Library Quality Objectives & Core Commitments:\n1. Increase the acquisition of print, digital, and multimedia resources by 10% annually to ensure modern, relevant, and accessible materials that support instruction, research, extension, and production.\n2. Increase library user engagement by 10% and ensure the 100% provision of adaptive, inclusive, and transformative library facilities that foster creativity, critical thinking, and lifelong learning.\n3. Forge at least one (1) local and one (1) international formal partnership or collaboration each year, and implement at least one (1) joint program or activity with academic institutions, government agencies, or library networks to strengthen resource sharing, collaboration, and service innovation.\n4. Ensure that 100% of library personnel participate in at least two (2) capacity-building or professional development activities per year, strengthening their skills in technology, research support, customer service, and library management.\n5. Achieve a minimum of 90% overall user satisfaction rating in the annual library survey by continuously delivering equitable, technology-driven, and user-centered services.\n\nJRMSU Institutional Core Values: God-centeredness, Excellence, Commitment, Integrity, Collaboration, and Accountability.'
+    ],
+    'what are the quality objectives': [
+        'JRMSU Katipunan Campus Library 5 Official Quality Objectives (from live CMS PageContent database):\n1. Increase the acquisition of print, digital, and multimedia resources by 10% annually.\n2. Increase library user engagement by 10% and provide adaptive, inclusive, and transformative facilities.\n3. Forge at least 1 local and 1 international formal partnership or collaboration annually.\n4. Ensure 100% of library personnel participate in at least 2 capacity-building activities per year.\n5. Achieve a minimum of 90% overall user satisfaction rating in the annual library survey.'
+    ],
 }
 
 
@@ -216,12 +228,17 @@ class Command(BaseCommand):
         # -------------------------------------------------------------
         # 1. PURGE INVALID / HALLUCINATED / NON-CURATED ROWS
         # -------------------------------------------------------------
-        all_entries = list(AIFaqCache.objects.all())
+        model_fields = {f.name for f in AIFaqCache._meta.fields}
+        if 'question_text' in model_fields:
+            all_entries = list(AIFaqCache.objects.only('id', 'question_hash', 'question_text').iterator(chunk_size=500))
+        else:
+            all_entries = list(AIFaqCache.objects.only('id', 'question', 'answers').iterator(chunk_size=500))
         purged_records = []
 
         for entry in all_entries:
-            q_raw = entry.question.strip().lower()
-            q_norm = normalize_text(entry.question)
+            q_val = getattr(entry, 'question', getattr(entry, 'question_text', ''))
+            q_raw = str(q_val or '').strip().lower()
+            q_norm = normalize_text(q_val)
 
             matched_term = None
             # Check question against blacklist terms
@@ -232,7 +249,8 @@ class Command(BaseCommand):
 
             # Check answers against blacklist terms
             if not matched_term:
-                answers = entry.answers if isinstance(entry.answers, list) else [str(entry.answers)]
+                raw_answers = getattr(entry, 'answers', [])
+                answers = raw_answers if isinstance(raw_answers, list) else [str(raw_answers)]
                 for ans in answers:
                     ans_lower = str(ans).lower()
                     for term in PURGE_TERMS:
@@ -247,7 +265,7 @@ class Command(BaseCommand):
 
             if matched_term or not is_curated:
                 reason = matched_term if matched_term else "Question is not part of standard curated institutional FAQs"
-                purged_records.append((entry.id, entry.question, reason))
+                purged_records.append((entry.id, q_val, reason))
                 if not dry_run:
                     entry.delete()
 
