@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # [Layer: Services/Implementations] — ai_service.py
 # Handles high-speed communication with the local Ollama AI instance with 3-Tier Hybrid RAG, Redis caching, and connection pooling.
 
@@ -92,7 +94,7 @@ class AIService(IAIService):
         text = str(text).lower()
         return re.sub(r'[^a-z0-9\s]', '', text).strip()
 
-    def _get_cached_answer(self, question: str, seen_answers: Optional[list] = None) -> Tuple[Optional[str], Optional[str]]:
+    def _get_cached_answer(self, question: str, seen_answers: Optional[list] = None) -> tuple[Optional[str], Optional[str]]:
         if seen_answers is None:
             seen_answers = []
 
@@ -1263,7 +1265,7 @@ class AIService(IAIService):
             logger.error(f"Error fetching dynamic context: {e}")
             return "DYNAMIC DATABASE KNOWLEDGE: General library information available."
 
-    def _classify_query_complexity(self, user_message: str) -> Tuple[str, dict, str]:
+    def _classify_query_complexity(self, user_message: str) -> tuple[str, dict, str]:
         """
         Adaptive 3-Tier Complexity Classifier and Dynamic Generation Tuning:
         - Tier 1: Precision Micro-Answer (0.3s-0.5s): Factual checks, Yes/No, hours, single book status (temperature 0.1, max 120 tokens).
@@ -1518,10 +1520,10 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                 "keep_alive": -1,
                 "options": {
                     "temperature": 0.4,
-                    "num_predict": 768
+                    "num_predict": 512
                 }
             }
-            resp = self.session.post(self.ollama_url, json=payload, timeout=15)
+            resp = self.session.post(self.ollama_url, json=payload, timeout=60)
             if resp.status_code == 200:
                 data = resp.json()
                 draft = data.get('message', {}).get('content', '').strip()

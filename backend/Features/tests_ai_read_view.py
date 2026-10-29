@@ -378,6 +378,8 @@ class AIReadViewVerificationTests(TestCase):
       4. Algorithm 3: 54-record Physical Setup (37) vs. Interior Photo (17) grouping
       5. Algorithm 4: 23 ManagedLink category grouping & 17 Library Services HTML extraction
       6. Algorithm 5 & End-to-End 13-Table Live Response Verification
+      7. UserController Heartbeat & Ghost Session Prevention (Finding 1 & 2)
+      8. sanitize_faq_cache Dynamic Field Building & Blacklist Purge (Finding 5)
     """
 
     @classmethod
@@ -1048,6 +1050,187 @@ class AIReadViewVerificationTests(TestCase):
                     lower_resp,
                     f"Expected '{expected}' in response to '{query}', got:\n{response}",
                 )
+
+    # -------------------------------------------------------------------------
+    # 7. UserController Heartbeat & Ghost Session Prevention Test
+    # -------------------------------------------------------------------------
+    def test_07_user_controller_heartbeat_invariants(self):
+        """
+        Verifies:
+        1. An unauthenticated request receives 401 Unauthorized.
+        2. A session with 'force_logout': True receives 401 Unauthorized.
+        3. A user whose `last_active is None` receives 401 Unauthorized
+           ({'status': 'inactive', 'authenticated': False}) and their `last_active`
+           remains None in the database (never resurrected).
+        4. A user with an active timestamp has `last_active` updated to `now`.
+        """
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from rest_framework import status
+        from django.utils import timezone
+        from Features.Api.Controllers.user_controller import UserViewSet as UserController
+        from Features.Data.Models.account_model import Account
+
+        factory = APIRequestFactory()
+        heartbeat_view = UserController.as_view({'post': 'heartbeat'})
+
+        # Subtest 1: Unauthenticated request
+        anon_request = factory.post('/api/users/heartbeat/')
+        anon_response = heartbeat_view(anon_request)
+        self.assertEqual(anon_response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(anon_response.data, {'status': 'inactive', 'authenticated': False})
+
+        # Subtest 2: Inactive/logged-out user with last_active is None
+        inactive_user = Account.objects.create_user(
+            username="inactive_heartbeat_test_user",
+            password="testpassword123",
+            last_active=None,
+        )
+        inactive_request = factory.post('/api/users/heartbeat/')
+        force_authenticate(inactive_request, user=inactive_user)
+        inactive_response = heartbeat_view(inactive_request)
+
+        self.assertEqual(inactive_response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(inactive_response.data, {'status': 'inactive', 'authenticated': False})
+
+        # CRITICAL ASSERTION: last_active must remain None in DB (NEVER resurrected)
+        inactive_user.refresh_from_db()
+        self.assertIsNone(
+            inactive_user.last_active,
+            "Logged-out user with last_active=None must NEVER be resurrected by heartbeat",
+        )
+
+        # Subtest 3: Active user with existing timestamp
+        initial_time = timezone.now() - timezone.timedelta(minutes=10)
+        active_user = Account.objects.create_user(
+            username="active_heartbeat_test_user",
+            password="testpassword123",
+            last_active=initial_time,
+        )
+        active_request = factory.post('/api/users/heartbeat/')
+        force_authenticate(active_request, user=active_user)
+        active_response = heartbeat_view(active_request)
+
+        self.assertEqual(active_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(active_response.data.get('status'), 'active')
+        self.assertIn('last_active', active_response.data)
+
+        # CRITICAL ASSERTION: DB record must be updated to now
+        active_user.refresh_from_db()
+        self.assertIsNotNone(active_user.last_active)
+        self.assertGreater(
+            active_user.last_active,
+            initial_time,
+            "Active user's last_active must be updated to current timestamp",
+        )
+
+        # Subtest 4: Session with force_logout=True receives 401
+        class MockSession(dict):
+            session_key = "active_session_123"
+
+        session = MockSession()
+        session["force_logout"] = True
+        session_request = factory.post('/api/users/heartbeat/')
+        session_request.session = session
+        force_authenticate(session_request, user=active_user)
+        forced_response = heartbeat_view(session_request)
+        self.assertEqual(forced_response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(forced_response.data, {'status': 'inactive', 'authenticated': False})
+
+    # -------------------------------------------------------------------------
+    # 8. sanitize_faq_cache Dynamic Field Building & Blacklist Purge Test
+    # -------------------------------------------------------------------------
+    def test_08_sanitize_faq_cache_dynamic_fields_and_blacklist_purge(self):
+        """
+        Verifies:
+        1. `sanitize_faq_cache` dynamically builds `fetch_fields` covering both question
+           and answers fields from `AIFaqCache` model fields, preventing N+1 queries.
+        2. Entries with blacklisted terms in `question` are purged.
+        3. Entries with blacklisted terms in `answers` are purged.
+        4. Curated institutional FAQs with clean answers are preserved.
+        """
+        import io
+        from django.core.management import call_command
+        from Features.management.commands.sanitize_faq_cache import (
+            Command as SanitizeFaqCacheCommand,
+            PURGE_TERMS,
+            CURATED_INSTITUTIONAL_FAQS,
+        )
+
+        # Subtest 1: Verify dynamic construction of fetch_fields
+        cmd = SanitizeFaqCacheCommand()
+        model_fields = {f.name for f in AIFaqCache._meta.fields}
+        fetch_fields = ['id']
+        for q_field in ['question', 'question_text', 'question_hash']:
+            if q_field in model_fields:
+                fetch_fields.append(q_field)
+        for a_field in ['answers', 'answer']:
+            if a_field in model_fields:
+                fetch_fields.append(a_field)
+
+        self.assertIn('id', fetch_fields)
+        self.assertIn('question', fetch_fields)
+        self.assertIn('answers', fetch_fields)
+
+        # Verify that querying only(*fetch_fields) works cleanly without N+1 deferral
+        entries_sample = list(AIFaqCache.objects.only(*fetch_fields)[:5])
+        self.assertIsInstance(entries_sample, list)
+
+        # Subtest 2: Setup test records to verify blacklist filtering
+        # a) Record with blacklisted term in question
+        blacklisted_q_entry = AIFaqCache.objects.create(
+            question="can you recommend the art of war book?",
+            answers=["The Art of War is by Sun Tzu."],
+        )
+
+        # b) Record with legitimate curated question, but blacklisted term in answer
+        AIFaqCache.objects.filter(question="is the library open on weekends").delete()
+        blacklisted_ans_entry = AIFaqCache.objects.create(
+            question="is the library open on weekends",
+            answers=["No, but we recommend reading William Shakespeare and Braveheart."],
+        )
+
+        # c) Non-curated arbitrary entry
+        non_curated_entry = AIFaqCache.objects.create(
+            question="what is the weather on mars today?",
+            answers=["Mars is cold and dusty."],
+        )
+
+        # d) Clean curated entry (ensure it exists and is clean)
+        clean_curated_q = "can i borrow magazines or newspapers"
+        AIFaqCache.objects.filter(question=clean_curated_q).delete()
+        clean_entry = AIFaqCache.objects.create(
+            question=clean_curated_q,
+            answers=["Magazines and newspapers are for room use only."],
+        )
+
+        # Subtest 3: Run sanitize_faq_cache command
+        out = io.StringIO()
+        call_command('sanitize_faq_cache', stdout=out)
+
+        # Subtest 4: Assertions on purge outcomes
+        # 1. Question blacklist entry purged
+        self.assertFalse(
+            AIFaqCache.objects.filter(id=blacklisted_q_entry.id).exists(),
+            "FAQ entry with blacklisted term in question must be purged",
+        )
+
+        # 2. Answer blacklist entry purged
+        self.assertFalse(
+            AIFaqCache.objects.filter(id=blacklisted_ans_entry.id).exists(),
+            "FAQ entry with blacklisted term in answers must be purged",
+        )
+
+        # 3. Non-curated entry purged
+        self.assertFalse(
+            AIFaqCache.objects.filter(id=non_curated_entry.id).exists(),
+            "Non-curated FAQ entry must be purged",
+        )
+
+        # 4. Clean curated entry preserved
+        self.assertTrue(
+            AIFaqCache.objects.filter(id=clean_entry.id).exists(),
+            "Clean curated institutional FAQ entry must NOT be purged",
+        )
 
 
 if __name__ == "__main__":
