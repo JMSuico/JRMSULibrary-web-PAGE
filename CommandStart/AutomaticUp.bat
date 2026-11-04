@@ -208,8 +208,15 @@ set "STARTUP_BAT=%STARTUP_FOLDER%\JRMSU_Library_AutoStart.bat"
 del "%STARTUP_FOLDER%\JRMSU_Library_AutoStart.vbs" >nul 2>&1
 del "%STARTUP_FOLDER%\SilentStartDockerWSL.vbs" >nul 2>&1
 
+:: 3.0 Save Master Script Path for 24/7 Watchdog and Startup Healing
+if not exist "%APPDATA%\JRMSULibrary" mkdir "%APPDATA%\JRMSULibrary" >nul 2>&1
+echo %~f0> "%APPDATA%\JRMSULibrary\AutomaticUpPath.txt"
+echo %~f0> "%~dp0AutomaticUpPath.txt"
+
 :: 3.1 Primary Mechanism: Windows Registry Run Key (Runs immediately upon entering desktop)
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /t REG_SZ /d "cmd.exe /c start \"\" \"%~dp0AutomaticUp.bat\"" /f >nul 2>&1
+:: Force-registers in HKCU (current user) and HKLM (machine-wide)
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /t REG_SZ /d "cmd.exe /c start \"\" \"%~f0\"" /f >nul 2>&1
+reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /t REG_SZ /d "cmd.exe /c start \"\" \"%~f0\"" /f >nul 2>&1
 
 :: 3.2 Secondary Mechanism: Startup Folder Batch Launcher (Opens visible console window forcefully & resilient to drive letter changes)
 > "!STARTUP_BAT!" echo @echo off
@@ -225,7 +232,11 @@ reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_S
 >> "!STARTUP_BAT!" echo     start "" "%USERPROFILE%\Desktop\JRMSU LIBRARY LANGDING PAGE\CommandStart\AutomaticUp.bat"
 >> "!STARTUP_BAT!" echo     exit /b 0
 >> "!STARTUP_BAT!" echo )
->> "!STARTUP_BAT!" echo for %%%%D in (G C D E F H) do (
+>> "!STARTUP_BAT!" echo for %%%%D in (F G C D E H) do (
+>> "!STARTUP_BAT!" echo     if exist "%%%%D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE\CommandStart\AutomaticUp.bat" (
+>> "!STARTUP_BAT!" echo         start "" "%%%%D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE\CommandStart\AutomaticUp.bat"
+>> "!STARTUP_BAT!" echo         exit /b 0
+>> "!STARTUP_BAT!" echo     )
 >> "!STARTUP_BAT!" echo     if exist "%%%%D:\JRMSU LIBRARY SYSTEM\CommandStart\AutomaticUp.bat" (
 >> "!STARTUP_BAT!" echo         start "" "%%%%D:\JRMSU LIBRARY SYSTEM\CommandStart\AutomaticUp.bat"
 >> "!STARTUP_BAT!" echo         exit /b 0
@@ -291,11 +302,23 @@ set "WATCHDOG_VBS=!WATCHDOG_DIR!\Watchdog.vbs"
 >> "!WATCHDOG_BAT!" echo if exist "%%TEMP%%\jrmsu_startup.lock" exit /b 0
 >> "!WATCHDOG_BAT!" echo.
 >> "!WATCHDOG_BAT!" echo :: 6. Self-heal by invoking AutomaticUp.bat
+>> "!WATCHDOG_BAT!" echo if exist "%APPDATA%\JRMSULibrary\AutomaticUpPath.txt" (
+>> "!WATCHDOG_BAT!" echo     for /f "usebackq delims=" %%%%P in ("%APPDATA%\JRMSULibrary\AutomaticUpPath.txt") do (
+>> "!WATCHDOG_BAT!" echo         if exist "%%%%~P" (
+>> "!WATCHDOG_BAT!" echo             call "%%%%~P"
+>> "!WATCHDOG_BAT!" echo             exit /b 0
+>> "!WATCHDOG_BAT!" echo         )
+>> "!WATCHDOG_BAT!" echo     )
+>> "!WATCHDOG_BAT!" echo )
 >> "!WATCHDOG_BAT!" echo if exist "%~dp0AutomaticUp.bat" (
 >> "!WATCHDOG_BAT!" echo     call "%~dp0AutomaticUp.bat"
 >> "!WATCHDOG_BAT!" echo     exit /b 0
 >> "!WATCHDOG_BAT!" echo )
->> "!WATCHDOG_BAT!" echo for %%%%D in (G C D E F H) do (
+>> "!WATCHDOG_BAT!" echo for %%%%D in (F G C D E H) do (
+>> "!WATCHDOG_BAT!" echo     if exist "%%%%D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE\CommandStart\AutomaticUp.bat" (
+>> "!WATCHDOG_BAT!" echo         call "%%%%D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE\CommandStart\AutomaticUp.bat"
+>> "!WATCHDOG_BAT!" echo         exit /b 0
+>> "!WATCHDOG_BAT!" echo     )
 >> "!WATCHDOG_BAT!" echo     if exist "%%%%D:\JRMSU LIBRARY SYSTEM\CommandStart\AutomaticUp.bat" (
 >> "!WATCHDOG_BAT!" echo         call "%%%%D:\JRMSU LIBRARY SYSTEM\CommandStart\AutomaticUp.bat"
 >> "!WATCHDOG_BAT!" echo         exit /b 0
@@ -473,6 +496,9 @@ if defined DOCKER_BIN (
     echo !DOCKER_BIN!> "%~dp0DockerLocation.txt"
     echo [CACHED] Saved Docker Desktop path permanently: !DOCKER_BIN!
     echo [CACHED] Future boots and restarts on this computer will skip searching.
+    :: Register Docker Desktop in Windows Registry to guarantee it launches on login/reboot
+    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Docker Desktop" /t REG_SZ /d "\"!DOCKER_BIN!\"" /f >nul 2>&1
+    reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "Docker Desktop" /t REG_SZ /d "\"!DOCKER_BIN!\"" /f >nul 2>&1
 )
 
 :launch_docker
@@ -534,6 +560,12 @@ if exist "!HOSTS_PATH!" (
 )
 echo ====================================================================
 echo.
+
+:: Ensure Windows Docker Desktop Background Service is active
+sc query com.docker.service >nul 2>&1
+if !errorlevel! equ 0 (
+    net start com.docker.service >nul 2>&1
+)
 
 echo [STARTING] Launching Docker Desktop in background (minimized to system tray)...
 start /min "" "!DOCKER_BIN!" -accept-license
