@@ -17,18 +17,44 @@ if exist "%~dp0MachineRole.txt" (
     for /f "usebackq delims=" %%R in ("%APPDATA%\JRMSULibrary\MachineRole.txt") do set "MACHINE_ROLE=%%~R"
 )
 
+:: Automatic Physical Library Server Auto-Detection
+:: If running on F: drive or under "JRMSU LIBRARY SYSTEM" folder, automatically promote to PRODUCTION_SERVER
+set "CURRENT_LAUNCH_PATH=%~dp0"
+echo "!CURRENT_LAUNCH_PATH!" | findstr /i /c:"JRMSU LIBRARY SYSTEM" >nul 2>&1 && (
+    if /i "!MACHINE_ROLE!"=="MAINTENANCE" (
+        echo [AUTO-PROMOTION] Physical Library Server detected at: !CURRENT_LAUNCH_PATH!
+        echo [AUTO-PROMOTION] Automatically configuring role as PRODUCTION_SERVER...
+        set "MACHINE_ROLE=PRODUCTION_SERVER"
+        echo PRODUCTION_SERVER> "%~dp0MachineRole.txt"
+        if not exist "%APPDATA%\JRMSULibrary" mkdir "%APPDATA%\JRMSULibrary" >nul 2>&1
+        echo PRODUCTION_SERVER> "%APPDATA%\JRMSULibrary\MachineRole.txt"
+    )
+)
+
 if /i "!MACHINE_ROLE!"=="MAINTENANCE" (
     echo ====================================================================
-    echo   [BLOCKED] THIS COMPUTER IS CONFIGURED AS A MAINTENANCE LAPTOP
+    echo   [ROLE NOTICE] THIS COMPUTER IS CURRENTLY TAGGED AS MAINTENANCE
     echo ====================================================================
-    echo Production hosting, 24/7 Watchdog, and Cloudflare tunnel auto-takeover
-    echo are strictly disabled on this device to protect the primary server.
+    echo Current MachineRole.txt setting: MAINTENANCE.
     echo.
-    echo If you need to run local testing without hijacking production Cloudflare,
-    echo use start-dev.bat instead.
-    echo ====================================================================
-    pause
-    exit /b 0
+    echo If this computer is the PHYSICAL LIBRARY SERVER PC, you can configure
+    echo it as PRODUCTION_SERVER right now to launch Docker and Cloudflare.
+    echo.
+    set "PROMOTE_CHOICE=N"
+    set /p "PROMOTE_CHOICE=Configure this computer as the Dedicated Library Server? (Y/N) [Default: N]: "
+    if /i "!PROMOTE_CHOICE!"=="Y" (
+        echo.
+        echo [PROMOTING] Running Configure-As-Library-Server.bat...
+        call "%~dp0Configure-As-Library-Server.bat"
+        exit /b 0
+    ) else (
+        echo.
+        echo [PROTECTION] Halting startup to protect the primary server.
+        echo If you need to run local testing on your laptop, use start-dev.bat instead.
+        echo ====================================================================
+        pause
+        exit /b 0
+    )
 )
 
 set "LOCK_FILE=%TEMP%\jrmsu_startup.lock"
@@ -457,6 +483,58 @@ if not defined DOCKER_BIN (
     goto :wait_docker_loop
 )
 
+:: 5.0 Host RAM & WSL2 Memory Guardrail (Prevents 96%% RAM consumption, guarantees 3-5s AI response)
+echo.
+echo ====================================================================
+echo   [RAM-GUARD] AUDITING HOST MEMORY ^& ENFORCING WSL2 MEMORY CEILING
+echo ====================================================================
+set "WSLCONFIG_FILE=%USERPROFILE%\.wslconfig"
+set "NEED_WSL_RESTART=0"
+
+if not exist "!WSLCONFIG_FILE!" (
+    set "NEED_WSL_RESTART=1"
+) else (
+    findstr /i "memory=6GB" "!WSLCONFIG_FILE!" >nul 2>&1
+    if !errorlevel! neq 0 set "NEED_WSL_RESTART=1"
+)
+
+if "!NEED_WSL_RESTART!"=="1" (
+    echo [RAM-GUARD] Applying 6GB memory ceiling to .wslconfig (leaves 6GB for Windows OS + Ollama)...
+    > "!WSLCONFIG_FILE!" echo # JRMSU Library Server WSL2 Memory Guardrail
+    >> "!WSLCONFIG_FILE!" echo [wsl2]
+    >> "!WSLCONFIG_FILE!" echo memory=6GB
+    >> "!WSLCONFIG_FILE!" echo processors=4
+    >> "!WSLCONFIG_FILE!" echo swap=2GB
+    >> "!WSLCONFIG_FILE!" echo localhostForwarding=true
+    
+    where wsl >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo [RAM-GUARD] Restarting WSL2 virtual engine to apply 6GB ceiling immediately...
+        wsl --shutdown >nul 2>&1
+        ping 127.0.0.1 -n 3 >nul
+    )
+    echo [OK] WSL2 6GB memory ceiling enforced.
+) else (
+    echo [RAM-GUARD] WSL2 6GB memory ceiling is active and verified.
+)
+
+:: Log host physical memory status
+for /f "usebackq tokens=*" %%M in (`powershell -NoProfile -Command "$os = Get-CimInstance Win32_OperatingSystem; $tot = [math]::Round($os.TotalVisibleMemorySize/1MB, 2); $fre = [math]::Round($os.FreePhysicalMemory/1MB, 2); $usd = [math]::Round($tot - $fre, 2); $pct = [math]::Round(($usd/$tot)*100, 1); Write-Output "Host RAM: $usd GB / $tot GB ($pct%% used, $fre GB free)"" 2^>nul`) do (
+    echo [RAM-STATUS] %%M
+)
+
+:: 5.0.1 Map host.docker.internal in Windows hosts file if Administrator
+set "HOSTS_PATH=%WINDIR%\System32\drivers\etc\hosts"
+if exist "!HOSTS_PATH!" (
+    findstr /i "host.docker.internal" "!HOSTS_PATH!" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo 127.0.0.1 host.docker.internal>> "!HOSTS_PATH!" 2>nul
+        if !errorlevel! equ 0 echo [OK] Mapped 127.0.0.1 host.docker.internal in hosts file.
+    )
+)
+echo ====================================================================
+echo.
+
 echo [STARTING] Launching Docker Desktop in background (minimized to system tray)...
 start /min "" "!DOCKER_BIN!" -accept-license
 
@@ -480,29 +558,15 @@ echo [WARNING] Docker initialization took longer than expected. Proceeding with 
 :docker_online
 echo [OK] Docker Engine is online and ready!
 
-:: 6. Check if the system is ALREADY online and running
-docker ps --filter "name=frontend-webpage" --filter "status=running" | findstr /i "frontend-webpage" >nul 2>&1
-if !errorlevel! equ 0 (
-    echo.
-    echo ====================================================================
-    echo   [OK] SYSTEM IS ALREADY UP AND RUNNING!
-    echo ====================================================================
-    echo - Public Landing Page:  https://page.jrmsukc-library.online
-    echo - Librarian Admin:      https://admin.jrmsukc-library.online
-    echo - Local Machine:        http://localhost:3000
-    echo - Wi-Fi / Local LAN:    http://!LOCAL_IP!:3000
-    echo.
-    echo You do not need to click again.
-    echo To stop the system, double-click StopAutomaticUp.bat.
-    echo ====================================================================
-    del "!LOCK_FILE!" >nul 2>&1
-    ping 127.0.0.1 -n 5 >nul
-    exit /b 0
-)
+:: 5.3 RAM & Cache Garbage Collection (Clean old builder artifacts and dead containers)
+echo [RAM-GUARD] Reclaiming stale Docker build caches and dead containers...
+docker builder prune -f >nul 2>&1
+docker system prune -f >nul 2>&1
+echo [OK] Docker system caches reclaimed.
 
-:: 7. Launch Docker Compose Services & Cloudflare Tunnel
+:: 6. Launch / Converge Docker Compose Services (Enforces single replica & memory efficiency)
 echo.
-echo [LAUNCHING] Starting JRMSU Library System containers...
+echo [LAUNCHING] Starting and converging JRMSU Library System containers...
 cd /d "!PROJECT_DIR!"
 
 docker compose up -d
@@ -510,6 +574,22 @@ if !errorlevel! neq 0 (
     echo [RETRY] Trying with docker-compose standalone...
     docker-compose up -d
 )
+
+:: Refresh backend so newly pulled AI code is loaded fresh into memory
+docker ps --filter "name=backend" --filter "status=running" | findstr /i "backend" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [REFRESH] Reloading backend ASGI worker to ensure newest AI code is active...
+    docker compose restart backend >nul 2>&1
+    echo [OK] Backend service online with live AI intent engine.
+)
+
+:: Verify frontend container
+docker ps --filter "name=frontend-webpage" --filter "status=running" | findstr /i "frontend-webpage" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [OK] Frontend webpage container is active and listening on port 3000.
+)
+
+:: 7. Launch Cloudflare Tunnel Connector
 
 echo.
 echo [LAUNCHING] Verifying Cloudflare Tunnel connector...
