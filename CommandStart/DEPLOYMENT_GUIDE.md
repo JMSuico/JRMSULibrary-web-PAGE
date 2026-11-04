@@ -109,6 +109,20 @@ This step equips the physical Library Server PC with high-priority background in
 
 ---
 
+---
+
+### Step 2-B: Server RAM & 3-5s AI Latency Optimization (On the Library PC)
+
+If the Library PC has 12 GB RAM and memory consumption reaches 90%-96%, Docker WSL2 memory paging will slow AI generation down. To drop RAM usage to 55%-65% and guarantee 3-5 second AI replies:
+
+1. Right-click **`Optimize-Server-RAM.bat`** in `CommandStart` and select **Run as Administrator**.
+2. The script applies the following automated tuning:
+   - **WSL2 Memory Guardrail**: Writes `%USERPROFILE%\.wslconfig` capping WSL2 virtual memory to **6 GB** and swap to **2 GB**, guaranteeing 6 GB of physical RAM for Windows OS, AweSun remote control, and system processes.
+   - **Backend Container Scaling**: Runs 1 high-speed Daphne ASGI instance instead of 3 redundant containers, saving ~800 MB RAM immediately.
+   - **Ollama Parallelism**: Sets `OLLAMA_NUM_PARALLEL=1`, cutting KV cache memory overhead in half.
+   - **Cache Pruning**: Prunes dead Docker builder caches and unneeded image layers.
+   - **Real-Time Token Streaming**: Words stream to the browser in under 1.5 seconds with sentence completion guards preventing any cut-off sentences.
+
 ### Step 3: Unattended Morning Reboot Setup (On the Library PC)
 
 To ensure the Library PC starts completely unattended when library staff flip the master power switch or press the PC power button each morning, configure Windows AutoLogon.

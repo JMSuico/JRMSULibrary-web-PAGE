@@ -64,7 +64,7 @@ services:
   # ─── Layer 3: Backend ──────────────────────────────────────────────────
   backend:
     deploy:
-      replicas: 3
+      replicas: 1
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -186,7 +186,7 @@ services:
     restart: unless-stopped
     environment:
       - OLLAMA_KEEP_ALIVE=-1
-      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_NUM_PARALLEL=1
     volumes:
       - ollama_data:/root/.ollama
 
