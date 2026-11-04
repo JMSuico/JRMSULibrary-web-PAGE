@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # [Layer: Services/Implementations] — ai_service.py
 # Handles high-speed communication with the local Ollama AI instance with 3-Tier Hybrid RAG, Redis caching, and connection pooling.
 
@@ -92,7 +94,7 @@ class AIService(IAIService):
         text = str(text).lower()
         return re.sub(r'[^a-z0-9\s]', '', text).strip()
 
-    def _get_cached_answer(self, question: str, seen_answers: Optional[list] = None) -> Tuple[Optional[str], Optional[str]]:
+    def _get_cached_answer(self, question: str, seen_answers: Optional[list] = None) -> tuple[Optional[str], Optional[str]]:
         if seen_answers is None:
             seen_answers = []
 
@@ -486,7 +488,29 @@ class AIService(IAIService):
                 "Please visit our Physical Setup page at /physical-setup to view all 37 verified library zones."
             )
 
+        # Enforce sentence completion: prevent cut-off or severed trailing thoughts
+        cleaned = self._trim_incomplete_sentence(cleaned)
+
         return cleaned
+
+    @staticmethod
+    def _trim_incomplete_sentence(text: str) -> str:
+        """
+        Trims trailing cut-off sentence fragments if LLM output stopped prematurely due to token budget.
+        e.g., '...database itself. If you have any other questions related' -> '...database itself.'
+        """
+        if not text:
+            return text
+        text = text.rstrip()
+        terminators = ('.', '!', '?', '."', '!"', '?"', ':\n', ')\n', ')')
+        if text.endswith(terminators):
+            return text
+        match = re.search(r'([.!?])(?:\s+[^.!?]*$)', text)
+        if match:
+            trimmed = text[:match.start() + 1].strip()
+            if len(trimmed) > 30:
+                return trimmed
+        return text
 
     def _resolve_deterministic_database_intent(self, user_message: str) -> Optional[str]:
         """
@@ -514,7 +538,7 @@ class AIService(IAIService):
             )
 
         # ---------------------------------------------------------
-        # Intent 0: Assistant Identity, Accuracy & Database Read/View Self-Audit
+        # Intent 0: Assistant Identity, Language Capability & Database Read/View Self-Audit
         # ---------------------------------------------------------
         has_identity = any(p in norm for p in [
             'who are you', 'what are you', 'what is your name', 'whats your name',
@@ -529,6 +553,25 @@ class AIService(IAIService):
                 "37 Physical Setup zones & 17 Interior photos, Room Reservations, and 17 official Library Services. How can I help you today?"
             )
 
+        has_language_query = any(p in norm for p in [
+            'can you speak tagalog', 'can you speak bisaya', 'can you speak tagalog or bissaya',
+            'can you speak tagalog or bisaya', 'do you speak tagalog', 'do you speak bisaya',
+            'marunong ka ba mag tagalog', 'marunong ka mag tagalog', 'marunong ka mag bisaya',
+            'nakasulti kag bisaya', 'kabalo ka mag bisaya', 'kahibalo ka mag bisaya',
+            'makasabot kag bisaya', 'nakakaintindi ka ba ng tagalog', 'nakakasabot ka bisaya'
+        ])
+        if has_language_query:
+            return (
+                "Oo, nakakaintindi at nakakapagsalita ako sa Tagalog at Bisaya! "
+                "Pwede kang magtanong tungkol sa aming mga libro, research references, e-resources, room reservations, o library hours. "
+                "Unsa may akong matabang kanimo karon? (How can I assist you today?)"
+            )
+
+        is_tagalog_query = any(w in tokens for w in [
+            'nakaka', 'kaba', 'ba', 'nimo', 'ug', 'sa', 'ang', 'anong', 'unsa', 'mo', 'basa',
+            'makabasa', 'mabasa', 'basahon', 'sulod', 'direkta', 'konektado'
+        ])
+
         has_accuracy_or_audit = (
             any(p in norm for p in [
                 'what tables can you read', 'what data can you view', 'what can you read',
@@ -537,18 +580,33 @@ class AIService(IAIService):
                 'read view audit', 'permitted tables', 'accurate of your response',
                 'accuracy of your response', 'is your response accurate',
                 'are your responses accurate', 'are you accurate', 'how accurate are you',
-                'can i trust your answer', 'real database', 'connected to the database'
+                'can i trust your answer', 'real database', 'connected to the database',
+                'nakaka basa kaba ng database', 'nakakabasa kaba ng database',
+                'nakakabasa ka ba ng database', 'nakaka basa ka ba ng database',
+                'nakakabasa kaba sa database', 'nakakabasa ka ba sa database',
+                'nakakabasa kaba database', 'nakakabasa ka ba database',
+                'mabasa ba nimo ang database', 'mabasa ba ang database',
+                'makabasa ba ka ug database', 'makabasa ka ug database',
+                'kaya mo bang basahin ang database', 'nababasa mo ba ang database',
+                'nakakonekta ka ba sa database', 'konektado ka ba sa database',
+                'unsa imong mabasa sa database', 'anong nababasa mo sa database',
+                'ano ang nasa database', 'unsa ang sulod sa database'
             ])
             or ('accurate' in tokens and bool({'response', 'responses', 'answer', 'answers', 'you', 'your'} & tokens))
-            or (bool({'tables', 'table', 'database', 'data', 'models', 'modules'} & tokens) and bool({'read', 'view', 'access', 'audit'} & tokens))
+            or (bool({'tables', 'table', 'database', 'data', 'models', 'modules'} & tokens) and bool({'read', 'view', 'access', 'audit', 'basa', 'mabasa', 'nakakabasa', 'makabasa', 'basahon'} & tokens))
         )
         if has_accuracy_or_audit:
             summary = self.get_read_view_audit_summary()
             audit_report = AIReadViewHelper.build_live_database_audit_report(summary)
             batch_name = summary.get('active_batch_name', 'Batch 1 2026')
             opening_hours = summary.get('opening_hours', '7:00 AM - 7:00 PM')
+            intro = (
+                "Oo! Direktang nakakonekta at nakakabasa ako sa live PostgreSQL database ng JRMSU Katipunan Campus Library!\n"
+                if is_tagalog_query else
+                "My responses are 100% grounded in the live JRMSU Katipunan Campus Library PostgreSQL database!\n"
+            )
             return (
-                f"My responses are 100% grounded in the live JRMSU Katipunan Campus Library PostgreSQL database!\n"
+                f"{intro}"
                 f"- Newly Acquired Books (`NewlyAcquiredBook` / `AcquisitionBatch`): {summary.get('books_total', 135)} records ({summary.get('books_img', 135)} visual cover photos in '{batch_name}' and {summary.get('books_named', 0)} named text records)\n"
                 f"- Research & Thesis References (`ResearchReference`): {summary.get('research_references_total', 0)} online catalog records\n"
                 f"- E-Resources (`EResourceDepartment` / `EResourceFile` / `ManagedLink`): {summary.get('eresource_departments_total', 60)} academic department folders, {summary.get('eresource_files_total', 0)} uploaded files & {summary.get('managed_links_total', 23)} active online database links\n"
@@ -1263,7 +1321,7 @@ class AIService(IAIService):
             logger.error(f"Error fetching dynamic context: {e}")
             return "DYNAMIC DATABASE KNOWLEDGE: General library information available."
 
-    def _classify_query_complexity(self, user_message: str) -> Tuple[str, dict, str]:
+    def _classify_query_complexity(self, user_message: str) -> tuple[str, dict, str]:
         """
         Adaptive 3-Tier Complexity Classifier and Dynamic Generation Tuning:
         - Tier 1: Precision Micro-Answer (0.3s-0.5s): Factual checks, Yes/No, hours, single book status (temperature 0.1, max 120 tokens).
@@ -1402,10 +1460,10 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
     def _get_ollama_options(self, complexity_tier: str = "TIER_2") -> dict:
         """Adaptive inference options for Ollama tuned to query complexity."""
         if complexity_tier == "TIER_1":
-            return {"num_ctx": 2048, "num_predict": 120, "temperature": 0.1, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15}
+            return {"num_ctx": 2048, "num_predict": 260, "temperature": 0.1, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15, "num_thread": 4}
         elif complexity_tier == "TIER_3":
-            return {"num_ctx": 2048, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15}
-        return {"num_ctx": 2048, "num_predict": 320, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15}
+            return {"num_ctx": 2048, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15, "num_thread": 4}
+        return {"num_ctx": 2048, "num_predict": 550, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15, "num_thread": 4}
 
     def generate_chat_stream(self, user_message: str, chat_history: Optional[list] = None, seen_answers: Optional[list] = None) -> Generator[str, None, None]:
         """
@@ -1459,18 +1517,30 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             response = self.session.post(self.ollama_url, json=payload, stream=True, timeout=120)
             response.raise_for_status()
 
-            full_answer = ""
-            for line in response.iter_lines():
-                if line:
-                    data = json.loads(line)
-                    if 'message' in data and 'content' in data['message']:
-                        full_answer += data['message']['content']
+            lead_buffer = ""
+            greeting_handled = False
 
-            sanitized_answer = self._sanitize_llm_output(full_answer, user_message)
-            if sanitized_answer:
-                words = sanitized_answer.split(' ')
-                for i, word in enumerate(words):
-                    yield word + (" " if i < len(words) - 1 else "")
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except Exception:
+                    continue
+
+                if 'message' in data and 'content' in data['message']:
+                    token = data['message']['content']
+                    if not greeting_handled:
+                        lead_buffer += token
+                        # Yield lead once we have enough chars to check for greeting or reached punctuation/newline/done
+                        if len(lead_buffer) >= 30 or any(p in lead_buffer for p in ['.', '!', '?', '\n']) or data.get('done', False):
+                            cleaned_lead = self._strip_rizal_greeting(lead_buffer)
+                            greeting_handled = True
+                            if cleaned_lead:
+                                yield cleaned_lead
+                    else:
+                        if token:
+                            yield token
 
         except requests.exceptions.ConnectionError:
             logger.error(f"Failed to connect to Ollama at {self.ollama_url}")
@@ -1518,10 +1588,10 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                 "keep_alive": -1,
                 "options": {
                     "temperature": 0.4,
-                    "num_predict": 768
+                    "num_predict": 512
                 }
             }
-            resp = self.session.post(self.ollama_url, json=payload, timeout=15)
+            resp = self.session.post(self.ollama_url, json=payload, timeout=60)
             if resp.status_code == 200:
                 data = resp.json()
                 draft = data.get('message', {}).get('content', '').strip()

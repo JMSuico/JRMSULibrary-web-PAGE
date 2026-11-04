@@ -229,10 +229,15 @@ class Command(BaseCommand):
         # 1. PURGE INVALID / HALLUCINATED / NON-CURATED ROWS
         # -------------------------------------------------------------
         model_fields = {f.name for f in AIFaqCache._meta.fields}
-        if 'question_text' in model_fields:
-            all_entries = list(AIFaqCache.objects.only('id', 'question_hash', 'question_text').iterator(chunk_size=500))
-        else:
-            all_entries = list(AIFaqCache.objects.only('id', 'question', 'answers').iterator(chunk_size=500))
+        fetch_fields = ['id']
+        for q_field in ['question', 'question_text', 'question_hash']:
+            if q_field in model_fields:
+                fetch_fields.append(q_field)
+        for a_field in ['answers', 'answer']:
+            if a_field in model_fields:
+                fetch_fields.append(a_field)
+
+        all_entries = list(AIFaqCache.objects.only(*fetch_fields).iterator(chunk_size=500))
         purged_records = []
 
         for entry in all_entries:
@@ -249,7 +254,9 @@ class Command(BaseCommand):
 
             # Check answers against blacklist terms
             if not matched_term:
-                raw_answers = getattr(entry, 'answers', [])
+                raw_answers = getattr(entry, 'answers', None)
+                if raw_answers is None:
+                    raw_answers = getattr(entry, 'answer', [])
                 answers = raw_answers if isinstance(raw_answers, list) else [str(raw_answers)]
                 for ans in answers:
                     ans_lower = str(ans).lower()

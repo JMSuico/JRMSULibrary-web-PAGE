@@ -149,23 +149,28 @@ class UserViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], permission_classes=[permissions.AllowAny])
     def heartbeat(self, request):
         session = getattr(request, 'session', None)
-        is_session_terminated = (
-            not session
-            or not session.session_key
-            or session.get('force_logout', False)
-        )
-
-        if not request.user or not request.user.is_authenticated or is_session_terminated:
+        has_session = session is not None and getattr(session, 'session_key', None) is not None
+        if has_session and session.get('force_logout', False):
             return Response(
                 {'status': 'inactive', 'authenticated': False},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        account = request.user
-        now = timezone.now()
-        Account.objects.filter(id=account.id).update(last_active=now)
-        account.last_active = now
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'status': 'inactive', 'authenticated': False},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
+        now = timezone.now()
+        updated = Account.objects.filter(id=request.user.id, last_active__isnull=False).update(last_active=now)
+        if updated == 0:
+            return Response(
+                {'status': 'inactive', 'authenticated': False},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        request.user.last_active = now
         return Response(
             {'status': 'active', 'last_active': now.isoformat()},
             status=status.HTTP_200_OK

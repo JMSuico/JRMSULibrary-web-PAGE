@@ -79,3 +79,14 @@ backups/
 *.sql
 *.zip
 *.rar
+!MASTER_SYSTEM_ARCHITECTURE.md
+!DEPLOYMENT_GUIDE.md
+!AutoLogon-README.md
+!CommandStart/**/*.md
+!CommandStart/*.md
+CommandStart/*.exe
+CommandStart/*.log
+MachineRole.txt
+CommandStart/MachineRole.txt
+DockerLocation.txt
+CommandStart/DockerLocation.txt
