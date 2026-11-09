@@ -34,9 +34,21 @@ urlpatterns += [
     path("api/docs/", scalar_v1_view, name="scalar-docs"),
 ]
 
-# Force serve media files in Localhost/Docker even when DEBUG=False
+def secure_media_serve(request, path, document_root=None, show_indexes=False):
+    """
+    Hardened media file server that injects anti-download and security headers
+    for read-only institutional library collection materials.
+    """
+    response = serve(request, path, document_root=document_root, show_indexes=show_indexes)
+    response['X-Content-Type-Options'] = 'nosniff'
+    response['Content-Disposition'] = 'inline'
+    response['Cache-Control'] = 'private, no-transform, max-age=3600'
+    response['X-Frame-Options'] = 'SAMEORIGIN'
+    return response
+
+# Force serve media files in Localhost/Docker even when DEBUG=False with anti-download security headers
 urlpatterns += [
-    re_path(r'^media/(?P<path>.*)$', serve, {
+    re_path(r'^media/(?P<path>.*)$', secure_media_serve, {
         'document_root': settings.MEDIA_ROOT,
     }),
 ]

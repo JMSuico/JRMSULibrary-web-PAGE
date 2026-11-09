@@ -14,6 +14,9 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 - **Client-Side Offline Request Caching:** Automatic queueing of user interactions during temporary connectivity drops with seamless background resynchronization.
 - **3-Tier Database Replication Suite:** Real-time local hot standby (`db-standby`), 1-click cloud sync to Supabase, automated backups, and 5-second emergency failover.
 - **Cloudflare Zero Trust Tunnel:** Production access via `www.jrmsukclibrary.com` with zero exposed router ports and edge caching for low-bandwidth (500 kbps) campus resilience.
+- **Zero-Download Secure Canvas Viewer:** Pure HTML5 Canvas rasterization for Local Books and Theses with transparent click shield, right-click context menu suppression, shortcut blocking (`Ctrl+S`, `Ctrl+P`, `Ctrl+U`, `F12`), -35° institutional diagonal watermark, and backend `Content-Disposition: inline` headers.
+- **Automated Document Knowledge & OCR Pipeline:** High-speed document parser (`pypdf`, `mammoth`, OpenXML fallback) extracting structured table of contents, executive summaries, full text, and academic keywords from Local Books (`EResourceFile`) and Theses (`ResearchReference`) into the database (`0036_add_document_knowledge_ocr_fields`).
+- **Deep Academic AI Grounding (Tier 3 RAG):** Dr. Jose Rizal AI actively searches and cites verified book chapters, course syllabi, and research methodologies/findings directly from the database to answer patron inquiries with zero hallucinations.
 - **Terminal Admin Protection:** Specialized security preventing command-line-created sysadmins from being modified or deleted through web interfaces.
 - **Vertical-Slice Architecture:** Both frontend and backend structured for maximum scalability and feature isolation.
 
@@ -23,7 +26,7 @@ A modern, highly interactive, and AI-powered web platform for the Jose Rizal Mem
 - Vite 6
 - Tailwind CSS v4
 - React Router DOM v7
-- Architecture: Vertical-Slice (`Pages/` -> `Features/` -> `Components/`)
+- Architecture: Vertical-Slice with Global Calling Imports (`@/Shared`, `@/Hooks`, `@/LayoutBars`, `@/LayoutStyles`)
 
 **Backend:**
 - Django + Django REST Framework (DRF)
@@ -99,6 +102,7 @@ The library relies on institutional eBooks, department catalogs, student PDFs, a
 | **Apply Migrations** | `docker-compose exec backend python manage.py migrate` | `cd backend && python manage.py migrate` | Executes pending migrations against PostgreSQL/SQL Server. |
 | **Automated Schema Update** | `docker-compose exec backend python manage.py update_database` | `cd backend && python manage.py update_database` | Runs migration self-check and validates schema health. |
 | **Audit Cloud Parity** | `docker-compose exec backend python manage.py verify_cloud_sync` | `cd backend && python manage.py verify_cloud_sync` | Compares record counts across all 21 models against Supabase Cloud DB. |
+| **Extract Document Knowledge** | `docker-compose exec backend python manage.py extract_file_knowledge [--force] [--limit N]` | `cd backend && python manage.py extract_file_knowledge [--force] [--limit N]` | *Fully automated in background by `AutonomousKnowledgeDaemon` on server boot & every 5 mins.* CLI available for manual on-demand batch indexing. |
 | **Purge Temp Uploads** | `docker-compose exec backend python manage.py cleanup_temp_files` | `cd backend && python manage.py cleanup_temp_files` | Removes orphaned chunk uploads and temp files older than 24 hours. |
 
 ---
@@ -411,3 +415,62 @@ For more in-depth guides, please refer to the markdown files in the project root
 - `Access.md`: Detailed port and networking documentation.
 - `FreshBuildandStartdocker.md`: Docker rebuilding references.
 - `SKILL.md`: Source of truth for architectural constraints.
+
+
+---
+
+## 📅 System Development Changelog & Sprint Timeline (June – November 2026)
+
+### Table 3. Sprint Plan of the Development
+
+| Sprint | Dates | Goal | Increment Delivered |
+| :---: | :---: | :--- | :--- |
+| **1** | **Jun 24, 2026 – Jul 14, 2026**<br>*(Academic view: Aug 17 – Aug 28, 2026)* | Foundation, Multi-Container Architecture, Database Schema, and Administrator Authentication | • Initialized Django ASGI (Daphne) backend and React 19 + Vite frontend in Docker.<br>• Relational database schema implemented in PostgreSQL (Users, Roles, System Settings).<br>• JWT/session authentication with CSRF protection and Role-Based Access Control (RBAC).<br>• Functional Admin Login terminal (`/admin/login`) and protected dashboard layout frame. |
+| **2** | **Jul 15, 2026 – Aug 11, 2026**<br>*(Academic view: Aug 31 – Sep 11, 2026)* | Catalog Management, Newly Acquired Books Inventory, Acquisition Batches, and Bulk Import | • Full CRUD operations for books with Dewey Decimal classification, author/title indexing, and cover image uploads.<br>• Acquisition Batch History manager for tracking book batches, donations, and procurement status.<br>• Client- and server-side Excel (`.xlsx`) parser for bulk catalog ingestion with data validation.<br>• Soft-delete recovery mechanism and Recycle Bin manager (`/admin/recycle-bin`) working end-to-end. |
+| **3** | **Aug 12, 2026 – Sep 08, 2026**<br>*(Academic view: Sep 14 – Sep 25, 2026)* | Public Landing Portal, OPAC Catalog Discovery, Institutional Sections, and E-Resources | • Responsive public landing page with university branding, real-time Philippine Standard Time (PST) hero clock, and campus map.<br>• Online Public Access Catalog (OPAC) with debounced search, category filtering, and book preview modal.<br>• Integrated E-Resources module with secure iframe proxies for subscribed databases (Scholaar, VitalSource).<br>• Interactive 3D physical library setup carousel, staff organizational flowchart, and visitor feedback submission widget. |
+| **4** | **Sep 09, 2026 – Oct 06, 2026**<br>*(Academic view: Sep 28 – Oct 09, 2026)* | Dr. Jose Rizal AI Research Assistant, Redis Semantic FAQ Cache, and Email/Reservation Pipeline | • On-premise Dr. Jose Rizal AI assistant powered by local Ollama (`qwen2.5:0.5b`) with zero cloud API dependency.<br>• Sub-10ms Redis semantic FAQ cache for recurring patron questions (hours, borrowing rules, clearance).<br>• Asynchronous Celery + Redis task pipeline for automated email notifications and room reservation confirmations.<br>• Anti-hallucination guardrails and dynamic catalog grounding preventing false bibliographic citations. |
+| **5** | **Oct 07, 2026 – Nov 05, 2026**<br>*(Academic view: Oct 12 – Oct 23, 2026)* | Administrative Analytics, Security Hardening, 24/7 Cloudflare Production Deployment, and Global Refactor | • Interactive administrative analytics dashboard with circulation velocity curves, inventory histograms, and visitor charts.<br>• Dual-subdomain Cloudflare Zero Trust Tunnel deployment (`page.jrmsukc-library.online` and `admin.jrmsukc-library.online`) with SSL termination.<br>• 24/7 self-healing watchdog (`AutomaticUp.bat`), Windows AutoLogon, and RAM optimization on host Library PC.<br>• Google Search Console verification, verified sitemap (`/sitemap.xml`), and modular frontend architecture refactor with Global Calling Imports. |
+
+---
+
+### Detailed Milestone Changelog by Date & Timestamp (June – November 2026)
+
+#### 🚀 June 2026: Project Inception, Core UI Wireframing & Vertical Slices
+* **2026-06-24 10:27:48 +0800** (`8a1b8a9`): Project inception (`start 1`) — Initialized core Git repository, established baseline Django backend scaffolding, and initialized React 19 + TypeScript frontend.
+* **2026-06-25 08:44:16 – 16:47:31 +0800** (`7749ef9` – `f78fec0`): UI implementation sprints 1 through 5 — Configured Tailwind CSS design tokens (JRMSU Navy `#001851`, Gold `#C9A84C`), built header navigation bar, dynamic hero banners, and preliminary book cards.
+* **2026-06-28 12:43:45 +0800** (`2b2a4b5`): UI implementation sprint 6 — Integrated responsive grid wrappers, modal backdrop containers, and typography scaling for tablet and mobile devices.
+* **2026-06-29 09:36:00 – 11:15:03 +0800** (`98fc44a`, `afb9bf3`): Architectural restructuring — Decoupled monolithic components into domain-isolated vertical slices (`Pages/`, `Features/`, `Components/`). Updated Vite and TypeScript configurations.
+* **2026-06-30 10:27:53 – 16:47:04 +0800** (`30201a9` – `3515c3f`): Backend API implementation — Created core Django REST Framework serializers, viewsets, database models for catalog and users, and integrated background SMTP email handlers.
+
+#### ⚙️ July 2026: Backend Consolidation, Multi-Container Docker, Security & Testing
+* **2026-07-02 08:55:47 – 16:12:23 +0800** (`7b1a4b1` – `4003330`): Backend consolidation & optimization — Untracked large media binaries, added initial QA validation suites, and established standardized JSON response envelopes.
+* **2026-07-07 08:59:35 – 16:51:29 +0800** (`a739c6c` – `8931676`): UI stabilization & authentication hardening — Reconstructed `SettingsPage.tsx`, added 3D floating bubble physics, Terms modal dialog, stabilized external e-resource iframe wrappers, and reinforced JWT session security.
+* **2026-07-08 14:58:38 – 16:23:47 +0800** (`0ad6ef5`, `47176e7`): Rigorous Quality Assurance passes (QA 1 & 2) — Verified form input sanitization, error boundaries, and API exception handling.
+* **2026-07-09 10:03:33 – 14:29:36 +0800** (`ef9124d`, `67dd3eb`): Multi-container Docker deployment — Authored multi-stage production Dockerfiles for React/Vite and Django/Daphne.
+* **2026-07-14 15:09:04 +0800** (`7cbbda1`): 5-layer container architecture — Orchestrated Docker Compose network spanning frontend, backend replicas, PostgreSQL, Redis, and Celery.
+* **2026-07-15 – 2026-07-21** (`b865772` – `54f11f5`): Data integrity & organizational hierarchy — Built dynamic staff directory tree, reference models, and catalog audit routines.
+* **2026-07-22 – 2026-07-25** (`eb64c2c` – `68493fe`): Staging proxy & cross-origin authentication — Added Whitenoise static asset handling, configured `SameSite=None` cookie propagation, and resolved PDF report generation proxy blocks.
+* **2026-07-27 08:04:16 – 09:35:46 +0800** (`9d59ee8` – `cf8c39e`): Network resilience & worker scaling — Resolved campus Wi-Fi IPv6 socket collision (`Errno 101`) by enforcing IPv4 resolution; shifted SMTP mail dispatch to Celery background threads to prevent 502 gateway timeouts; added browser desktop push alerts.
+
+#### 🛡️ August 2026: Environment Standardization & Catalog Verification
+* **2026-08-20 16:35:12 – 17:59:45 +0800** (`3277ab9` – `5b43eef`): Environment configuration hardening — Standardized `.env.example` templates, validated database migrations across PostgreSQL and MSSQL, and audited circulation statistics calculation logic.
+
+#### 🌐 September 2026: Public Portal Polish, E-Resources & Cloudflare Zero Trust
+* **2026-09-08 00:01:03 – 2026-09-14 18:01:48 +0800** (`13204dd`, `b43d035`): Catalog discovery enhancements — Upgraded book cover carousel, added real-time search debouncing, and streamlined e-resource access for academic departments.
+* **2026-09-21 08:00:07 +0800** (`9fb24e1`): System status lifecycle and feature audit baseline established.
+* **2026-09-22 01:01:41 – 11:34:49 +0800** (`034a2a6`, `253f497`): Cloudflare encrypted tunnel integration — Configured zero-trust edge routing to securely expose public catalog without forwarding external router ports.
+* **2026-09-28 11:30:04 +0800** (`18c4750`): Cloudflare production subdomain integration.
+
+#### 🤖 October 2026: 24/7 Host Automation, Dr. Rizal AI, FAQ Cache & Search Indexing
+* **2026-10-12 14:49:19 – 17:35:45 +0800** (`b2c6e5d` – `487f8f7`): Custom domain cutover & host automation — Configured production domain `jrmsukc-library.online`, setup dual subdomains (`page.` for public portal and `admin.` for librarian console), and engineered `AutomaticUp.bat` and `StopAutomaticUp.bat` scripts with multi-drive discovery and crash restart loops.
+* **2026-10-13 08:55:17 – 14:40:37 +0800** (`3a64f53` – `f38a916`): On-premise AI integration & power-resilience — Connected local Ollama (`qwen2.5:0.5b`) LLM, eliminated semantic FAQ cache false positives, grounded AI responses in live book collection data, established strict NO STATICS rule, and hardened auto-recovery against power brownouts.
+* **2026-10-14 08:59:51 – 09:51:43 +0800** (`fd4085c`, `04a38f2`): Weekly maintenance update and database index verification.
+* **2026-10-25 21:19:43 – 2026-10-26 07:27:53 +0800** (`2a9770c` – `53eafe7`): Patron feedback & research survey sticky widgets integrated into public portal.
+* **2026-10-26 16:00:29 – 22:06:37 +0800** (`e15ca6e` – `2793958`): Multi-engine SEO verification (Google, Bing, Yahoo, DuckDuckGo) via `BingSiteAuth.xml` and sitemap refresh; expanded AI token ceiling to 1024 tokens with non-blocking chat input UX; consolidated master CLI command cheatsheet.
+* **2026-10-28 23:38:23 +0800** (`0565efc`): 3-tier adaptive prompt length routing and anti-hallucination guardrails implemented for Dr. Rizal AI.
+* **2026-10-29 00:00:03 – 10:17:56 +0800** (`7f2de85`, `834942c`): Physical 2-floor layout guardrails enforced, academic reasoning bypass enabled, and 5 Graphify architectural advisory findings remediated (session heartbeat, typing indicators, email timeout, and FAQ queries).
+
+#### 🏆 November 2026: Role Segregation, AI Production Verification, Host Healing & Global Architecture Refactor
+* **2026-11-04 13:08:13 – 15:43:47 +0800** (`5b57d5d` – `7449a52`): Production host role segregation & auto-boot healing — Formally segregated 24/7 Library Server PC from developer Maintenance Laptop, configured Windows AutoLogon, optimized Docker RAM (WSL2 6GB memory cap), achieved 3-5s local AI reply streaming, passed 12-suite challenge production AI verification test, and enforced persistent background auto-start via Windows Registry (`HKCU`/`HKLM`).
+* **2026-11-05 13:29:59 +0800** (`a3cd74a`): Google Search Console sitemap update (`/sitemap.xml`) and indexing pipeline audit.
+* **2026-11-05 15:20:00 – 15:46:00 +0800**: Complete frontend architectural core refactor — Decoupled monolithic 1,739-line `index.css` into modular domains (`FontSyle/fontStyles.css`, `MainLayout.css`, `PartLayout.css`, master `index.css`), created universal presentational primitives in `src/Shared/` (`Button`, `ModalCard`, `Drawer`, `Charts`), standardized global calling hooks in `src/Hooks/` (`usePagination`, `useFluidResponsiveness`, `useDebounce`), and unified layout frames in `src/LayoutBars/` with 100% type safety and zero regressions.

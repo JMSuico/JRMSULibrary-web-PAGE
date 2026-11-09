@@ -1,0 +1,34 @@
+/* ==========================================================================
+   GLOBAL CALLING STYLESHEET: FontSyle/fontStyles.css
+   Global Typography and Font Definitions (Playfair Display, Inter, JetBrains Mono)
+   STRICT RULE: FONT USES ONLY
+   ========================================================================== */
+
+@theme {
+  --font-label-caps: "Inter", sans-serif;
+  --font-status-clock: "JetBrains Mono", monospace;
+  --font-headline-lg: "Playfair Display", serif;
+  --font-display-hero: "Playfair Display", serif;
+  --font-ui-nav: "Inter", sans-serif;
+  --font-body-lg: "Inter", sans-serif;
+  --font-headline-md: "Playfair Display", serif;
+  --font-body-md: "Inter", sans-serif;
+
+  --text-label-caps: 12px;
+  --text-status-clock: 56px;
+  --text-headline-lg: 36px;
+  --text-display-hero: 64px;
+  --text-ui-nav: 14px;
+  --text-body-lg: 18px;
+  --text-headline-md: 28px;
+  --text-body-md: 16px;
+}
+
+@layer utilities {
+  /* Fluid typography overrides */
+  @media (max-width: 375px) {
+    .hero-stagger .font-status-clock {
+      font-size: 2.5rem !important;
+    }
+  }
+}

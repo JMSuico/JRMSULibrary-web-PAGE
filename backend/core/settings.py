@@ -142,11 +142,12 @@ load_dotenv(BASE_DIR / ".env")
 DB_ENGINE = os.environ.get("DB_ENGINE", "mssql")
 
 if DB_ENGINE == "mssql":
+    _mssql_extra = os.environ.get("DB_MSSQL_EXTRA_PARAMS", "Trusted_Connection=yes;TrustServerCertificate=yes;")
     _mssql_options = {
-        "driver": os.environ.get("DB_MSSQL_DRIVER", "ODBC Driver 17 for SQL Server"),
+        "driver": os.environ.get("DB_MSSQL_DRIVER", "ODBC Driver 18 for SQL Server"),
     }
     if os.environ.get("DB_WINDOWS_AUTH", "True") == "True":
-        _mssql_options["extra_params"] = "Trusted_Connection=yes;"
+        _mssql_options["extra_params"] = _mssql_extra
 
     DATABASES = {
         "default": {
@@ -195,8 +196,8 @@ else:
             "NAME": "JRMSUKatipunanCampusLibrary",
             "HOST": "localhost",
             "OPTIONS": {
-                "driver": "ODBC Driver 17 for SQL Server",
-                "extra_params": "Trusted_Connection=yes;",
+                "driver": os.environ.get("DB_MSSQL_DRIVER", "ODBC Driver 18 for SQL Server"),
+                "extra_params": os.environ.get("DB_MSSQL_EXTRA_PARAMS", "Trusted_Connection=yes;TrustServerCertificate=yes;"),
             },
         }
     }

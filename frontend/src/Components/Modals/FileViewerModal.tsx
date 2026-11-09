@@ -1,6 +1,8 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
+import { SecurePdfViewer } from './SecurePdfViewer';
+import { ShieldAlert } from 'lucide-react';
 
 interface FileViewerModalProps {
   file: TreeNodeData;
@@ -11,6 +13,7 @@ interface FileViewerModalProps {
 
 export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList, onClose, onNavigate }) => {
   const currentIdx = fileList.findIndex((f) => f.path === file.path);
+  const [securityWarning, setSecurityWarning] = useState<string | null>(null);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
@@ -27,6 +30,14 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
     };
   }, [handleKeyDown]);
 
+  // Auto-dismiss security warnings after 3.5 seconds
+  useEffect(() => {
+    if (securityWarning) {
+      const timer = setTimeout(() => setSecurityWarning(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [securityWarning]);
+
   if (!file.path) return null;
 
   const isPdf = file.path.toLowerCase().endsWith('.pdf');
@@ -34,12 +45,31 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
 
   return createPortal(
     <div
-      className="fixed inset-0 ] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999] select-none"
       onClick={onClose}
+      onDragStart={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setSecurityWarning('Right-click is disabled to protect JRMSU Library collection materials.');
+      }}
     >
+      {/* Real-Time Floating Security Warning Toast */}
+      {securityWarning && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-[#001851]/95 text-[#F0D97A] border border-[#C9A84C]/60 px-5 py-3 rounded-2xl shadow-2xl z-[10001] text-xs font-semibold flex items-center gap-2.5 animate-bounce max-w-md text-center backdrop-blur-md">
+          <ShieldAlert className="w-5 h-5 text-[#F0D97A] shrink-0" />
+          <span>{securityWarning}</span>
+        </div>
+      )}
+
       <div
         className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl max-h-[90vh] flex flex-col animate-modal-card"
         onClick={(e) => e.stopPropagation()}
+        onDragStart={(e) => e.preventDefault()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setSecurityWarning('Right-click is disabled to protect JRMSU Library collection materials.');
+        }}
         role="dialog"
         aria-modal="true"
         aria-label={`Viewing: ${file.name}`}
@@ -65,7 +95,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
         </div>
 
         {/* Navigation + Viewer */}
-        <div className="flex items-stretch flex-1 min-h-0">
+        <div className="flex items-stretch flex-1 min-h-0 relative">
           {currentIdx > 0 && (
             <button
               onClick={() => onNavigate(fileList[currentIdx - 1])}
@@ -78,11 +108,10 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
 
           <div className="flex-1 bg-gray-100 p-4 flex items-center justify-center overflow-auto min-h-[60vh] relative">
             {isPdf ? (
-              <iframe
-                src={`${file.path}#toolbar=0&navpanes=0&scrollbar=0`}
-                className="w-full h-full rounded-lg shadow-inner"
-                style={{ minHeight: '60vh' }}
-                title={file.name}
+              <SecurePdfViewer 
+                url={file.path} 
+                title={file.name} 
+                onSecurityWarning={setSecurityWarning} 
               />
             ) : isLink ? (
               <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full animate-modal-card">
@@ -124,8 +153,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
           )}
         </div>
       </div>
-    </div>
-  ,
+    </div>,
     document.body
   );
 };

@@ -14,6 +14,13 @@ class ResearchReference(models.Model):
         ('file', 'Uploaded File'),
     ]
 
+    OCR_STATUS_CHOICES = [
+        ('pending', 'Pending Extraction'),
+        ('completed', 'Knowledge Extracted'),
+        ('failed', 'Extraction Failed'),
+        ('none', 'Physical Copy Only'),
+    ]
+
     category = models.CharField(max_length=255, choices=CATEGORY_CHOICES)
     department = models.CharField(
         max_length=255,
@@ -40,6 +47,18 @@ class ResearchReference(models.Model):
     access_type = models.CharField(max_length=10, choices=ACCESS_CHOICES, default='none')
     access_link = models.URLField(max_length=1000, null=True, blank=True)
     access_file = models.FileField(upload_to='research_references/', null=True, blank=True)
+
+    # Document Knowledge & OCR Extraction Fields
+    extracted_text = models.TextField(blank=True, null=True, help_text="Parsed text from the thesis or dissertation.")
+    abstract = models.TextField(blank=True, null=True, help_text="Extracted or input research abstract.")
+    methodology = models.TextField(blank=True, null=True, help_text="Extracted research methodology and tools.")
+    findings_conclusion = models.TextField(blank=True, null=True, help_text="Key research conclusions and findings.")
+    ocr_status = models.CharField(
+        max_length=20,
+        default='pending',
+        choices=OCR_STATUS_CHOICES
+    )
+    ocr_processed_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)

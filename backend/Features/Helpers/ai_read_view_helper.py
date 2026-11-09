@@ -1081,3 +1081,359 @@ class AIReadViewHelper:
             "**Privacy & Security Boundary**: Private admin and patron PII tables (`AdminUser`, `User` / `Student`, `AttendanceLog`, `BorrowerRecord`, `AnalyticsEvent`, `Subscriber`) are strictly protected and **never** accessed by the AI assistant.",
         ]
         return "\n".join(lines)
+
+    # -------------------------------------------------------------------------
+    # 8. Document & Thesis Knowledge Grounding Helpers
+    # -------------------------------------------------------------------------
+    @classmethod
+    def _extract_file_breadcrumb(cls, file_obj: Any) -> str:
+        """
+        Extracts human-readable department breadcrumb for an EResourceFile instance.
+        """
+        if hasattr(file_obj, "breadcrumb") and file_obj.breadcrumb:
+            return str(file_obj.breadcrumb).strip()
+        if hasattr(file_obj, "department_breadcrumb") and file_obj.department_breadcrumb:
+            return str(file_obj.department_breadcrumb).strip()
+
+        dept = getattr(file_obj, "department", None)
+        if not dept:
+            return "General / E-Resources"
+
+        if isinstance(dept, str):
+            return dept.strip()
+
+        # Traverse parent chain if dept is an object/model
+        chain: List[str] = []
+        curr = dept
+        visited: Set[int] = set()
+        while curr is not None and id(curr) not in visited:
+            visited.add(id(curr))
+            name = str(getattr(curr, "name", "") or "").strip()
+            if name:
+                chain.append(name)
+            curr = getattr(curr, "parent", None)
+
+        if chain:
+            chain.reverse()
+            return " > ".join(chain)
+
+        return "General / E-Resources"
+
+    @classmethod
+    def match_and_format_file_knowledge(
+        cls,
+        files: List[Any],
+        query_tokens: List[str],
+        raw_query: str = "",
+        limit: int = 3,
+    ) -> str:
+        """
+        Matches EResourceFile instances against user query tokens using file name,
+        keywords, and summary.
+
+        Returns a concise, grounded knowledge context string (under 300 tokens) citing:
+          - File name and parent Department breadcrumb
+          - Document summary
+          - Table of contents / chapters
+          - Key topics / concepts covered
+        """
+        if not files:
+            return ""
+
+        effective_tokens = [
+            t.lower()
+            for t in (query_tokens or [])
+            if t and t.lower() not in cls.STOP_WORDS
+        ]
+        clean_raw = (raw_query or "").lower().strip()
+
+        if not effective_tokens and not clean_raw:
+            return ""
+
+        scored_files: List[Tuple[float, str, Any]] = []
+
+        for f in files:
+            if getattr(f, "is_active", True) is False:
+                continue
+
+            name_str = str(getattr(f, "name", "") or "").strip()
+            if not name_str:
+                continue
+
+            kw_val = getattr(f, "keywords", "")
+            if isinstance(kw_val, (list, tuple, set)):
+                kw_str = " ".join(str(k) for k in kw_val)
+            else:
+                kw_str = str(kw_val or "").strip()
+
+            summary_str = str(
+                getattr(f, "summary", "")
+                or getattr(f, "description", "")
+                or ""
+            ).strip()
+
+            toc_val = (
+                getattr(f, "table_of_contents", None)
+                or getattr(f, "chapters", None)
+                or getattr(f, "toc", None)
+            )
+            if isinstance(toc_val, (list, tuple)):
+                toc_str = ", ".join(str(c).strip() for c in toc_val if str(c).strip())
+            else:
+                toc_str = str(toc_val or "").strip()
+
+            topics_val = (
+                getattr(f, "key_topics", None)
+                or getattr(f, "concepts", None)
+                or getattr(f, "topics", None)
+            )
+            if isinstance(topics_val, (list, tuple, set)):
+                topics_str = ", ".join(str(t).strip() for t in topics_val if str(t).strip())
+            else:
+                topics_str = str(topics_val or "").strip()
+
+            breadcrumb = cls._extract_file_breadcrumb(f)
+
+            name_l = name_str.lower()
+            kw_l = kw_str.lower()
+            summary_l = summary_str.lower()
+            breadcrumb_l = breadcrumb.lower()
+            toc_l = toc_str.lower()
+            topics_l = topics_str.lower()
+
+            name_words = set(re.findall(r"[a-z0-9]+", name_l))
+            kw_words = set(re.findall(r"[a-z0-9]+", kw_l))
+            summary_words = set(re.findall(r"[a-z0-9]+", summary_l))
+            breadcrumb_words = set(re.findall(r"[a-z0-9]+", breadcrumb_l))
+
+            score = 0.0
+
+            # 1. Exact raw query phrase matching
+            if len(clean_raw) >= 3:
+                if clean_raw in name_l:
+                    score += 15.0
+                if clean_raw in kw_l:
+                    score += 10.0
+                if clean_raw in summary_l:
+                    score += 8.0
+                if clean_raw in toc_l or clean_raw in topics_l:
+                    score += 6.0
+
+            # 2. Token matching across name, keywords, summary, breadcrumb, TOC, key topics
+            for tok in effective_tokens:
+                score += cls._match_token_in_text(tok, name_l, name_words) * 1.0
+                score += cls._match_token_in_text(tok, kw_l, kw_words) * 0.9
+                score += cls._match_token_in_text(tok, summary_l, summary_words) * 0.7
+                score += cls._match_token_in_text(tok, breadcrumb_l, breadcrumb_words) * 0.5
+                if tok in toc_l:
+                    score += 2.0
+                if tok in topics_l:
+                    score += 2.0
+
+            if score > 0.0:
+                scored_files.append((score, name_l, f))
+
+        if not scored_files:
+            return ""
+
+        scored_files.sort(key=lambda item: (-item[0], item[1]))
+        top_files = [item[2] for item in scored_files[: max(1, limit)]]
+
+        lines: List[str] = ["[DOCUMENT & BOOK CONTENT KNOWLEDGE (E-Resource Course Files)]"]
+        for f in top_files:
+            name_str = str(getattr(f, "name", "") or "Document").strip()
+            breadcrumb = cls._extract_file_breadcrumb(f)
+            entry_lines = [f"- File: '{name_str}' (Department: {breadcrumb})"]
+
+            summary_str = str(
+                getattr(f, "summary", "")
+                or getattr(f, "description", "")
+                or ""
+            ).strip()
+            if summary_str:
+                if len(summary_str) > 220:
+                    summary_str = summary_str[:217].rstrip() + "..."
+                entry_lines.append(f"  Summary: {summary_str}")
+
+            toc_val = (
+                getattr(f, "table_of_contents", None)
+                or getattr(f, "chapters", None)
+                or getattr(f, "toc", None)
+            )
+            if toc_val:
+                if isinstance(toc_val, (list, tuple)):
+                    toc_str = ", ".join(str(c).strip() for c in toc_val if str(c).strip())
+                else:
+                    toc_str = str(toc_val).strip()
+                if len(toc_str) > 180:
+                    toc_str = toc_str[:177].rstrip() + "..."
+                entry_lines.append(f"  Table of Contents / Chapters: {toc_str}")
+
+            topics_val = (
+                getattr(f, "key_topics", None)
+                or getattr(f, "concepts", None)
+                or getattr(f, "topics", None)
+                or getattr(f, "keywords", None)
+            )
+            if topics_val:
+                if isinstance(topics_val, (list, tuple, set)):
+                    topics_str = ", ".join(str(t).strip() for t in topics_val if str(t).strip())
+                else:
+                    topics_str = str(topics_val).strip()
+                if len(topics_str) > 150:
+                    topics_str = topics_str[:147].rstrip() + "..."
+                entry_lines.append(f"  Key Topics / Concepts: {topics_str}")
+
+            lines.append("\n".join(entry_lines))
+
+        return "\n".join(lines)
+
+    @classmethod
+    def match_and_format_thesis_knowledge(
+        cls,
+        references: List[Any],
+        query_tokens: List[str],
+        raw_query: str = "",
+        limit: int = 3,
+    ) -> str:
+        """
+        Matches ResearchReference instances that have extracted knowledge
+        (abstract, findings_conclusion, methodology).
+
+        Returns a concise grounded summary of the research methodology and key findings.
+        """
+        knowledge_refs: List[Any] = []
+        for r in references or []:
+            abstract = getattr(r, "abstract", None)
+            findings = (
+                getattr(r, "findings_conclusion", None)
+                or getattr(r, "findings", None)
+                or getattr(r, "conclusion", None)
+            )
+            methodology = (
+                getattr(r, "methodology", None)
+                or getattr(r, "methods", None)
+            )
+            if abstract or findings or methodology:
+                knowledge_refs.append(r)
+
+        if not knowledge_refs:
+            return ""
+
+        effective_tokens = [
+            t.lower()
+            for t in (query_tokens or [])
+            if t and t.lower() not in cls.STOP_WORDS
+        ]
+        clean_raw = (raw_query or "").lower().strip()
+
+        if not effective_tokens and not clean_raw:
+            return ""
+
+        scored_refs: List[Tuple[float, str, Any]] = []
+
+        for r in knowledge_refs:
+            title_str = str(getattr(r, "title", "") or "").strip()
+            author_str = str(getattr(r, "author", "") or "").strip()
+            dept_str = str(getattr(r, "department", "") or "").strip()
+            cat_str = str(getattr(r, "category", "") or "").strip()
+            abstract_str = str(getattr(r, "abstract", "") or "").strip()
+            findings_str = str(
+                getattr(r, "findings_conclusion", None)
+                or getattr(r, "findings", None)
+                or getattr(r, "conclusion", "")
+                or ""
+            ).strip()
+            methodology_str = str(
+                getattr(r, "methodology", None)
+                or getattr(r, "methods", "")
+                or ""
+            ).strip()
+
+            title_l = title_str.lower()
+            dept_l = f"{dept_str} {cat_str}".lower()
+            abstract_l = abstract_str.lower()
+            findings_l = findings_str.lower()
+            methodology_l = methodology_str.lower()
+
+            title_words = set(re.findall(r"[a-z0-9]+", title_l))
+            dept_words = set(re.findall(r"[a-z0-9]+", dept_l))
+            findings_words = set(re.findall(r"[a-z0-9]+", findings_l))
+            methodology_words = set(re.findall(r"[a-z0-9]+", methodology_l))
+            abstract_words = set(re.findall(r"[a-z0-9]+", abstract_l))
+
+            score = 0.0
+
+            # 1. Exact raw query phrase matching
+            if len(clean_raw) >= 3:
+                if clean_raw in title_l:
+                    score += 15.0
+                if clean_raw in findings_l:
+                    score += 10.0
+                if clean_raw in methodology_l:
+                    score += 10.0
+                if clean_raw in abstract_l:
+                    score += 6.0
+
+            # 2. Token matching
+            for tok in effective_tokens:
+                score += cls._match_token_in_text(tok, title_l, title_words) * 1.0
+                score += cls._match_token_in_text(tok, findings_l, findings_words) * 0.9
+                score += cls._match_token_in_text(tok, methodology_l, methodology_words) * 0.9
+                score += cls._match_token_in_text(tok, abstract_l, abstract_words) * 0.7
+                score += cls._match_token_in_text(tok, dept_l, dept_words) * 0.5
+
+            if score > 0.0:
+                scored_refs.append((score, title_l, r))
+
+        if not scored_refs:
+            return ""
+
+        scored_refs.sort(key=lambda item: (-item[0], item[1]))
+        top_refs = [item[2] for item in scored_refs[: max(1, limit)]]
+
+        lines: List[str] = ["[THESIS & RESEARCH KNOWLEDGE (Extracted Methodology & Findings)]"]
+        for r in top_refs:
+            title_str = str(getattr(r, "title", "") or "Untitled Research").strip()
+            author_str = str(getattr(r, "author", "") or "Unknown").strip()
+            dept_str = str(getattr(r, "department", "") or getattr(r, "category", "") or "General").strip()
+            call_no = getattr(r, "call_number", None) or getattr(r, "acc_no", None)
+            call_str = f" | Call No: {call_no}" if call_no else ""
+
+            entry_lines = [f"- Thesis: '{title_str}' by {author_str} ({dept_str}{call_str})"]
+
+            methodology = str(
+                getattr(r, "methodology", None)
+                or getattr(r, "methods", "")
+                or ""
+            ).strip()
+            if methodology:
+                if len(methodology) > 220:
+                    methodology = methodology[:217].rstrip() + "..."
+                entry_lines.append(f"  Methodology: {methodology}")
+
+            findings = str(
+                getattr(r, "findings_conclusion", None)
+                or getattr(r, "findings", None)
+                or getattr(r, "conclusion", "")
+                or ""
+            ).strip()
+            if findings:
+                if len(findings) > 260:
+                    findings = findings[:257].rstrip() + "..."
+                entry_lines.append(f"  Key Findings & Conclusion: {findings}")
+
+            abstract = str(getattr(r, "abstract", "") or "").strip()
+            if abstract and not (methodology and findings):
+                if len(abstract) > 220:
+                    abstract = abstract[:217].rstrip() + "..."
+                entry_lines.append(f"  Abstract Summary: {abstract}")
+
+            lines.append("\n".join(entry_lines))
+
+        return "\n".join(lines)
+
+
+# Standalone function aliases for direct import flexibility
+match_and_format_file_knowledge = AIReadViewHelper.match_and_format_file_knowledge
+match_and_format_thesis_knowledge = AIReadViewHelper.match_and_format_thesis_knowledge

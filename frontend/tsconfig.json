@@ -18,6 +18,30 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@/Shared": [
+        "./src/Shared"
+      ],
+      "@/Shared/*": [
+        "./src/Shared/*"
+      ],
+      "@/Hooks": [
+        "./src/Hooks"
+      ],
+      "@/Hooks/*": [
+        "./src/Hooks/*"
+      ],
+      "@/LayoutBars": [
+        "./src/LayoutBars"
+      ],
+      "@/LayoutBars/*": [
+        "./src/LayoutBars/*"
+      ],
+      "@/LayoutStyles": [
+        "./src/LayoutStyles"
+      ],
+      "@/LayoutStyles/*": [
+        "./src/LayoutStyles/*"
       ]
     },
     "allowImportingTsExtensions": true,
