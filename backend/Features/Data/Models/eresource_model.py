@@ -18,6 +18,13 @@ class EResourceDepartment(models.Model):
 
 
 class EResourceFile(models.Model):
+    OCR_STATUS_CHOICES = [
+        ('pending', 'Pending Extraction'),
+        ('completed', 'Knowledge Extracted'),
+        ('failed', 'Extraction Failed'),
+        ('skipped', 'Unsupported Format'),
+    ]
+
     department = models.ForeignKey(
         EResourceDepartment, on_delete=models.CASCADE,
         related_name='files'
@@ -26,6 +33,18 @@ class EResourceFile(models.Model):
     file = models.FileField(upload_to='e_resources/', max_length=500)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+
+    # Document Knowledge & OCR Extraction Fields
+    extracted_text = models.TextField(blank=True, null=True, help_text="Parsed plain text from the document.")
+    summary = models.TextField(blank=True, null=True, help_text="Executive summary of the document.")
+    table_of_contents = models.TextField(blank=True, null=True, help_text="Extracted chapters and section headings.")
+    keywords = models.TextField(blank=True, null=True, help_text="Extracted key subject matter terms and topics.")
+    ocr_status = models.CharField(
+        max_length=20,
+        default='pending',
+        choices=OCR_STATUS_CHOICES
+    )
+    ocr_processed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['name']

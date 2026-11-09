@@ -18,6 +18,7 @@ from .feedback_serializer import FeedbackSerializer
 from .personnel_serializer import PersonnelSerializer
 from .settings_serializer import SiteSettingsSerializer
 from .recycle_bin_serializer import RecycleBinSerializer
+from .reference_serializer import ResearchReferenceSerializer
 
 __all__ = [
     'NewlyAcquiredBookSerializer',
@@ -34,4 +35,5 @@ __all__ = [
     'PersonnelSerializer',
     'SiteSettingsSerializer',
     'RecycleBinSerializer',
+    'ResearchReferenceSerializer',
 ]

@@ -9,6 +9,10 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
+        '@/Shared': path.resolve(__dirname, './src/Shared'),
+        '@/Hooks': path.resolve(__dirname, './src/Hooks'),
+        '@/LayoutBars': path.resolve(__dirname, './src/LayoutBars'),
+        '@/LayoutStyles': path.resolve(__dirname, './src/LayoutStyles'),
         '@': path.resolve(__dirname, '.'),
       },
     },

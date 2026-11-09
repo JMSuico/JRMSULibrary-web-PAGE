@@ -39,5 +39,6 @@ __all__ = [
     'SiteSettings',
     'RecycleBin',
     'GeneratedReport',
+    'ResearchReference',
     'AIFaqCache',
 ]

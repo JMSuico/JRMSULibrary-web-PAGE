@@ -150,6 +150,11 @@ class EResourceFileViewSet(viewsets.ViewSet):
         from rest_framework.exceptions import ValidationError
         try:
             item = self.service.create(mutable_data, uploaded_file)
+            try:
+                from Features.signals import trigger_background_file_extraction
+                trigger_background_file_extraction("EResourceFile", item.pk)
+            except Exception as trig_err:
+                logger.warning(f"[EResource Upload] Auto-extraction trigger warning: {trig_err}")
             return Response(EResourceFileSerializer(item).data, status=201)
         except ValidationError as e:
             return Response(e.detail, status=400)

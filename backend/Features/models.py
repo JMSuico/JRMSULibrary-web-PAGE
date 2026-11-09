@@ -8,6 +8,7 @@ from Features.Data.Models import (
     LibraryInteriorImage,
     EResourceDepartment,
     EResourceFile,
+    ResearchReference,
     AIFaqCache,
 )
 
@@ -20,5 +21,6 @@ __all__ = [
     'LibraryInteriorImage',
     'EResourceDepartment',
     'EResourceFile',
+    'ResearchReference',
     'AIFaqCache',
 ]

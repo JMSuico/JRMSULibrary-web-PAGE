@@ -659,7 +659,22 @@ class AIService(IAIService):
             'difference between', 'synthesize'
         ])
 
-        if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt:
+        # Check if user inquiry is asking about specific document/book contents, chapters, or thesis findings
+        is_document_knowledge_query = any(p in norm for p in [
+            'finding', 'findings', 'conclusion', 'conclusions', 'methodology', 'methods',
+            'what did', 'what is in', 'what is inside', 'what is covered', 'what does it cover',
+            'what does', 'what are the findings', 'chapter', 'chapters', 'table of contents', 'toc',
+            'summary of', 'tell me about the chapters', 'tell me about the content',
+            'topics covered', 'content of', 'contents of', 'what does the thesis say',
+            'what does the handbook say', 'what does the book cover', 'what is covered in',
+            'what is covered inside', 'what is in the', 'tell me about the'
+        ]) and any(w in norm for w in [
+            'chapter', 'chapters', 'content', 'contents', 'covered', 'finding', 'findings',
+            'conclusion', 'conclusions', 'methodology', 'methods', 'handbook', 'syllabus',
+            'thesis', 'theses', 'dissertation', 'table of contents', 'toc', 'summary'
+        ])
+
+        if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt and not is_document_knowledge_query:
             count = self._get_reference_count()
             if count == 0:
                 return (
@@ -735,7 +750,7 @@ class AIService(IAIService):
             or (bool({'database', 'databases', 'journal', 'journals'} & tokens) and bool({'online', 'subscribed', 'external', 'academic', 'available', 'open', 'access', 'what', 'list'} & tokens))
         )
 
-        if has_eresource:
+        if has_eresource and not is_document_knowledge_query:
             depts = self._get_all_eresource_depts()
             try:
                 active_files = list(self.eresource_file_repo.get_all_active())
@@ -1115,7 +1130,7 @@ class AIService(IAIService):
             'available' in tokens and bool({'book', 'books', 'catalog', 'collection', 'reading', 'inventory', 'titles'} & tokens)
         )
 
-        if has_book_phrase or has_book_token:
+        if (has_book_phrase or has_book_token) and not is_document_knowledge_query:
             inv_summary = self._get_book_inventory_summary()
             display_batch = self._get_display_batch()
             batch_name = getattr(display_batch, 'name', 'Batch 1 2026') if display_batch else 'Batch 1 2026'
@@ -1338,7 +1353,10 @@ class AIService(IAIService):
         tier3_triggers = {
             'why', 'explain', 'analyze', 'analysis', 'compare', 'comparison', 'thesis', 'capstone',
             'rrl', 'methodology', 'framework', 'literature', 'formulate', 'synthesize', 'evaluate',
-            'implication', 'pros and cons', 'difference between', 'recommend a research title'
+            'implication', 'pros and cons', 'difference between', 'recommend a research title',
+            'finding', 'findings', 'conclusion', 'conclusions', 'chapter', 'chapters',
+            'table of contents', 'toc', 'what is in', 'what is inside', 'what is covered',
+            'covered in', 'content of', 'contents of'
         }
         tier2_triggers = {
             'recommend', 'suggest', 'how to', 'how do i', 'steps to', 'list of', 'what books about',
@@ -1392,8 +1410,9 @@ class AIService(IAIService):
         if user_message:
             query_tokens = AIReadViewHelper.expand_query_tokens(user_message)
             if query_tokens:
+                raw_refs = []
                 try:
-                    raw_refs = list(self.reference_repo.search_multi_token(query_tokens, limit=10))
+                    raw_refs = list(self.reference_repo.search_multi_token(query_tokens, limit=15))
                     matched_refs = AIReadViewHelper.rank_and_sort_references(raw_refs, query_tokens, raw_query=user_message, limit=3)
                     for r in matched_refs:
                         targeted_matches.append(f"- [Thesis/Research Reference] {self._format_ref(r)}")
@@ -1410,6 +1429,44 @@ class AIService(IAIService):
                             targeted_matches.append(f"- [E-Resource Folder] {f['breadcrumb']}")
                 except Exception as e:
                     logger.warning(f"Targeted search warning: {e}")
+
+                # 1. DOCUMENT & BOOK CONTENT KNOWLEDGE (EResourceFile)
+                try:
+                    candidate_files = []
+                    if hasattr(self.eresource_file_repo, 'search_active_files'):
+                        candidate_files = list(self.eresource_file_repo.search_active_files(query_tokens, limit=15))
+                    if not candidate_files and hasattr(self.eresource_file_repo, 'get_all_active'):
+                        candidate_files = list(self.eresource_file_repo.get_all_active())
+                    elif not candidate_files and hasattr(self.eresource_file_repo, 'get_all'):
+                        candidate_files = list(self.eresource_file_repo.get_all())
+
+                    file_knowledge = AIReadViewHelper.match_and_format_file_knowledge(
+                        candidate_files, query_tokens, raw_query=user_message, limit=3
+                    )
+                    if file_knowledge:
+                        targeted_matches.append(file_knowledge)
+                except Exception as e:
+                    logger.warning(f"File knowledge extraction warning: {e}")
+
+                # 2. THESIS & RESEARCH KNOWLEDGE (Methodology & Findings from ResearchReference)
+                try:
+                    all_refs_for_knowledge = list(raw_refs)
+                    if not all_refs_for_knowledge and hasattr(self.reference_repo, 'get_all'):
+                        all_refs_for_knowledge = list(self.reference_repo.get_all()[:25])
+                    elif len(all_refs_for_knowledge) < 5 and hasattr(self.reference_repo, 'get_recent'):
+                        recent_pool = list(self.reference_repo.get_recent(25))
+                        seen_ids = {getattr(r, 'id', None) for r in all_refs_for_knowledge}
+                        for r in recent_pool:
+                            if getattr(r, 'id', None) not in seen_ids:
+                                all_refs_for_knowledge.append(r)
+
+                    thesis_knowledge = AIReadViewHelper.match_and_format_thesis_knowledge(
+                        all_refs_for_knowledge, query_tokens, raw_query=user_message, limit=3
+                    )
+                    if thesis_knowledge:
+                        targeted_matches.append(thesis_knowledge)
+                except Exception as e:
+                    logger.warning(f"Thesis knowledge extraction warning: {e}")
 
         targeted_matches_text = "\n".join(targeted_matches) if targeted_matches else "No specific matches found in direct keyword search."
 
@@ -1439,6 +1496,9 @@ CRITICAL BEHAVIOR RULES:
 8. ROOM RESERVATION RULES:
    - Reservable rooms are: Discussion Room 1 & 2, Tutorium Room 1 & 2, Multimedia Room.
    - Instruct users to click the 'Reserve a Room' button right below the chat window. NEVER mention UOPAC for room reservations.
+9. BOOK CONTENTS, CHAPTERS & THESIS FINDINGS (ZERO HALLUCINATIONS):
+   - When asked what is covered inside a book, handbook, syllabus, or course document, or asked about its chapters, table of contents, or key concepts: you MUST answer strictly using the verified DOCUMENT & BOOK CONTENT KNOWLEDGE provided in the context below. State the exact document name, parent department breadcrumb, summary, chapters/TOC, and key topics. If the document or its chapters are not in the context, state clearly and politely that the specific contents or chapters are not yet indexed in the database. NEVER invent or hallucinate chapters, authors, or topics!
+   - When asked about thesis methodology, research findings, conclusions, or results: you MUST answer strictly using the verified THESIS & RESEARCH KNOWLEDGE provided in the context below. Cite the exact title, author, methodology, and key findings. If a thesis has no extracted findings or is not in the context, state that clearly. NEVER fabricate research findings or conclusions!
 
 LIBRARY CONTEXT & LIVE INFORMATION:
 - Operating Hours: Monday to Friday, {mon_fri} (Philippine Time). Closed on weekends and regular holidays.

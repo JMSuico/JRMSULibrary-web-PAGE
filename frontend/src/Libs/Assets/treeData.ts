@@ -21,7 +21,7 @@ export const eBooksTree: TreeNodeData[] = [
         type: 'folder',
         path: `${agriPath}/BS Agriculture`,
         children: [
-          { name: '01.-Basic-Agriculture.-Student-Handbook.pdf', type: 'file', path: `${agriPath}/BS Agriculture/01.-Basic-Agriculture.-Student-Handbook-author-Shiksha-Kendra.pdf` },
+          { name: '01.-Basic-Agriculture.-Student-Handbook.pdf', type: 'file', path: '/assets/sample.pdf' },
           { name: '02.-Farmer-s-Handbook-on-Basic-Agriculture.pdf', type: 'file', path: `${agriPath}/BS Agriculture/02.-Farmer-s-Handbook-on-Basic-Agriculture-author-Chandra-Shekara-Ajit-Kumar-N.-Balasubramani-Bakul-C.-Chaudhary-Rajeev-Sharma-Max-Baumann-and-Chitra-Shukla.pdf` },
           { name: '05.-Northeast-Beginning-Farmer_s-Field-Journal.pdf', type: 'file', path: `${agriPath}/BS Agriculture/05.-Northeast-Beginning-Farmer_s-Field-Journal-author-Greenhorns.pdf` },
           { name: '09.-Understanding-Farming.pdf', type: 'file', path: `${agriPath}/BS Agriculture/09.-Understanding-Farming.-Facts-and-figures-about-German-farming-author-Federal-Ministry-of-Food-and-Agriculture-BMEL.pdf` },

@@ -166,6 +166,10 @@ services:
       - backend
     ports:
       - "3000:80"
+    volumes:
+      - ./frontend/public/google2d437595507846a0.html:/usr/share/nginx/html/google2d437595507846a0.html:ro
+      - ./frontend/public/sitemap.xml:/usr/share/nginx/html/sitemap.xml:ro
+      - ./frontend/public/robots.txt:/usr/share/nginx/html/robots.txt:ro
 
   # ─── Layer 2: Frontend Admin Page ──────────────────────────────────────
   frontend-admin:

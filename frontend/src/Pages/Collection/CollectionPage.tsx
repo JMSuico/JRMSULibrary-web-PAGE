@@ -192,13 +192,9 @@ export default function CollectionPage() {
         {/* Local Books — TreeView with search/sort */}
         {activeTab === 'local-books' && (
           <div className="max-w-3xl mx-auto mb-12">
-            {loadingResources ? (
+            {loadingResources && filteredTree.length === 0 ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="animate-spin text-gold-light w-8 h-8" />
-              </div>
-            ) : errorMsg ? (
-              <div className="text-center text-red-500 py-12">
-                Error: {errorMsg}
               </div>
             ) : filteredTree.length > 0 ? (
               <TreeView
@@ -209,6 +205,10 @@ export default function CollectionPage() {
                 sortOrder={sortOrder}
                 onSortChange={(s) => setSortOrder(s as any)}
               />
+            ) : errorMsg ? (
+              <div className="text-center text-red-500 py-12">
+                Error: {errorMsg}
+              </div>
             ) : (
               <div className="text-center text-white/70 py-12">
                 No E-Resources available at the moment.

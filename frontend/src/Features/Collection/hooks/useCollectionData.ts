@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
+import { eBooksTree, type TreeNodeData } from '@/src/Libs/Assets/treeData';
 import { eresourceApi, EResourceDepartment } from '@/src/Endpoints/eresourceApi';
 import { cmsApi, ManagedLink } from '@/src/Endpoints/cmsApi';
 import { defaultExternalLinks } from '@/src/Libs/Assets/defaultLinks';
@@ -132,7 +132,10 @@ export function useCollectionData(activeTab: string) {
 
   useAutoRefresh(load, 30000);
 
-  const localTree = useMemo(() => mapDepartmentsToTree(departments), [departments]);
+  const localTree = useMemo(() => {
+    const dynamic = mapDepartmentsToTree(departments);
+    return dynamic.length > 0 ? dynamic : eBooksTree;
+  }, [departments]);
   const onlineTree = useMemo(() => mapLinksToTree(onlineLinks), [onlineLinks]);
 
   const currentTree = activeTab === 'online' ? onlineTree : localTree;
