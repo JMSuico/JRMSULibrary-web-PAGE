@@ -566,3 +566,9 @@ flowchart TD
 - **CLI Management Command**: `python manage.py extract_file_knowledge [--force] [--limit N]` remains available for optional manual administrative auditing or batch re-indexing.
 - **Authentic JRMSU University UI**: Document viewing in `FileViewerModal.tsx` strictly adheres to the official JRMSU design system (Royal Blue gradient `from-blue-900 to-blue-600`, Google `material-symbols-outlined`, white container cards `rounded-2xl`, and light gray canvas backdrop), eliminating artificial dark AI banners while maintaining 100% canvas anti-download security.
 - **AI Service Dynamic Grounding**: `ai_service.py` intercepts document content queries via `is_document_knowledge_query`, dynamically injects relevant verified chapters and research findings into the prompt, and enforces Rule 9 ("Zero Hallucination Policy").
+
+### 11.3 Production Purity & Scratch Test Suite Isolation
+To guarantee that the production codebase remains pure, uncluttered, and free of development test runners or mock artifacts:
+1. **Scratch Folder Isolation**: All test suites, challenge runners, and mock specifications are quarantined within `C:\Users\provu\Desktop\JRMSU LIBRARY LANGDING PAGE\scratch\`.
+2. **Production App Purity**: `backend/Features/` and `frontend/src/` contain strictly production-grade code. No ad-hoc test scripts or mock frameworks are committed to production branches.
+3. **Master Test Runner**: Verification across the 54-test matrix (OCR, daemon, signals, grounding, and stress challenges) is orchestrated via `scratch/run_all_scratch_tests.py` (and `run_all_scratch_tests.bat`), ensuring 100% test coverage without compromising production deployment purity.
