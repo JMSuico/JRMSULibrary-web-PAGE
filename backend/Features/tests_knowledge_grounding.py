@@ -9,23 +9,15 @@ from unittest.mock import MagicMock
 backend_path = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_path))
 
-# ── 1. MOCK MINIMAL DJANGO ENVIRONMENT ──────────────────────────────────
-for mod_name in ['django', 'django.core', 'django.core.cache', 'django.db', 'django.db.models', 'django.conf']:
-    if mod_name not in sys.modules:
-        m = ModuleType(mod_name)
-        sys.modules[mod_name] = m
+# ── 1. INITIALIZE CANONICAL MOCK ENVIRONMENT ──────────────────────────────
+import Features.tests_knowledge_ingestion
+from Features.Helpers.ai_read_view_helper import (
+    AIReadViewHelper,
+    match_and_format_file_knowledge,
+    match_and_format_thesis_knowledge,
+)
 
-sys.modules['django.core.cache'].cache = MagicMock()
-
-# ── 2. LOAD AI READ VIEW HELPER DIRECTLY ─────────────────────────────────
-helper_path = backend_path / "Features" / "Helpers" / "ai_read_view_helper.py"
-helper_loader = importlib.machinery.SourceFileLoader('ai_read_view_helper', str(helper_path))
-helper_mod = helper_loader.load_module()
-AIReadViewHelper = helper_mod.AIReadViewHelper
-match_and_format_file_knowledge = helper_mod.match_and_format_file_knowledge
-match_and_format_thesis_knowledge = helper_mod.match_and_format_thesis_knowledge
-
-# ── 3. LOAD AI SERVICE DIRECTLY ──────────────────────────────────────────
+# ── 2. REPOSITORY & SERVICE INTERFACE MOCKS ───────────────────────────────
 mock_repo = ModuleType("Features.Repositories.Implementations")
 for r in [
     'PersonnelRepository', 'ManagedLinkRepository', 'PageContentRepository',
@@ -36,9 +28,6 @@ for r in [
 ]:
     setattr(mock_repo, r, MagicMock)
 
-feat_pkg = ModuleType('Features')
-feat_pkg.__path__ = [str(backend_path / 'Features')]
-sys.modules['Features'] = feat_pkg
 sys.modules['Features.Repositories'] = ModuleType('Features.Repositories')
 sys.modules['Features.Repositories.Implementations'] = mock_repo
 sys.modules['Features.Repositories.Implementations.personnel_repository'] = mock_repo
@@ -51,28 +40,23 @@ sys.modules['Features.Repositories.Implementations.gallery_repository'] = mock_r
 sys.modules['Features.Repositories.Implementations.settings_repository'] = mock_repo
 sys.modules['Features.Repositories.Implementations.eresource_repository'] = mock_repo
 
-mock_mgmt = ModuleType('Features.management')
-mock_mgmt_cmds = ModuleType('Features.management.commands')
-mock_extract_cmd = ModuleType('Features.management.commands.extract_file_knowledge')
-mock_extract_cmd.process_single_eresource_file = MagicMock(return_value=True)
-mock_extract_cmd.process_single_research_reference = MagicMock(return_value=True)
-sys.modules['Features.management'] = mock_mgmt
-sys.modules['Features.management.commands'] = mock_mgmt_cmds
-sys.modules['Features.management.commands.extract_file_knowledge'] = mock_extract_cmd
-
 mock_iface = ModuleType('Features.Services.Interfaces.i_ai_service')
 mock_iface.IAIService = object
 sys.modules['Features.Services'] = ModuleType('Features.Services')
 sys.modules['Features.Services.Interfaces'] = ModuleType('Features.Services.Interfaces')
 sys.modules['Features.Services.Interfaces.i_ai_service'] = mock_iface
 
-mock_helpers = ModuleType('Features.Helpers')
-mock_helpers.AIReadViewHelper = AIReadViewHelper
-mock_helpers.match_and_format_file_knowledge = match_and_format_file_knowledge
-mock_helpers.match_and_format_thesis_knowledge = match_and_format_thesis_knowledge
-sys.modules['Features.Helpers'] = mock_helpers
-sys.modules['Features.Helpers.ai_read_view_helper'] = mock_helpers
+helpers_mod = sys.modules.get('Features.Helpers')
+if helpers_mod is None:
+    helpers_mod = ModuleType('Features.Helpers')
+    helpers_mod.__path__ = [str(backend_path / 'Features' / 'Helpers')]
+    sys.modules['Features.Helpers'] = helpers_mod
+helpers_mod.AIReadViewHelper = AIReadViewHelper
+helpers_mod.match_and_format_file_knowledge = match_and_format_file_knowledge
+helpers_mod.match_and_format_thesis_knowledge = match_and_format_thesis_knowledge
+sys.modules['Features.Helpers.ai_read_view_helper'] = helpers_mod
 
+# ── 3. LOAD AI SERVICE ────────────────────────────────────────────────────
 ai_service_path = backend_path / "Features" / "Services" / "Implementations" / "ai_service.py"
 ai_loader = importlib.machinery.SourceFileLoader('ai_service', str(ai_service_path))
 ai_service_mod = ai_loader.load_module()

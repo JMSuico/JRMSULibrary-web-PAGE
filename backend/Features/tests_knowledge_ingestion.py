@@ -49,11 +49,23 @@ try:
 except ImportError:
     # Build complete mock hierarchy for django
     django_mock = types.ModuleType("django")
+    django_mock.__path__ = []
     sys.modules["django"] = django_mock
+
+    core_mock = types.ModuleType("django.core")
+    core_mock.__path__ = []
+    sys.modules["django.core"] = core_mock
+    django_mock.core = core_mock
+
+    cache_mock = types.ModuleType("django.core.cache")
+    cache_mock.cache = MagicMock()
+    sys.modules["django.core.cache"] = cache_mock
+    core_mock.cache = cache_mock
 
     conf_mock = types.ModuleType("django.conf")
     conf_mock.settings = MagicMock()
     sys.modules["django.conf"] = conf_mock
+    django_mock.conf = conf_mock
 
     utils_mock = types.ModuleType("django.utils")
     import datetime
@@ -63,6 +75,7 @@ except ImportError:
             return datetime.datetime.now(datetime.timezone.utc)
     utils_mock.timezone = FakeTimezone()
     sys.modules["django.utils"] = utils_mock
+    django_mock.utils = utils_mock
 
     dispatch_mock = types.ModuleType("django.dispatch")
     def fake_receiver(*args, **kwargs):
@@ -71,10 +84,13 @@ except ImportError:
         return decorator
     dispatch_mock.receiver = fake_receiver
     sys.modules["django.dispatch"] = dispatch_mock
+    django_mock.dispatch = dispatch_mock
 
     db_mock = types.ModuleType("django.db")
+    db_mock.__path__ = []
     db_mock.connection = MagicMock()
     db_mock.transaction = MagicMock()
+    django_mock.db = db_mock
     
     class FakeModel:
         class Meta: pass
