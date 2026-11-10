@@ -37,6 +37,41 @@ export function mapLinksToTree(links: ManagedLink[]): TreeNodeData[] {
   }));
 }
 
+export function resolveResourceFilePath(rawPath: string | null | undefined): string {
+  if (!rawPath) return '/assets/sample.pdf';
+  
+  // If already a full URL (e.g. S3, Supabase, or external proxy)
+  if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
+    try {
+      const parsed = new URL(rawPath);
+      if (parsed.pathname.startsWith('/media/')) {
+        return parsed.pathname;
+      }
+    } catch {
+      // ignore invalid URL format
+    }
+    return rawPath;
+  }
+
+  // Already prefixed
+  if (rawPath.startsWith('/media/') || rawPath.startsWith('/assets/')) {
+    return rawPath;
+  }
+
+  // Relative Django e_resources paths
+  if (rawPath.startsWith('e_resources/')) {
+    return `/media/${rawPath}`;
+  }
+  if (rawPath.startsWith('/e_resources/')) {
+    return `/media${rawPath}`;
+  }
+  if (rawPath.startsWith('media/')) {
+    return `/${rawPath}`;
+  }
+
+  return rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+}
+
 export function mapDepartmentsToTree(departments: EResourceDepartment[]): TreeNodeData[] {
   return departments.map(dept => ({
     name: dept.name,
@@ -48,8 +83,7 @@ export function mapDepartmentsToTree(departments: EResourceDepartment[]): TreeNo
         .map(f => ({
           name: f.name,
           type: 'file' as const,
-          // Use relative path so Vite proxy or Nginx handles it
-          path: f.file.startsWith('http') ? f.file : f.file
+          path: resolveResourceFilePath(f.file)
         }))
     ]
   })).filter(node => node.children && node.children.length > 0);

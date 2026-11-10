@@ -4,7 +4,8 @@ from Features.Data.Models import (
     Account, ContactMessage, Feedback, Personnel,
     NewlyAcquiredBook, LibraryInteriorImage,
     EResourceDepartment, EResourceFile,
-    AcquisitionBatch, BatchHistory
+    AcquisitionBatch, BatchHistory,
+    ResearchReference
 )
 
 @admin.register(Account)
@@ -65,6 +66,34 @@ class EResourceDepartmentAdmin(admin.ModelAdmin):
 
 @admin.register(EResourceFile)
 class EResourceFileAdmin(admin.ModelAdmin):
-    list_display = ['name', 'department', 'is_active']
-    list_filter = ['department', 'is_active']
-    search_fields = ['name']
+    list_display = ['name', 'department', 'ocr_status', 'ocr_processed_at', 'is_active']
+    list_filter = ['department', 'ocr_status', 'is_active']
+    search_fields = ['name', 'keywords', 'summary']
+    actions = ['extract_document_knowledge_action']
+
+    @admin.action(description="⚡ Extract / Re-extract AI Document Knowledge (OCR)")
+    def extract_document_knowledge_action(self, request, queryset):
+        from Features.management.commands.extract_file_knowledge import process_single_eresource_file
+        success_count = 0
+        for item in queryset:
+            if process_single_eresource_file(item):
+                success_count += 1
+        self.message_user(request, f"Successfully extracted AI document knowledge for {success_count} / {queryset.count()} files.")
+
+
+@admin.register(ResearchReference)
+class ResearchReferenceAdmin(admin.ModelAdmin):
+    list_display = ['title', 'author', 'department', 'access_type', 'ocr_status', 'is_active']
+    list_filter = ['department', 'access_type', 'ocr_status', 'is_active']
+    search_fields = ['title', 'author', 'abstract', 'keywords']
+    actions = ['extract_thesis_knowledge_action']
+
+    @admin.action(description="⚡ Extract / Re-extract AI Thesis Knowledge (OCR)")
+    def extract_thesis_knowledge_action(self, request, queryset):
+        from Features.management.commands.extract_file_knowledge import process_single_research_reference
+        success_count = 0
+        for item in queryset:
+            if process_single_research_reference(item):
+                success_count += 1
+        self.message_user(request, f"Successfully extracted AI thesis knowledge for {success_count} / {queryset.count()} theses.")
+

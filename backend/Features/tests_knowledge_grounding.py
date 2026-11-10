@@ -36,7 +36,9 @@ for r in [
 ]:
     setattr(mock_repo, r, MagicMock)
 
-sys.modules['Features'] = ModuleType('Features')
+feat_pkg = ModuleType('Features')
+feat_pkg.__path__ = [str(backend_path / 'Features')]
+sys.modules['Features'] = feat_pkg
 sys.modules['Features.Repositories'] = ModuleType('Features.Repositories')
 sys.modules['Features.Repositories.Implementations'] = mock_repo
 sys.modules['Features.Repositories.Implementations.personnel_repository'] = mock_repo
@@ -48,6 +50,15 @@ sys.modules['Features.Repositories.Implementations.ai_faq_repository'] = mock_re
 sys.modules['Features.Repositories.Implementations.gallery_repository'] = mock_repo
 sys.modules['Features.Repositories.Implementations.settings_repository'] = mock_repo
 sys.modules['Features.Repositories.Implementations.eresource_repository'] = mock_repo
+
+mock_mgmt = ModuleType('Features.management')
+mock_mgmt_cmds = ModuleType('Features.management.commands')
+mock_extract_cmd = ModuleType('Features.management.commands.extract_file_knowledge')
+mock_extract_cmd.process_single_eresource_file = MagicMock(return_value=True)
+mock_extract_cmd.process_single_research_reference = MagicMock(return_value=True)
+sys.modules['Features.management'] = mock_mgmt
+sys.modules['Features.management.commands'] = mock_mgmt_cmds
+sys.modules['Features.management.commands.extract_file_knowledge'] = mock_extract_cmd
 
 mock_iface = ModuleType('Features.Services.Interfaces.i_ai_service')
 mock_iface.IAIService = object
@@ -275,6 +286,143 @@ class TestKnowledgeGrounding(unittest.TestCase):
         self.assertIn("Randomized Complete Block Design", prompt2)
         self.assertIn("26.8%", prompt2)
         self.assertIn("ZERO HALLUCINATIONS", prompt2)
+
+
+    # ── TEST 7: User Picture Inquiry: Specific File Knowledge Direct Answer ──
+    def test_direct_file_knowledge_inquiry_from_user_screenshot(self):
+        service = AIService()
+        agri_file = SimpleNamespace(
+            pk=1,
+            name="01.-Basic-Agriculture.-Student-Handbook.pdf",
+            summary="Comprehensive instructional student handbook covering core agricultural sciences, crop cultivation, soil science, and sustainable farming systems.",
+            table_of_contents="Chapter 1: Introduction to Agricultural Sciences\nChapter 2: Soil Classification & Fertility\nChapter 3: Agronomic Principles & Field Crops\nChapter 4: Integrated Pest Management",
+            keywords="Agriculture, Agronomy, Soil Fertility, Crop Production, Plant Pathology, IPM",
+            department=SimpleNamespace(name="AGRI", parent=SimpleNamespace(name="CAF", parent=None)),
+            is_active=True,
+            file="e_resources/sample.pdf",
+            ocr_status="completed"
+        )
+        service.eresource_file_repo.get_all_active = MagicMock(return_value=[agri_file])
+
+        query = "01.-Basic-Agriculture.-Student-Handbook.pdf whats this content all about?"
+        ans = service._resolve_deterministic_database_intent(query)
+
+        self.assertIsNotNone(ans)
+        self.assertIn("01.-Basic-Agriculture.-Student-Handbook.pdf", ans)
+        self.assertIn("Executive Summary", ans)
+        self.assertIn("Table of Contents / Key Chapters", ans)
+        self.assertIn("Core Topics & Concepts Covered", ans)
+        self.assertIn("Collection Reading Policy", ans)
+        # CRITICAL: Must NEVER dump the generic 69 department folders!
+        self.assertNotIn("69 Academic Department Folders", ans)
+        self.assertNotIn("CAF > BIOSYSTEM ENGINEERING", ans)
+
+
+    # ── TEST 8: File with unextracted/pending knowledge auto-synthesizes on the fly ──
+    def test_unextracted_file_synthesizes_domain_knowledge(self):
+        service = AIService()
+        unextracted_file = SimpleNamespace(
+            pk=99,
+            name="01.-Basic-Agriculture.-Student-Handbook.pdf",
+            summary=None,
+            table_of_contents=None,
+            keywords=None,
+            department=SimpleNamespace(name="AGRI", parent=SimpleNamespace(name="CAF", parent=None)),
+            is_active=True,
+            file="e_resources/sample.pdf",
+            ocr_status="pending",
+            save=MagicMock()
+        )
+        service.eresource_file_repo.get_all_active = MagicMock(return_value=[unextracted_file])
+
+        query = "01.-Basic-Agriculture.-Student-Handbook.pdf whats this content all about?"
+        ans = service._resolve_deterministic_database_intent(query)
+
+        self.assertIsNotNone(ans)
+        self.assertIn("01.-Basic-Agriculture.-Student-Handbook.pdf", ans)
+        self.assertIn("Executive Summary", ans)
+        self.assertIn("Table of Contents / Key Chapters", ans)
+        self.assertIn("Agriculture", ans)
+        self.assertNotIn("69 Academic Department Folders", ans)
+
+
+    # ── TEST 9: Exact user inquiry string with spaces around punctuation ──
+    def test_exact_user_inquiry_with_spaces_around_punctuation(self):
+        service = AIService()
+        agri_file = SimpleNamespace(
+            pk=1,
+            name="01.-Basic-Agriculture.-Student-Handbook.pdf",
+            summary="Comprehensive instructional student handbook covering core agricultural sciences, crop cultivation, soil science, and sustainable farming systems.",
+            table_of_contents="Chapter 1: Introduction to Agricultural Sciences\nChapter 2: Soil Classification & Fertility\nChapter 3: Agronomic Principles & Field Crops\nChapter 4: Integrated Pest Management",
+            keywords="Agriculture, Agronomy, Soil Fertility, Crop Production, Plant Pathology, IPM",
+            department=SimpleNamespace(name="AGRI", parent=SimpleNamespace(name="CAF", parent=None)),
+            is_active=True,
+            file="e_resources/sample.pdf",
+            ocr_status="completed",
+            save=MagicMock()
+        )
+        service.eresource_file_repo.get_all_active = MagicMock(return_value=[agri_file])
+
+        # Exact query from user's production PC screenshot:
+        query = "01 .- Basic-Agriculture .- Student-Handbook.pdf whats this content all about?"
+        ans = service._resolve_deterministic_database_intent(query)
+
+        self.assertIsNotNone(ans)
+        self.assertIn("01.-Basic-Agriculture.-Student-Handbook.pdf", ans)
+        self.assertIn("Executive Summary", ans)
+        self.assertIn("Table of Contents / Key Chapters", ans)
+        self.assertIn("Collection Reading Policy", ans)
+        # CRITICAL: Must NEVER fall through to Intent 3 or dump 69 folders!
+        self.assertNotIn("69 Academic Department Folders", ans)
+        self.assertNotIn("Currently 559 downloadable PDF files", ans)
+
+
+    # ── TEST 10: Specific Thesis & Dissertation Research Inquiry ──
+    def test_thesis_direct_knowledge_inquiry(self):
+        service = AIService()
+        thesis_record = SimpleNamespace(
+            pk=77,
+            title="IoT-Based Environmental Monitoring in Zamboanga del Norte",
+            author="Juan dela Cruz, Engr.",
+            department="College of Engineering and Technology",
+            category="Thesis and Dissertation",
+            call_number="TH-EN-2026-004",
+            abstract="Continuous wireless sensor telemetry for environmental surveillance and flood risk mitigation across Katipunan river basins.",
+            methodology="ESP32 LoRaWAN nodes deployed at 5 municipal checkpoints with solar recharging arrays.",
+            findings_conclusion="Sensors achieved 99.4% uptime with sub-second alert transmission during peak precipitation periods.",
+            access_type="file",
+            access_file=SimpleNamespace(name="theses/iot_monitoring.pdf"),
+            ocr_status="completed",
+            save=MagicMock()
+        )
+        service.reference_repo.get_all = MagicMock(return_value=[thesis_record])
+        service.eresource_file_repo.get_all_active = MagicMock(return_value=[])
+
+        query = "IoT-Based Environmental Monitoring in Zamboanga del Norte whats this content all about?"
+        ans = service._resolve_deterministic_database_intent(query)
+
+        self.assertIsNotNone(ans)
+        self.assertIn("IoT-Based Environmental Monitoring in Zamboanga del Norte", ans)
+        self.assertIn("Research Abstract", ans)
+        self.assertIn("Research Methodology", ans)
+        self.assertIn("Key Findings & Conclusions", ans)
+        self.assertIn("Juan dela Cruz", ans)
+        self.assertIn("Catalog Access Policy", ans)
+        self.assertNotIn("69 Academic Department Folders", ans)
+
+
+    # ── TEST 11: Non-existent specific file inquiry returns factual document notice ──
+    def test_nonexistent_specific_file_does_not_dump_folders(self):
+        service = AIService()
+        service.eresource_file_repo.get_all_active = MagicMock(return_value=[])
+        service.reference_repo.get_all = MagicMock(return_value=[])
+
+        query = "99.-Non-Existent-Fake-Handbook.pdf whats this content all about?"
+        ans = service._resolve_deterministic_database_intent(query)
+
+        self.assertIsNotNone(ans)
+        self.assertIn("could not find a document matching that specific filename", ans)
+        self.assertNotIn("CAF > BIOSYSTEM ENGINEERING", ans)
 
 
 if __name__ == '__main__':

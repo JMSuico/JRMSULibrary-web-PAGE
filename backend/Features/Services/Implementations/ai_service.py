@@ -660,19 +660,24 @@ class AIService(IAIService):
         ])
 
         # Check if user inquiry is asking about specific document/book contents, chapters, or thesis findings
-        is_document_knowledge_query = any(p in norm for p in [
-            'finding', 'findings', 'conclusion', 'conclusions', 'methodology', 'methods',
-            'what did', 'what is in', 'what is inside', 'what is covered', 'what does it cover',
-            'what does', 'what are the findings', 'chapter', 'chapters', 'table of contents', 'toc',
-            'summary of', 'tell me about the chapters', 'tell me about the content',
-            'topics covered', 'content of', 'contents of', 'what does the thesis say',
-            'what does the handbook say', 'what does the book cover', 'what is covered in',
-            'what is covered inside', 'what is in the', 'tell me about the'
-        ]) and any(w in norm for w in [
-            'chapter', 'chapters', 'content', 'contents', 'covered', 'finding', 'findings',
-            'conclusion', 'conclusions', 'methodology', 'methods', 'handbook', 'syllabus',
-            'thesis', 'theses', 'dissertation', 'table of contents', 'toc', 'summary'
-        ])
+        is_document_knowledge_query = (
+            any(p in norm for p in [
+                'whats this content all about', 'what is this content all about', 'what is this content about',
+                'whats this content about', 'what is this about', 'whats this about', 'all about',
+                'tell me about this', 'tell me about the book', 'tell me about the file', 'tell me about the pdf',
+                'what does this cover', 'what does it cover', 'what is covered', 'what is inside', 'whats inside',
+                'summary of', 'content of', 'contents of', 'table of contents', 'chapters of', 'chapter of',
+                'what is in', 'whats in', 'what does it say', 'what are the findings', 'methodology of',
+                'tell me about the chapters', 'tell me about the content', 'topics covered', 'what did',
+                'what are the findings', 'what does the thesis say', 'what does the handbook say',
+                'what does the book cover', 'what is covered in', 'what is covered inside', 'what is in the'
+            ])
+            or (
+                any(ext in norm for ext in ['pdf', 'handbook', 'syllabus', 'thesis', 'theses', 'dissertation'])
+                and any(w in norm for w in ['content', 'contents', 'about', 'chapter', 'chapters', 'summary', 'covered', 'inside', 'topics', 'say', 'saying', 'finding', 'findings', 'conclusion'])
+            )
+            or bool(re.search(r'\b\d{1,3}[\.\-_]', str(user_message)))
+        )
 
         if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt and not is_document_knowledge_query:
             count = self._get_reference_count()
@@ -723,6 +728,71 @@ class AIService(IAIService):
                     f"{refs_list}\n\n"
                     f"You can search and filter by college department under the 'Collection' -> 'Research & Thesis References' tab on our website!"
                 )
+
+        # ---------------------------------------------------------
+        # Intent 2.7: Specific Document & Book Content Knowledge Intent
+        # (Local Books TreeView, E-Resource Course Syllabi & Research References)
+        # Directly answers inquiries regarding what a specific book/file/handbook contains,
+        # its chapters, table of contents, executive summary, and key topics.
+        # ---------------------------------------------------------
+        if is_document_knowledge_query:
+            try:
+                candidate_files = []
+                if hasattr(self.eresource_file_repo, 'get_all_active'):
+                    candidate_files = list(self.eresource_file_repo.get_all_active())
+                elif hasattr(self.eresource_file_repo, 'get_all'):
+                    candidate_files = list(self.eresource_file_repo.get_all())
+
+                matched_doc = AIReadViewHelper.find_targeted_document(
+                    candidate_files, user_message, tokens=tokens
+                )
+
+                if matched_doc:
+                    # If this document does not yet have extracted summary/toc, populate now
+                    if not getattr(matched_doc, 'summary', None) or not getattr(matched_doc, 'table_of_contents', None):
+                        try:
+                            from Features.management.commands.extract_file_knowledge import process_single_eresource_file
+                            process_single_eresource_file(matched_doc)
+                            from unittest.mock import MagicMock
+                            if hasattr(self.eresource_file_repo, 'get_by_id'):
+                                try:
+                                    reloaded = self.eresource_file_repo.get_by_id(matched_doc.pk)
+                                    if reloaded and not isinstance(reloaded, MagicMock):
+                                        matched_doc = reloaded
+                                except Exception:
+                                    pass
+                        except Exception as pe:
+                            logger.warning(f"On-the-fly extraction error for EResourceFile #{matched_doc.pk}: {pe}")
+
+                    return AIReadViewHelper.format_single_document_direct_answer(matched_doc)
+
+                # Check ResearchReferences (Theses & Dissertations)
+                candidate_refs = []
+                if hasattr(self.reference_repo, 'get_all'):
+                    try:
+                        candidate_refs = list(self.reference_repo.get_all())
+                    except Exception as te:
+                        logger.warning(f"Thesis reference candidate retrieval warning: {te}")
+
+                matched_ref = AIReadViewHelper.find_targeted_document(
+                    candidate_refs, user_message, tokens=tokens
+                )
+                if matched_ref:
+                    return AIReadViewHelper.format_single_document_direct_answer(matched_ref)
+
+                # If query specifically targets an explicit filename pattern (e.g. .pdf or numbered prefix):
+                if any(ext in norm for ext in ['.pdf', 'pdf']) and bool(re.search(r'\b\d{1,3}[\.\-_]', str(user_message))):
+                    return (
+                        "I searched our digital E-Resources collection and Research References catalog, but could not find a document "
+                        "matching that specific filename or title. You can browse our 69 Academic Department Folders and 559 local books "
+                        "under 'Collection' -> 'Local Books' or search student theses under 'Collection' -> 'Research & Thesis References'. "
+                        "If you have the exact title or call number, please let me know!"
+                    )
+
+                return None
+
+            except Exception as dke:
+                logger.warning(f"Document knowledge intent warning: {dke}")
 
         # ---------------------------------------------------------
         # Intent 3: E-Resources, Course Folders & Online Databases Intent
