@@ -25,6 +25,12 @@ class ResearchReferenceService(IResearchReferenceService):
         serializer = ResearchReferenceSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             ref = self.repo.create(serializer.validated_data)
+            if getattr(ref, 'access_type', None) == 'file' and getattr(ref, 'access_file', None):
+                try:
+                    from Features.management.commands.extract_file_knowledge import process_single_research_reference
+                    process_single_research_reference(ref)
+                except Exception:
+                    pass
             return True, ResearchReferenceSerializer(ref, context={'request': request}).data
         return False, serializer.errors
 
@@ -45,6 +51,12 @@ class ResearchReferenceService(IResearchReferenceService):
         serializer = ResearchReferenceSerializer(ref, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             updated_ref = self.repo.update(ref, serializer.validated_data)
+            if getattr(updated_ref, 'access_type', None) == 'file' and getattr(updated_ref, 'access_file', None):
+                try:
+                    from Features.management.commands.extract_file_knowledge import process_single_research_reference
+                    process_single_research_reference(updated_ref)
+                except Exception:
+                    pass
             return True, ResearchReferenceSerializer(updated_ref, context={'request': request}).data
         return False, serializer.errors
 

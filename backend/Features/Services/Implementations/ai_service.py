@@ -670,13 +670,14 @@ class AIService(IAIService):
                 'what is in', 'whats in', 'what does it say', 'what are the findings', 'methodology of',
                 'tell me about the chapters', 'tell me about the content', 'topics covered', 'what did',
                 'what are the findings', 'what does the thesis say', 'what does the handbook say',
-                'what does the book cover', 'what is covered in', 'what is covered inside', 'what is in the'
+                'what does the book cover', 'what is covered in', 'what is covered inside', 'what is in the',
+                'give me an overview', 'tell me an overview', 'overview on', 'overview of', 'overview about', 'overview'
             ])
             or (
-                any(ext in norm for ext in ['pdf', 'handbook', 'syllabus', 'thesis', 'theses', 'dissertation'])
-                and any(w in norm for w in ['content', 'contents', 'about', 'chapter', 'chapters', 'summary', 'covered', 'inside', 'topics', 'say', 'saying', 'finding', 'findings', 'conclusion'])
+                any(ext in norm for ext in ['pdf', 'handbook', 'syllabus', 'thesis', 'theses', 'dissertation', 'book', 'file', 'document'])
+                and any(w in norm for w in ['content', 'contents', 'about', 'chapter', 'chapters', 'summary', 'covered', 'inside', 'topics', 'say', 'saying', 'finding', 'findings', 'conclusion', 'overview'])
             )
-            or bool(re.search(r'\b\d{1,3}[\.\-_]', str(user_message)))
+            or bool(re.search(r'\b\d{1,3}\s*[\.\-_]', str(user_message)))
         )
 
         if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt and not is_document_knowledge_query:
@@ -781,7 +782,7 @@ class AIService(IAIService):
                     return AIReadViewHelper.format_single_document_direct_answer(matched_ref)
 
                 # If query specifically targets an explicit filename pattern (e.g. .pdf or numbered prefix):
-                if any(ext in norm for ext in ['.pdf', 'pdf']) and bool(re.search(r'\b\d{1,3}[\.\-_]', str(user_message))):
+                if any(ext in norm for ext in ['.pdf', 'pdf']) and bool(re.search(r'\b\d{1,3}\s*[\.\-_]', str(user_message))):
                     return (
                         "I searched our digital E-Resources collection and Research References catalog, but could not find a document "
                         "matching that specific filename or title. You can browse our 69 Academic Department Folders and 559 local books "

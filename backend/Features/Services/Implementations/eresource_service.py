@@ -25,10 +25,24 @@ class EResourceDepartmentService(IEResourceDepartmentService):
         return self._repo.get_by_id(id)
 
     def create(self, data: dict):
-        return self._repo.create(data)
+        file_obj = self._repo.create(data)
+        if getattr(file_obj, 'file', None):
+            try:
+                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
+                process_single_eresource_file(file_obj)
+            except Exception:
+                pass
+        return file_obj
 
     def update(self, id: int, data: dict):
-        return self._repo.update(id, data)
+        updated = self._repo.update(id, data)
+        if updated and getattr(updated, 'file', None):
+            try:
+                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
+                process_single_eresource_file(updated)
+            except Exception:
+                pass
+        return updated
 
     def delete(self, id: int, user_id: int = None) -> bool:
         item = self._repo.get_by_id(id)
@@ -93,10 +107,24 @@ class EResourceFileService(IEResourceFileService):
         else:
             data['is_active'] = False
 
-        return self._repo.create(data)
+        file_obj = self._repo.create(data)
+        if getattr(file_obj, 'file', None):
+            try:
+                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
+                process_single_eresource_file(file_obj)
+            except Exception:
+                pass
+        return file_obj
 
     def update(self, id: int, data: dict):
-        return self._repo.update(id, data)
+        updated = self._repo.update(id, data)
+        if updated and getattr(updated, 'file', None):
+            try:
+                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
+                process_single_eresource_file(updated)
+            except Exception:
+                pass
+        return updated
 
     def delete(self, id: int, user_id: int = None) -> bool:
         item = self._repo.get_by_id(id)

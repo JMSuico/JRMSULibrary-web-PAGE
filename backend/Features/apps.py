@@ -29,3 +29,10 @@ class FeaturesConfig(AppConfig):
             except Exception as e:
                 print(f"Exception in apps.py ready(): {e}")
                 pass
+
+            try:
+                from Features.Helpers.local_books_auto_seeder import auto_seed_local_books_catalog
+                auto_seed_local_books_catalog(force=False)
+            except Exception as e:
+                print(f"Auto-seed exception in ready(): {e}")
+                pass
