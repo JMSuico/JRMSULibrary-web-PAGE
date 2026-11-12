@@ -240,9 +240,12 @@ def update_global_timestamp(sender: Any, **kwargs: Any) -> None:
             pass
 
     # Update the timestamp
-    rows_updated = SiteSettings.objects.all().update(updated_at=timezone.now())
-    if rows_updated == 0:
-        SiteSettings.objects.create()
+    try:
+        rows_updated = SiteSettings.objects.all().update(updated_at=timezone.now())
+        if rows_updated == 0:
+            SiteSettings.objects.create()
+    except Exception:
+        pass
 
     # Broadcast via WebSockets
     try:

@@ -195,7 +195,7 @@ frontend/src/
 │   ├── Personnel/                                 # PersonnelSection flowchart & staff directory
 │   ├── AIAssistant/                               # RizalAssistant chat panel, RizalBubble floating trigger
 │   ├── ResearchSurvey/                            # SurveyStickyCard, SurveyModal
-│   ├── Auth/                                      # Login form, Multi-step biometric induction
+│   ├── Auth/                                      # LoginForm, ForgotPasswordModal, JWT credential auth
 │   ├── EResources/                                # Database proxy viewer, e-journal catalog
 │   └── Admin/                                     # 13 Admin Management Modules:
 │       ├── Analytics/                             # Real-time traffic, borrowing stats, charts
@@ -479,12 +479,11 @@ The Local Books and E-Resource collection (`/collection/local-books`, `FileViewe
      - `Cache-Control: private, no-transform, max-age=3600`
      - `X-Frame-Options: SAMEORIGIN` (prevents external click-jacking embedding)
 
-### 8.2 Laplacian Variance Blur Detection
-For student identity card capture during registration:
-$$\sigma^2 = \frac{1}{N} \sum_{x,y} \left( \nabla^2 I(x,y) - \mu \right)^2$$
-Where $\nabla^2 I$ is the discrete Laplacian convolution kernel $\begin{bmatrix} 0 & 1 & 0 \\ 1 & -4 & 1 \\ 0 & 1 & 0 \end{bmatrix}$.
-- If $\sigma^2 < 100$: Frame is flagged blurry; prompts user to steady the document.
-- If $\sigma^2 \ge 100$: Frame is sharp; proceeds to crop and cache.
+### 8.2 Session Heartbeat & Ghost Session Invariant
+To enforce strict session security and real-time inactivity logout:
+- **Active Heartbeat Tracking**: Client sends a background heartbeat every 60 seconds (`POST /api/users/heartbeat/`); `user_controller.py` executes an atomic conditional update on active accounts (`Account.objects.filter(id=..., last_active__isnull=False).update(last_active=now)`).
+- **Ghost Session Resurrection Prevention**: If an account has been logged out or timed out (`last_active = None`), the conditional query matches 0 rows and returns `HTTP 401 Unauthorized`, preventing in-flight pings from reviving dead sessions.
+- **Instant Client Redirect**: On 401 response, client token storage is cleared and the browser instantly redirects to `/admin/login`.
 
 ### 8.3 Hybrid Relevance Search Algorithm
 OPAC book discovery utilizes weighted multi-token field scoring:

@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
-import { SecurePdfViewer } from './SecurePdfViewer';
-import { ShieldAlert, AlertTriangle, ExternalLink, X, ChevronLeft, ChevronRight, FileText, Globe } from 'lucide-react';
 
 interface FileViewerModalProps {
   file: TreeNodeData;
@@ -20,158 +18,204 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
   );
   const safeIdx = currentIdx >= 0 ? currentIdx : 0;
 
-  const [securityWarning, setSecurityWarning] = useState<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const activeBlobRef = useRef<string | null>(null);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Intercept and disable saving, printing, and inspecting shortcuts
+    const isSave = (e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S');
+    const isPrint = (e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P');
+    const isViewSource = (e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U');
+    const isInspect = e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'i', 'C', 'c', 'J', 'j'].includes(e.key));
+
+    if (isSave || isPrint || isViewSource || isInspect) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     if (e.key === 'Escape') onClose();
     if (e.key === 'ArrowLeft' && safeIdx > 0) onNavigate(fileList[safeIdx - 1]);
     if (e.key === 'ArrowRight' && safeIdx < fileList.length - 1) onNavigate(fileList[safeIdx + 1]);
   }, [onClose, onNavigate, safeIdx, fileList]);
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
     document.body.style.overflow = 'hidden';
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
       document.body.style.overflow = '';
     };
   }, [handleKeyDown]);
-
-  // Auto-dismiss security warnings after 3.5 seconds
-  useEffect(() => {
-    if (securityWarning) {
-      const timer = setTimeout(() => setSecurityWarning(null), 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [securityWarning]);
 
   if (!file.path) return null;
 
   const isPdf = file.path.toLowerCase().endsWith('.pdf');
   const isLink = file.path.startsWith('http://') || file.path.startsWith('https://');
 
+  // Anti-download URL protection: fetch file and render via ephemeral blob URL
+  // so the direct file path is never visible or downloadable via inspect element.
+  useEffect(() => {
+    if (!isPdf || !file.path) {
+      setBlobUrl(null);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+
+    // Revoke previous blob if any
+    if (activeBlobRef.current) {
+      URL.revokeObjectURL(activeBlobRef.current);
+      activeBlobRef.current = null;
+    }
+
+    fetch(file.path)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (!isMounted) return;
+        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+        const url = URL.createObjectURL(pdfBlob);
+        activeBlobRef.current = url;
+        setBlobUrl(url);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        // Graceful fallback to file path with hidden toolbar if fetch fails
+        setBlobUrl(file.path || null);
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+      if (activeBlobRef.current) {
+        URL.revokeObjectURL(activeBlobRef.current);
+        activeBlobRef.current = null;
+      }
+    };
+  }, [file.path, isPdf]);
+
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-modal-overlay z-[9999] select-none"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999] select-none"
       onClick={onClose}
+      onContextMenu={(e) => e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        setSecurityWarning('Right-click is disabled to protect JRMSU Library collection materials.');
-      }}
     >
-      {/* Real-Time Floating Security Warning Toast */}
-      {securityWarning && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-amber-950/95 text-amber-200 border border-amber-400/50 px-5 py-3 rounded-2xl shadow-2xl z-[10001] text-xs font-semibold flex items-center gap-2.5 animate-bounce max-w-md text-center pointer-events-none backdrop-blur-md">
-          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0" />
-          <span>{securityWarning}</span>
-        </div>
-      )}
-
       <div
-        className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl max-h-[92vh] flex flex-col animate-modal-card text-white relative"
+        className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl max-h-[90vh] flex flex-col animate-modal-card"
         onClick={(e) => e.stopPropagation()}
-        onDragStart={(e) => e.preventDefault()}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setSecurityWarning('Right-click is disabled to protect JRMSU Library collection materials.');
-        }}
+        onContextMenu={(e) => e.preventDefault()}
         role="dialog"
         aria-modal="true"
         aria-label={`Viewing: ${file.name}`}
       >
-        {/* Header - Authentic JRMSU Navy Palette with Document Details */}
-        <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900 text-white px-5 py-3.5 flex items-center justify-between shrink-0 border-b border-slate-700/70">
+        {/* Header - Authentic JRMSU Blue Gradient */}
+        <div className="bg-gradient-to-r from-blue-900 to-blue-600 text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            {isLink ? (
-              <Globe className="w-5 h-5 text-blue-400 shrink-0" />
-            ) : (
-              <FileText className="w-5 h-5 text-amber-400 shrink-0" />
-            )}
-            <div className="flex flex-col min-w-0">
-              <span className="font-semibold truncate text-sm text-slate-100">{file.name}</span>
-              <span className="text-[11px] text-amber-300/80 font-mono flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                Protected Local Collection • Read-Only
-              </span>
-            </div>
+            <span className="material-symbols-outlined">{isLink ? 'link' : 'description'}</span>
+            <span className="font-medium truncate text-sm">{file.name}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-300 font-mono bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700 shadow-inner">
+            <span className="text-xs text-blue-200">
               {fileList.length > 0 ? `${safeIdx + 1} / ${fileList.length}` : '1 / 1'}
             </span>
             <button
               onClick={onClose}
-              className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className="text-white hover:text-white/70 transition-colors cursor-pointer"
               aria-label="Close viewer"
             >
-              <X className="w-5 h-5" />
+              <span className="material-symbols-outlined">close</span>
             </button>
           </div>
         </div>
 
-        {/* Navigation + Content Viewer */}
-        <div className="flex items-stretch flex-1 min-h-0 relative bg-slate-950">
-          {/* Previous File Carousel Button */}
+        {/* Navigation + Viewer */}
+        <div className="flex items-stretch flex-1 min-h-0 relative">
           {safeIdx > 0 && (
             <button
               onClick={() => onNavigate(fileList[safeIdx - 1])}
-              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-full bg-slate-800/80 hover:bg-blue-600 text-white shadow-xl backdrop-blur transition-all hover:scale-105 cursor-pointer border border-slate-600"
+              className="carousel-nav-btn absolute left-6 top-1/2 -translate-y-1/2 z-20 cursor-pointer"
               aria-label="Previous file"
-              title="Previous File"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <span className="material-symbols-outlined">chevron_left</span>
             </button>
           )}
 
-          {/* Main Viewer Body */}
-          <div className="flex-1 flex items-center justify-center overflow-hidden min-h-[62vh] relative">
+          <div 
+            className="flex-1 bg-gray-100 p-4 flex items-center justify-center overflow-auto min-h-[60vh] relative"
+            onContextMenu={(e) => e.preventDefault()}
+          >
             {isPdf ? (
-              <SecurePdfViewer 
-                url={file.path} 
-                title={file.name} 
-                onSecurityWarning={(msg) => setSecurityWarning(msg)} 
-              />
-            ) : isLink ? (
-              <div className="text-center bg-slate-900 p-8 md:p-14 rounded-2xl shadow-xl border border-slate-800 max-w-xl mx-auto w-full animate-modal-card m-4">
-                <div className="w-20 h-20 bg-blue-500/10 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-6 border border-blue-500/20">
-                  <Globe className="w-10 h-10" />
+              loading ? (
+                <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
+                  <span className="material-symbols-outlined animate-spin text-3xl text-blue-600">progress_activity</span>
+                  <span className="text-sm font-medium">Opening document for reading...</span>
                 </div>
-                <h3 className="font-bold text-2xl text-slate-100 mb-3">External Academic Resource</h3>
-                <p className="text-slate-400 mb-8 max-w-md mx-auto text-sm leading-relaxed">
-                  You are about to navigate to an external university database or academic partner repository to access <span className="font-semibold text-amber-300">{file.name}</span>.
+              ) : blobUrl ? (
+                <div className="w-full h-full relative flex items-center justify-center" style={{ minHeight: '60vh' }}>
+                  <iframe
+                    src={`${blobUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                    className="w-full h-full rounded-lg shadow-inner bg-white border-0"
+                    style={{ minHeight: '60vh' }}
+                    title={file.name}
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                  {/* Transparent top overlay to block browser toolbar click-through/saving */}
+                  <div 
+                    className="absolute top-0 left-0 right-0 h-10 pointer-events-auto bg-transparent"
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                </div>
+              ) : (
+                <div className="text-center text-gray-500">
+                  <span className="material-symbols-outlined text-5xl mb-2 text-gray-400">description</span>
+                  <p className="font-medium">Unable to load document preview.</p>
+                  <p className="text-xs text-gray-400 mt-1">File: {file.name}</p>
+                </div>
+              )
+            ) : isLink ? (
+              <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full animate-modal-card">
+                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="material-symbols-outlined text-4xl">public</span>
+                </div>
+                <h3 className="font-headline-md font-bold text-2xl text-navy-dark mb-3">External Link</h3>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                  You are about to navigate away from the JRMSU Library website to access <span className="font-semibold text-navy-dark">{file.name}</span>.
                 </p>
                 <a 
                   href={file.path} 
                   target="_blank" 
                   rel="noopener noreferrer" 
-                  className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg bg-blue-600 hover:bg-blue-500 text-white hover:-translate-y-0.5 transition-all text-sm cursor-pointer"
+                  className="btn btn-primary inline-flex items-center justify-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg hover:-translate-y-1 transition-all"
                   onClick={onClose}
                 >
-                  <span>Proceed to External Website</span>
-                  <ExternalLink className="w-4 h-4" />
+                  Proceed to Website
+                  <span className="material-symbols-outlined text-sm">open_in_new</span>
                 </a>
               </div>
             ) : (
-              <div className="text-center text-slate-400 p-8">
-                <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-3" />
-                <p className="font-semibold text-slate-200">Preview not available for this file format.</p>
-                <p className="text-xs text-slate-500 mt-2 font-mono">File: {file.name}</p>
-                <p className="text-xs text-amber-400/80 mt-4">Protected by JRMSU Library collection policy.</p>
+              <div className="text-center text-gray-500">
+                <span className="material-symbols-outlined text-6xl mb-4 text-gray-400">description</span>
+                <p className="font-medium">Preview not available for this file type.</p>
+                <p className="text-sm mt-2">File: {file.name}</p>
               </div>
             )}
           </div>
 
-          {/* Next File Carousel Button */}
           {safeIdx < fileList.length - 1 && (
             <button
               onClick={() => onNavigate(fileList[safeIdx + 1])}
-              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-full bg-slate-800/80 hover:bg-blue-600 text-white shadow-xl backdrop-blur transition-all hover:scale-105 cursor-pointer border border-slate-600"
+              className="carousel-nav-btn absolute right-6 top-1/2 -translate-y-1/2 z-20 cursor-pointer"
               aria-label="Next file"
-              title="Next File"
             >
-              <ChevronRight className="w-5 h-5" />
+              <span className="material-symbols-outlined">chevron_right</span>
             </button>
           )}
         </div>
