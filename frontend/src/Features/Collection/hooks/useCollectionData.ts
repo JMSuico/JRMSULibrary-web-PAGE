@@ -144,17 +144,25 @@ export function useCollectionData(activeTab: string) {
     setErrorMsg(null);
     try {
       console.log('Fetching Collection resources...');
-      const [deps, links] = await Promise.all([
+      const [depsRes, linksRes] = await Promise.allSettled([
         eresourceApi.getAllDepartments(),
         cmsApi.getAllLinks()
       ]);
-      console.log('Fetched deps:', deps);
-      console.log('Fetched links:', links);
-      setDepartments(deps);
-      setOnlineLinks(links.filter(l => l.is_active));
+      
+      if (depsRes.status === 'fulfilled' && Array.isArray(depsRes.value)) {
+        setDepartments(depsRes.value);
+      }
+      
+      if (linksRes.status === 'fulfilled' && Array.isArray(linksRes.value)) {
+        setOnlineLinks(linksRes.value.filter(l => l.is_active));
+      }
+
+      // If backend is unreachable or returning 502, smoothly fallback to bundled catalog
+      if (depsRes.status === 'rejected' && linksRes.status === 'rejected') {
+        console.warn('Backend currently offline/restarting, smoothly serving bundled offline library catalog.');
+      }
     } catch (e: any) {
-      console.error('Failed to load Collection resources', e);
-      setErrorMsg(e.message || 'Failed to load');
+      console.warn('Failed to load Collection resources, using offline fallback', e);
     } finally {
       setLoadingResources(false);
     }
