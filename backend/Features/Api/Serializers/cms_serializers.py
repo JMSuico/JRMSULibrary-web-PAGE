@@ -47,11 +47,7 @@ class EResourceDepartmentSerializer(serializers.ModelSerializer):
 class EResourceFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = EResourceFile
-        fields = [
-            'id', 'name', 'file', 'department', 'is_active', 'created_at',
-            'extracted_text', 'summary', 'table_of_contents', 'keywords',
-            'ocr_status', 'ocr_processed_at'
-        ]
+        fields = ['id', 'name', 'file', 'department', 'is_active', 'created_at']
         read_only_fields = ['created_at']
 
 

@@ -55,13 +55,6 @@ class ResearchReferenceViewSet(viewsets.ViewSet):
     def create(self, request):
         success, result = self.service.create_reference(request.data, request=request)
         if success:
-            ref_id = result.get('id') if isinstance(result, dict) else getattr(result, 'id', None)
-            if ref_id:
-                try:
-                    from Features.signals import trigger_background_file_extraction
-                    trigger_background_file_extraction("ResearchReference", ref_id)
-                except Exception as trig_err:
-                    logger.warning(f"[Research Upload] Auto-extraction trigger warning: {trig_err}")
             return Response(result, status=status.HTTP_201_CREATED)
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
 

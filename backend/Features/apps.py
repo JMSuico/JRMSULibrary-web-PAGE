@@ -29,11 +29,3 @@ class FeaturesConfig(AppConfig):
             except Exception as e:
                 print(f"Exception in apps.py ready(): {e}")
                 pass
-
-            try:
-                from Features.Helpers.autonomous_knowledge_daemon import AutonomousKnowledgeDaemon
-                AutonomousKnowledgeDaemon.start_daemon()
-                print("Server starting: Autonomous Knowledge Extraction Daemon successfully initialized.")
-            except Exception as e:
-                print(f"Exception starting AutonomousKnowledgeDaemon: {e}")
-                pass
