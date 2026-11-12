@@ -131,6 +131,9 @@ def trigger_background_file_extraction(model_name: str, instance_pk: int) -> Non
     Uses `transaction.on_commit` when inside an active atomic block so the file is guaranteed
     persisted on disk before extraction starts. Falls back to immediate thread launch if outside transactions.
     """
+    if any(cmd in sys.argv for cmd in ['migrate', 'makemigrations', 'createsuperuser', 'createsuperuser_custom']):
+        return
+
     with _INGESTION_LOCK:
         key = (model_name, instance_pk)
         if key in _IN_FLIGHT_INGESTION:
