@@ -38,12 +38,16 @@ logger = logging.getLogger(__name__)
 
 def resolve_file_on_disk(field_file: Any) -> Optional[str]:
     """
-    Safely resolves the absolute file path on disk from a Django FileField.
-    Checks field_file.path, MEDIA_ROOT concatenation, and standard project media paths.
-    Returns None if the file cannot be located or is invalid.
+    Safely resolves the absolute file path on disk from a Django FileField or relative path string.
+    Checks field_file.path, MEDIA_ROOT concatenation, normalized eBooks subdirectories,
+    mounted frontend_assets (/app/frontend_assets and local frontend/src/Assets/assets),
+    and standard project fallback paths. Returns None if not found on disk.
     """
     if not field_file:
         return None
+
+    file_name = field_file if isinstance(field_file, str) else getattr(field_file, "name", None)
+    clean_name = str(file_name or "").replace("\\", "/").lstrip("/")
 
     # 1. Try native .path attribute if storage backend supports it
     try:
@@ -54,41 +58,67 @@ def resolve_file_on_disk(field_file: Any) -> Optional[str]:
     except Exception as e:
         logger.debug("Failed resolving native .path on FileField: %s", e)
 
-    # 2. Try settings.MEDIA_ROOT + field_file.name
+    media_root = getattr(settings, "MEDIA_ROOT", None)
+    base_dir = getattr(settings, "BASE_DIR", None)
+    stripped_rel = clean_name
+    for prefix in ("e_resources/", "assets/", "media/"):
+        if stripped_rel.startswith(prefix):
+            stripped_rel = stripped_rel[len(prefix):]
+    single_ebooks = clean_name.replace("eBooks/eBooks/", "eBooks/")
+    single_stripped_rel = stripped_rel.replace("eBooks/eBooks/", "eBooks/")
+
+    # 2. Try settings.MEDIA_ROOT + file_name (and single-eBooks normalization)
     try:
-        media_root = getattr(settings, "MEDIA_ROOT", None)
-        file_name = getattr(field_file, "name", None)
-        if media_root and file_name:
-            candidate = os.path.normpath(os.path.join(str(media_root), str(file_name)))
-            if os.path.exists(candidate) and os.path.isfile(candidate):
-                return candidate
+        if media_root and clean_name:
+            for rel_cand in (clean_name, single_ebooks):
+                candidate = os.path.normpath(os.path.join(str(media_root), rel_cand))
+                if os.path.exists(candidate) and os.path.isfile(candidate):
+                    return candidate
     except Exception as e:
         logger.debug("Failed resolving path via MEDIA_ROOT: %s", e)
 
-    # 3. Try relative to base dir or backend/media
+    # 3. Try BASE_DIR/media
     try:
-        base_dir = getattr(settings, "BASE_DIR", None)
-        file_name = getattr(field_file, "name", None)
-        if base_dir and file_name:
-            candidate = os.path.normpath(os.path.join(str(base_dir), "media", str(file_name)))
-            if os.path.exists(candidate) and os.path.isfile(candidate):
-                return candidate
+        if base_dir and clean_name:
+            for rel_cand in (clean_name, single_ebooks):
+                candidate = os.path.normpath(os.path.join(str(base_dir), "media", rel_cand))
+                if os.path.exists(candidate) and os.path.isfile(candidate):
+                    return candidate
     except Exception as e:
         logger.debug("Failed resolving path via BASE_DIR/media: %s", e)
 
-    # 4. Check raw name as existing path directly
-    raw_name = getattr(field_file, "name", None)
-    if raw_name and isinstance(raw_name, str):
-        candidate = os.path.normpath(raw_name)
+    # 4. Try mounted & local frontend asset roots (/app/frontend_assets, frontend/src/Assets/assets, frontend/public/assets)
+    try:
+        asset_roots = ["/app/frontend_assets"]
+        if base_dir:
+            bstr = str(base_dir)
+            asset_roots.extend([
+                os.path.normpath(os.path.join(bstr, "frontend_assets")),
+                os.path.normpath(os.path.join(bstr, "..", "frontend", "src", "Assets", "assets")),
+                os.path.normpath(os.path.join(bstr, "frontend", "src", "Assets", "assets")),
+                os.path.normpath(os.path.join(bstr, "..", "frontend", "public", "assets")),
+                os.path.normpath(os.path.join(bstr, "frontend", "public", "assets")),
+            ])
+        for asset_root in asset_roots:
+            for rel_cand in (stripped_rel, single_stripped_rel):
+                if not rel_cand:
+                    continue
+                candidate = os.path.normpath(os.path.join(asset_root, rel_cand))
+                if os.path.exists(candidate) and os.path.isfile(candidate):
+                    return candidate
+    except Exception as e:
+        logger.debug("Failed resolving path via frontend_assets: %s", e)
+
+    # 5. Check raw name as existing path directly
+    if clean_name:
+        candidate = os.path.normpath(str(file_name))
         if os.path.exists(candidate) and os.path.isfile(candidate):
             return candidate
 
-    # 5. Check frontend/public/assets fallback for local collection items
+    # 6. Check frontend/public/assets fallback by exact basename
     try:
-        base_dir = getattr(settings, "BASE_DIR", None)
-        file_name = getattr(field_file, "name", None)
-        if base_dir and file_name:
-            basename = os.path.basename(file_name)
+        if base_dir and clean_name:
+            basename = os.path.basename(clean_name)
             candidate = os.path.normpath(os.path.join(str(base_dir), "..", "frontend", "public", "assets", basename))
             if os.path.exists(candidate) and os.path.isfile(candidate):
                 return candidate
@@ -96,6 +126,19 @@ def resolve_file_on_disk(field_file: Any) -> Optional[str]:
         logger.debug("Failed resolving path via frontend/public/assets: %s", e)
 
     return None
+
+
+def _pick_best_academic_section(matches: Any, min_len: int, max_len: int) -> str:
+    """Selects the longest substantive prose block across regex matches, skipping TOC lines."""
+    best = ""
+    for m in matches:
+        raw = m.group(1).strip()
+        if not raw or re.search(r"\.{4,}", raw[:200]):
+            continue
+        cleaned = re.sub(r"\s+", " ", raw)
+        if len(cleaned) >= min_len and len(cleaned) > len(best):
+            best = cleaned
+    return best[:max_len].strip() if best else ""
 
 
 def extract_findings_or_conclusion(text: str) -> str:
@@ -106,18 +149,12 @@ def extract_findings_or_conclusion(text: str) -> str:
     if not text:
         return ""
 
-    match = re.search(
-        r"(?i)\b(?:findings\s+(?:and|&)\s+conclusions?|findings|conclusions?\s+(?:and|&)\s+recommendations?|conclusion)\b[:\s\-\n]+(.*?)(?=\n\s*(?:[1-9]\.|\b(?:recommendations?|references?|bibliography|appendi(?:x|ces))\b)|\Z)",
-        text,
-        flags=re.DOTALL,
+    pattern = (
+        r"(?i)\b(?:summary\s+of\s+findings|findings\s+(?:and|&)\s+conclusions?|findings|results\s+(?:and|&)\s+discussion|"
+        r"conclusions?\s+(?:and|&)\s+recommendations?|conclusions?)\b[:\s\-\n]+"
+        r"(.*?)(?=\n\s*(?:chapter\s+[ivxlcdm0-9]+|\b(?:recommendations?|references?|bibliography|appendi(?:x|ces))\b)|\Z)"
     )
-    if match:
-        raw_conclusion = match.group(1).strip()
-        cleaned = re.sub(r"\s+", " ", raw_conclusion)
-        if len(cleaned) >= 80:
-            return cleaned[:1800].strip()
-
-    return ""
+    return _pick_best_academic_section(re.finditer(pattern, text, flags=re.DOTALL), min_len=80, max_len=2400)
 
 
 def extract_methodology(text: str) -> str:
@@ -127,18 +164,11 @@ def extract_methodology(text: str) -> str:
     if not text:
         return ""
 
-    match = re.search(
-        r"(?i)\b(?:research\s+methodology|methodology|materials\s+and\s+methods|methods)\b[:\s\-\n]+(.*?)(?=\n\s*(?:[1-9]\.|\b(?:results|findings|discussion|conclusion)\b)|\Z)",
-        text,
-        flags=re.DOTALL,
+    pattern = (
+        r"(?i)\b(?:research\s+methodology|research\s+design(?:\s+and\s+methodology)?|methodology|materials\s+and\s+methods|methods)\b[:\s\-\n]+"
+        r"(.*?)(?=\n\s*(?:chapter\s+[ivxlcdm0-9]+|\b(?:results|findings|discussion|conclusion|summary\s+of\s+findings)\b)|\Z)"
     )
-    if match:
-        raw_methodology = match.group(1).strip()
-        cleaned = re.sub(r"\s+", " ", raw_methodology)
-        if len(cleaned) >= 50:
-            return cleaned[:1500].strip()
-
-    return ""
+    return _pick_best_academic_section(re.finditer(pattern, text, flags=re.DOTALL), min_len=50, max_len=2000)
 
 
 def process_single_eresource_file(book: EResourceFile) -> bool:
@@ -213,10 +243,11 @@ def process_single_eresource_file(book: EResourceFile) -> bool:
         return False
 
 
-def process_single_research_reference(thesis: ResearchReference) -> bool:
+def process_single_research_reference(thesis: ResearchReference, force: bool = False) -> bool:
     """
     Extracts document knowledge from a single ResearchReference record with an uploaded file.
     Updates plain text, abstract, methodology, findings/conclusion, and ocr_status.
+    When force=True (e.g. replacement file upload), refreshes derived abstract/methodology/findings.
     Returns True on successful extraction, False otherwise.
     """
     access_type = getattr(thesis, "access_type", None)
@@ -251,9 +282,9 @@ def process_single_research_reference(thesis: ResearchReference) -> bool:
                 thesis.extracted_text = extracted_text
                 update_fields.append("extracted_text")
 
-            # Populate abstract if not already manually authored
+            # Populate abstract if not already manually authored (or when force refreshing)
             if hasattr(thesis, "abstract"):
-                if not thesis.abstract and summary:
+                if summary and (not thesis.abstract or force):
                     thesis.abstract = summary
                     update_fields.append("abstract")
 
@@ -261,12 +292,12 @@ def process_single_research_reference(thesis: ResearchReference) -> bool:
                 if findings:
                     thesis.findings_conclusion = findings
                     update_fields.append("findings_conclusion")
-                elif not thesis.findings_conclusion and summary:
+                elif summary and (not thesis.findings_conclusion or force):
                     thesis.findings_conclusion = summary
                     update_fields.append("findings_conclusion")
 
             if hasattr(thesis, "methodology") and methodology:
-                if not thesis.methodology:
+                if not thesis.methodology or force:
                     thesis.methodology = methodology
                     update_fields.append("methodology")
 

@@ -1120,6 +1120,85 @@ class AIReadViewHelper:
         return "General / E-Resources"
 
     @classmethod
+    def _extract_relevant_fulltext_excerpts(
+        cls,
+        extracted_text: str,
+        query_tokens: Optional[List[str]] = None,
+        max_chars: int = 900,
+    ) -> str:
+        """
+        Extracts clean, readable excerpts from full extracted document text.
+        Prioritizes passages near matching query tokens; otherwise returns balanced
+        opening, middle, and concluding excerpts while stripping TOC dot-leaders.
+        """
+        text = str(extracted_text or "").strip()
+        if not text:
+            return ""
+
+        clean_lines: List[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if re.match(r"^\[?Page\s+\d+\]?$", line, re.IGNORECASE):
+                continue
+            if re.search(r"\.{4,}\s*\d*\s*$", line):
+                continue
+            clean_lines.append(line)
+
+        cleaned = re.sub(r"\s+", " ", " ".join(clean_lines)).strip()
+        if not cleaned:
+            return ""
+        if len(cleaned) <= max_chars:
+            return cleaned
+
+        effective_tokens = [
+            t.lower()
+            for t in (query_tokens or [])
+            if t and len(t) > 2 and t.lower() not in cls.STOP_WORDS
+        ]
+
+        if effective_tokens:
+            lowered = cleaned.lower()
+            chunks: List[Tuple[int, int, str]] = []
+            step = 280
+            win = 380
+            for start in range(0, len(cleaned), step):
+                end = min(len(cleaned), start + win)
+                slice_str = cleaned[start:end].strip()
+                if not slice_str:
+                    continue
+                slice_l = lowered[start:end]
+                hits = sum(1 for tok in effective_tokens if tok in slice_l)
+                if hits > 0:
+                    chunks.append((hits, -start, slice_str))
+            if chunks:
+                chunks.sort(key=lambda x: (-x[0], -x[1]))
+                selected: List[str] = []
+                total = 0
+                for _, _, chunk in chunks:
+                    if any(chunk[:60] in s for s in selected):
+                        continue
+                    prefix = "..." if chunk and not chunk[0].isupper() else ""
+                    piece = f"{prefix}{chunk}..."
+                    if total + len(piece) > max_chars and selected:
+                        break
+                    selected.append(piece)
+                    total += len(piece) + 3
+                    if len(selected) >= 3:
+                        break
+                if selected:
+                    return " | ".join(selected)[:max_chars]
+
+        seg = max(140, (max_chars - 24) // 3)
+        head = cleaned[:seg].rsplit(" ", 1)[0].strip()
+        mid_start = max(len(head), (len(cleaned) // 2) - (seg // 2))
+        mid = cleaned[mid_start:mid_start + seg].strip()
+        tail = cleaned[-seg:].split(" ", 1)[-1].strip() if len(cleaned) > seg * 2 else ""
+        parts = [p for p in [head, mid, tail] if p]
+        return " [...] ".join(parts)[:max_chars]
+
+    @classmethod
     def match_and_format_file_knowledge(
         cls,
         files: List[Any],
@@ -1129,13 +1208,14 @@ class AIReadViewHelper:
     ) -> str:
         """
         Matches EResourceFile instances against user query tokens using file name,
-        keywords, and summary.
+        keywords, summary, table of contents, and full extracted document text.
 
-        Returns a concise, grounded knowledge context string (under 300 tokens) citing:
+        Returns a concise, grounded knowledge context string citing:
           - File name and parent Department breadcrumb
           - Document summary
           - Table of contents / chapters
           - Key topics / concepts covered
+          - Full-text document excerpts
         """
         if not files:
             return ""
@@ -1200,6 +1280,8 @@ class AIReadViewHelper:
             breadcrumb_l = breadcrumb.lower()
             toc_l = toc_str.lower()
             topics_l = topics_str.lower()
+            full_text_str = str(getattr(f, "extracted_text", "") or "").strip()
+            full_text_l = full_text_str.lower()
 
             name_words = set(re.findall(r"[a-z0-9]+", name_l))
             kw_words = set(re.findall(r"[a-z0-9]+", kw_l))
@@ -1218,8 +1300,10 @@ class AIReadViewHelper:
                     score += 8.0
                 if clean_raw in toc_l or clean_raw in topics_l:
                     score += 6.0
+                if full_text_l and clean_raw in full_text_l:
+                    score += 8.0
 
-            # 2. Token matching across name, keywords, summary, breadcrumb, TOC, key topics
+            # 2. Token matching across name, keywords, summary, breadcrumb, TOC, key topics, and full extracted text
             for tok in effective_tokens:
                 score += cls._match_token_in_text(tok, name_l, name_words) * 1.0
                 score += cls._match_token_in_text(tok, kw_l, kw_words) * 0.9
@@ -1229,6 +1313,8 @@ class AIReadViewHelper:
                     score += 2.0
                 if tok in topics_l:
                     score += 2.0
+                if full_text_l and re.search(rf"\b{re.escape(tok)}", full_text_l):
+                    score += 2.5
 
             if score > 0.0:
                 scored_files.append((score, name_l, f))
@@ -1251,8 +1337,8 @@ class AIReadViewHelper:
                 or ""
             ).strip()
             if summary_str:
-                if len(summary_str) > 220:
-                    summary_str = summary_str[:217].rstrip() + "..."
+                if len(summary_str) > 500:
+                    summary_str = summary_str[:497].rstrip() + "..."
                 entry_lines.append(f"  Summary: {summary_str}")
 
             toc_val = (
@@ -1265,8 +1351,8 @@ class AIReadViewHelper:
                     toc_str = ", ".join(str(c).strip() for c in toc_val if str(c).strip())
                 else:
                     toc_str = str(toc_val).strip()
-                if len(toc_str) > 180:
-                    toc_str = toc_str[:177].rstrip() + "..."
+                if len(toc_str) > 450:
+                    toc_str = toc_str[:447].rstrip() + "..."
                 entry_lines.append(f"  Table of Contents / Chapters: {toc_str}")
 
             topics_val = (
@@ -1280,9 +1366,16 @@ class AIReadViewHelper:
                     topics_str = ", ".join(str(t).strip() for t in topics_val if str(t).strip())
                 else:
                     topics_str = str(topics_val).strip()
-                if len(topics_str) > 150:
-                    topics_str = topics_str[:147].rstrip() + "..."
+                if len(topics_str) > 300:
+                    topics_str = topics_str[:297].rstrip() + "..."
                 entry_lines.append(f"  Key Topics / Concepts: {topics_str}")
+
+            full_text_str = str(getattr(f, "extracted_text", "") or "").strip()
+            excerpt_str = cls._extract_relevant_fulltext_excerpts(
+                full_text_str, query_tokens=effective_tokens, max_chars=700
+            )
+            if excerpt_str:
+                entry_lines.append(f"  Full-Text Document Excerpts: {excerpt_str}")
 
             lines.append("\n".join(entry_lines))
 
@@ -1414,6 +1507,20 @@ class AIReadViewHelper:
             abstract_str = str(getattr(doc, "abstract", "") or summary_str).strip()
             method_str = str(getattr(doc, "methodology", "") or "").strip()
             findings_str = str(getattr(doc, "findings_conclusion", "") or "").strip()
+            full_text_str = str(getattr(doc, "extracted_text", "") or "").strip()
+
+            if full_text_str and (not abstract_str or not findings_str or not method_str):
+                try:
+                    from Features.Helpers.ocr_text_extractor import OCRTextExtractor
+                    from Features.management.commands.extract_file_knowledge import (
+                        extract_findings_or_conclusion,
+                        extract_methodology,
+                    )
+                    abstract_str = abstract_str or OCRTextExtractor._generate_summary(full_text_str)
+                    method_str = method_str or extract_methodology(full_text_str)
+                    findings_str = findings_str or extract_findings_or_conclusion(full_text_str)
+                except Exception:
+                    pass
 
             if not abstract_str or not findings_str:
                 try:
@@ -1433,6 +1540,8 @@ class AIReadViewHelper:
             call_line = f"🏷️ Call Number: {call_str}\n" if call_str != "N/A" else ""
             method_section = f"\n🔬 Research Methodology:\n{method_str}\n" if method_str else ""
             findings_section = f"\n💡 Key Findings & Conclusions:\n{findings_str}\n" if findings_str else ""
+            excerpt_str = cls._extract_relevant_fulltext_excerpts(full_text_str, max_chars=900) if len(full_text_str) > 300 else ""
+            excerpt_section = f"\n📄 Document Full-Text Highlights:\n{excerpt_str}\n" if excerpt_str else ""
 
             return (
                 f"Here is the verified research knowledge for '{title_str}' from our library catalog:\n\n"
@@ -1443,12 +1552,27 @@ class AIReadViewHelper:
                 f"📋 Research Abstract:\n"
                 f"{abstract_str}\n"
                 f"{method_section}"
-                f"{findings_section}\n"
+                f"{findings_section}"
+                f"{excerpt_section}\n"
                 f"🛡️ Catalog Access Policy:\n"
                 f"This academic research is cataloged under 'Collection' -> 'Research & Thesis References'. "
                 f"To protect student and institutional copyright, digital viewing is served in read-only protected mode, "
                 f"and bound physical copies are available inside the Research & Reference Section for on-site consultation."
             )
+
+        # Extract structured knowledge from actual extracted_text first before domain synthesis fallback
+        eresource_full_text = str(getattr(doc, "extracted_text", "") or "").strip()
+        if eresource_full_text and (not summary_str or not toc_str or not keywords_str):
+            try:
+                from Features.Helpers.ocr_text_extractor import OCRTextExtractor
+                if not summary_str:
+                    summary_str = OCRTextExtractor._generate_summary(eresource_full_text, name_str)
+                if not toc_str:
+                    toc_str = OCRTextExtractor._extract_table_of_contents(eresource_full_text)
+                if not keywords_str:
+                    keywords_str = OCRTextExtractor._extract_keywords(eresource_full_text, name_str)
+            except Exception:
+                pass
 
         # If knowledge was not yet generated, synthesize on the fly
         synth = {}
@@ -1500,6 +1624,12 @@ class AIReadViewHelper:
 
         dept_display = f"🏛️ Academic Department / Course: {breadcrumb}\n" if breadcrumb else ""
         keywords_display = f"\n🏷️ Core Topics & Concepts Covered:\n{keywords_str}\n" if keywords_str else ""
+        fulltext_excerpt = (
+            cls._extract_relevant_fulltext_excerpts(eresource_full_text, max_chars=1100)
+            if len(eresource_full_text) > 200
+            else ""
+        )
+        fulltext_display = f"\n📄 Document Full-Text Highlights:\n{fulltext_excerpt}\n" if fulltext_excerpt else ""
 
         return (
             f"Here is the verified document knowledge for '{name_str}' from our digital collection:\n\n"
@@ -1509,10 +1639,11 @@ class AIReadViewHelper:
             f"{summary_str}\n\n"
             f"📑 Table of Contents / Key Chapters:\n"
             f"{formatted_toc}\n"
-            f"{keywords_display}\n"
+            f"{keywords_display}"
+            f"{fulltext_display}\n"
             f"🛡️ Collection Reading Policy:\n"
             f"This title is available for secure patron reading under our 'Collection' -> 'Local Books' TreeView. "
-            f"To protect intellectual property and collection integrity, the document is rendered via our read-only HTML5 Canvas viewer with permanent institutional watermarks and anti-download protection."
+            f"To protect intellectual property and collection integrity, the document is served via our read-only protected document viewer with anti-download protection."
         )
 
     @classmethod
@@ -1582,6 +1713,8 @@ class AIReadViewHelper:
             abstract_l = abstract_str.lower()
             findings_l = findings_str.lower()
             methodology_l = methodology_str.lower()
+            full_text_str = str(getattr(r, "extracted_text", "") or "").strip()
+            full_text_l = full_text_str.lower()
 
             title_words = set(re.findall(r"[a-z0-9]+", title_l))
             dept_words = set(re.findall(r"[a-z0-9]+", dept_l))
@@ -1601,6 +1734,8 @@ class AIReadViewHelper:
                     score += 10.0
                 if clean_raw in abstract_l:
                     score += 6.0
+                if full_text_l and clean_raw in full_text_l:
+                    score += 8.0
 
             # 2. Token matching
             for tok in effective_tokens:
@@ -1609,6 +1744,8 @@ class AIReadViewHelper:
                 score += cls._match_token_in_text(tok, methodology_l, methodology_words) * 0.9
                 score += cls._match_token_in_text(tok, abstract_l, abstract_words) * 0.7
                 score += cls._match_token_in_text(tok, dept_l, dept_words) * 0.5
+                if full_text_l and re.search(rf"\b{re.escape(tok)}", full_text_l):
+                    score += 2.5
 
             if score > 0.0:
                 scored_refs.append((score, title_l, r))
@@ -1635,8 +1772,8 @@ class AIReadViewHelper:
                 or ""
             ).strip()
             if methodology:
-                if len(methodology) > 220:
-                    methodology = methodology[:217].rstrip() + "..."
+                if len(methodology) > 450:
+                    methodology = methodology[:447].rstrip() + "..."
                 entry_lines.append(f"  Methodology: {methodology}")
 
             findings = str(
@@ -1646,15 +1783,22 @@ class AIReadViewHelper:
                 or ""
             ).strip()
             if findings:
-                if len(findings) > 260:
-                    findings = findings[:257].rstrip() + "..."
+                if len(findings) > 500:
+                    findings = findings[:497].rstrip() + "..."
                 entry_lines.append(f"  Key Findings & Conclusion: {findings}")
 
             abstract = str(getattr(r, "abstract", "") or "").strip()
             if abstract and not (methodology and findings):
-                if len(abstract) > 220:
-                    abstract = abstract[:217].rstrip() + "..."
+                if len(abstract) > 450:
+                    abstract = abstract[:447].rstrip() + "..."
                 entry_lines.append(f"  Abstract Summary: {abstract}")
+
+            full_text_str = str(getattr(r, "extracted_text", "") or "").strip()
+            excerpt_str = cls._extract_relevant_fulltext_excerpts(
+                full_text_str, query_tokens=effective_tokens, max_chars=700
+            )
+            if excerpt_str:
+                entry_lines.append(f"  Full-Text Thesis Excerpts: {excerpt_str}")
 
             lines.append("\n".join(entry_lines))
 

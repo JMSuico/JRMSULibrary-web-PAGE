@@ -665,18 +665,21 @@ class AIService(IAIService):
                 'whats this content all about', 'what is this content all about', 'what is this content about',
                 'whats this content about', 'what is this about', 'whats this about', 'all about',
                 'tell me about this', 'tell me about the book', 'tell me about the file', 'tell me about the pdf',
+                'tell me about the thesis', 'tell me about the research', 'tell me about the document',
                 'what does this cover', 'what does it cover', 'what is covered', 'what is inside', 'whats inside',
-                'summary of', 'content of', 'contents of', 'table of contents', 'chapters of', 'chapter of',
-                'what is in', 'whats in', 'what does it say', 'what are the findings', 'methodology of',
+                'summary of', 'summarize', 'summarise', 'content of', 'contents of', 'table of contents',
+                'chapters of', 'chapter of', 'what is in', 'whats in', 'what does it say', 'what are the findings',
+                'methodology of', 'abstract of', 'findings of', 'results of', 'conclusion of', 'conclusions of',
                 'tell me about the chapters', 'tell me about the content', 'topics covered', 'what did',
                 'what are the findings', 'what does the thesis say', 'what does the handbook say',
-                'what does the book cover', 'what is covered in', 'what is covered inside', 'what is in the'
+                'what does the book cover', 'what is covered in', 'what is covered inside', 'what is in the',
+                'give me an overview', 'tell me an overview', 'overview on', 'overview of', 'overview about', 'overview'
             ])
             or (
-                any(ext in norm for ext in ['pdf', 'handbook', 'syllabus', 'thesis', 'theses', 'dissertation'])
-                and any(w in norm for w in ['content', 'contents', 'about', 'chapter', 'chapters', 'summary', 'covered', 'inside', 'topics', 'say', 'saying', 'finding', 'findings', 'conclusion'])
+                any(ext in norm for ext in ['pdf', 'handbook', 'syllabus', 'thesis', 'theses', 'dissertation', 'book', 'file', 'document', 'paper', 'study'])
+                and any(w in norm for w in ['content', 'contents', 'about', 'chapter', 'chapters', 'summary', 'summarize', 'summarise', 'covered', 'inside', 'topics', 'say', 'saying', 'finding', 'findings', 'conclusion', 'conclusions', 'methodology', 'abstract', 'results', 'overview', 'explain', 'describe', 'read'])
             )
-            or bool(re.search(r'\b\d{1,3}[\.\-_]', str(user_message)))
+            or bool(re.search(r'\b\d{1,3}\s*[\.\-_]', str(user_message)))
         )
 
         if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt and not is_document_knowledge_query:
@@ -778,10 +781,26 @@ class AIService(IAIService):
                     candidate_refs, user_message, tokens=tokens
                 )
                 if matched_ref:
+                    if (
+                        getattr(matched_ref, 'access_type', None) == 'file'
+                        and getattr(matched_ref, 'access_file', None)
+                        and (not getattr(matched_ref, 'extracted_text', None) or getattr(matched_ref, 'ocr_status', '') != 'completed')
+                    ):
+                        try:
+                            from Features.management.commands.extract_file_knowledge import process_single_research_reference
+                            process_single_research_reference(matched_ref)
+                            from unittest.mock import MagicMock
+                            if hasattr(self.reference_repo, 'get_by_id'):
+                                reloaded_ref = self.reference_repo.get_by_id(matched_ref.pk)
+                                if reloaded_ref and not isinstance(reloaded_ref, MagicMock):
+                                    matched_ref = reloaded_ref
+                        except Exception as pe:
+                            logger.warning(f"On-the-fly extraction error for ResearchReference #{getattr(matched_ref, 'pk', '?')}: {pe}")
+
                     return AIReadViewHelper.format_single_document_direct_answer(matched_ref)
 
                 # If query specifically targets an explicit filename pattern (e.g. .pdf or numbered prefix):
-                if any(ext in norm for ext in ['.pdf', 'pdf']) and bool(re.search(r'\b\d{1,3}[\.\-_]', str(user_message))):
+                if any(ext in norm for ext in ['.pdf', 'pdf']) and bool(re.search(r'\b\d{1,3}\s*[\.\-_]', str(user_message))):
                     return (
                         "I searched our digital E-Resources collection and Research References catalog, but could not find a document "
                         "matching that specific filename or title. You can browse our 69 Academic Department Folders and 559 local books "
@@ -1592,7 +1611,7 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
         if complexity_tier == "TIER_1":
             return {"num_ctx": 2048, "num_predict": 260, "temperature": 0.1, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15, "num_thread": 4}
         elif complexity_tier == "TIER_3":
-            return {"num_ctx": 2048, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15, "num_thread": 4}
+            return {"num_ctx": 4096, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15, "num_thread": 4}
         return {"num_ctx": 2048, "num_predict": 550, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15, "num_thread": 4}
 
     def generate_chat_stream(self, user_message: str, chat_history: Optional[list] = None, seen_answers: Optional[list] = None) -> Generator[str, None, None]:

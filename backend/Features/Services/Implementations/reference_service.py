@@ -25,6 +25,14 @@ class ResearchReferenceService(IResearchReferenceService):
         serializer = ResearchReferenceSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             ref = self.repo.create(serializer.validated_data)
+            if getattr(ref, 'access_type', None) == 'file' and getattr(ref, 'access_file', None):
+                try:
+                    from Features.management.commands.extract_file_knowledge import process_single_research_reference
+                    process_single_research_reference(ref, force=True)
+                    from django.core.cache import cache
+                    cache.delete("rizal_institution_context")
+                except Exception:
+                    pass
             return True, ResearchReferenceSerializer(ref, context={'request': request}).data
         return False, serializer.errors
 
@@ -38,13 +46,24 @@ class ResearchReferenceService(IResearchReferenceService):
             MalwareScannerHelper.verify_document_safety(data['access_file'])
 
         # Handle file replacement/cleanup
+        file_replaced = False
         if 'access_file' in data:
+            if data['access_file'] and not isinstance(data['access_file'], str):
+                file_replaced = True
             if ref.access_file and (data['access_file'] is None or data['access_file'] != ref.access_file):
                 ref.access_file.delete(save=False)
 
         serializer = ResearchReferenceSerializer(ref, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             updated_ref = self.repo.update(ref, serializer.validated_data)
+            if getattr(updated_ref, 'access_type', None) == 'file' and getattr(updated_ref, 'access_file', None):
+                try:
+                    from Features.management.commands.extract_file_knowledge import process_single_research_reference
+                    process_single_research_reference(updated_ref, force=file_replaced)
+                    from django.core.cache import cache
+                    cache.delete("rizal_institution_context")
+                except Exception:
+                    pass
             return True, ResearchReferenceSerializer(updated_ref, context={'request': request}).data
         return False, serializer.errors
 
