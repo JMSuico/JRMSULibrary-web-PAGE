@@ -380,6 +380,26 @@ class OCRTextExtractor:
             logger.error("[PDF Extractor] pypdf library is not installed.")
             return cls._create_empty_result("pypdf is not installed. Please install pypdf==5.1.0.")
 
+        if path_obj.stat().st_size == 0:
+            logger.warning(f"[PDF Extractor] Skipping empty (0-byte) PDF file: {file_path}")
+            return cls._create_empty_result("PDF file is empty (0 bytes).")
+
+        pdf_errors_mod = getattr(pypdf, "errors", None)
+        if pdf_errors_mod is None:
+            try:
+                import pypdf.errors as pdf_errors_mod  # type: ignore[no-redef]
+            except ImportError:
+                pdf_errors_mod = None
+
+        pdf_error_types = tuple(
+            err_cls
+            for err_cls in (
+                getattr(pdf_errors_mod, err_name, None)
+                for err_name in ("EmptyFileError", "PdfStreamError", "PdfReadError", "ParseError", "PyPdfError")
+            )
+            if isinstance(err_cls, type) and issubclass(err_cls, Exception)
+        )
+
         try:
             reader = pypdf.PdfReader(str(path_obj))
 
@@ -442,6 +462,11 @@ class OCRTextExtractor:
                 "error": None,
             }
 
+        except pdf_error_types as pdf_err:
+            logger.warning(
+                f"[PDF Extractor] Skipping corrupted/unreadable PDF ({type(pdf_err).__name__}) {file_path}: {pdf_err}"
+            )
+            return cls._create_empty_result(f"Corrupted or unreadable PDF: {pdf_err}")
         except Exception as e:
             logger.exception(f"[PDF Extractor] Unhandled error extracting PDF from {file_path}: {e}")
             return cls._create_empty_result(f"PDF extraction error: {str(e)}")
@@ -469,6 +494,10 @@ class OCRTextExtractor:
         if not path_obj.exists() or not path_obj.is_file():
             logger.error(f"[DOCX Extractor] File not found or not a valid file: {file_path}")
             return cls._create_empty_result(f"File not found: {file_path}")
+
+        if path_obj.stat().st_size == 0:
+            logger.warning(f"[DOCX Extractor] Skipping empty (0-byte) DOCX file: {file_path}")
+            return cls._create_empty_result("DOCX file is empty (0 bytes).")
 
         extracted_text = ""
         headings: List[str] = []
@@ -538,7 +567,7 @@ class OCRTextExtractor:
             }
 
         except zipfile.BadZipFile:
-            logger.error(f"[DOCX Extractor] File {file_path} is not a valid docx zip archive.")
+            logger.warning(f"[DOCX Extractor] File {file_path} is not a valid docx zip archive.")
             return cls._create_empty_result("Corrupted or invalid DOCX archive file.")
         except Exception as e:
             logger.exception(f"[DOCX Extractor] Unhandled error extracting DOCX from {file_path}: {e}")
@@ -550,6 +579,10 @@ class OCRTextExtractor:
         path_obj = Path(file_path)
         if not path_obj.exists() or not path_obj.is_file():
             return cls._create_empty_result(f"File not found: {file_path}")
+
+        if path_obj.stat().st_size == 0:
+            logger.warning(f"[TXT Extractor] Skipping empty (0-byte) text file: {file_path}")
+            return cls._create_empty_result("Text file is empty (0 bytes).")
 
         extracted_text = ""
         # Try common encodings

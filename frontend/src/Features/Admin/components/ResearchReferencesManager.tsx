@@ -579,13 +579,30 @@ export function ResearchReferencesManager() {
                   {accessType === 'file' && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                       <DragDropFileUpload
-                        onFileSelect={(file) => setSelectedFile(file)}
-                        selectedFile={selectedFile}
-                        onClear={() => setSelectedFile(null)}
-                        accept=".pdf,.ppt,.pptx,.docx,.pub"
-                        maxSizeMB={50}
-                        helperText="Accepts PDF, DOCX, PPTX, PUB up to 50MB"
+                        onFilesSelected={(files) => setSelectedFile(files[0] || null)}
+                        multiple={false}
+                        accept=".pdf,.docx,.pptx,.pub,.xlsx"
+                        maxSizeMB={25}
+                        label="Click to upload document or drag and drop"
+                        subLabel="Accepts PDF, DOCX, PPTX, PUB, XLSX up to 25MB"
                       />
+                      {selectedFile && (
+                        <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                          <span className="flex items-center gap-1.5 font-medium truncate">
+                            <CheckCircle2 size={14} className="shrink-0 text-blue-600" />
+                            <span className="truncate">{selectedFile.name}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFile(null)}
+                            className="inline-flex items-center gap-1 text-blue-700 hover:text-red-600 font-semibold shrink-0 cursor-pointer transition-colors"
+                            aria-label="Clear selected file"
+                          >
+                            <X size={14} />
+                            Clear
+                          </button>
+                        </div>
+                      )}
                       {editingRef?.access_file && !selectedFile && (
                         <p className="text-xs text-blue-600 mt-2 font-medium">Currently attached: {editingRef.access_file.split('/').pop()}</p>
                       )}
