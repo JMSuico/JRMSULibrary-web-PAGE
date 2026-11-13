@@ -83,9 +83,9 @@ class EResourceFileAdmin(admin.ModelAdmin):
 
 @admin.register(ResearchReference)
 class ResearchReferenceAdmin(admin.ModelAdmin):
-    list_display = ['title', 'author', 'department', 'access_type', 'ocr_status', 'is_active']
-    list_filter = ['department', 'access_type', 'ocr_status', 'is_active']
-    search_fields = ['title', 'author', 'abstract', 'keywords']
+    list_display = ['title', 'author', 'department', 'access_type', 'ocr_status', 'ocr_processed_at']
+    list_filter = ['department', 'access_type', 'ocr_status']
+    search_fields = ['title', 'author', 'abstract', 'methodology', 'findings_conclusion']
     actions = ['extract_thesis_knowledge_action']
 
     @admin.action(description="⚡ Extract / Re-extract AI Thesis Knowledge (OCR)")
