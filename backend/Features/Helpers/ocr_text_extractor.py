@@ -13,6 +13,8 @@ are malformed or optional dependencies are unavailable.
 from __future__ import annotations
 
 import collections
+import errno
+import gc
 import html
 import logging
 import math
@@ -380,7 +382,8 @@ class OCRTextExtractor:
             logger.error("[PDF Extractor] pypdf library is not installed.")
             return cls._create_empty_result("pypdf is not installed. Please install pypdf==5.1.0.")
 
-        if path_obj.stat().st_size == 0:
+        file_size = path_obj.stat().st_size
+        if file_size == 0:
             logger.warning(f"[PDF Extractor] Skipping empty (0-byte) PDF file: {file_path}")
             return cls._create_empty_result("PDF file is empty (0 bytes).")
 
@@ -401,43 +404,51 @@ class OCRTextExtractor:
         )
 
         try:
-            reader = pypdf.PdfReader(str(path_obj))
+            # Open in binary stream mode so pypdf seeks on disk instead of loading the entire PDF into BytesIO RAM
+            with path_obj.open("rb") as pdf_fh:
+                reader = pypdf.PdfReader(pdf_fh)
 
-            # Handle password-protected / encrypted PDFs
-            if reader.is_encrypted:
+                # Handle password-protected / encrypted PDFs
+                if reader.is_encrypted:
+                    try:
+                        decrypted = reader.decrypt("")
+                        # If empty password decrypts or partially allows access, continue; otherwise fail cleanly
+                        if reader.is_encrypted and decrypted == 0:
+                            logger.warning(f"[PDF Extractor] PDF is encrypted and requires a password: {file_path}")
+                            return cls._create_empty_result("PDF is encrypted and password-protected.")
+                    except Exception as dec_err:
+                        logger.warning(f"[PDF Extractor] Failed to decrypt PDF: {dec_err}")
+                        return cls._create_empty_result(f"PDF is encrypted: {dec_err}")
+
+                page_count = len(reader.pages)
+                page_texts: List[str] = []
+
+                for idx, page in enumerate(reader.pages):
+                    try:
+                        pt = page.extract_text() or ""
+                        if pt.strip():
+                            page_texts.append(pt.strip())
+                    except Exception as pe:
+                        logger.warning(f"[PDF Extractor] Failed reading page {idx + 1} of {file_path}: {pe}")
+
+                extracted_text = cls._clean_text("\n\n".join(page_texts))
+                page_texts.clear()
+                if not extracted_text or len(extracted_text.strip()) < 10:
+                    logger.warning(f"[PDF Extractor] PDF has no extractable text layer (scanned/empty): {file_path}")
+                    return cls._create_empty_result("PDF contains no selectable text layer (scanned image PDF or empty document).")
+
+                # Extract outline / bookmarks Table of Contents
+                toc_lines: List[str] = []
                 try:
-                    decrypted = reader.decrypt("")
-                    # If empty password decrypts or partially allows access, continue; otherwise fail cleanly
-                    if reader.is_encrypted and decrypted == 0:
-                        logger.warning(f"[PDF Extractor] PDF is encrypted and requires a password: {file_path}")
-                        return cls._create_empty_result("PDF is encrypted and password-protected.")
-                except Exception as dec_err:
-                    logger.warning(f"[PDF Extractor] Failed to decrypt PDF: {dec_err}")
-                    return cls._create_empty_result(f"PDF is encrypted: {dec_err}")
+                    if reader.outline:
+                        toc_lines = cls._parse_pypdf_outline(reader.outline, reader)
+                except Exception as oe:
+                    logger.debug(f"[PDF Extractor] Outline extraction failed: {oe}")
 
-            page_count = len(reader.pages)
-            page_texts: List[str] = []
+                del reader
 
-            for idx, page in enumerate(reader.pages):
-                try:
-                    pt = page.extract_text() or ""
-                    if pt.strip():
-                        page_texts.append(pt.strip())
-                except Exception as pe:
-                    logger.warning(f"[PDF Extractor] Failed reading page {idx + 1} of {file_path}: {pe}")
-
-            extracted_text = cls._clean_text("\n\n".join(page_texts))
-            if not extracted_text or len(extracted_text.strip()) < 10:
-                logger.warning(f"[PDF Extractor] PDF has no extractable text layer (scanned/empty): {file_path}")
-                return cls._create_empty_result("PDF contains no selectable text layer (scanned image PDF or empty document).")
-
-            # Extract outline / bookmarks Table of Contents
-            toc_lines: List[str] = []
-            try:
-                if reader.outline:
-                    toc_lines = cls._parse_pypdf_outline(reader.outline, reader)
-            except Exception as oe:
-                logger.debug(f"[PDF Extractor] Outline extraction failed: {oe}")
+            if file_size >= 10 * 1024 * 1024:
+                gc.collect()
 
             # If no formal outline bookmarks are present, fall back to regex heading detection
             if not toc_lines and extracted_text:
@@ -468,6 +479,14 @@ class OCRTextExtractor:
             )
             return cls._create_empty_result(f"Corrupted or unreadable PDF: {pdf_err}")
         except Exception as e:
+            if isinstance(e, MemoryError) or (
+                isinstance(e, OSError) and getattr(e, "errno", None) == errno.ENOMEM
+            ):
+                gc.collect()
+                logger.warning(
+                    f"[PDF Extractor] Skipping PDF due to memory limit ({type(e).__name__}) {file_path}: {e}"
+                )
+                return cls._create_empty_result(f"PDF exceeds available extraction memory: {e}")
             logger.exception(f"[PDF Extractor] Unhandled error extracting PDF from {file_path}: {e}")
             return cls._create_empty_result(f"PDF extraction error: {str(e)}")
 
