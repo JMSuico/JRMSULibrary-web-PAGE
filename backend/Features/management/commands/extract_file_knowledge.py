@@ -192,10 +192,10 @@ def process_single_eresource_file(book: EResourceFile) -> bool:
         extraction = OCRTextExtractor.extract_document_knowledge(file_path)
 
         if extraction.get("success", False):
-            extracted_text = extraction.get("extracted_text", "")
-            summary = extraction.get("summary", "")
-            table_of_contents = extraction.get("table_of_contents", "")
-            keywords = extraction.get("keywords", "")
+            extracted_text = OCRTextExtractor.sanitize_db_text(extraction.get("extracted_text", ""))
+            summary = OCRTextExtractor.sanitize_db_text(extraction.get("summary", ""))
+            table_of_contents = OCRTextExtractor.sanitize_db_text(extraction.get("table_of_contents", ""))
+            keywords = OCRTextExtractor.sanitize_db_text(extraction.get("keywords", ""))
 
             update_fields: List[str] = []
             if hasattr(book, "extracted_text"):
@@ -272,10 +272,10 @@ def process_single_research_reference(thesis: ResearchReference, force: bool = F
     try:
         extraction = OCRTextExtractor.extract_document_knowledge(file_path)
         if extraction.get("success", False):
-            extracted_text = extraction.get("extracted_text", "")
-            summary = extraction.get("summary", "")
-            findings = extract_findings_or_conclusion(extracted_text)
-            methodology = extract_methodology(extracted_text)
+            extracted_text = OCRTextExtractor.sanitize_db_text(extraction.get("extracted_text", ""))
+            summary = OCRTextExtractor.sanitize_db_text(extraction.get("summary", ""))
+            findings = OCRTextExtractor.sanitize_db_text(extract_findings_or_conclusion(extracted_text))
+            methodology = OCRTextExtractor.sanitize_db_text(extract_methodology(extracted_text))
 
             update_fields: List[str] = []
             if hasattr(thesis, "extracted_text"):

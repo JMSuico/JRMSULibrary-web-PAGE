@@ -189,29 +189,36 @@ def auto_seed_local_books_catalog(force: bool = False, extract_pdfs_sync: bool =
                 defaults_map = {
                     "file": clean_path,
                     "is_active": True,
-                    "extracted_text": synth.get("extracted_text", ""),
-                    "summary": synth.get("summary", ""),
-                    "table_of_contents": synth.get("table_of_contents", ""),
-                    "keywords": synth.get("keywords", ""),
+                    "extracted_text": OCRTextExtractor.sanitize_db_text(synth.get("extracted_text", "")),
+                    "summary": OCRTextExtractor.sanitize_db_text(synth.get("summary", "")),
+                    "table_of_contents": OCRTextExtractor.sanitize_db_text(synth.get("table_of_contents", "")),
+                    "keywords": OCRTextExtractor.sanitize_db_text(synth.get("keywords", "")),
                     "ocr_status": target_status,
                     "ocr_processed_at": timezone.now() if target_status == "completed" else None,
                 }
 
-                if existing_file:
-                    for field_name, val in defaults_map.items():
-                        setattr(existing_file, field_name, val)
-                    existing_file.save()
-                else:
-                    EResourceFile.objects.create(
-                        name=node_name,
-                        department=parent_dept,
-                        **defaults_map,
+                try:
+                    with transaction.atomic():
+                        if existing_file:
+                            for field_name, val in defaults_map.items():
+                                setattr(existing_file, field_name, val)
+                            existing_file.save()
+                        else:
+                            EResourceFile.objects.create(
+                                name=node_name,
+                                department=parent_dept,
+                                **defaults_map,
+                            )
+                    seeded_count += 1
+                except Exception as save_err:
+                    logger.warning(
+                        "[AutoSeeder] Failed persisting '%s' (%s); keeping previous records intact.",
+                        node_name,
+                        save_err,
                     )
-                seeded_count += 1
 
     try:
-        with transaction.atomic():
-            _traverse_and_seed(root_nodes)
+        _traverse_and_seed(root_nodes)
     finally:
         if update_global_timestamp is not None:
             for m in (EResourceDepartment, EResourceFile):
