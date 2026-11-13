@@ -28,11 +28,34 @@ class FeaturesConfig(AppConfig):
                 print("Server starting: Successfully cleared all active sessions and online statuses.")
             except Exception as e:
                 print(f"Exception in apps.py ready(): {e}")
-                pass
 
-            try:
-                from Features.Helpers.local_books_auto_seeder import auto_seed_local_books_catalog
-                auto_seed_local_books_catalog(force=False)
-            except Exception as e:
-                print(f"Auto-seed exception in ready(): {e}")
-                pass
+            # Run catalog auto-seeding + background OCR daemon outside ready() critical path
+            # so ASGI/WSGI server binds immediately without risking 502 startup timeouts.
+            def _post_boot_knowledge_bootstrap():
+                import time
+                from django.db import close_old_connections, connection
+                time.sleep(1.5)
+                close_old_connections()
+                try:
+                    from Features.Helpers.local_books_auto_seeder import auto_seed_local_books_catalog
+                    auto_seed_local_books_catalog(force=False, extract_pdfs_sync=False)
+                except Exception as e:
+                    print(f"Auto-seed exception in post-boot bootstrap: {e}")
+                finally:
+                    try:
+                        connection.close()
+                    except Exception:
+                        pass
+
+                try:
+                    from Features.Helpers.autonomous_knowledge_daemon import AutonomousKnowledgeDaemon
+                    AutonomousKnowledgeDaemon.start_daemon()
+                except Exception as de:
+                    print(f"AutonomousKnowledgeDaemon start exception: {de}")
+
+            import threading
+            threading.Thread(
+                target=_post_boot_knowledge_bootstrap,
+                daemon=True,
+                name="PostBootKnowledgeBootstrap",
+            ).start()

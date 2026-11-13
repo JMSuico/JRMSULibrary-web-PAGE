@@ -145,20 +145,25 @@ class OCRTextExtractor:
         if len(clean) <= max_chars:
             return clean
 
-        # Attempt to synthesize from an Abstract or Executive Summary section
-        abstract_match = re.search(
+        # Attempt to synthesize from an Abstract or Executive Summary section (skipping TOC entries)
+        best_abstract = ""
+        for abstract_match in re.finditer(
             r"(?i)\b(?:abstract|executive summary|overview)\b[:\s\-\n]+(.*?)(?=\n\s*(?:[1-9]\.|\b(?:keywords|introduction|table of contents|contents|chapter|unit)\b)|\Z)",
             clean,
             flags=re.DOTALL,
-        )
-        if abstract_match:
+        ):
             candidate = abstract_match.group(1).strip()
-            # Collapse internal newlines
-            candidate = re.sub(r"\s+", " ", candidate)
-            if len(candidate) >= 120:
-                if len(candidate) <= max_chars:
-                    return candidate
-                clean = candidate
+            # Skip Table of Contents dot-leaders like "Introduction ...... 1"
+            if re.search(r"\.{4,}", candidate):
+                continue
+            candidate_norm = re.sub(r"\s+", " ", candidate)
+            if len(candidate_norm) >= 120 and len(candidate_norm) > len(best_abstract):
+                best_abstract = candidate_norm
+
+        if best_abstract:
+            if len(best_abstract) <= max_chars:
+                return best_abstract
+            clean = best_abstract
 
         # Take a slice up to max_chars + 100 to search for a clean sentence boundary
         slice_window = clean[: max_chars + 100]
@@ -395,6 +400,9 @@ class OCRTextExtractor:
                     logger.warning(f"[PDF Extractor] Failed reading page {idx + 1} of {file_path}: {pe}")
 
             extracted_text = cls._clean_text("\n\n".join(page_texts))
+            if not extracted_text or len(extracted_text.strip()) < 10:
+                logger.warning(f"[PDF Extractor] PDF has no extractable text layer (scanned/empty): {file_path}")
+                return cls._create_empty_result("PDF contains no selectable text layer (scanned image PDF or empty document).")
 
             # Extract outline / bookmarks Table of Contents
             toc_lines: List[str] = []

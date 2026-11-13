@@ -19,6 +19,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
 
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [viewerError, setViewerError] = useState<string | null>(null);
 
   // Keyboard shortcut suppression (Ctrl+S, Ctrl+P, Ctrl+U, F12) and navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -51,9 +52,10 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
   const isLink = Boolean(file.path && (file.path.startsWith('http://') || file.path.startsWith('https://')));
 
   // Protected In-Memory Blob Generator:
-  // Reads file bytes into a memory buffer and creates an ephemeral blob URL.
-  // This completely conceals physical server file paths and direct download URLs from browser Inspect Element.
+  // Reads file bytes into a memory buffer, validates %PDF- signature, and creates an ephemeral blob URL.
+  // Completely conceals physical server file paths and direct download URLs from browser Inspect Element.
   useEffect(() => {
+    setViewerError(null);
     if (!isPdf || !file.path) {
       setBlobUrl(null);
       setLoading(false);
@@ -63,31 +65,35 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
     let isMounted = true;
     let activeUrl: string | null = null;
     setLoading(true);
+    setBlobUrl(null);
+
+    const fetchValidatedPdfBlob = async (url: string): Promise<Blob | null> => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const rawBlob = await res.blob();
+        if (rawBlob.size < 5) return null;
+        const headerBytes = new Uint8Array(await rawBlob.slice(0, 5).arrayBuffer());
+        const isPdfMagic =
+          headerBytes[0] === 0x25 && // %
+          headerBytes[1] === 0x50 && // P
+          headerBytes[2] === 0x44 && // D
+          headerBytes[3] === 0x46 && // F
+          headerBytes[4] === 0x2d;   // -
+        if (!isPdfMagic) return null;
+        return rawBlob;
+      } catch {
+        return null;
+      }
+    };
 
     const loadProtectedBlob = async () => {
       try {
-        let pdfBlob: Blob | null = null;
+        let pdfBlob = await fetchValidatedPdfBlob(file.path);
 
-        // 1. Fetch document bytes from primary database media path
-        try {
-          const res = await fetch(file.path);
-          if (res.ok) {
-            pdfBlob = await res.blob();
-          }
-        } catch {
-          // Primary fetch failed
-        }
-
-        // 2. Seamless institutional fallback if file is unseeded or physically missing
+        // Seamless institutional fallback if primary file is unseeded or physically missing
         if (!pdfBlob && file.path !== '/assets/sample.pdf') {
-          try {
-            const fallbackRes = await fetch('/assets/sample.pdf');
-            if (fallbackRes.ok) {
-              pdfBlob = await fallbackRes.blob();
-            }
-          } catch {
-            // Fallback fetch failed
-          }
+          pdfBlob = await fetchValidatedPdfBlob('/assets/sample.pdf');
         }
 
         if (pdfBlob && isMounted) {
@@ -95,15 +101,17 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
           const url = URL.createObjectURL(securePdfBlob);
           activeUrl = url;
           setBlobUrl(url);
+          setViewerError(null);
           setLoading(false);
         } else if (isMounted) {
-          // If in-memory blob creation fails, fallback to direct path
-          setBlobUrl(file.path);
+          setBlobUrl(null);
+          setViewerError('Document preview is currently unavailable on the server.');
           setLoading(false);
         }
       } catch {
         if (isMounted) {
-          setBlobUrl(file.path);
+          setBlobUrl(null);
+          setViewerError('Document preview is currently unavailable on the server.');
           setLoading(false);
         }
       }
@@ -177,9 +185,17 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
                   <span className="material-symbols-outlined animate-spin text-3xl text-blue-600">progress_activity</span>
                   <span className="text-sm font-medium">Opening document for reading...</span>
                 </div>
+              ) : viewerError || !blobUrl ? (
+                <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full animate-modal-card">
+                  <div className="w-20 h-20 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <span className="material-symbols-outlined text-4xl">description</span>
+                  </div>
+                  <h3 className="font-headline-md font-bold text-2xl text-navy-dark mb-3">{file.name}</h3>
+                  <p className="text-gray-500 mb-2">{viewerError || 'Unable to render protected PDF preview.'}</p>
+                </div>
               ) : (
                 <iframe
-                  src={`${blobUrl || file.path}#toolbar=0&navpanes=0&scrollbar=0`}
+                  src={`${blobUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                   className="w-full h-full rounded-lg shadow-inner"
                   style={{ minHeight: '60vh' }}
                   title={file.name}

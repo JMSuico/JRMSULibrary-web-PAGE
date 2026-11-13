@@ -67,7 +67,11 @@ class ResearchReferenceRepository(IResearchReferenceRepository):
                 Q(department__icontains=token_str) |
                 Q(category__icontains=token_str) |
                 Q(call_number__icontains=token_str) |
-                Q(acc_no__icontains=token_str)
+                Q(acc_no__icontains=token_str) |
+                Q(abstract__icontains=token_str) |
+                Q(methodology__icontains=token_str) |
+                Q(findings_conclusion__icontains=token_str) |
+                Q(extracted_text__icontains=token_str)
             )
 
         if not valid_tokens:

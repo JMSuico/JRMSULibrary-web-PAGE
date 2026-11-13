@@ -25,24 +25,10 @@ class EResourceDepartmentService(IEResourceDepartmentService):
         return self._repo.get_by_id(id)
 
     def create(self, data: dict):
-        file_obj = self._repo.create(data)
-        if getattr(file_obj, 'file', None):
-            try:
-                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
-                process_single_eresource_file(file_obj)
-            except Exception:
-                pass
-        return file_obj
+        return self._repo.create(data)
 
     def update(self, id: int, data: dict):
-        updated = self._repo.update(id, data)
-        if updated and getattr(updated, 'file', None):
-            try:
-                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
-                process_single_eresource_file(updated)
-            except Exception:
-                pass
-        return updated
+        return self._repo.update(id, data)
 
     def delete(self, id: int, user_id: int = None) -> bool:
         item = self._repo.get_by_id(id)
@@ -112,6 +98,8 @@ class EResourceFileService(IEResourceFileService):
             try:
                 from Features.management.commands.extract_file_knowledge import process_single_eresource_file
                 process_single_eresource_file(file_obj)
+                from django.core.cache import cache
+                cache.delete("rizal_institution_context")
             except Exception:
                 pass
         return file_obj
@@ -122,6 +110,8 @@ class EResourceFileService(IEResourceFileService):
             try:
                 from Features.management.commands.extract_file_knowledge import process_single_eresource_file
                 process_single_eresource_file(updated)
+                from django.core.cache import cache
+                cache.delete("rizal_institution_context")
             except Exception:
                 pass
         return updated

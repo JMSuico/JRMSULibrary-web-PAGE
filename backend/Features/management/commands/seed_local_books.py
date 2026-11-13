@@ -20,6 +20,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         force = options.get('force', False)
-        self.stdout.write(self.style.NOTICE("Starting local books seeding..."))
-        count = auto_seed_local_books_catalog(force=force)
+        self.stdout.write(self.style.NOTICE("Starting local books seeding (with PDF text extraction when available)..."))
+        count = auto_seed_local_books_catalog(force=force, extract_pdfs_sync=True)
         self.stdout.write(self.style.SUCCESS(f"Successfully seeded/updated {count} books."))

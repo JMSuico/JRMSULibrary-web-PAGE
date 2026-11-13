@@ -181,7 +181,8 @@ class AutonomousKnowledgeDaemon:
 
                 dept, _ = EResourceDepartment.objects.get_or_create(
                     name=cand['dept'],
-                    defaults={'is_active': True}
+                    parent=None,
+                    defaults={'order': 1}
                 )
 
                 # Check if already registered
@@ -204,36 +205,90 @@ class AutonomousKnowledgeDaemon:
         except Exception as e:
             logger.warning("[KnowledgeDaemon] Auto-registration of local book assets skipped: %s", e)
 
+    def _drain_pending_queryset(
+        self,
+        fetch_qs_fn,
+        process_item_fn,
+        label: str,
+        batch_size: int = 50,
+        max_batches: int = 12,
+    ) -> None:
+        """Drains pending extraction records in bounded batches without holding stale DB connections."""
+        seen_pks = set()
+        any_processed = False
+
+        for _ in range(max_batches):
+            pending_qs = fetch_qs_fn()
+            if isinstance(pending_qs, (list, tuple)):
+                items = [
+                    obj for obj in pending_qs
+                    if getattr(obj, "pk", id(obj)) not in seen_pks
+                ][:batch_size]
+            else:
+                if seen_pks and hasattr(pending_qs, "exclude"):
+                    pending_qs = pending_qs.exclude(pk__in=seen_pks)
+                items = list(pending_qs[:batch_size])
+
+            if not items:
+                break
+
+            logger.info("[KnowledgeDaemon] Found %d pending %s records.", len(items), label)
+            for obj in items:
+                seen_pks.add(getattr(obj, "pk", id(obj)))
+                try:
+                    process_item_fn(obj)
+                except Exception as e:
+                    logger.warning(
+                        "[KnowledgeDaemon] Failed processing %s #%s: %s",
+                        label,
+                        getattr(obj, "pk", "?"),
+                        e,
+                    )
+
+            any_processed = True
+            if len(items) < batch_size:
+                break
+
+            try:
+                from django.db import connection
+                connection.close()
+            except Exception:
+                pass
+
+        if any_processed:
+            try:
+                from django.core.cache import cache
+                cache.delete("rizal_institution_context")
+            except Exception:
+                pass
+
     def _sweep_eresource_files(self) -> None:
         """Sweeps pending EResourceFile records and extracts their knowledge."""
         from django.db.models import Q
         from Features.Data.Models.eresource_model import EResourceFile
         from Features.management.commands.extract_file_knowledge import process_single_eresource_file
 
-        pending_qs = EResourceFile.objects.filter(
-            Q(ocr_status='pending') | Q(ocr_status__isnull=True) | Q(extracted_text__isnull=True) | Q(extracted_text='')
-        ).exclude(ocr_status='failed')[:20]
+        def _fetch():
+            return EResourceFile.objects.filter(
+                Q(ocr_status='pending') | Q(ocr_status__isnull=True) | Q(extracted_text__isnull=True) | Q(extracted_text='')
+            ).exclude(ocr_status='failed')
 
-        items = list(pending_qs) if not isinstance(pending_qs, (list, tuple)) else pending_qs
-        if len(items) > 0:
-            logger.info("[KnowledgeDaemon] Found %d pending EResourceFile records.", len(items))
-            for book in items:
-                try:
-                    ok = process_single_eresource_file(book)
-                    if not ok and (not getattr(book, 'summary', None) or not getattr(book, 'table_of_contents', None)):
-                        from Features.Helpers.ocr_text_extractor import OCRTextExtractor
-                        from Features.Helpers.ai_read_view_helper import AIReadViewHelper
-                        breadcrumb = AIReadViewHelper._extract_file_breadcrumb(book)
-                        synth = OCRTextExtractor.synthesize_domain_knowledge(getattr(book, 'name', ''), breadcrumb)
-                        book.summary = synth.get('summary', '')
-                        book.table_of_contents = synth.get('table_of_contents', '')
-                        book.keywords = synth.get('keywords', '')
-                        book.ocr_status = 'completed'
-                        from django.utils import timezone
-                        book.ocr_processed_at = timezone.now()
-                        book.save(update_fields=['summary', 'table_of_contents', 'keywords', 'ocr_status', 'ocr_processed_at'])
-                except Exception as e:
-                    logger.warning("[KnowledgeDaemon] Failed processing EResourceFile #%s: %s", getattr(book, "pk", "?"), e)
+        def _process(book):
+            ok = process_single_eresource_file(book)
+            if not ok and (not getattr(book, 'summary', None) or not getattr(book, 'table_of_contents', None)):
+                from Features.Helpers.ocr_text_extractor import OCRTextExtractor
+                from Features.Helpers.ai_read_view_helper import AIReadViewHelper
+                breadcrumb = AIReadViewHelper._extract_file_breadcrumb(book)
+                synth = OCRTextExtractor.synthesize_domain_knowledge(getattr(book, 'name', ''), breadcrumb)
+                book.summary = synth.get('summary', '')
+                book.table_of_contents = synth.get('table_of_contents', '')
+                book.keywords = synth.get('keywords', '')
+                book.ocr_status = 'completed'
+                from django.utils import timezone
+                book.ocr_processed_at = timezone.now()
+                book.save(update_fields=['summary', 'table_of_contents', 'keywords', 'ocr_status', 'ocr_processed_at'])
+
+        self._drain_pending_queryset(_fetch, _process, "EResourceFile")
 
     def _sweep_research_references(self) -> None:
         """Sweeps pending ResearchReference records with attached files."""
@@ -241,34 +296,31 @@ class AutonomousKnowledgeDaemon:
         from Features.Data.Models.research_reference_model import ResearchReference
         from Features.management.commands.extract_file_knowledge import process_single_research_reference
 
-        pending_qs = ResearchReference.objects.filter(
-            access_type='file'
-        ).filter(
-            Q(ocr_status='pending') | Q(ocr_status__isnull=True) | Q(extracted_text__isnull=True) | Q(extracted_text='')
-        ).exclude(ocr_status='failed')[:20]
+        def _fetch():
+            return ResearchReference.objects.filter(
+                access_type='file'
+            ).filter(
+                Q(ocr_status='pending') | Q(ocr_status__isnull=True) | Q(extracted_text__isnull=True) | Q(extracted_text='')
+            ).exclude(ocr_status='failed')
 
-        items = list(pending_qs) if not isinstance(pending_qs, (list, tuple)) else pending_qs
-        if len(items) > 0:
-            logger.info("[KnowledgeDaemon] Found %d pending ResearchReference records.", len(items))
-            for ref in items:
-                try:
-                    ok = process_single_research_reference(ref)
-                    if not ok and (not getattr(ref, 'abstract', None) or not getattr(ref, 'findings_conclusion', None)):
-                        from Features.Helpers.ocr_text_extractor import OCRTextExtractor
-                        dept = getattr(ref, 'department', '') or ''
-                        title = getattr(ref, 'title', '') or ''
-                        synth = OCRTextExtractor.synthesize_domain_knowledge(title, dept)
-                        if not getattr(ref, 'abstract', None):
-                            ref.abstract = synth.get('summary', '')
-                        if not getattr(ref, 'findings_conclusion', None):
-                            ref.findings_conclusion = (
-                                f"Scholarly findings and academic outcomes for '{title}', contributing specialized research data to the {dept or 'JRMSU'} academic repository."
-                            )
-                        if not getattr(ref, 'methodology', None):
-                            ref.methodology = "Rigorous experimental and field methodology following institutional ethical guidelines."
-                        ref.ocr_status = 'completed'
-                        from django.utils import timezone
-                        ref.ocr_processed_at = timezone.now()
-                        ref.save(update_fields=['abstract', 'findings_conclusion', 'methodology', 'ocr_status', 'ocr_processed_at'])
-                except Exception as e:
-                    logger.warning("[KnowledgeDaemon] Failed processing ResearchReference #%s: %s", getattr(ref, "pk", "?"), e)
+        def _process(ref):
+            ok = process_single_research_reference(ref)
+            if not ok and (not getattr(ref, 'abstract', None) or not getattr(ref, 'findings_conclusion', None)):
+                from Features.Helpers.ocr_text_extractor import OCRTextExtractor
+                dept = getattr(ref, 'department', '') or ''
+                title = getattr(ref, 'title', '') or ''
+                synth = OCRTextExtractor.synthesize_domain_knowledge(title, dept)
+                if not getattr(ref, 'abstract', None):
+                    ref.abstract = synth.get('summary', '')
+                if not getattr(ref, 'findings_conclusion', None):
+                    ref.findings_conclusion = (
+                        f"Scholarly findings and academic outcomes for '{title}', contributing specialized research data to the {dept or 'JRMSU'} academic repository."
+                    )
+                if not getattr(ref, 'methodology', None):
+                    ref.methodology = "Rigorous experimental and field methodology following institutional ethical guidelines."
+                ref.ocr_status = 'completed'
+                from django.utils import timezone
+                ref.ocr_processed_at = timezone.now()
+                ref.save(update_fields=['abstract', 'findings_conclusion', 'methodology', 'ocr_status', 'ocr_processed_at'])
+
+        self._drain_pending_queryset(_fetch, _process, "ResearchReference")

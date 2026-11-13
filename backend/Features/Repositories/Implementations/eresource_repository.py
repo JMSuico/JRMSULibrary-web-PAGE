@@ -45,7 +45,14 @@ class EResourceFileRepository(IEResourceFileRepository):
             return []
         query = Q()
         for tok in clean_tokens:
-            query |= Q(name__icontains=tok) | Q(department__name__icontains=tok)
+            query |= (
+                Q(name__icontains=tok) |
+                Q(department__name__icontains=tok) |
+                Q(keywords__icontains=tok) |
+                Q(summary__icontains=tok) |
+                Q(table_of_contents__icontains=tok) |
+                Q(extracted_text__icontains=tok)
+            )
         return list(
             EResourceFile.objects.filter(is_active=True)
             .select_related('department', 'department__parent')
