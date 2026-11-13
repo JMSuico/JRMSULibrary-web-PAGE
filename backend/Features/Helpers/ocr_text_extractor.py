@@ -118,13 +118,20 @@ class OCRTextExtractor:
             "error": error,
         }
 
-    @classmethod
-    def _clean_text(cls, text: str) -> str:
-        """Sanitizes text by stripping null bytes, normalizing control chars and whitespace."""
+    @staticmethod
+    def sanitize_db_text(text: Any) -> str:
+        """Strips lone UTF-16 surrogates, NUL bytes, and disallowed control characters for PostgreSQL UTF-8."""
         if not text:
             return ""
-        # Remove null bytes and non-printable control chars except \n, \r, \t
-        sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+        cleaned = str(text).encode("utf-8", errors="ignore").decode("utf-8")
+        return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", cleaned)
+
+    @classmethod
+    def _clean_text(cls, text: str) -> str:
+        """Sanitizes text by stripping surrogates, null bytes, control chars and normalizing whitespace."""
+        if not text:
+            return ""
+        sanitized = cls.sanitize_db_text(text)
         # Normalize Windows/Mac line endings
         sanitized = sanitized.replace("\r\n", "\n").replace("\r", "\n")
         # Collapse excessive blank lines (more than 2 consecutive)
@@ -416,9 +423,9 @@ class OCRTextExtractor:
             if not toc_lines and extracted_text:
                 toc_lines = cls._detect_regex_headings(extracted_text)
 
-            table_of_contents = "\n".join(toc_lines).strip()
-            summary = cls._generate_summary(extracted_text)
-            keywords = cls._extract_keywords(extracted_text)
+            table_of_contents = cls.sanitize_db_text("\n".join(toc_lines)).strip()
+            summary = cls.sanitize_db_text(cls._generate_summary(extracted_text))
+            keywords = cls.sanitize_db_text(cls._extract_keywords(extracted_text))
 
             logger.info(
                 f"[PDF Extractor] Successfully extracted {file_path}: "
@@ -511,9 +518,9 @@ class OCRTextExtractor:
             if not headings and extracted_text:
                 headings = cls._detect_regex_headings(extracted_text)
 
-            table_of_contents = "\n".join(headings).strip()
-            summary = cls._generate_summary(extracted_text)
-            keywords = cls._extract_keywords(extracted_text)
+            table_of_contents = cls.sanitize_db_text("\n".join(headings)).strip()
+            summary = cls.sanitize_db_text(cls._generate_summary(extracted_text))
+            keywords = cls.sanitize_db_text(cls._extract_keywords(extracted_text))
 
             logger.info(
                 f"[DOCX Extractor] Successfully extracted {file_path}: "
