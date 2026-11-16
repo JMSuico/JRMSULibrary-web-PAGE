@@ -74,26 +74,64 @@ if exist "!HOSTS_PATH!" (
 )
 
 :: 4. Install Cloudflare Tunnel as a 24/7 Windows Service
-set "CF_TOKEN=eyJhIjoiMzJiM2E1ODQ0YmY1YjhiNjU2NGE0NDc5ZTcyZGY0ZGEiLCJ0IjoiOGRlMjAwOGMtZTQ2MC00ZDg1LTk5YTMtMmQwYjFkNTU5OWFkIiwicyI6Ik1EUTVPVGN4TnpJdE5tTmtOQzAwTUROa0xUZzBOakV0T0RBME9UazRORGMyWkdZMiJ9"
-
-echo.
-echo [INSTALLING] Installing and configuring Cloudflared Windows Service...
->> "%LOGFILE%" echo [TUNNEL] Installing Cloudflared Windows Service...
-
-:: Check if Cloudflared service already exists
-sc query Cloudflared >nul 2>&1
-if !errorlevel! equ 0 (
-    echo [INFO] Existing Cloudflared service detected. Refreshing service with production token...
-    >> "%LOGFILE%" echo [TUNNEL] Refreshing existing Cloudflared service...
-    net stop Cloudflared >> "%LOGFILE%" 2>&1
-    sc stop Cloudflared >> "%LOGFILE%" 2>&1
-    "!CLOUDFLARED_BIN!" service uninstall >> "%LOGFILE%" 2>&1
-    timeout /t 2 /nobreak >nul 2>&1
+:: Load CF_TUNNEL_TOKEN from environment or root .env (never hardcode tunnel tokens in source)
+set "CF_TOKEN="
+if defined CF_TUNNEL_TOKEN set "CF_TOKEN=!CF_TUNNEL_TOKEN!"
+if not defined CF_TOKEN if defined TUNNEL_TOKEN set "CF_TOKEN=!TUNNEL_TOKEN!"
+if not defined CF_TOKEN (
+    for %%E in ("%~dp0..\.env" "%~dp0..\JRMSULibrary-web-PAGE\.env" "%~dp0.env") do (
+        if not defined CF_TOKEN if exist "%%~E" (
+            for /f "usebackq tokens=1,* delims==" %%A in ("%%~E") do (
+                if /i "%%~A"=="CF_TUNNEL_TOKEN" (
+                    set "_CF_RAW=%%~B"
+                    set "_CF_RAW=!_CF_RAW:"=!"
+                    set "_CF_RAW=!_CF_RAW:'=!"
+                    for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TOKEN=%%V"
+                    set "_CF_RAW="
+                ) else if /i "%%~A"=="TUNNEL_TOKEN" (
+                    if not defined CF_TOKEN (
+                        set "_CF_RAW=%%~B"
+                        set "_CF_RAW=!_CF_RAW:"=!"
+                        set "_CF_RAW=!_CF_RAW:'=!"
+                        for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TOKEN=%%V"
+                        set "_CF_RAW="
+                    )
+                )
+            )
+        )
+    )
+)
+if defined CF_TOKEN (
+    echo !CF_TOKEN! | findstr /b /i "change_me_ your_" >nul 2>&1 && set "CF_TOKEN="
 )
 
-:: Register service with production token
->> "%LOGFILE%" echo [TUNNEL] Executing service install with production token...
-"!CLOUDFLARED_BIN!" service install !CF_TOKEN! >> "%LOGFILE%" 2>&1
+echo.
+if not defined CF_TOKEN (
+    echo [WARNING] CF_TUNNEL_TOKEN not set in environment or .env. Skipping Cloudflared Windows Service installation.
+    echo [INFO] Add CF_TUNNEL_TOKEN=^<your_token^> to .env and run CommandStart\install-tunnel-service.bat when ready.
+    >> "%LOGFILE%" echo [TUNNEL] WARNING: CF_TUNNEL_TOKEN not found; skipped Cloudflared service install.
+) else (
+    echo [INSTALLING] Installing and configuring Cloudflared Windows Service...
+    >> "%LOGFILE%" echo [TUNNEL] Installing Cloudflared Windows Service...
+
+    :: Check if Cloudflared service already exists
+    sc query Cloudflared >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo [INFO] Existing Cloudflared service detected. Refreshing service with configured token...
+        >> "%LOGFILE%" echo [TUNNEL] Refreshing existing Cloudflared service...
+        net stop Cloudflared >> "%LOGFILE%" 2>&1
+        sc stop Cloudflared >> "%LOGFILE%" 2>&1
+        "!CLOUDFLARED_BIN!" service uninstall >> "%LOGFILE%" 2>&1
+        timeout /t 2 /nobreak >nul 2>&1
+    )
+
+    :: Register service with configured token, then clear token from process memory
+    >> "%LOGFILE%" echo [TUNNEL] Executing service install with configured CF_TUNNEL_TOKEN...
+    "!CLOUDFLARED_BIN!" service install !CF_TOKEN! >> "%LOGFILE%" 2>&1
+    set "CF_TOKEN="
+    set "CF_TUNNEL_TOKEN="
+    set "TUNNEL_TOKEN="
+)
 
 :: 5. Configure Windows Service Auto-Start and Auto-Recovery
 echo [CONFIGURING] Configuring 24/7 Auto-Start and Auto-Recovery policies...

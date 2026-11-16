@@ -54,7 +54,7 @@ class FeedbackViewSet(viewsets.ViewSet):
 
     def retrieve(self, request, pk=None):
         try:
-            feedback = self.service.repository.get_by_id(pk)
+            feedback = self.service.get_feedback_by_id(pk)
             return Response(FeedbackSerializer(feedback).data)
         except Exception:
             return Response(status=status.HTTP_404_NOT_FOUND)

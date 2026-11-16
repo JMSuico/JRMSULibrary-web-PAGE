@@ -1,27 +1,81 @@
 # [Layer: Api/Controllers] — user_controller.py
 
-from rest_framework import viewsets, permissions, parsers, status
+import hmac
+import os
+import secrets
+import string
+import time
+import threading
+import uuid
+
+from django.conf import settings
+from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
+from django.contrib.auth.password_validation import validate_password
+from django.core.cache import cache
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.mail import send_mail
+from django.core.validators import validate_email
+from django.utils import timezone
+from rest_framework import parsers, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
-from Features.Api.Serializers.user_serializer import UserSerializer, UserCreateUpdateSerializer
-from Features.Services.Implementations.user_service import UserService
-from django.utils import timezone
+
+from Features.Api.Serializers.user_serializer import UserCreateUpdateSerializer, UserSerializer
 from Features.Data.Models.account_model import Account
+from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+from Features.Services.Implementations.user_service import UserService
+
 
 class IsSuperUser(permissions.BasePermission):
+    """Restrict administrative user-management operations strictly to superusers."""
+
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_staff)
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.is_superuser
+        )
+
+
+class IsSuperUserOrSelf(permissions.BasePermission):
+    """Allow superusers full access, or authenticated users to access only their own pk."""
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_superuser:
+            return True
+        pk = view.kwargs.get("pk")
+        return pk is not None and str(pk) == str(request.user.id)
+
 
 class LoginRateThrottle(AnonRateThrottle):
     scope = 'login'
+
+
+class PasswordResetRateThrottle(AnonRateThrottle):
+    """Scoped brute-force throttle for password reset request and verification endpoints."""
+
+    scope = 'password_reset'
+    rate = '5/minute'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            'scope': self.scope,
+            'ident': self.get_ident(request),
+        }
+
 
 class UserViewSet(viewsets.ViewSet):
     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsSuperUser()]
+        if self.action in ['list', 'create', 'update', 'partial_update', 'destroy', 'force_logout']:
+            return [permissions.IsAuthenticated(), IsSuperUser()]
+        if self.action in ['retrieve', 'upload_avatar']:
+            return [permissions.IsAuthenticated(), IsSuperUserOrSelf()]
         if self.action in ['login', 'request_password_reset', 'reset_password_with_code', 'heartbeat']:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
@@ -34,9 +88,13 @@ class UserViewSet(viewsets.ViewSet):
         return UserSerializer(user, context={"request": request}).data
 
     def list(self, request):
+        if not request.user.is_superuser:
+            return Response({"error": "Superuser privileges required."}, status=status.HTTP_403_FORBIDDEN)
         return Response([self._serialize(u, request) for u in self.service.get_all()])
 
     def retrieve(self, request, pk=None):
+        if not request.user.is_superuser and str(pk) != str(request.user.id):
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
         item = self.service.get_by_id(pk)
         return Response(self._serialize(item, request)) if item else Response(status=404)
 
@@ -125,6 +183,9 @@ class UserViewSet(viewsets.ViewSet):
 
     @action(detail=True, methods=["post"])
     def force_logout(self, request, pk=None):
+        if not request.user.is_superuser:
+            return Response({"error": "Superuser privileges required."}, status=status.HTTP_403_FORBIDDEN)
+
         user = self.service.get_by_id(pk)
         if not user:
             return Response(status=404)
@@ -140,7 +201,6 @@ class UserViewSet(viewsets.ViewSet):
         self.service.clear_user_sessions(user.pk)
                 
         # Also clear any cache locks
-        from django.core.cache import cache
         cache.delete(f"login_attempts_{user.username}")
         cache.delete(f"login_lockout_ts_{user.username}")
         
@@ -213,6 +273,9 @@ class UserViewSet(viewsets.ViewSet):
     @action(detail=True, methods=["post"], parser_classes=[parsers.MultiPartParser, parsers.FormParser])
     def upload_avatar(self, request, pk=None):
         """Dedicated endpoint to update only the avatar of a user."""
+        if not request.user.is_superuser and str(pk) != str(request.user.id):
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
         item = self.service.get_by_id(pk)
         if not item:
             return Response(status=404)
@@ -224,16 +287,13 @@ class UserViewSet(viewsets.ViewSet):
             return Response({"error": "No avatar file provided"}, status=400)
         
         # Validate file strictly using Magic Bytes whitelist
-        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
-        from rest_framework.exceptions import ValidationError
         try:
             MalwareScannerHelper.verify_image_safety(avatar_file)
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
 
         # Rename file to UUID to avoid browser caching issues when updating
-        import uuid
-        ext = avatar_file.name.split('.')[-1].lower()
+        ext = os.path.splitext(avatar_file.name)[1].lstrip('.').lower() or 'png'
         avatar_file.name = f"{uuid.uuid4().hex}.{ext}"
 
         # Delete old avatar file if it exists
@@ -304,8 +364,13 @@ class UserViewSet(viewsets.ViewSet):
                 if field == "username":
                     if self.service.username_exists_exclude_user(value, user.pk):
                         return Response({"error": "Username already taken"}, status=400)
-                # Validate email uniqueness
+                # Validate email format and uniqueness
                 if field == "email":
+                    if value:
+                        try:
+                            validate_email(value)
+                        except DjangoValidationError:
+                            return Response({"error": "Enter a valid email address."}, status=400)
                     if self.service.email_exists_exclude_user(value, user.pk):
                         return Response({"error": "this email is already exist try another email."}, status=400)
                 setattr(user, field, value)
@@ -316,16 +381,18 @@ class UserViewSet(viewsets.ViewSet):
 
         return Response(self._serialize(user, request))
 
-    @action(detail=False, methods=["post"], throttle_classes=[AnonRateThrottle])
+    @action(detail=False, methods=["post"], throttle_classes=[PasswordResetRateThrottle, AnonRateThrottle])
     def request_password_reset(self, request):
         email = request.data.get("email")
-        if not email:
+        if not email or not isinstance(email, str):
             return Response({"error": "Email is required"}, status=400)
 
-        from django.core.cache import cache
-        import time
-        reset_attempt_key = f"reset_attempts_{email.lower()}"
-        reset_lockout_key = f"reset_lockout_ts_{email.lower()}"
+        norm_email = email.strip().lower()
+        if not norm_email:
+            return Response({"error": "Email is required"}, status=400)
+
+        reset_attempt_key = f"reset_attempts_{norm_email}"
+        reset_lockout_key = f"reset_lockout_ts_{norm_email}"
         reset_attempts = cache.get(reset_attempt_key, 0)
         if reset_attempts >= 3:
             lockout_start = cache.get(reset_lockout_key, 0)
@@ -334,79 +401,80 @@ class UserViewSet(viewsets.ViewSet):
             remaining_min = remaining // 60
             remaining_sec = remaining % 60
             return Response({"error": f"Too many reset requests. Try again in {remaining_min}m {remaining_sec}s."}, status=429)
-            
-        user = self.service.get_by_email(email)
-        
+
+        # Increment uniformly regardless of user existence to prevent email-enumeration via 429 side-channel
+        new_reset_attempts = reset_attempts + 1
+        cache.set(reset_attempt_key, new_reset_attempts, timeout=300)  # 5 minutes cooldown
+        if new_reset_attempts >= 3:
+            cache.set(reset_lockout_key, time.time(), timeout=300)
+
+        user = self.service.get_by_email(norm_email) or self.service.get_by_email(email.strip())
         if not user:
-            # Return 200 anyway to prevent email enumeration
             return Response({"message": "If that email exists in our system, a reset code has been sent."})
-            
-        import random
-        import string
-        code = ''.join(random.choices(string.digits, k=8))
-        
-        from django.core.cache import cache
-        cache_key = f"pwd_reset_{email.lower()}"
-        cache.set(cache_key, code, timeout=900) # 15 minutes
-        
-        from django.core.mail import send_mail
-        from django.conf import settings
-        import threading
-        
+
+        code = ''.join(secrets.choice(string.digits) for _ in range(8))
+
+        cache_key = f"pwd_reset_{norm_email}"
+        cache.set(cache_key, code, timeout=900)  # 15 minutes
+        cache.delete(f"pwd_reset_fails_{norm_email}")
+
         def send_pwd_reset():
             try:
                 send_mail(
                     subject="Password Reset Code",
                     message=f"Your password reset code for JRMSU Library Admin Portal is: {code}\n\nThis code is valid for 15 minutes. If you did not request this, please ignore this email.",
                     from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[email],
+                    recipient_list=[user.email],
                     fail_silently=True
                 )
             except Exception:
                 pass
-                
+
         t = threading.Thread(target=send_pwd_reset)
         t.daemon = True
         t.start()
 
-        # Increment reset attempt counter
-        new_reset_attempts = reset_attempts + 1
-        cache.set(reset_attempt_key, new_reset_attempts, timeout=300)  # 5 minutes cooldown
-        if new_reset_attempts >= 3:
-            cache.set(reset_lockout_key, time.time(), timeout=300)
-            
         return Response({"message": "If that email exists in our system, a reset code has been sent."})
 
-    @action(detail=False, methods=["post"], throttle_classes=[AnonRateThrottle])
+    @action(detail=False, methods=["post"], throttle_classes=[PasswordResetRateThrottle, AnonRateThrottle])
     def reset_password_with_code(self, request):
         email = request.data.get("email")
         code = request.data.get("code")
         new_password = request.data.get("new_password")
-        
-        if not email or not code or not new_password:
+
+        if not email or not code or not new_password or not isinstance(email, str) or not isinstance(code, str):
             return Response({"error": "Email, code, and new password are required"}, status=400)
-            
-        from django.core.cache import cache
-        cache_key = f"pwd_reset_{email.lower()}"
+
+        norm_email = email.strip().lower()
+        cache_key = f"pwd_reset_{norm_email}"
+        fail_key = f"pwd_reset_fails_{norm_email}"
+
+        fails = cache.get(fail_key, 0)
+        if fails >= 5:
+            cache.delete(cache_key)
+            return Response({"error": "Too many invalid reset attempts. Please request a new reset code."}, status=429)
+
         cached_code = cache.get(cache_key)
-        
-        if not cached_code or cached_code != code:
+        if not cached_code or not hmac.compare_digest(str(cached_code), code.strip()):
+            new_fails = fails + 1
+            cache.set(fail_key, new_fails, timeout=900)
+            if new_fails >= 5:
+                cache.delete(cache_key)
             return Response({"error": "Invalid or expired reset code"}, status=400)
-            
-        user = self.service.get_by_email(email)
-        
+
+        user = self.service.get_by_email(norm_email) or self.service.get_by_email(email.strip())
         if not user:
-            return Response({"error": "User not found"}, status=404)
-            
-        from django.contrib.auth.password_validation import validate_password
-        from django.core.exceptions import ValidationError
+            # Never leak whether an account exists
+            return Response({"error": "Invalid or expired reset code"}, status=400)
+
         try:
             validate_password(new_password, user)
-        except ValidationError as e:
+        except DjangoValidationError as e:
             return Response({"error": " ".join(e.messages)}, status=400)
-            
+
         user.set_password(new_password)
         user.save()
-        cache.delete(cache_key) # Invalidate code immediately
-        
+        cache.delete(cache_key)  # Invalidate code immediately
+        cache.delete(fail_key)
+
         return Response({"message": "Password successfully reset. You can now log in."})

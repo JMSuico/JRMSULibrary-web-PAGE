@@ -1,4 +1,4 @@
-import { apiClient } from '@/src/Libs/apiClient';
+import { apiClient, ensureCsrfToken, getCookie } from '@/src/Libs/apiClient';
 import faqCacheRaw from '@/src/Assets/FAQ cache/faq_cache.json';
 
 const faqCache: Record<string, string[]> = faqCacheRaw as Record<string, string[]>;
@@ -167,38 +167,59 @@ export const aiApi = {
     }
 
     // 2. API Fallback (Ollama streaming via Daphne ASGI)
-    let API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
-    if (!API_BASE.endsWith('/api') && !API_BASE.endsWith('/api/')) {
-      API_BASE = API_BASE.endsWith('/') ? `${API_BASE}api` : `${API_BASE}/api`;
+    let apiBase = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
+    if (!apiBase.endsWith('/api')) {
+      apiBase = `${apiBase}/api`;
     }
-    const url = `${API_BASE}/ai/chat/`;
+    const url = `${apiBase}/ai/chat/`;
+    const payload = JSON.stringify({ message, history, seen_answers: getSeenAnswers() });
 
-    // Extract CSRF if available (same logic as apiClient)
-    let csrf = '';
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, 10) === 'csrftoken=') {
-          csrf = decodeURIComponent(cookie.substring(10));
-          break;
-        }
+    await ensureCsrfToken();
+
+    const postStreamRequest = async (): Promise<Response> => {
+      const csrf = getCookie('csrftoken') || '';
+      return fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf
+        },
+        credentials: 'include',
+        signal,
+        body: payload
+      });
+    };
+
+    let response = await postStreamRequest();
+
+    // Retry once on 403 after explicitly refreshing the CSRF cookie from /csrf/
+    if (response.status === 403) {
+      try {
+        await fetch(`${apiBase}/csrf/`, { credentials: 'include', signal });
+      } catch (err) {
+        if (signal?.aborted) throw err;
       }
+      await ensureCsrfToken();
+      response = await postStreamRequest();
     }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrf
-      },
-      credentials: 'include',
-      signal,
-      body: JSON.stringify({ message, history, seen_answers: getSeenAnswers() })
-    });
 
     if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
+      let errorMsg = response.statusText || `HTTP Error ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData === 'object') {
+          if (typeof errorData.detail === 'string' && errorData.detail.trim()) {
+            errorMsg = errorData.detail;
+          } else if (typeof errorData.error === 'string' && errorData.error.trim()) {
+            errorMsg = errorData.error;
+          } else if (typeof errorData.message === 'string' && errorData.message.trim()) {
+            errorMsg = errorData.message;
+          }
+        }
+      } catch {
+        // Keep fallback HTTP status error message when response body is not JSON
+      }
+      throw new Error(errorMsg);
     }
 
     if (!response.body) {

@@ -94,7 +94,7 @@ class OCRTextExtractor:
 
     # Common regex patterns to detect section headers in plain text
     SECTION_HEADER_PATTERNS = [
-        re.compile(r"^(?:chapter|unit|module|section|part)\s+[0-9ivxlcdm]+[:\s\.\-].*$", re.IGNORECASE),
+        re.compile(r"^(?:chapter|unit|module|section|part)\s+[0-9ivxlcdm]+(?:[:\s\.\-].*)?$", re.IGNORECASE),
         re.compile(r"^[0-9]+(?:\.[0-9]+)+\s+[A-Z].*$"),
         re.compile(r"^[IVXLCDM]+\.\s+[A-Z].*$"),
         re.compile(r"^[A-Z]\.\s+[A-Z].*$"),
@@ -254,14 +254,21 @@ class OCRTextExtractor:
         return ", ".join(selected_keywords[:top_k])
 
     @classmethod
-    def _detect_regex_headings(cls, text: str) -> List[str]:
-        """Scans plain text lines for standard academic and chapter headings."""
+    def _detect_headings_from_text(cls, text: str) -> List[str]:
+        """Scans plain text lines for standard academic, chapter, and section headings."""
+        if not text:
+            return []
+
         headings: List[str] = []
         seen_headings: Set[str] = set()
 
-        lines = [line.strip() for line in text.split("\n")]
+        clean = cls._clean_text(text)
+        lines = [line.strip() for line in clean.split("\n")]
         for line in lines:
             if not line or len(line) > 120 or len(line) < 3:
+                continue
+            # Skip page number markers and TOC dot-leader index entries
+            if re.match(r"^\[?Page\s+\d+\]?$", line, re.IGNORECASE) or re.search(r"\.{4,}", line):
                 continue
 
             for pattern in cls.SECTION_HEADER_PATTERNS:
@@ -273,6 +280,86 @@ class OCRTextExtractor:
                     break
 
         return headings
+
+    @classmethod
+    def _detect_regex_headings(cls, text: str) -> List[str]:
+        """Backward-compatible alias for _detect_headings_from_text."""
+        return cls._detect_headings_from_text(text)
+
+    @classmethod
+    def _format_toc_lines(cls, toc_lines: List[str], max_lines: int = 60, max_chars: int = 3500) -> str:
+        """Joins and caps Table of Contents lines cleanly without splitting a line mid-text."""
+        if not toc_lines:
+            return ""
+        selected: List[str] = []
+        total_len = 0
+        for raw_line in toc_lines[:max_lines]:
+            line = cls.sanitize_db_text(raw_line).rstrip()
+            if not line.strip():
+                continue
+            added_len = len(line) + (1 if selected else 0)
+            if total_len + added_len > max_chars:
+                break
+            selected.append(line)
+            total_len += added_len
+        return "\n".join(selected).strip()
+
+    @classmethod
+    def _extract_table_of_contents(cls, text: str, max_lines: int = 60, max_chars: int = 3500) -> str:
+        """
+        Extracts a structured Table of Contents from plain text using explicit heading detection,
+        falling back to a concise paragraph/section outline when no explicit headings match.
+        """
+        if not text:
+            return ""
+
+        headings = cls._detect_headings_from_text(text)
+        if headings:
+            return cls._format_toc_lines(headings, max_lines=max_lines, max_chars=max_chars)
+
+        # Fallback: build a concise paragraph/section outline
+        clean = cls._clean_text(text)
+        raw_blocks = [b.strip() for b in re.split(r"\n\s*\n+", clean) if b.strip()]
+        if len(raw_blocks) <= 1:
+            raw_blocks = [ln.strip() for ln in clean.splitlines() if ln.strip()]
+
+        outline: List[str] = []
+        seen: Set[str] = set()
+        for block in raw_blocks:
+            lines = [
+                ln.strip()
+                for ln in block.splitlines()
+                if ln.strip()
+                and not re.match(r"^\[?Page\s+\d+\]?$", ln.strip(), re.IGNORECASE)
+                and not re.search(r"\.{4,}", ln)
+            ]
+            if not lines:
+                continue
+
+            first_line = lines[0]
+            if 4 <= len(first_line) <= 85 and not first_line.endswith((",", ";")):
+                snippet = first_line
+            else:
+                collapsed = re.sub(r"\s+", " ", " ".join(lines)).strip()
+                sentence_match = re.match(r"^(.{15,110}?[\.\!\?])(?:\s|$)", collapsed)
+                if sentence_match:
+                    snippet = sentence_match.group(1).strip()
+                elif len(collapsed) > 100:
+                    cut = collapsed[:100].rsplit(" ", 1)[0].strip()
+                    snippet = f"{cut}..."
+                else:
+                    snippet = collapsed
+
+            norm_snip = snippet.lower()
+            if len(snippet) < 4 or norm_snip in seen:
+                continue
+            seen.add(norm_snip)
+            idx = len(outline) + 1
+            outline.append(f"- Section {idx}: {snippet}")
+            if len(outline) >= 10:
+                break
+
+        return cls._format_toc_lines(outline, max_lines=max_lines, max_chars=max_chars)
 
     @classmethod
     def _parse_pypdf_outline(cls, outline_items: Any, reader: Any, depth: int = 0) -> List[str]:
@@ -450,17 +537,21 @@ class OCRTextExtractor:
             if file_size >= 10 * 1024 * 1024:
                 gc.collect()
 
-            # If no formal outline bookmarks are present, fall back to regex heading detection
-            if not toc_lines and extracted_text:
-                toc_lines = cls._detect_regex_headings(extracted_text)
+            # If formal outline bookmarks are present, format cleanly; otherwise extract TOC from text
+            if toc_lines:
+                table_of_contents = cls._format_toc_lines(toc_lines)
+            elif extracted_text:
+                table_of_contents = cls._extract_table_of_contents(extracted_text)
+            else:
+                table_of_contents = ""
 
-            table_of_contents = cls.sanitize_db_text("\n".join(toc_lines)).strip()
             summary = cls.sanitize_db_text(cls._generate_summary(extracted_text))
             keywords = cls.sanitize_db_text(cls._extract_keywords(extracted_text))
+            toc_count = len(table_of_contents.splitlines()) if table_of_contents else 0
 
             logger.info(
                 f"[PDF Extractor] Successfully extracted {file_path}: "
-                f"{page_count} pages, {len(extracted_text)} chars, {len(toc_lines)} headings."
+                f"{page_count} pages, {len(extracted_text)} chars, {toc_count} headings."
             )
 
             return {
@@ -562,17 +653,21 @@ class OCRTextExtractor:
             page_count = native_pages
             extracted_text = cls._clean_text(extracted_text)
 
-            # If no headings found in styles or HTML, run regex heading detection
-            if not headings and extracted_text:
-                headings = cls._detect_regex_headings(extracted_text)
+            # If style/HTML headings were extracted, format cleanly; otherwise extract TOC from text
+            if headings:
+                table_of_contents = cls._format_toc_lines(headings)
+            elif extracted_text:
+                table_of_contents = cls._extract_table_of_contents(extracted_text)
+            else:
+                table_of_contents = ""
 
-            table_of_contents = cls.sanitize_db_text("\n".join(headings)).strip()
             summary = cls.sanitize_db_text(cls._generate_summary(extracted_text))
             keywords = cls.sanitize_db_text(cls._extract_keywords(extracted_text))
+            toc_count = len(table_of_contents.splitlines()) if table_of_contents else 0
 
             logger.info(
                 f"[DOCX Extractor] Successfully extracted {file_path}: "
-                f"{page_count} pages (est), {len(extracted_text)} chars, {len(headings)} headings."
+                f"{page_count} pages (est), {len(extracted_text)} chars, {toc_count} headings."
             )
 
             return {
@@ -617,10 +712,9 @@ class OCRTextExtractor:
         word_count = len(extracted_text.split())
         page_count = max(1, math.ceil(word_count / 350))
 
-        headings = cls._detect_regex_headings(extracted_text)
-        table_of_contents = "\n".join(headings).strip()
-        summary = cls._generate_summary(extracted_text)
-        keywords = cls._extract_keywords(extracted_text)
+        table_of_contents = cls._extract_table_of_contents(extracted_text)
+        summary = cls.sanitize_db_text(cls._generate_summary(extracted_text))
+        keywords = cls.sanitize_db_text(cls._extract_keywords(extracted_text))
 
         return {
             "extracted_text": extracted_text,
@@ -704,7 +798,23 @@ class OCRTextExtractor:
         dept_str = str(department_name or "").upper()
         norm_combined = f"{clean_title} {dept_str}".lower()
 
-        # Domain 1: Agriculture / Agronomy / Crops / Soils / Farm Mechanization
+        # Domain 2: Operating Systems / Systems Programming / CPU Architecture
+        norm_words = set(re.findall(r"[a-z0-9]+", norm_combined))
+        elif_os_match = (
+            "os" in norm_words
+            or any(
+                w in norm_combined
+                for w in [
+                    "operating system",
+                    "operating systems",
+                    "cpu",
+                    "kernel",
+                    "core fundamentals",
+                    "concurrency",
+                    "multithreading",
+                ]
+            )
+        )
         if any(w in norm_combined for w in ['agri', 'agriculture', 'handbook', 'crop', 'soil', 'farm', 'caf', 'bsabe', 'biosystem', 'horticulture', 'agronomy']):
             summary = (
                 f"Comprehensive instructional student handbook and academic curriculum guide for '{clean_title}'. "
@@ -723,7 +833,7 @@ class OCRTextExtractor:
             keywords = "Agriculture, Agronomy, Soil Fertility, Crop Production, Plant Pathology, Integrated Pest Management, Farm Mechanization, Agri-Economics, Sustainable Farming, Soil Science, Horticulture"
 
         # Domain 2: Operating Systems / Systems Programming / CPU Architecture
-        elif any(w in norm_combined for w in ['operating system', 'operating systems', 'os', 'cpu', 'kernel', 'core fundamentals', 'concurrency', 'multithreading']):
+        elif elif_os_match:
             summary = (
                 f"Authoritative academic reference covering '{clean_title}'. "
                 "Explores operating systems architecture, CPU core fundamentals, process lifecycle management, "

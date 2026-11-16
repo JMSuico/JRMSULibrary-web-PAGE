@@ -1,13 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
+import { CheckCircle, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ForgotPasswordModal } from '@/src/Features/Auth/components/ForgotPasswordModal';
 import { ensureCsrfToken } from '@/src/Libs/apiClient';
 
+function parseThrottleSeconds(err: any): number {
+  if (typeof err?.retryAfter === 'number' && err.retryAfter > 0) {
+    return Math.ceil(err.retryAfter);
+  }
+  const msg = String(err?.message || '');
+  const minSecMatch = msg.match(/(\d+)\s*m\s*(\d+)\s*s/i);
+  if (minSecMatch) {
+    const total = Number(minSecMatch[1]) * 60 + Number(minSecMatch[2]);
+    if (total > 0) return total;
+  }
+  const secMatch = msg.match(/(\d+)\s*(?:seconds?|secs?|s)\b/i);
+  if (secMatch) {
+    const secs = Number(secMatch[1]);
+    if (secs > 0) return secs;
+  }
+  return 60;
+}
+
+function getSafeAuthErrorMessage(err: any): string {
+  const msg = typeof err?.message === 'string' ? err.message.trim() : '';
+  if (!msg || msg.startsWith('{') || msg.startsWith('[') || msg.length > 200 || /^HTTP Error \d+$/i.test(msg)) {
+    return 'Invalid username or password. Please try again.';
+  }
+  return msg;
+}
+
 export function LoginForm() {
-  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [captchaNum1, setCaptchaNum1] = useState(0);
@@ -17,11 +41,13 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { showToast } = useToast();
 
   const [verificationState, setVerificationState] = useState<'idle' | 'solving' | 'verified'>('idle');
 
-  // Initialize Captcha and Remember Me
+  // Initialize Captcha and Remember Me (username only; never store passwords or tokens)
   useEffect(() => {
     setCaptchaNum1(Math.floor(Math.random() * 10) + 1);
     setCaptchaNum2(Math.floor(Math.random() * 10) + 1);
@@ -30,19 +56,33 @@ export function LoginForm() {
     if (remembered) {
       try {
         const parsed = JSON.parse(remembered);
-        if (parsed.username) {
-          setUsername(parsed.username);
-          setRememberMe(true);
-        }
-        // If an old session saved a plaintext password, immediately sanitize it from localStorage
-        if (parsed.password) {
-          localStorage.setItem('jrmsu_admin_remember_me', JSON.stringify({ username: parsed.username }));
+        if (parsed && typeof parsed === 'object') {
+          if (typeof parsed.username === 'string' && parsed.username) {
+            setUsername(parsed.username);
+            setRememberMe(true);
+          }
+          // Scrub any legacy plaintext password or auth secret from localStorage
+          if ('password' in parsed || 'token' in parsed || 'secret' in parsed) {
+            if (typeof parsed.username === 'string' && parsed.username) {
+              localStorage.setItem('jrmsu_admin_remember_me', JSON.stringify({ username: parsed.username }));
+            } else {
+              localStorage.removeItem('jrmsu_admin_remember_me');
+            }
+          }
         }
       } catch (e) {
-        // ignore JSON parse errors
+        localStorage.removeItem('jrmsu_admin_remember_me');
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutSeconds(prev => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
 
   useEffect(() => {
     if (verificationState === 'solving' && captchaInput === (captchaNum1 + captchaNum2).toString()) {
@@ -60,13 +100,20 @@ export function LoginForm() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isHuman) return;
-    
-    setIsLoading(true);
+    if (!isHuman || lockoutSeconds > 0) return;
     
     // Autofill fix: Read directly from DOM to handle browser autofill bypassing React's onChange
-    const actualUsername = (document.getElementById('username') as HTMLInputElement)?.value || username;
+    const actualUsername = ((document.getElementById('username') as HTMLInputElement)?.value || username).trim();
     const actualPassword = (document.getElementById('password') as HTMLInputElement)?.value || password;
+
+    if (!actualUsername || !actualPassword) {
+      setErrorMessage('Please enter both your username and password.');
+      showToast('Please enter both your username and password.', 'error');
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsLoading(true);
     
     try {
       await ensureCsrfToken(); // Ensure CSRF token is present before POST
@@ -87,7 +134,25 @@ export function LoginForm() {
       // especially if the server was recently restarted.
       window.location.href = '/admin';
     } catch (err: any) {
-      showToast(err.message || 'Invalid credentials', 'error');
+      const rawMessage = String(err?.message || '');
+      const isThrottled =
+        err?.status === 429 ||
+        /too many|throttl|rate limit|temporarily locked/i.test(rawMessage);
+
+      if (isThrottled) {
+        const waitSeconds = parseThrottleSeconds(err);
+        setLockoutSeconds(waitSeconds);
+        const throttleMsg =
+          getSafeAuthErrorMessage(err) ||
+          `Too many login attempts. Please wait ${waitSeconds}s before trying again.`;
+        setErrorMessage(throttleMsg);
+        showToast(throttleMsg, 'error');
+      } else {
+        const safeMsg = getSafeAuthErrorMessage(err);
+        setErrorMessage(safeMsg);
+        showToast(safeMsg, 'error');
+      }
+
       // If login fails, force them to re-verify for security against brute force
       setVerificationState('idle');
       setCaptchaInput('');
@@ -111,6 +176,8 @@ export function LoginForm() {
           <input
             type="text"
             id="username"
+            name="username"
+            autoComplete="username"
             maxLength={150}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -130,6 +197,8 @@ export function LoginForm() {
           <input
             type={showPassword ? "text" : "password"}
             id="password"
+            name="password"
+            autoComplete="current-password"
             maxLength={128}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -175,12 +244,12 @@ export function LoginForm() {
               <CheckCircle className="w-6 h-6 text-green-500 animate-in zoom-in" />
             )}
             <span className={`text-sm font-medium ${verificationState === 'verified' ? 'text-green-700' : 'text-gray-700'}`}>
-              {verificationState === 'idle' ? 'Verify you are human' : verificationState === 'solving' ? 'Please solve the problem' : 'Verification complete'}
+              {verificationState === 'idle' ? 'Verify you are human' : verificationState === 'solving' ? 'Please solve the math check' : 'Verification complete'}
             </span>
           </div>
           <div className="flex flex-col items-center justify-center">
             <ShieldCheck className={`w-5 h-5 ${verificationState === 'verified' ? 'text-green-500' : 'text-navy'}`} />
-            <span className={`text-[9px] mt-1 uppercase tracking-wider font-semibold ${verificationState === 'verified' ? 'text-green-500' : 'text-navy'}`}>Secure</span>
+            <span className={`text-[9px] mt-1 uppercase tracking-wider font-semibold ${verificationState === 'verified' ? 'text-green-500' : 'text-navy'}`}>Human Check</span>
           </div>
         </div>
         
@@ -191,6 +260,9 @@ export function LoginForm() {
             </div>
             <input
               type="number"
+              inputMode="numeric"
+              autoComplete="off"
+              aria-label="Human verification answer"
               value={captchaInput}
               onChange={(e) => setCaptchaInput(e.target.value)}
               className={`w-20 px-3 py-2 border rounded-lg text-lg font-mono text-center focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
@@ -219,7 +291,7 @@ export function LoginForm() {
             />
             <CheckCircle className="absolute text-white w-3.5 h-3.5 opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" strokeWidth={3} />
           </div>
-          <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900 transition-colors">Remember me</span>
+          <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900 transition-colors">Remember username</span>
         </label>
         
         <button
@@ -231,9 +303,24 @@ export function LoginForm() {
         </button>
       </div>
 
+      {(errorMessage || lockoutSeconds > 0) && (
+        <div
+          role="alert"
+          className="flex items-start gap-2.5 p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs font-medium"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+          <div className="flex flex-col gap-0.5">
+            <span>{errorMessage || 'Too many login attempts. Please wait before trying again.'}</span>
+            {lockoutSeconds > 0 && (
+              <span className="font-semibold">Retry available in {lockoutSeconds}s.</span>
+            )}
+          </div>
+        </div>
+      )}
+
       <button
         type="submit"
-        disabled={!isHuman || isLoading || !username || !password}
+        disabled={!isHuman || isLoading || lockoutSeconds > 0}
         className="w-full mt-2 py-3.5 rounded-xl bg-navy hover:bg-navy-dark text-white font-inter font-semibold transition-all shadow-md shadow-navy/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isLoading ? (
@@ -241,6 +328,8 @@ export function LoginForm() {
             <Loader2 className="w-5 h-5 animate-spin" />
             Authenticating...
           </>
+        ) : lockoutSeconds > 0 ? (
+          `Locked (${lockoutSeconds}s)`
         ) : (
           'Sign In to Dashboard'
         )}

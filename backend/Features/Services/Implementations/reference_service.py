@@ -17,6 +17,9 @@ class ResearchReferenceService(IResearchReferenceService):
             return ResearchReferenceSerializer(ref, context={'request': request}).data
         return None
 
+    def get_reference_model_by_id(self, reference_id):
+        return self.repo.get_by_id(reference_id)
+
     def create_reference(self, data, request=None):
         from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
         if 'access_file' in data and data['access_file']:

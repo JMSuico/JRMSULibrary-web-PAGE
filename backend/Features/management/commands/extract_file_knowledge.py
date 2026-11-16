@@ -115,13 +115,20 @@ def resolve_file_on_disk(field_file: Any) -> Optional[str]:
         if os.path.exists(candidate) and os.path.isfile(candidate):
             return candidate
 
-    # 6. Check frontend/public/assets fallback by exact basename
+    # 6. Check frontend/public/assets fallback ONLY by exact literal basename
     try:
         if base_dir and clean_name:
-            basename = os.path.basename(clean_name)
-            candidate = os.path.normpath(os.path.join(str(base_dir), "..", "frontend", "public", "assets", basename))
-            if os.path.exists(candidate) and os.path.isfile(candidate):
-                return candidate
+            basename = os.path.basename(clean_name.rstrip("/"))
+            if basename and basename not in (".", ".."):
+                candidate = os.path.normpath(
+                    os.path.join(str(base_dir), "..", "frontend", "public", "assets", basename)
+                )
+                if (
+                    os.path.basename(candidate) == basename
+                    and os.path.exists(candidate)
+                    and os.path.isfile(candidate)
+                ):
+                    return candidate
     except Exception as e:
         logger.debug("Failed resolving path via frontend/public/assets: %s", e)
 
@@ -171,21 +178,83 @@ def extract_methodology(text: str) -> str:
     return _pick_best_academic_section(re.finditer(pattern, text, flags=re.DOTALL), min_len=50, max_len=2000)
 
 
-def process_single_eresource_file(book: EResourceFile) -> bool:
+def _mark_eresource_failed(book: Any) -> None:
+    """Marks an EResourceFile record as failed with a timestamp when present."""
+    if hasattr(book, "ocr_status"):
+        book.ocr_status = "failed"
+        update_fields = ["ocr_status"]
+        if hasattr(book, "ocr_processed_at"):
+            book.ocr_processed_at = timezone.now()
+            update_fields.append("ocr_processed_at")
+        book.save(update_fields=update_fields)
+
+
+def _synthesize_missing_eresource_knowledge(book: EResourceFile) -> bool:
+    """
+    Populates domain-synthesized knowledge for a cataloged EResourceFile whose
+    physical PDF/document is not mounted on disk.
+    """
+    from Features.Helpers.ai_read_view_helper import AIReadViewHelper
+
+    book_name = getattr(book, "name", f"Local Book #{getattr(book, 'pk', '?')}")
+    breadcrumb = AIReadViewHelper._extract_file_breadcrumb(book)
+    synth = OCRTextExtractor.synthesize_domain_knowledge(book_name, breadcrumb)
+
+    summary = OCRTextExtractor.sanitize_db_text(synth.get("summary", ""))
+    table_of_contents = OCRTextExtractor.sanitize_db_text(synth.get("table_of_contents", ""))
+    keywords = OCRTextExtractor.sanitize_db_text(synth.get("keywords", ""))
+
+    update_fields: List[str] = []
+    if hasattr(book, "summary"):
+        book.summary = summary
+        update_fields.append("summary")
+    if hasattr(book, "table_of_contents"):
+        book.table_of_contents = table_of_contents
+        update_fields.append("table_of_contents")
+    if hasattr(book, "keywords"):
+        book.keywords = keywords
+        update_fields.append("keywords")
+    if hasattr(book, "extracted_text") and not getattr(book, "extracted_text", None):
+        book.extracted_text = OCRTextExtractor.sanitize_db_text(synth.get("extracted_text", ""))
+        update_fields.append("extracted_text")
+    if hasattr(book, "ocr_status"):
+        book.ocr_status = "completed"
+        update_fields.append("ocr_status")
+    if hasattr(book, "ocr_processed_at"):
+        book.ocr_processed_at = timezone.now()
+        update_fields.append("ocr_processed_at")
+
+    if update_fields:
+        book.save(update_fields=update_fields)
+    return True
+
+
+def process_single_eresource_file(book: EResourceFile, synthesize_when_missing: bool = False) -> bool:
     """
     Extracts document knowledge from a single EResourceFile record.
     Updates plain text, summary, table of contents, keywords, and ocr_status.
-    Returns True on successful extraction, False otherwise.
+    When synthesize_when_missing=True and the binary file is absent on disk,
+    populates domain-synthesized knowledge instead of marking the record failed.
+    Returns True on success, False otherwise.
     """
     file_field = getattr(book, "file", None)
     file_path = resolve_file_on_disk(file_field)
 
     if not file_path:
+        if synthesize_when_missing:
+            logger.info(
+                "[EResource Ingestion] File on disk not found for EResourceFile #%s — synthesizing domain knowledge",
+                getattr(book, "pk", "?"),
+            )
+            try:
+                return _synthesize_missing_eresource_knowledge(book)
+            except Exception as se:
+                logger.warning("Synthesis error for book #%s: %s", getattr(book, "pk", "?"), se)
+                _mark_eresource_failed(book)
+                return False
+
         logger.warning("[EResource Ingestion] File on disk not found for EResourceFile #%s", book.pk)
-        if hasattr(book, "ocr_status"):
-            book.ocr_status = "failed"
-            book.ocr_processed_at = timezone.now()
-            book.save(update_fields=["ocr_status", "ocr_processed_at"])
+        _mark_eresource_failed(book)
         return False
 
     try:
@@ -228,27 +297,64 @@ def process_single_eresource_file(book: EResourceFile) -> bool:
         else:
             err = extraction.get("error", "Unknown extraction error")
             logger.warning("[EResource Ingestion] Extraction failed for EResourceFile #%s: %s", book.pk, err)
-            if hasattr(book, "ocr_status"):
-                book.ocr_status = "failed"
-                book.ocr_processed_at = timezone.now()
-                book.save(update_fields=["ocr_status", "ocr_processed_at"])
+            _mark_eresource_failed(book)
             return False
 
     except Exception as e:
         logger.exception("[EResource Ingestion] Unexpected exception for EResourceFile #%s: %s", book.pk, e)
-        if hasattr(book, "ocr_status"):
-            book.ocr_status = "failed"
-            book.ocr_processed_at = timezone.now()
-            book.save(update_fields=["ocr_status", "ocr_processed_at"])
+        _mark_eresource_failed(book)
         return False
 
 
-def process_single_research_reference(thesis: ResearchReference, force: bool = False) -> bool:
+def _mark_research_failed(thesis: ResearchReference) -> None:
+    if hasattr(thesis, "ocr_status"):
+        thesis.ocr_status = "failed"
+        thesis.ocr_processed_at = timezone.now()
+        thesis.save(update_fields=["ocr_status", "ocr_processed_at"])
+
+
+def _synthesize_missing_research_knowledge(thesis: ResearchReference) -> bool:
+    dept = getattr(thesis, "department", "") or ""
+    title = getattr(thesis, "title", f"Thesis #{getattr(thesis, 'pk', '?')}")
+    synth = OCRTextExtractor.synthesize_domain_knowledge(title, dept)
+    update_fields: List[str] = []
+
+    if hasattr(thesis, "abstract") and not getattr(thesis, "abstract", None):
+        thesis.abstract = OCRTextExtractor.sanitize_db_text(synth.get("summary", ""))
+        update_fields.append("abstract")
+    if hasattr(thesis, "findings_conclusion") and not getattr(thesis, "findings_conclusion", None):
+        thesis.findings_conclusion = OCRTextExtractor.sanitize_db_text(
+            f"Scholarly findings and academic outcomes for '{title}', "
+            f"contributing specialized research data to the {dept or 'JRMSU'} academic repository."
+        )
+        update_fields.append("findings_conclusion")
+    if hasattr(thesis, "methodology") and not getattr(thesis, "methodology", None):
+        thesis.methodology = "Rigorous experimental and field methodology following institutional ethical guidelines."
+        update_fields.append("methodology")
+    if hasattr(thesis, "ocr_status"):
+        thesis.ocr_status = "completed"
+        update_fields.append("ocr_status")
+    if hasattr(thesis, "ocr_processed_at"):
+        thesis.ocr_processed_at = timezone.now()
+        update_fields.append("ocr_processed_at")
+
+    if update_fields:
+        thesis.save(update_fields=update_fields)
+    return True
+
+
+def process_single_research_reference(
+    thesis: ResearchReference,
+    force: bool = False,
+    synthesize_when_missing: bool = False,
+) -> bool:
     """
     Extracts document knowledge from a single ResearchReference record with an uploaded file.
     Updates plain text, abstract, methodology, findings/conclusion, and ocr_status.
     When force=True (e.g. replacement file upload), refreshes derived abstract/methodology/findings.
-    Returns True on successful extraction, False otherwise.
+    When synthesize_when_missing=True and no physical file is found on disk, synthesizes metadata
+    safely instead of marking the record failed.
+    Returns True on successful extraction/synthesis, False otherwise.
     """
     access_type = getattr(thesis, "access_type", None)
     access_file = getattr(thesis, "access_file", None)
@@ -262,11 +368,15 @@ def process_single_research_reference(thesis: ResearchReference, force: bool = F
 
     file_path = resolve_file_on_disk(access_file)
     if not file_path:
+        if synthesize_when_missing:
+            try:
+                return _synthesize_missing_research_knowledge(thesis)
+            except Exception as se:
+                logger.warning("[Research Ingestion] Synthesis error for thesis #%s: %s", thesis.pk, se)
+                _mark_research_failed(thesis)
+                return False
         logger.warning("[Research Ingestion] File on disk not found for ResearchReference #%s", thesis.pk)
-        if hasattr(thesis, "ocr_status"):
-            thesis.ocr_status = "failed"
-            thesis.ocr_processed_at = timezone.now()
-            thesis.save(update_fields=["ocr_status", "ocr_processed_at"])
+        _mark_research_failed(thesis)
         return False
 
     try:
@@ -319,18 +429,12 @@ def process_single_research_reference(thesis: ResearchReference, force: bool = F
         else:
             err = extraction.get("error", "Unknown extraction error")
             logger.warning("[Research Ingestion] Extraction failed for ResearchReference #%s: %s", thesis.pk, err)
-            if hasattr(thesis, "ocr_status"):
-                thesis.ocr_status = "failed"
-                thesis.ocr_processed_at = timezone.now()
-                thesis.save(update_fields=["ocr_status", "ocr_processed_at"])
+            _mark_research_failed(thesis)
             return False
 
     except Exception as e:
         logger.exception("[Research Ingestion] Unexpected exception for ResearchReference #%s: %s", thesis.pk, e)
-        if hasattr(thesis, "ocr_status"):
-            thesis.ocr_status = "failed"
-            thesis.ocr_processed_at = timezone.now()
-            thesis.save(update_fields=["ocr_status", "ocr_processed_at"])
+        _mark_research_failed(thesis)
         return False
 
 
@@ -406,87 +510,18 @@ class Command(BaseCommand):
             book_name = getattr(book, "name", f"Local Book #{book.pk}")
             self._write_stdout(f"  [{idx}/{total_queued_books}] Local Book: '{book_name}' (ID: {book.pk})...", ending=" ")
 
-            file_field = getattr(book, "file", None)
-            file_path = resolve_file_on_disk(file_field)
-
-            if not file_path:
-                self.stdout.write(self.style.WARNING("[FILE NOT ON DISK — SYNTHESIZING DOMAIN KNOWLEDGE]"))
-                try:
-                    from Features.Helpers.ai_read_view_helper import AIReadViewHelper
-                    breadcrumb = AIReadViewHelper._extract_file_breadcrumb(book)
-                    synth = OCRTextExtractor.synthesize_domain_knowledge(book_name, breadcrumb)
-                    book.summary = synth.get("summary", "")
-                    book.table_of_contents = synth.get("table_of_contents", "")
-                    book.keywords = synth.get("keywords", "")
-                    book.ocr_status = "completed"
-                    book.ocr_processed_at = timezone.now()
-                    book.save(update_fields=["summary", "table_of_contents", "keywords", "ocr_status", "ocr_processed_at"])
-                    success_books += 1
-                    self.stdout.write(self.style.SUCCESS("[OK: SYNTHESIZED DOMAIN KNOWLEDGE]"))
-                except Exception as se:
-                    logger.warning("Synthesis error for book #%s: %s", book.pk, se)
-                    if hasattr(book, "ocr_status"):
-                        book.ocr_status = "failed"
-                        book.ocr_processed_at = timezone.now()
-                        book.save(update_fields=["ocr_status", "ocr_processed_at"])
-                    failed_books += 1
-                continue
-
-            try:
-                extraction = OCRTextExtractor.extract_document_knowledge(file_path)
-                if extraction.get("success", False):
-                    extracted_text = extraction.get("extracted_text", "")
-                    summary = extraction.get("summary", "")
-                    table_of_contents = extraction.get("table_of_contents", "")
-                    keywords = extraction.get("keywords", "")
-                    page_count = extraction.get("page_count", 0)
-
-                    update_fields = []
-                    if hasattr(book, "extracted_text"):
-                        book.extracted_text = extracted_text
-                        update_fields.append("extracted_text")
-                    if hasattr(book, "summary"):
-                        book.summary = summary
-                        update_fields.append("summary")
-                    if hasattr(book, "table_of_contents"):
-                        book.table_of_contents = table_of_contents
-                        update_fields.append("table_of_contents")
-                    if hasattr(book, "keywords"):
-                        book.keywords = keywords
-                        update_fields.append("keywords")
-                    if hasattr(book, "ocr_status"):
-                        book.ocr_status = "completed"
-                        update_fields.append("ocr_status")
-                    if hasattr(book, "ocr_processed_at"):
-                        book.ocr_processed_at = timezone.now()
-                        update_fields.append("ocr_processed_at")
-
-                    if update_fields:
-                        book.save(update_fields=update_fields)
-
-                    kw_count = len([k for k in keywords.split(",") if k.strip()])
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            f"[OK: {len(extracted_text)} chars, {page_count} pgs, {kw_count} keywords]"
-                        )
+            if process_single_eresource_file(book, synthesize_when_missing=True):
+                extracted_len = len(getattr(book, "extracted_text", "") or "")
+                keywords = getattr(book, "keywords", "") or ""
+                kw_count = len([k for k in keywords.split(",") if k.strip()])
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"[OK: {extracted_len} chars, {kw_count} keywords]"
                     )
-                    success_books += 1
-                else:
-                    err_msg = extraction.get("error", "Unknown extraction error")
-                    self.stdout.write(self.style.WARNING(f"[EXTRACTION FAILED: {err_msg}]"))
-                    if hasattr(book, "ocr_status"):
-                        book.ocr_status = "failed"
-                        book.ocr_processed_at = timezone.now()
-                        book.save(update_fields=["ocr_status", "ocr_processed_at"])
-                    failed_books += 1
-
-            except Exception as e:
-                logger.exception("Unexpected error processing EResourceFile #%s: %s", book.pk, e)
-                self.stdout.write(self.style.ERROR(f"[EXCEPTION: {e}]"))
-                if hasattr(book, "ocr_status"):
-                    book.ocr_status = "failed"
-                    book.ocr_processed_at = timezone.now()
-                    book.save(update_fields=["ocr_status", "ocr_processed_at"])
+                )
+                success_books += 1
+            else:
+                self.stdout.write(self.style.WARNING("[FAILED]"))
                 failed_books += 1
 
         # =========================================================
@@ -526,105 +561,18 @@ class Command(BaseCommand):
             display_title = (thesis_title[:45] + "...") if len(thesis_title) > 45 else thesis_title
             self._write_stdout(f"  [{idx}/{total_queued_theses}] Thesis: '{display_title}' (ID: {thesis.pk})...", ending=" ")
 
-            access_file = getattr(thesis, "access_file", None)
-            file_path = resolve_file_on_disk(access_file)
-
-            if not file_path:
-                self.stdout.write(self.style.WARNING("[FILE NOT ON DISK — SYNTHESIZING THESIS KNOWLEDGE]"))
-                try:
-                    dept = getattr(thesis, "department", "") or ""
-                    title = getattr(thesis, "title", f"Thesis #{thesis.pk}")
-                    synth = OCRTextExtractor.synthesize_domain_knowledge(title, dept)
-                    if not getattr(thesis, "abstract", None):
-                        thesis.abstract = synth.get("summary", "")
-                    if not getattr(thesis, "findings_conclusion", None):
-                        thesis.findings_conclusion = (
-                            f"Scholarly findings and academic outcomes for '{title}', "
-                            f"contributing specialized research data to the {dept or 'JRMSU'} academic repository."
-                        )
-                    if not getattr(thesis, "methodology", None):
-                        thesis.methodology = "Rigorous experimental and field methodology following institutional ethical guidelines."
-                    thesis.ocr_status = "completed"
-                    thesis.ocr_processed_at = timezone.now()
-                    thesis.save(update_fields=["abstract", "findings_conclusion", "methodology", "ocr_status", "ocr_processed_at"])
-                    success_theses += 1
-                    self.stdout.write(self.style.SUCCESS("[OK: SYNTHESIZED THESIS KNOWLEDGE]"))
-                except Exception as se:
-                    logger.warning("Synthesis error for thesis #%s: %s", thesis.pk, se)
-                    if hasattr(thesis, "ocr_status"):
-                        thesis.ocr_status = "failed"
-                        thesis.ocr_processed_at = timezone.now()
-                        thesis.save(update_fields=["ocr_status", "ocr_processed_at"])
-                    failed_theses += 1
-                continue
-
-            try:
-                extraction = OCRTextExtractor.extract_document_knowledge(file_path)
-                if extraction.get("success", False):
-                    extracted_text = extraction.get("extracted_text", "")
-                    summary = extraction.get("summary", "")
-                    findings = extract_findings_or_conclusion(extracted_text)
-                    methodology = extract_methodology(extracted_text)
-
-                    update_fields = []
-                    if hasattr(thesis, "extracted_text"):
-                        thesis.extracted_text = extracted_text
-                        update_fields.append("extracted_text")
-
-                    # If abstract is empty or force mode is requested
-                    if hasattr(thesis, "abstract"):
-                        if not thesis.abstract or force:
-                            thesis.abstract = summary
-                            update_fields.append("abstract")
-
-                    if hasattr(thesis, "findings_conclusion"):
-                        if findings:
-                            thesis.findings_conclusion = findings
-                            update_fields.append("findings_conclusion")
-                        elif not thesis.findings_conclusion and summary:
-                            thesis.findings_conclusion = summary
-                            update_fields.append("findings_conclusion")
-
-                    if hasattr(thesis, "methodology") and methodology:
-                        if not thesis.methodology or force:
-                            thesis.methodology = methodology
-                            update_fields.append("methodology")
-
-                    if hasattr(thesis, "ocr_status"):
-                        thesis.ocr_status = "completed"
-                        update_fields.append("ocr_status")
-
-                    if hasattr(thesis, "ocr_processed_at"):
-                        thesis.ocr_processed_at = timezone.now()
-                        update_fields.append("ocr_processed_at")
-
-                    if update_fields:
-                        thesis.save(update_fields=update_fields)
-
-                    abstract_len = len(thesis.abstract or "")
-                    has_findings = bool(thesis.findings_conclusion)
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            f"[OK: {len(extracted_text)} chars, abstract: {abstract_len} chars, findings: {has_findings}]"
-                        )
+            if process_single_research_reference(thesis, force=force, synthesize_when_missing=True):
+                extracted_len = len(getattr(thesis, "extracted_text", "") or "")
+                abstract_len = len(getattr(thesis, "abstract", "") or "")
+                has_findings = bool(getattr(thesis, "findings_conclusion", ""))
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"[OK: {extracted_len} chars, abstract: {abstract_len} chars, findings: {has_findings}]"
                     )
-                    success_theses += 1
-                else:
-                    err_msg = extraction.get("error", "Unknown extraction error")
-                    self.stdout.write(self.style.WARNING(f"[EXTRACTION FAILED: {err_msg}]"))
-                    if hasattr(thesis, "ocr_status"):
-                        thesis.ocr_status = "failed"
-                        thesis.ocr_processed_at = timezone.now()
-                        thesis.save(update_fields=["ocr_status", "ocr_processed_at"])
-                    failed_theses += 1
-
-            except Exception as e:
-                logger.exception("Unexpected error processing ResearchReference #%s: %s", thesis.pk, e)
-                self.stdout.write(self.style.ERROR(f"[EXCEPTION: {e}]"))
-                if hasattr(thesis, "ocr_status"):
-                    thesis.ocr_status = "failed"
-                    thesis.ocr_processed_at = timezone.now()
-                    thesis.save(update_fields=["ocr_status", "ocr_processed_at"])
+                )
+                success_theses += 1
+            else:
+                self.stdout.write(self.style.WARNING("[FAILED OR SKIPPED]"))
                 failed_theses += 1
 
         self._print_statistics(

@@ -3,7 +3,10 @@ dist
 venv
 __pycache__
 *.pyc
-.env
+.env*
+backups/
+*.sql
+*.dump
 media
 .git
 .vite

@@ -58,11 +58,48 @@ if !errorlevel! equ 0 (
 ) else (
     echo [RESTARTING] Restarting standalone cloudflared process...
     taskkill /f /im cloudflared.exe >nul 2>&1
-    set "CF_TOKEN=eyJhIjoiMzJiM2E1ODQ0YmY1YjhiNjU2NGE0NDc5ZTcyZGY0ZGEiLCJ0IjoiOGRlMjAwOGMtZTQ2MC00ZDg1LTk5YTMtMmQwYjFkNTU5OWFkIiwicyI6Ik1EUTVPVGN4TnpJdE5tTmtOQzAwTUROa0xUZzBOakV0T0RBME9UazRORGMyWkdZMiJ9"
+    if not defined CF_TUNNEL_TOKEN if defined TUNNEL_TOKEN set "CF_TUNNEL_TOKEN=%TUNNEL_TOKEN%"
+    if not defined CF_TUNNEL_TOKEN (
+        for %%E in ("%~dp0..\.env" "%~dp0..\JRMSULibrary-web-PAGE\.env" "%~dp0.env") do (
+            if not defined CF_TUNNEL_TOKEN if exist "%%~E" (
+                for /f "usebackq tokens=1,* delims==" %%A in ("%%~E") do (
+                    if /i "%%~A"=="CF_TUNNEL_TOKEN" (
+                        set "_CF_RAW=%%~B"
+                        set "_CF_RAW=!_CF_RAW:"=!"
+                        set "_CF_RAW=!_CF_RAW:'=!"
+                        for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TUNNEL_TOKEN=%%V"
+                        set "_CF_RAW="
+                    ) else if /i "%%~A"=="TUNNEL_TOKEN" (
+                        if not defined CF_TUNNEL_TOKEN (
+                            set "_CF_RAW=%%~B"
+                            set "_CF_RAW=!_CF_RAW:"=!"
+                            set "_CF_RAW=!_CF_RAW:'=!"
+                            for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TUNNEL_TOKEN=%%V"
+                            set "_CF_RAW="
+                        )
+                    )
+                )
+            )
+        )
+    )
+    if defined CF_TUNNEL_TOKEN (
+        echo !CF_TUNNEL_TOKEN! | findstr /b /i "change_me_ your_" >nul 2>&1 && set "CF_TUNNEL_TOKEN="
+    )
     if exist "%~dp0cloudflared.exe" (
-        start /b "" "%~dp0cloudflared.exe" tunnel run --token !CF_TOKEN! >nul 2>&1
-        echo [OK] Started standalone cloudflared.exe.
+        if defined CF_TUNNEL_TOKEN (
+            set "TUNNEL_TOKEN=!CF_TUNNEL_TOKEN!"
+            start /b "" "%~dp0cloudflared.exe" tunnel run >nul 2>&1
+            set "TUNNEL_TOKEN="
+            set "CF_TUNNEL_TOKEN="
+            echo [OK] Started standalone cloudflared.exe.
+        ) else (
+            echo [ERROR] CF_TUNNEL_TOKEN is not set in root .env or environment!
+            echo         Add CF_TUNNEL_TOKEN to root .env or install the Cloudflared service via install-tunnel-service.bat.
+            pause
+            exit /b 1
+        )
     ) else (
+        set "CF_TUNNEL_TOKEN="
         docker restart cloudflared >nul 2>&1
         echo [OK] Restarted Cloudflare container.
     )

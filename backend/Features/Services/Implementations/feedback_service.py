@@ -38,3 +38,6 @@ class FeedbackService(FeedbackServiceInterface):
 
     def get_all_feedback(self):
         return self.repository.get_all()
+
+    def get_feedback_by_id(self, feedback_id: int):
+        return self.repository.get_by_id(feedback_id)

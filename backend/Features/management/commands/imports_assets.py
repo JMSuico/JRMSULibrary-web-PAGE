@@ -1,7 +1,9 @@
 import os
 import shutil
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
+from django.db import connection
+from Features.Helpers.schema_helpers import find_missing_document_knowledge_columns
 from Features.models import EResourceDepartment, EResourceFile, LibraryInteriorImage
 
 # Supported file extensions for each import type
@@ -32,6 +34,14 @@ class Command(BaseCommand):
         return local_path
 
     def handle(self, *args, **options):
+        missing_cols = find_missing_document_knowledge_columns(connection)
+        if missing_cols:
+            details = "; ".join(f"{tbl}: {', '.join(cols)}" for tbl, cols in missing_cols.items())
+            raise CommandError(
+                f"Database schema is missing required Document Knowledge columns ({details}). "
+                f"Run 'python manage.py migrate' before running 'imports_assets'."
+            )
+
         if options['reset']:
             deleted_files = EResourceFile.objects.all().delete()
             deleted_depts = EResourceDepartment.objects.all().delete()
@@ -114,6 +124,12 @@ class Command(BaseCommand):
         self._import_external_links()
         self._import_page_texts()
 
+        pending_ocr = EResourceFile.objects.filter(ocr_status='pending').count()
+        if pending_ocr:
+            self.stdout.write(self.style.NOTICE(
+                f"{pending_ocr} eResource file(s) are queued with ocr_status='pending' "
+                f"(processed automatically by AutonomousKnowledgeDaemon or via 'python manage.py extract_file_knowledge')."
+            ))
         self.stdout.write(self.style.SUCCESS("Import completed successfully!"))
 
     # ---------------------------------------------------------------

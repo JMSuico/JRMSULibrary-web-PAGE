@@ -13,6 +13,7 @@ Provides:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 from typing import Any, Optional, Set, Tuple
@@ -125,13 +126,26 @@ def _run_background_document_extraction(model_name: str, instance_pk: int) -> No
         connection.close()
 
 
+_SKIP_BG_OCR_COMMANDS = {
+    'migrate',
+    'makemigrations',
+    'createsuperuser',
+    'createsuperuser_custom',
+    'update_database',
+    'add_migration',
+    'imports_assets',
+    'seed_local_books',
+    'extract_file_knowledge',
+}
+
+
 def trigger_background_file_extraction(model_name: str, instance_pk: int) -> None:
     """
     Schedules background knowledge extraction for a file record.
     Uses `transaction.on_commit` when inside an active atomic block so the file is guaranteed
     persisted on disk before extraction starts. Falls back to immediate thread launch if outside transactions.
     """
-    if any(cmd in sys.argv for cmd in ['migrate', 'makemigrations', 'createsuperuser', 'createsuperuser_custom']):
+    if any(arg in _SKIP_BG_OCR_COMMANDS or os.path.basename(str(arg)) in _SKIP_BG_OCR_COMMANDS for arg in sys.argv):
         return
 
     with _INGESTION_LOCK:

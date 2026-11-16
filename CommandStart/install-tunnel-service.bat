@@ -46,9 +46,46 @@ if exist "!HOSTS_FILE!" (
     )
 )
 
-:: 3. Install Cloudflare Service
-set "CF_TOKEN=eyJhIjoiMzJiM2E1ODQ0YmY1YjhiNjU2NGE0NDc5ZTcyZGY0ZGEiLCJ0IjoiOGRlMjAwOGMtZTQ2MC00ZDg1LTk5YTMtMmQwYjFkNTU5OWFkIiwicyI6Ik1EUTVPVGN4TnpJdE5tTmtOQzAwTUROa0xUZzBOakV0T0RBME9UazRORGMyWkdZMiJ9"
+:: 3. Load CF_TUNNEL_TOKEN from environment or root .env (never hardcode tokens)
+if not defined CF_TUNNEL_TOKEN if defined TUNNEL_TOKEN set "CF_TUNNEL_TOKEN=%TUNNEL_TOKEN%"
+if not defined CF_TUNNEL_TOKEN (
+    for %%E in ("%~dp0..\.env" "%~dp0..\JRMSULibrary-web-PAGE\.env" "%~dp0.env") do (
+        if not defined CF_TUNNEL_TOKEN if exist "%%~E" (
+            for /f "usebackq tokens=1,* delims==" %%A in ("%%~E") do (
+                if /i "%%~A"=="CF_TUNNEL_TOKEN" (
+                    set "_CF_RAW=%%~B"
+                    set "_CF_RAW=!_CF_RAW:"=!"
+                    set "_CF_RAW=!_CF_RAW:'=!"
+                    for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TUNNEL_TOKEN=%%V"
+                    set "_CF_RAW="
+                ) else if /i "%%~A"=="TUNNEL_TOKEN" (
+                    if not defined CF_TUNNEL_TOKEN (
+                        set "_CF_RAW=%%~B"
+                        set "_CF_RAW=!_CF_RAW:"=!"
+                        set "_CF_RAW=!_CF_RAW:'=!"
+                        for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TUNNEL_TOKEN=%%V"
+                        set "_CF_RAW="
+                    )
+                )
+            )
+        )
+    )
+)
+if defined CF_TUNNEL_TOKEN (
+    echo !CF_TUNNEL_TOKEN! | findstr /b /i "change_me_ your_" >nul 2>&1 && set "CF_TUNNEL_TOKEN="
+)
 
+if not defined CF_TUNNEL_TOKEN (
+    echo [ERROR] CF_TUNNEL_TOKEN is not set in root .env or environment!
+    echo.
+    echo Add CF_TUNNEL_TOKEN=^<your_cloudflare_tunnel_token^> to your root .env file,
+    echo or set CF_TUNNEL_TOKEN in the environment, then re-run this installer.
+    echo.
+    pause
+    exit /b 1
+)
+
+:: 4. Install Cloudflare Service
 echo [INSTALLING] Registering Cloudflared agent Windows Service...
 sc query Cloudflared >nul 2>&1
 if !errorlevel! equ 0 (
@@ -58,7 +95,14 @@ if !errorlevel! equ 0 (
     timeout /t 2 /nobreak >nul 2>&1
 )
 
-"!CLOUDFLARED_BIN!" service install !CF_TOKEN!
+"!CLOUDFLARED_BIN!" service install !CF_TUNNEL_TOKEN!
+set "CF_INSTALL_RC=!errorlevel!"
+set "CF_TUNNEL_TOKEN="
+if !CF_INSTALL_RC! neq 0 (
+    echo [ERROR] Failed to install Cloudflared Windows Service ^(exit code !CF_INSTALL_RC!^).
+    pause
+    exit /b !CF_INSTALL_RC!
+)
 
 :: 4. Auto-Recovery Policy
 sc config Cloudflared start= auto >nul 2>&1

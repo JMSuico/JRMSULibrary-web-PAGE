@@ -1,6 +1,19 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set "BACKGROUND_MODE=0"
+if /i "%~1"=="--background" set "BACKGROUND_MODE=1"
+if /i "%~1"=="--silent" set "BACKGROUND_MODE=1"
+
+if not exist "%APPDATA%\JRMSULibrary" mkdir "%APPDATA%\JRMSULibrary" >nul 2>&1
+set "BG_LOG=%APPDATA%\JRMSULibrary\background.log"
+if "!BACKGROUND_MODE!"=="1" (
+    if exist "!BG_LOG!" (
+        for %%F in ("!BG_LOG!") do if %%~zF gtr 524288 del /f /q "!BG_LOG!" >nul 2>&1
+    )
+    >> "!BG_LOG!" echo [%date% %time%] AutomaticUp.bat started in background mode.
+)
+
 title JRMSU Library - Automatic System Launcher and AutoStart Setup
 
 echo ====================================================================
@@ -62,6 +75,24 @@ set "LOCK_FILE=%TEMP%\jrmsu_startup.lock"
 :: 1. Single-Instance Initialization (Clean stale locks)
 del "!LOCK_FILE!" >nul 2>&1
 echo %date% %time% > "!LOCK_FILE!"
+
+:: 1.05 Enforce 24/7 Server Always-Awake Power Policy on AC Power
+:: Note: If Windows enters S3/Hibernate sleep, the CPU and Docker/WSL2 VM suspend and cannot serve requests.
+:: We save original AC timeouts once (restored by StopAutomaticUp.bat), disable AC sleep/hibernate,
+:: and keep display power-off untouched so the screen can turn off while the server stays online 24/7.
+set "POWER_BACKUP_FILE=%APPDATA%\JRMSULibrary\PreviousPowerPolicy.txt"
+if not exist "!POWER_BACKUP_FILE!" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $q = (powercfg /q SCHEME_CURRENT SUB_SLEEP 2>$null) -join [char]10; $s = if ($q -match 'STANDBYIDLE[\s\S]*?Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') { [int][Math]::Round([Convert]::ToInt32($matches[1],16)/60) } else { 30 }; $h = if ($q -match 'HIBERNATEIDLE[\s\S]*?Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') { [int][Math]::Round([Convert]::ToInt32($matches[1],16)/60) } else { 0 }; Set-Content -Path $env:POWER_BACKUP_FILE -Value ($s.ToString() + ',' + $h.ToString()) -Encoding ASCII } catch {}" >nul 2>&1
+)
+powercfg -change -standby-timeout-ac 0 >nul 2>&1
+set "STANDBY_RC=!errorlevel!"
+powercfg -change -hibernate-timeout-ac 0 >nul 2>&1
+if !STANDBY_RC! equ 0 (
+    echo [POWER] 24/7 Always-Online AC policy active: Sleep and Hibernate disabled ^(monitor still turns off normally^).
+    if "!BACKGROUND_MODE!"=="1" >> "!BG_LOG!" echo [%date% %time%] Applied 24/7 AC keep-awake power policy ^(standby=0, hibernate=0^).
+) else (
+    echo [POWER] Warning: Could not update AC sleep timeout via powercfg ^(run as Administrator if blocked^).
+)
 
 :: 1.1 Detect Connected Physical & External Storage Drives
 set "DETECTED_DRIVES="
@@ -208,22 +239,30 @@ set "STARTUP_BAT=%STARTUP_FOLDER%\JRMSU_Library_AutoStart.bat"
 del "%STARTUP_FOLDER%\JRMSU_Library_AutoStart.vbs" >nul 2>&1
 del "%STARTUP_FOLDER%\SilentStartDockerWSL.vbs" >nul 2>&1
 
-:: 3.0 Save Master Script Path for 24/7 Watchdog and Startup Healing
+:: 3.0 Save Master Script Path & Hidden Launcher for 24/7 Background Startup/Watchdog
 if not exist "%APPDATA%\JRMSULibrary" mkdir "%APPDATA%\JRMSULibrary" >nul 2>&1
 echo %~f0> "%APPDATA%\JRMSULibrary\AutomaticUpPath.txt"
 echo %~f0> "%~dp0AutomaticUpPath.txt"
 
-:: 3.1 Primary Mechanism: Windows Registry Run Key (Runs immediately upon entering desktop)
-:: Force-registers in HKCU (current user) and HKLM (machine-wide)
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /t REG_SZ /d "cmd.exe /c start \"\" \"%~f0\"" /f >nul 2>&1
-reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /t REG_SZ /d "cmd.exe /c start \"\" \"%~f0\"" /f >nul 2>&1
+set "SILENT_LAUNCH_VBS=%APPDATA%\JRMSULibrary\SilentLaunch.vbs"
+> "!SILENT_LAUNCH_VBS!" echo Set WshShell = CreateObject("WScript.Shell"^)
+>> "!SILENT_LAUNCH_VBS!" echo WshShell.Run """%~f0"" --background", 0, False
 
-:: 3.2 Secondary Mechanism: Startup Folder Batch Launcher (Opens visible console window forcefully & resilient to drive letter changes)
+:: 3.1 Primary Mechanism: Windows Registry Run Key (Runs silently in background on desktop sign-in)
+:: Force-registers in HKCU (current user) and HKLM (machine-wide)
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /t REG_SZ /d "wscript.exe //nologo \"!SILENT_LAUNCH_VBS!\"" /f >nul 2>&1
+reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /t REG_SZ /d "wscript.exe //nologo \"!SILENT_LAUNCH_VBS!\"" /f >nul 2>&1
+
+:: 3.2 Secondary Mechanism: Startup Folder Batch Launcher (Hidden background start & resilient to drive letter changes)
 > "!STARTUP_BAT!" echo @echo off
->> "!STARTUP_BAT!" echo if exist "%~dp0AutomaticUp.bat" (
->> "!STARTUP_BAT!" echo     start "" "%~dp0AutomaticUp.bat"
+>> "!STARTUP_BAT!" echo if exist "%~dp0AutomaticUp.bat" ^(
+>> "!STARTUP_BAT!" echo     if exist "%%APPDATA%%\JRMSULibrary\SilentLaunch.vbs" ^(
+>> "!STARTUP_BAT!" echo         wscript.exe //nologo "%%APPDATA%%\JRMSULibrary\SilentLaunch.vbs"
+>> "!STARTUP_BAT!" echo         exit /b 0
+>> "!STARTUP_BAT!" echo     ^)
+>> "!STARTUP_BAT!" echo     call "%~dp0AutomaticUp.bat" --background
 >> "!STARTUP_BAT!" echo     exit /b 0
->> "!STARTUP_BAT!" echo )
+>> "!STARTUP_BAT!" echo ^)
 >> "!STARTUP_BAT!" echo if exist "%USERPROFILE%\Desktop\JRMSU LIBRARY LANDING PAGE\CommandStart\AutomaticUp.bat" (
 >> "!STARTUP_BAT!" echo     start "" "%USERPROFILE%\Desktop\JRMSU LIBRARY LANDING PAGE\CommandStart\AutomaticUp.bat"
 >> "!STARTUP_BAT!" echo     exit /b 0
@@ -298,41 +337,46 @@ set "WATCHDOG_VBS=!WATCHDOG_DIR!\Watchdog.vbs"
 >> "!WATCHDOG_BAT!" echo :: 4. Exit if both are running
 >> "!WATCHDOG_BAT!" echo if ^^^!DOCKER_OK^^^! equ 1 if ^^^!CF_OK^^^! equ 1 exit /b 0
 >> "!WATCHDOG_BAT!" echo.
->> "!WATCHDOG_BAT!" echo :: 5. Check if startup is already in progress
->> "!WATCHDOG_BAT!" echo if exist "%%TEMP%%\jrmsu_startup.lock" exit /b 0
+>> "!WATCHDOG_BAT!" echo :: 5. Check if startup is already in progress ^(auto-clear stale lock older than 15 minutes^)
+>> "!WATCHDOG_BAT!" echo if exist "%%TEMP%%\jrmsu_startup.lock" ^(
+>> "!WATCHDOG_BAT!" echo     powershell -NoProfile -Command "if (((Get-Date) - (Get-Item '%TEMP%\jrmsu_startup.lock').LastWriteTime).TotalMinutes -lt 15) { exit 0 } else { Remove-Item '%TEMP%\jrmsu_startup.lock' -Force; exit 1 }" ^>nul 2^>^&1
+>> "!WATCHDOG_BAT!" echo     if ^^!errorlevel^^! equ 0 exit /b 0
+>> "!WATCHDOG_BAT!" echo ^)
 >> "!WATCHDOG_BAT!" echo.
->> "!WATCHDOG_BAT!" echo :: 6. Self-heal by invoking AutomaticUp.bat
+>> "!WATCHDOG_BAT!" echo :: 6. Enforce AC Keep-Awake and silently self-heal by invoking AutomaticUp.bat --background
+>> "!WATCHDOG_BAT!" echo powercfg -change -standby-timeout-ac 0 ^>nul 2^>^&1
+>> "!WATCHDOG_BAT!" echo powercfg -change -hibernate-timeout-ac 0 ^>nul 2^>^&1
 >> "!WATCHDOG_BAT!" echo if exist "%APPDATA%\JRMSULibrary\AutomaticUpPath.txt" (
 >> "!WATCHDOG_BAT!" echo     for /f "usebackq delims=" %%%%P in ("%APPDATA%\JRMSULibrary\AutomaticUpPath.txt") do (
 >> "!WATCHDOG_BAT!" echo         if exist "%%%%~P" (
->> "!WATCHDOG_BAT!" echo             call "%%%%~P"
+>> "!WATCHDOG_BAT!" echo             call "%%%%~P" --background
 >> "!WATCHDOG_BAT!" echo             exit /b 0
 >> "!WATCHDOG_BAT!" echo         )
 >> "!WATCHDOG_BAT!" echo     )
 >> "!WATCHDOG_BAT!" echo )
 >> "!WATCHDOG_BAT!" echo if exist "%~dp0AutomaticUp.bat" (
->> "!WATCHDOG_BAT!" echo     call "%~dp0AutomaticUp.bat"
+>> "!WATCHDOG_BAT!" echo     call "%~dp0AutomaticUp.bat" --background
 >> "!WATCHDOG_BAT!" echo     exit /b 0
 >> "!WATCHDOG_BAT!" echo )
 >> "!WATCHDOG_BAT!" echo for %%%%D in (F G C D E H) do (
 >> "!WATCHDOG_BAT!" echo     if exist "%%%%D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE\CommandStart\AutomaticUp.bat" (
->> "!WATCHDOG_BAT!" echo         call "%%%%D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE\CommandStart\AutomaticUp.bat"
+>> "!WATCHDOG_BAT!" echo         call "%%%%D:\JRMSU LIBRARY SYSTEM\JRMSULibrary-web-PAGE\CommandStart\AutomaticUp.bat" --background
 >> "!WATCHDOG_BAT!" echo         exit /b 0
 >> "!WATCHDOG_BAT!" echo     )
 >> "!WATCHDOG_BAT!" echo     if exist "%%%%D:\JRMSU LIBRARY SYSTEM\CommandStart\AutomaticUp.bat" (
->> "!WATCHDOG_BAT!" echo         call "%%%%D:\JRMSU LIBRARY SYSTEM\CommandStart\AutomaticUp.bat"
+>> "!WATCHDOG_BAT!" echo         call "%%%%D:\JRMSU LIBRARY SYSTEM\CommandStart\AutomaticUp.bat" --background
 >> "!WATCHDOG_BAT!" echo         exit /b 0
 >> "!WATCHDOG_BAT!" echo     )
 >> "!WATCHDOG_BAT!" echo     if exist "%%%%D:\CommandStart\AutomaticUp.bat" (
->> "!WATCHDOG_BAT!" echo         call "%%%%D:\CommandStart\AutomaticUp.bat"
+>> "!WATCHDOG_BAT!" echo         call "%%%%D:\CommandStart\AutomaticUp.bat" --background
 >> "!WATCHDOG_BAT!" echo         exit /b 0
 >> "!WATCHDOG_BAT!" echo     )
 >> "!WATCHDOG_BAT!" echo     if exist "%%%%D:%USERPROFILE:~2%\Desktop\JRMSU LIBRARY LANDING PAGE\CommandStart\AutomaticUp.bat" (
->> "!WATCHDOG_BAT!" echo         call "%%%%D:%USERPROFILE:~2%\Desktop\JRMSU LIBRARY LANDING PAGE\CommandStart\AutomaticUp.bat"
+>> "!WATCHDOG_BAT!" echo         call "%%%%D:%USERPROFILE:~2%\Desktop\JRMSU LIBRARY LANDING PAGE\CommandStart\AutomaticUp.bat" --background
 >> "!WATCHDOG_BAT!" echo         exit /b 0
 >> "!WATCHDOG_BAT!" echo     )
 >> "!WATCHDOG_BAT!" echo     if exist "%%%%D:%USERPROFILE:~2%\Desktop\JRMSU LIBRARY LANGDING PAGE\CommandStart\AutomaticUp.bat" (
->> "!WATCHDOG_BAT!" echo         call "%%%%D:%USERPROFILE:~2%\Desktop\JRMSU LIBRARY LANGDING PAGE\CommandStart\AutomaticUp.bat"
+>> "!WATCHDOG_BAT!" echo         call "%%%%D:%USERPROFILE:~2%\Desktop\JRMSU LIBRARY LANGDING PAGE\CommandStart\AutomaticUp.bat" --background
 >> "!WATCHDOG_BAT!" echo         exit /b 0
 >> "!WATCHDOG_BAT!" echo     )
 >> "!WATCHDOG_BAT!" echo )
@@ -340,8 +384,13 @@ set "WATCHDOG_VBS=!WATCHDOG_DIR!\Watchdog.vbs"
 > "!WATCHDOG_VBS!" echo Set WshShell = CreateObject("WScript.Shell"^)
 >> "!WATCHDOG_VBS!" echo WshShell.Run """!WATCHDOG_BAT!""", 0, False
 
-schtasks /create /tn "JRMSU_Library_247_Watchdog" /tr "wscript.exe \"!WATCHDOG_VBS!\"" /sc minute /mo 3 /f >nul 2>&1
-echo [OK] 24/7 Keep-Alive Watchdog active (Self-heals if Docker Desktop is closed).
+set "TASK_REG_OK=0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $vbs=$env:WATCHDOG_VBS; $q=[char]34; $isAdmin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); $action=New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//nologo ' + $q + $vbs + $q); $triggers=@((New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 3)), (New-ScheduledTaskTrigger -AtLogOn)); try { $cimClass=Get-CimClass -Namespace Root/Microsoft/Windows/TaskScheduler -ClassName MSFT_TaskEventTrigger; $wakeEvt=New-CimInstance -CimClass $cimClass -ClientOnly; $wakeEvt.Enabled=$true; $wakeEvt.Subscription='<QueryList><Query Id=''0'' Path=''System''><Select Path=''System''>*[System[(Provider[@Name=''Microsoft-Windows-Power-Troubleshooter''] and EventID=1) or (Provider[@Name=''Microsoft-Windows-Kernel-Power''] and (EventID=107 or EventID=507))]]</Select></Query></QueryList>'; $triggers += $wakeEvt } catch {}; $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Hidden -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 30); $rl=if($isAdmin){'Highest'}else{'Limited'}; $principal=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel $rl; Register-ScheduledTask -TaskName 'JRMSU_Library_247_Watchdog' -Action $action -Trigger $triggers -Settings $settings -Principal $principal -Force | Out-Null" >nul 2>&1
+if !errorlevel! equ 0 set "TASK_REG_OK=1"
+if "!TASK_REG_OK!"=="0" (
+    schtasks /create /tn "JRMSU_Library_247_Watchdog" /tr "wscript.exe //nologo \"!WATCHDOG_VBS!\"" /sc minute /mo 3 /f >nul 2>&1
+)
+echo [OK] 24/7 Background Watchdog active (Hidden, Battery-Safe, Auto-Recovers on Logon/Resume/Close).
 
 :: 4. Detect Active Local Dynamic IP (Read-Only reference for Wi-Fi / LAN, zero network tampering)
 echo [NETWORK] Detecting active campus Wi-Fi / Local Network IP address...
@@ -625,7 +674,34 @@ if !errorlevel! equ 0 (
 
 echo.
 echo [LAUNCHING] Verifying Cloudflare Tunnel connector...
-set "CF_HARDCODED_TOKEN=eyJhIjoiMzJiM2E1ODQ0YmY1YjhiNjU2NGE0NDc5ZTcyZGY0ZGEiLCJ0IjoiOGRlMjAwOGMtZTQ2MC00ZDg1LTk5YTMtMmQwYjFkNTU5OWFkIiwicyI6Ik1EUTVPVGN4TnpJdE5tTmtOQzAwTUROa0xUZzBOakV0T0RBME9UazRORGMyWkdZMiJ9"
+set "CF_TUNNEL_TOKEN=%CF_TUNNEL_TOKEN%"
+if not defined CF_TUNNEL_TOKEN if defined TUNNEL_TOKEN set "CF_TUNNEL_TOKEN=%TUNNEL_TOKEN%"
+if not defined CF_TUNNEL_TOKEN (
+    for %%E in ("!PROJECT_DIR!\.env" "%~dp0..\.env" "%~dp0..\JRMSULibrary-web-PAGE\.env" "%~dp0.env") do (
+        if not defined CF_TUNNEL_TOKEN if exist "%%~E" (
+            for /f "usebackq tokens=1,* delims==" %%A in ("%%~E") do (
+                if /i "%%~A"=="CF_TUNNEL_TOKEN" (
+                    set "_CF_RAW=%%~B"
+                    set "_CF_RAW=!_CF_RAW:"=!"
+                    set "_CF_RAW=!_CF_RAW:'=!"
+                    for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TUNNEL_TOKEN=%%V"
+                    set "_CF_RAW="
+                ) else if /i "%%~A"=="TUNNEL_TOKEN" (
+                    if not defined CF_TUNNEL_TOKEN (
+                        set "_CF_RAW=%%~B"
+                        set "_CF_RAW=!_CF_RAW:"=!"
+                        set "_CF_RAW=!_CF_RAW:'=!"
+                        for /f "tokens=1 delims=# " %%V in ("!_CF_RAW!") do set "CF_TUNNEL_TOKEN=%%V"
+                        set "_CF_RAW="
+                    )
+                )
+            )
+        )
+    )
+)
+if defined CF_TUNNEL_TOKEN (
+    echo !CF_TUNNEL_TOKEN! | findstr /b /i "change_me_ your_" >nul 2>&1 && set "CF_TUNNEL_TOKEN="
+)
 set "CF_RUNNING=0"
 sc query Cloudflared 2>nul | findstr /i "RUNNING" >nul 2>&1
 if !errorlevel! equ 0 set "CF_RUNNING=1"
@@ -643,17 +719,33 @@ if "!CF_RUNNING!"=="1" (
     ) else (
         echo [FALLBACK] Service start unavailable or non-admin. Launching standalone connector...
         if exist "%~dp0cloudflared.exe" (
-            start /b "" "%~dp0cloudflared.exe" tunnel run --token !CF_HARDCODED_TOKEN! >nul 2>&1
-            echo [OK] Started standalone cloudflared.exe in background.
+            if defined CF_TUNNEL_TOKEN (
+                set "TUNNEL_TOKEN=!CF_TUNNEL_TOKEN!"
+                start /b "" "%~dp0cloudflared.exe" tunnel run >nul 2>&1
+                set "TUNNEL_TOKEN="
+                echo [OK] Started standalone cloudflared.exe in background.
+            ) else (
+                echo [WARNING] CF_TUNNEL_TOKEN is not configured in .env or environment.
+                echo           Set CF_TUNNEL_TOKEN in "!PROJECT_DIR!\.env" or install the Cloudflared Windows Service.
+            )
         ) else (
             docker start cloudflared >nul 2>&1
             if !errorlevel! neq 0 (
-                docker run -d --name cloudflared --restart unless-stopped cloudflare/cloudflared:latest tunnel --no-autoupdate run --token !CF_HARDCODED_TOKEN! >nul 2>&1
+                if defined CF_TUNNEL_TOKEN (
+                    set "TUNNEL_TOKEN=!CF_TUNNEL_TOKEN!"
+                    docker run -d --name cloudflared --restart unless-stopped -e TUNNEL_TOKEN cloudflare/cloudflared:latest tunnel --no-autoupdate run >nul 2>&1
+                    set "TUNNEL_TOKEN="
+                    echo [OK] Started Cloudflare connector via Docker.
+                ) else (
+                    echo [WARNING] CF_TUNNEL_TOKEN is not configured in .env or environment. Skipping cloudflared container launch.
+                )
+            ) else (
+                echo [OK] Started existing Cloudflare container via Docker.
             )
-            echo [OK] Started Cloudflare connector via Docker.
         )
     )
 )
+set "CF_TUNNEL_TOKEN="
 
 :: Clean up lock file
 del "!LOCK_FILE!" >nul 2>&1
@@ -667,12 +759,16 @@ echo 1. Public Landing Page:  https://page.jrmsukc-library.online
 echo 2. Librarian Admin:      https://admin.jrmsukc-library.online
 echo 3. Local Machine:        http://localhost:3000  (Admin: http://localhost:3001)
 echo 4. Campus Wi-Fi / LAN:   http://!LOCAL_IP!:3000  (Admin: http://!LOCAL_IP!:3001)
-echo 5. Windows Auto-Start:   ENABLED (Will launch automatically on boot)
-echo 6. 24/7 Keep-Alive:      ACTIVE (Automatically recovers if Docker Desktop is closed)
+echo 5. Windows Auto-Start:   ENABLED (Silent background startup on sign-in)
+echo 6. 24/7 Keep-Alive:      ACTIVE (Hidden watchdog + AC sleep/hibernate disabled; auto-heals on resume)
 echo 7. Background Engine:    Docker Desktop minimized in system tray (safe to close window)
 echo 8. Network Setting:      Dynamic DHCP Preserved (Zero IP tampering)
 echo 9. To stop the system:   Double-click StopAutomaticUp.bat anytime.
 echo.
 echo ====================================================================
+if "!BACKGROUND_MODE!"=="1" (
+    >> "!BG_LOG!" echo [%date% %time%] AutomaticUp.bat background run completed successfully.
+    exit /b 0
+)
 ping 127.0.0.1 -n 8 >nul
 exit /b 0
