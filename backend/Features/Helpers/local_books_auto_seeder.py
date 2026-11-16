@@ -11,10 +11,11 @@ of every document in the library collection without manual CLI intervention.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from django.conf import settings
 from django.db import transaction
@@ -23,6 +24,212 @@ from django.db.models.signals import post_delete, post_save
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+_LEGACY_OS_POISON_FILENAME = "OPERATING_SYSTEMS_Basic_Fundamentals_to_CPU_Core_Fundamentals_1.pdf"
+_LEGACY_POISON_PATHS = {
+    "e_resources/sample.pdf",
+    "/assets/sample.pdf",
+    "assets/sample.pdf",
+    "sample.pdf",
+}
+_LEGACY_POISON_BASENAMES = {
+    "sample.pdf",
+    _LEGACY_OS_POISON_FILENAME.lower(),
+}
+
+
+def _normalize_tree_file_path(raw_path: str) -> str:
+    clean_path = str(raw_path or "").strip()
+    if clean_path.startswith("/assets/"):
+        return clean_path.replace("/assets/", "e_resources/", 1)
+    if clean_path and not clean_path.startswith("e_resources/"):
+        return f"e_resources/{clean_path.lstrip('/')}"
+    return clean_path
+
+
+def _collect_expected_paths(
+    nodes: List[Dict[str, Any]],
+    parent_dept_name: str = "",
+) -> Tuple[Dict[str, str], Dict[Tuple[str, str], str]]:
+    """
+    Walks eBooksTree.json nodes and builds canonical TreeView file path lookups
+    keyed by node name and by (department_name, node_name).
+    """
+    by_name: Dict[str, str] = {}
+    by_dept_and_name: Dict[Tuple[str, str], str] = {}
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = str(node.get("type", "")).strip().lower()
+        node_name = str(node.get("name", "")).strip()
+        if not node_name:
+            continue
+
+        if node_type in ("directory", "folder"):
+            children = node.get("children", [])
+            if isinstance(children, list) and children:
+                next_dept = "" if (not parent_dept_name and node_name.lower() == "department") else node_name
+                child_by_name, child_by_dept = _collect_expected_paths(children, next_dept)
+                by_name.update(child_by_name)
+                by_dept_and_name.update(child_by_dept)
+        elif node_type == "file":
+            clean_path = _normalize_tree_file_path(str(node.get("path", "")))
+            if clean_path:
+                by_name[node_name] = clean_path
+                if parent_dept_name:
+                    by_dept_and_name[(parent_dept_name.lower(), node_name.lower())] = clean_path
+
+    return by_name, by_dept_and_name
+
+
+def _is_legacy_sample_poisoned(record: Any) -> bool:
+    """
+    Returns True when an active EResourceFile points to sample.pdf or the
+    unrelated OPERATING_SYSTEMS PDF even though its own name is neither.
+    """
+    record_name = str(getattr(record, "name", "") or "").strip()
+    norm_name = record_name.upper().replace("_", " ").replace("-", " ")
+    if record_name.lower() == "sample.pdf" or ("OPERATING" in norm_name and "SYSTEMS" in norm_name):
+        return False
+
+    raw_file = getattr(record, "file", "")
+    file_path = str(getattr(raw_file, "name", None) or raw_file or "").replace("\\", "/").strip()
+    if not file_path:
+        return False
+
+    lower_file = file_path.lower()
+    basename = os.path.basename(lower_file.rstrip("/"))
+    return lower_file in _LEGACY_POISON_PATHS or basename in _LEGACY_POISON_BASENAMES
+
+
+def _resolve_canonical_tree_path(
+    record: Any,
+    expected_paths_by_name: Dict[str, str],
+    expected_paths_by_dept_and_name: Optional[Dict[Tuple[str, str], str]] = None,
+) -> Optional[str]:
+    """Resolves the canonical TreeView e_resources path for a poisoned EResourceFile."""
+    record_name = str(getattr(record, "name", "") or "").strip()
+    if not record_name:
+        return None
+
+    dept_name = str(getattr(getattr(record, "department", None), "name", "") or "").strip().lower()
+    if expected_paths_by_dept_and_name and dept_name:
+        dept_match = expected_paths_by_dept_and_name.get((dept_name, record_name.lower()))
+        if dept_match:
+            return dept_match
+
+    direct = expected_paths_by_name.get(record_name)
+    if direct:
+        return direct
+
+    lower_target = record_name.lower()
+    stem_lower = os.path.splitext(lower_target)[0]
+    for candidate_name, candidate_path in expected_paths_by_name.items():
+        cand_lower = candidate_name.lower()
+        if cand_lower == lower_target or os.path.splitext(cand_lower)[0] == stem_lower:
+            return candidate_path
+
+    # Unique prefix match for legacy truncated daemon names (e.g. missing '-author-...')
+    prefix_matches = [
+        candidate_path
+        for candidate_name, candidate_path in expected_paths_by_name.items()
+        if stem_lower and candidate_name.lower().startswith(f"{stem_lower}-")
+    ]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+
+    return None
+
+
+@contextmanager
+def _suspend_timestamp_signals(*models: Any) -> Iterator[None]:
+    """Temporarily disconnects update_global_timestamp during bulk catalog sync/healing."""
+    update_global_timestamp = None
+    try:
+        from Features.signals import update_global_timestamp as handler
+
+        update_global_timestamp = handler
+        for model in models:
+            post_save.disconnect(update_global_timestamp, sender=model)
+            post_delete.disconnect(update_global_timestamp, sender=model)
+    except Exception:
+        update_global_timestamp = None
+
+    try:
+        yield
+    finally:
+        if update_global_timestamp is not None:
+            for model in models:
+                post_save.connect(update_global_timestamp, sender=model)
+                post_delete.connect(update_global_timestamp, sender=model)
+
+
+def _heal_legacy_sample_poisoning(
+    expected_paths_by_name: Dict[str, str],
+    expected_paths_by_dept_and_name: Optional[Dict[Tuple[str, str], str]] = None,
+) -> int:
+    """
+    Detects active EResourceFile records whose .file was poisoned to sample.pdf or
+    OPERATING_SYSTEMS_Basic_Fundamentals_to_CPU_Core_Fundamentals_1.pdf, restores
+    their canonical TreeView .file path, and re-extracts or re-synthesizes knowledge.
+    """
+    from Features.Data.Models.eresource_model import EResourceDepartment, EResourceFile
+    from Features.management.commands.extract_file_knowledge import process_single_eresource_file
+
+    poisoned_records: List[Tuple[Any, str]] = []
+    for record in EResourceFile.objects.filter(is_active=True):
+        if not _is_legacy_sample_poisoned(record):
+            continue
+        canonical_path = _resolve_canonical_tree_path(
+            record,
+            expected_paths_by_name,
+            expected_paths_by_dept_and_name,
+        )
+        if canonical_path:
+            poisoned_records.append((record, canonical_path))
+
+    if not poisoned_records:
+        return 0
+
+    healed_count = 0
+    with _suspend_timestamp_signals(EResourceDepartment, EResourceFile):
+        for record, canonical_path in poisoned_records:
+            try:
+                update_fields = ["file"]
+                record.file = canonical_path
+                for text_field in ("extracted_text", "summary", "table_of_contents", "keywords"):
+                    if hasattr(record, text_field):
+                        setattr(record, text_field, "")
+                        update_fields.append(text_field)
+                if hasattr(record, "ocr_status"):
+                    record.ocr_status = "pending"
+                    update_fields.append("ocr_status")
+                if hasattr(record, "ocr_processed_at"):
+                    record.ocr_processed_at = None
+                    update_fields.append("ocr_processed_at")
+
+                with transaction.atomic():
+                    record.save(update_fields=update_fields)
+
+                process_single_eresource_file(record, synthesize_when_missing=True)
+                healed_count += 1
+            except Exception as heal_err:
+                logger.warning(
+                    "[AutoSeeder] Failed healing legacy sample poisoning for '%s': %s",
+                    getattr(record, "name", "?"),
+                    heal_err,
+                )
+
+    if healed_count > 0:
+        try:
+            from django.core.cache import cache
+            cache.delete("rizal_institution_context")
+        except Exception:
+            pass
+        logger.info("[AutoSeeder] Healed %d legacy sample.pdf/OPERATING_SYSTEMS poisoned record(s).", healed_count)
+
+    return healed_count
 
 
 def _count_tree_files(nodes: List[Dict[str, Any]]) -> int:
@@ -76,6 +283,11 @@ def auto_seed_local_books_catalog(force: bool = False, extract_pdfs_sync: bool =
 
     root_nodes: List[Dict[str, Any]] = tree_data if isinstance(tree_data, list) else [tree_data]
     expected_file_count = _count_tree_files(root_nodes)
+    expected_paths_by_name, expected_paths_by_dept_and_name = _collect_expected_paths(root_nodes)
+    healed_count = _heal_legacy_sample_poisoning(
+        expected_paths_by_name,
+        expected_paths_by_dept_and_name,
+    )
 
     existing_count = EResourceFile.objects.filter(is_active=True).count()
     if expected_file_count > 0 and existing_count >= expected_file_count and not force:
@@ -84,7 +296,7 @@ def auto_seed_local_books_catalog(force: bool = False, extract_pdfs_sync: bool =
             existing_count,
             expected_file_count,
         )
-        return 0
+        return healed_count
 
     logger.info(
         "[AutoSeeder] Synchronizing local eBooks collection (%d existing / %d expected)...",
@@ -93,14 +305,6 @@ def auto_seed_local_books_catalog(force: bool = False, extract_pdfs_sync: bool =
     )
 
     seeded_count = 0
-
-    try:
-        from Features.signals import update_global_timestamp
-        for m in (EResourceDepartment, EResourceFile):
-            post_save.disconnect(update_global_timestamp, sender=m)
-            post_delete.disconnect(update_global_timestamp, sender=m)
-    except Exception:
-        update_global_timestamp = None
 
     def _get_or_create_dept(name: str, parent: Optional[EResourceDepartment]) -> EResourceDepartment:
         existing_dept = EResourceDepartment.objects.filter(name__iexact=name, parent=parent).first()
@@ -143,12 +347,7 @@ def auto_seed_local_books_catalog(force: bool = False, extract_pdfs_sync: bool =
                 if not parent_dept:
                     parent_dept = _get_or_create_dept("General Collection", None)
 
-                raw_path = str(node.get("path", "")).strip()
-                clean_path = raw_path
-                if clean_path.startswith("/assets/"):
-                    clean_path = clean_path.replace("/assets/", "e_resources/", 1)
-                elif clean_path and not clean_path.startswith("e_resources/"):
-                    clean_path = f"e_resources/{clean_path.lstrip('/')}"
+                clean_path = _normalize_tree_file_path(str(node.get("path", "")))
 
                 stem_name = os.path.splitext(node_name)[0]
                 existing_file = (
@@ -217,13 +416,8 @@ def auto_seed_local_books_catalog(force: bool = False, extract_pdfs_sync: bool =
                         save_err,
                     )
 
-    try:
+    with _suspend_timestamp_signals(EResourceDepartment, EResourceFile):
         _traverse_and_seed(root_nodes)
-    finally:
-        if update_global_timestamp is not None:
-            for m in (EResourceDepartment, EResourceFile):
-                post_save.connect(update_global_timestamp, sender=m)
-                post_delete.connect(update_global_timestamp, sender=m)
 
     try:
         from django.core.cache import cache

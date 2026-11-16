@@ -672,6 +672,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      await ensureCsrfToken();
       await contactApi.submitContactMessage({
         message_type: 'CREDENTIAL_REQUEST',
         name: formName,
@@ -1001,7 +1002,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  maxLength={500}
+                  maxLength={4000}
                   placeholder={isTyping ? "Type your next message..." : "Ask me anything..."}
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-navy-mid/30 focus:ring-1 focus:ring-navy-mid/30 transition-all"
                 />

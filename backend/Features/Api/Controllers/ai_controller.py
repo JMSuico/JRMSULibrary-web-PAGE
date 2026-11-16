@@ -6,8 +6,8 @@ import bleach
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db import close_old_connections, connection
 from django.http import StreamingHttpResponse
-from rest_framework.throttling import ScopedRateThrottle
 from Features.Services.Implementations.ai_service import AIService
 
 
@@ -16,8 +16,6 @@ class AIViewSet(viewsets.ViewSet):
     ViewSet for handling AI Chatbot interactions with Daphne ASGI streaming responses.
     """
     permission_classes = [permissions.AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'chat'  # Prevent abuse of the AI generation endpoint
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -44,8 +42,8 @@ class AIViewSet(viewsets.ViewSet):
         if not user_message:
             return Response({'error': 'Message cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
             
-        if len(user_message) > 500:
-            return Response({'error': 'Message exceeds the maximum limit of 500 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(user_message) > 4000:
+            return Response({'error': 'Message exceeds the maximum limit of 4000 characters.'}, status=status.HTTP_400_BAD_REQUEST)
             
         validated_history = []
         if isinstance(chat_history, list):
@@ -73,13 +71,17 @@ class AIViewSet(viewsets.ViewSet):
 
             def sync_worker():
                 try:
+                    close_old_connections()
                     for chunk in self.service.generate_chat_stream(user_message, validated_history, seen_answers):
                         if chunk:
                             loop.call_soon_threadsafe(queue.put_nowait, chunk)
                 except Exception as e:
                     loop.call_soon_threadsafe(queue.put_nowait, f"\n[AI Error: {str(e)}]")
                 finally:
-                    loop.call_soon_threadsafe(queue.put_nowait, None)
+                    try:
+                        connection.close()
+                    finally:
+                        loop.call_soon_threadsafe(queue.put_nowait, None)
 
             # Run Ollama blocking generator in thread pool
             loop.run_in_executor(None, sync_worker)

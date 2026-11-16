@@ -34,6 +34,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
   const [pageNumber, setPageNumber] = useState(1);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<any>(null);
+  const loadingTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
 
@@ -70,26 +71,56 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
       document.body.style.overflow = '';
-      if (renderTaskRef.current) {
-        try {
-          renderTaskRef.current.cancel();
-        } catch {
-          // ignore
-        }
-      }
     };
   }, [onClose]);
 
   useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+    setHtmlContent(null);
+    setPdfDoc(null);
+
+    const loadPdf = async (url: string) => {
+      try {
+        if (loadingTaskRef.current) {
+          try {
+            Promise.resolve(loadingTaskRef.current.destroy()).catch(() => {});
+          } catch {
+            // ignore
+          }
+          loadingTaskRef.current = null;
+        }
+        const loadingTask = pdfjsLib.getDocument({ url });
+        loadingTaskRef.current = loadingTask;
+        const pdf = await loadingTask.promise;
+        if (!isMounted) {
+          try {
+            Promise.resolve(loadingTask.destroy()).catch(() => {});
+          } catch {
+            // ignore
+          }
+          return;
+        }
+        setPdfDoc(pdf);
+        setNumPages(pdf.numPages);
+        setPageNumber(1);
+        setLoading(false);
+      } catch (err: any) {
+        if (!isMounted) return;
+        setError('Failed to load PDF document.');
+        setLoading(false);
+      }
+    };
+
     const fetchPreview = async () => {
-      setLoading(true);
-      setError(null);
       try {
         const result = await apiClient(`/research-references/${referenceId}/preview/`);
+        if (!isMounted) return;
 
         if (result.redirect) {
           // It's a PDF, load the URL via PDF.js
-          loadPdf(result.redirect);
+          await loadPdf(result.redirect);
         } else if (result.html) {
           // It's a Docx converted to HTML
           setHtmlContent(result.html);
@@ -99,35 +130,54 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
           setLoading(false);
         }
       } catch (err: any) {
+        if (!isMounted) return;
         setError(err.message || 'Failed to load document preview.');
         setLoading(false);
       }
     };
 
     fetchPreview();
+
+    return () => {
+      isMounted = false;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // ignore
+        }
+        renderTaskRef.current = null;
+      }
+      if (loadingTaskRef.current) {
+        try {
+          Promise.resolve(loadingTaskRef.current?.destroy()).catch(() => {});
+        } catch {
+          // ignore
+        }
+        loadingTaskRef.current = null;
+      }
+    };
   }, [referenceId]);
 
-  const loadPdf = async (url: string) => {
-    try {
-      const loadingTask = pdfjsLib.getDocument({ url });
-      const pdf = await loadingTask.promise;
-      setPdfDoc(pdf);
-      setNumPages(pdf.numPages);
-      setPageNumber(1);
-      setLoading(false);
-    } catch (err: any) {
-      setError('Failed to load PDF document.');
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isCancelled = false;
     if (pdfDoc && canvasRef.current) {
-      renderPage(pageNumber);
+      renderPage(pageNumber, () => isCancelled);
     }
+    return () => {
+      isCancelled = true;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // ignore
+        }
+        renderTaskRef.current = null;
+      }
+    };
   }, [pdfDoc, pageNumber]);
 
-  const renderPage = async (num: number) => {
+  const renderPage = async (num: number, isCancelled: () => boolean = () => false) => {
     if (!pdfDoc || !canvasRef.current) return;
 
     try {
@@ -137,9 +187,11 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
         } catch {
           // Ignore cancellation
         }
+        renderTaskRef.current = null;
       }
 
       const page = await pdfDoc.getPage(num);
+      if (isCancelled() || !canvasRef.current) return;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -162,6 +214,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
       const renderTask = page.render(renderContext);
       renderTaskRef.current = renderTask;
       await renderTask.promise;
+      if (isCancelled()) return;
 
       // Institutional Watermark directly drawn onto Canvas
       ctx.save();
@@ -175,7 +228,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
       ctx.fillText('JRMSU KATIPUNAN CAMPUS LIBRARY • OFFICIAL READ-ONLY PATRON COPY • DO NOT DISTRIBUTE', 0, 0);
       ctx.restore();
     } catch (err: any) {
-      if (err?.name !== 'RenderingCancelledException') {
+      if (err?.name !== 'RenderingCancelledException' && !isCancelled()) {
         console.error('Error rendering page:', err);
       }
     }

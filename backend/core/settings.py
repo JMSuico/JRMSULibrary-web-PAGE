@@ -56,15 +56,24 @@ if _env_file.exists():
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("SECRET_KEY")
-if not DEBUG and not SECRET_KEY:
-    from django.core.exceptions import ImproperlyConfigured
-    raise ImproperlyConfigured("SECRET_KEY environment variable must be set when DEBUG=False.")
+SECRET_KEY = (os.environ.get("SECRET_KEY") or os.environ.get("DJANGO_SECRET_KEY") or "").strip()
+if not DEBUG:
+    if not SECRET_KEY or SECRET_KEY.startswith("django-insecure-"):
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "SECRET_KEY (or DJANGO_SECRET_KEY) environment variable must be set and must not start with 'django-insecure-' when DEBUG=False."
+        )
 elif not SECRET_KEY:
     SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
 
 _raw_allowed_hosts = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1")
 ALLOWED_HOSTS = [h.strip() for h in _raw_allowed_hosts.split(",") if h.strip()]
+_allow_wildcard_host = os.environ.get("ALLOW_WILDCARD_HOST", "False").lower() in ("true", "1", "yes")
+if not DEBUG and "*" in ALLOWED_HOSTS and not _allow_wildcard_host:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        "Wildcard '*' in ALLOWED_HOSTS is not permitted when DEBUG=False unless ALLOW_WILDCARD_HOST=True is explicitly set."
+    )
 
 
 # Application definition
@@ -185,6 +194,8 @@ elif DB_ENGINE == "postgresql":
             "PASSWORD": os.environ.get("DB_PASSWORD", ""),
             "HOST": os.environ.get("DB_HOST", "localhost"),
             "PORT": os.environ.get("DB_PORT", "5432"),
+            "CONN_MAX_AGE": 60,
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 
@@ -240,10 +251,48 @@ AUTH_USER_MODEL = "Features.Account"
 
 # CORS settings - Permanently allow any local IP for Docker/Wi-Fi hosting
 _env_origins = os.environ.get("ALLOWED_CORS_ORIGINS", "")
-_allowed_origins = _env_origins + ",http://localhost:3000,http://localhost:3001,http://localhost:5173,https://page.jrmsukc-library.online,https://admin.jrmsukc-library.online,https://jrmsukc-library.online,https://*.jrmsukc-library.online,https://www.jrmsukclibrary.com,https://jrmsukclibrary.com,https://*.workers.dev,https://*.trycloudflare.com"
+_allow_dev_tunnel_origins = os.environ.get("ALLOW_DEV_TUNNEL_ORIGINS", "False").lower() == "true"
 
-# Fallback: specific domains
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip() and origin.strip() != '*']
+_base_cors_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "https://page.jrmsukc-library.online",
+    "https://admin.jrmsukc-library.online",
+    "https://jrmsukc-library.online",
+    "https://*.jrmsukc-library.online",
+    "https://www.jrmsukclibrary.com",
+    "https://jrmsukclibrary.com",
+]
+_dev_tunnel_cors_origins = [
+    "https://*.workers.dev",
+    "https://*.trycloudflare.com",
+]
+_dev_tunnel_csrf_origins = [
+    "https://*.trycloudflare.com",
+    "https://*.cloudflare.com",
+    "https://*.workers.dev",
+    "https://*.ngrok-free.dev",
+    "https://*.ngrok-free.app",
+    "https://*.ngrok.io",
+    "https://*.ngrok.app",
+    "https://dosage-dormitory-shadily.ngrok-free.dev",
+]
+
+_env_origin_list = [
+    origin.strip()
+    for origin in _env_origins.split(",")
+    if origin.strip() and origin.strip() != "*"
+]
+
+# Fallback: specific domains (temporary tunnel wildcards gated behind ALLOW_DEV_TUNNEL_ORIGINS=True)
+CORS_ALLOWED_ORIGINS = list(
+    dict.fromkeys(
+        _env_origin_list
+        + _base_cors_origins
+        + (_dev_tunnel_cors_origins if _allow_dev_tunnel_origins else [])
+    )
+)
 
 # SECURE FIX: Only allow private local network IP addresses (LAN) for local Wi-Fi testing.
 # This strictly prevents malicious external websites from making cross-origin requests.
@@ -256,26 +305,24 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-# Trust any origin for CSRF since we are local hosting
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS + [
-    "http://127.0.0.1", 
-    "http://localhost",
-    "https://page.jrmsukc-library.online",
-    "https://admin.jrmsukc-library.online",
-    "https://jrmsukc-library.online",
-    "https://*.jrmsukc-library.online",
-    "https://www.jrmsukclibrary.com",
-    "https://jrmsukclibrary.com",
-    "https://*.jrmsukclibrary.com",
-    "https://*.trycloudflare.com",
-    "https://*.cloudflare.com",
-    "https://*.workers.dev",
-    "https://*.ngrok-free.dev",
-    "https://*.ngrok-free.app",
-    "https://*.ngrok.io",
-    "https://*.ngrok.app",
-    "https://dosage-dormitory-shadily.ngrok-free.dev"
-]
+# Explicit production + localhost CSRF origins; tunnel wildcards only when ALLOW_DEV_TUNNEL_ORIGINS=True
+CSRF_TRUSTED_ORIGINS = list(
+    dict.fromkeys(
+        CORS_ALLOWED_ORIGINS
+        + [
+            "http://127.0.0.1",
+            "http://localhost",
+            "https://page.jrmsukc-library.online",
+            "https://admin.jrmsukc-library.online",
+            "https://jrmsukc-library.online",
+            "https://*.jrmsukc-library.online",
+            "https://www.jrmsukclibrary.com",
+            "https://jrmsukclibrary.com",
+            "https://*.jrmsukclibrary.com",
+        ]
+        + (_dev_tunnel_csrf_origins if _allow_dev_tunnel_origins else [])
+    )
+)
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -287,35 +334,26 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
-    # NOTE: No DEFAULT_THROTTLE_CLASSES — throttling is applied per-view only (login, contact, feedback, chat)
+    # NOTE: No DEFAULT_THROTTLE_CLASSES — throttling is applied per-view only (login, feedback)
     # This prevents the '1999 seconds' error on collection browsing pages for anonymous users on Wi-Fi.
     "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
     "DEFAULT_THROTTLE_RATES": {
         "anon": "5000/hour",       # Anonymous browsing (Local Books, Online Access)
         "user": "10000/hour",      # Authenticated admin users
-        "contact": "200/hour",     # Contact form submissions
         "login": "10/minute",      # Login attempts
-        "chat": "200/hour",        # AI chat
         "feedback": "30/hour",     # Feedback form
-        "analytics_track": "5/hour" # Analytics tracking
     }
 }
 
 # Security Headers (Always Active)
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = 'DENY'
+X_FRAME_OPTIONS = 'SAMEORIGIN'
 SESSION_COOKIE_HTTPONLY = True
 
-# Production Security Settings
-if not DEBUG:
-    _ssl_enabled = os.environ.get("DISABLE_SSL_REDIRECT", "False").lower() not in ("true", "1", "yes")
-    SECURE_SSL_REDIRECT = _ssl_enabled
-    SESSION_COOKIE_SECURE = _ssl_enabled
-    CSRF_COOKIE_SECURE = _ssl_enabled
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+# Production HTTPS & Cookie Security Settings
+_disable_ssl_redirect = os.environ.get("DISABLE_SSL_REDIRECT", "False").lower() in ("true", "1", "yes")
+_use_https = (not DEBUG) and (not _disable_ssl_redirect)
 
 # FIX: Do NOT expire session on browser close.
 # Mobile browsers treat tab-switching as browser close, killing the session and triggering
@@ -325,22 +363,29 @@ if not DEBUG:
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_COOKIE_AGE = 28800  # 8 hours
 
-# For Cross-Origin Authentication (Vercel -> Render)
-if os.environ.get("DISABLE_SSL_REDIRECT", "False").lower() in ("true", "1", "yes"):
-    # If SSL is disabled (like in local WiFi dev), disable Secure cookies
-    # and use Lax so they work over standard HTTP.
-    SESSION_COOKIE_SAMESITE = 'Lax'
-    CSRF_COOKIE_SAMESITE = 'Lax'
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
-else:
-    SESSION_COOKIE_SAMESITE = 'None'
-    CSRF_COOKIE_SAMESITE = 'None'
+if _use_https:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-
-# Trust Render's proxy so Django will actually set Secure=True cookies
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # Keep SameSite='Lax' by default; set CROSS_SITE_COOKIES=True only when frontend/backend
+    # are hosted on separate eTLD+1 domains (e.g. Vercel -> Render).
+    _cross_site_cookies = os.environ.get("CROSS_SITE_COOKIES", "False").lower() in ("true", "1", "yes")
+    _samesite = "None" if _cross_site_cookies else "Lax"
+    SESSION_COOKIE_SAMESITE = _samesite
+    CSRF_COOKIE_SAMESITE = _samesite
+    # Trust reverse proxy TLS header only when HTTPS is enabled
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+else:
+    # Local HTTP / Docker LAN mode (DEBUG=True or DISABLE_SSL_REDIRECT=True)
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_PROXY_SSL_HEADER = None
 
 # Timezone (Philippine Time)
 TIME_ZONE = "Asia/Manila"
@@ -439,6 +484,9 @@ CELERY_TIMEZONE = 'Asia/Manila'
 # Prevent 500 Internal Server errors when Redis is not running (e.g. Render deployments)
 if os.environ.get('USE_CELERY', 'False').lower() != 'true':
     CELERY_TASK_ALWAYS_EAGER = True
+
+# Ollama AI request timeout (seconds)
+OLLAMA_REQUEST_TIMEOUT = float(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "300"))
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "JRMSU Library API",

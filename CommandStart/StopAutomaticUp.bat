@@ -117,7 +117,8 @@ echo [CONFIGURING] Restoring system to MANUAL running mode...
 
 :: Remove Registry Auto-Start
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /f >nul 2>&1
-echo [OK] Windows Registry Run key removed.
+reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "JRMSU_Library_System" /f >nul 2>&1
+echo [OK] Windows Registry Run keys removed.
 
 :: Remove Startup Folder Launchers
 del "%STARTUP_FOLDER%\JRMSU_Library_AutoStart.bat" >nul 2>&1
@@ -130,7 +131,19 @@ echo [CONFIGURING] Deactivating 24/7 Watchdog monitor...
 schtasks /delete /tn "JRMSU_Library_247_Watchdog" /f >nul 2>&1
 del "%APPDATA%\JRMSULibrary\Watchdog.bat" >nul 2>&1
 del "%APPDATA%\JRMSULibrary\Watchdog.vbs" >nul 2>&1
+del "%APPDATA%\JRMSULibrary\SilentLaunch.vbs" >nul 2>&1
 echo [OK] 24/7 Watchdog monitor deactivated.
+
+:: Restore previous AC Sleep / Hibernate timeouts if backed up by AutomaticUp.bat
+set "POWER_BACKUP_FILE=%APPDATA%\JRMSULibrary\PreviousPowerPolicy.txt"
+if exist "!POWER_BACKUP_FILE!" (
+    for /f "usebackq tokens=1,2 delims=," %%A in ("!POWER_BACKUP_FILE!") do (
+        if not "%%~A"=="" powercfg -change -standby-timeout-ac %%~A >nul 2>&1
+        if not "%%~B"=="" powercfg -change -hibernate-timeout-ac %%~B >nul 2>&1
+    )
+    del /f /q "!POWER_BACKUP_FILE!" >nul 2>&1
+    echo [OK] Previous Windows AC sleep/hibernate power timeouts restored.
+)
 
 :: Also clean up any lingering old SilentStartDockerWSL.vbs
 set "OLD_BROKEN_VBS=%STARTUP_FOLDER%\SilentStartDockerWSL.vbs"

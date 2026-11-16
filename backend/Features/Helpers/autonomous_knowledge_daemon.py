@@ -11,8 +11,8 @@ Core Capabilities:
 2. Periodic Sweep Loop: Every 5 minutes, checks for newly uploaded or unindexed documents.
 3. Event-Driven Wakeup: Provides `AutonomousKnowledgeDaemon.trigger_now()` so API upload endpoints
    and bulk import handlers can immediately request an ingestion pass without waiting for the timer.
-4. Local Book / Static Asset Auto-Registration: Verifies files in `frontend/public/assets` and
-   `media/e_resources/` (such as `sample.pdf` / `Basic-Agriculture`), ensuring they are indexed
+4. Local Book / Static Asset Auto-Registration: Verifies mounted physical files in
+   `frontend/public/assets`, `frontend/src/Assets/assets`, and `media/e_resources/`, ensuring they are indexed
    in the database so Dr. Rizal AI Chatbot can ground answers on them.
 5. In-flight Lock & Connection Safety: Closes thread-local database connections on each pass to
    prevent connection pool starvation.
@@ -21,10 +21,8 @@ Core Capabilities:
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -142,64 +140,59 @@ class AutonomousKnowledgeDaemon:
 
     def _auto_register_local_book_assets(self) -> None:
         """
-        Auto-registers verified local book files (such as sample.pdf / 01.-Basic-Agriculture)
-        into the database if they are not already indexed.
+        Auto-registers verified local book files on disk into the database
+        if they are not already indexed. Never binds unrelated books to sample assets.
         """
         try:
             from Features.Data.Models.eresource_model import EResourceFile, EResourceDepartment
-            from django.conf import settings
+            from Features.management.commands.extract_file_knowledge import (
+                process_single_eresource_file,
+                resolve_file_on_disk,
+            )
 
-            base_dir = getattr(settings, 'BASE_DIR', None)
-            candidates: List[Dict[str, str]] = [
+            candidates: List[Dict[str, Any]] = [
                 {
-                    'name': '01.-Basic-Agriculture.-Student-Handbook.pdf',
-                    'title': 'Basic Agriculture Student Handbook',
+                    'name': '01.-Basic-Agriculture.-Student-Handbook-author-Shiksha-Kendra.pdf',
+                    'alt_names': ['01.-Basic-Agriculture.-Student-Handbook.pdf'],
                     'dept': 'AGRI',
                     'rel_paths': [
-                        'frontend/public/assets/sample.pdf',
-                        'media/e_resources/01_Sx6iwPc.-Basic-Agriculture.-Student-Handbook-author-Shiksha-Kendra.pdf',
-                        'media/e_resources/OPERATING_SYSTEMS_Basic_Fundamentals_to_CPU_Core_Fundamentals_1.pdf'
-                    ]
+                        'e_resources/eBooks/Department/AGRI/BS Agriculture/01.-Basic-Agriculture.-Student-Handbook-author-Shiksha-Kendra.pdf',
+                        'e_resources/01_Sx6iwPc.-Basic-Agriculture.-Student-Handbook-author-Shiksha-Kendra.pdf',
+                        'e_resources/01.-Basic-Agriculture.-Student-Handbook.pdf',
+                    ],
                 }
             ]
 
             for cand in candidates:
-                # Find physical file on disk
-                resolved_path: Optional[str] = None
+                # Only register if an actual matching Agriculture PDF exists on disk
+                matched_db_path: Optional[str] = None
                 for rel in cand['rel_paths']:
-                    full = os.path.normpath(os.path.join(str(base_dir), "..", rel)) if base_dir else rel
-                    if os.path.exists(full) and os.path.isfile(full):
-                        resolved_path = full
-                        break
-                    alt = os.path.normpath(os.path.join(str(base_dir), rel)) if base_dir else rel
-                    if os.path.exists(alt) and os.path.isfile(alt):
-                        resolved_path = alt
+                    if resolve_file_on_disk(rel):
+                        matched_db_path = rel
                         break
 
-                if not resolved_path:
+                if not matched_db_path:
                     continue
 
                 dept, _ = EResourceDepartment.objects.get_or_create(
                     name=cand['dept'],
                     parent=None,
-                    defaults={'order': 1}
+                    defaults={'order': 1},
                 )
 
-                # Check if already registered
-                record = EResourceFile.objects.filter(name=cand['name']).first()
+                candidate_names = [cand['name'], *cand.get('alt_names', [])]
+                record = EResourceFile.objects.filter(name__in=candidate_names).first()
                 if not record:
                     logger.info("[KnowledgeDaemon] Auto-registering local collection book: %s", cand['name'])
                     record = EResourceFile.objects.create(
                         name=cand['name'],
-                        file='e_resources/sample.pdf',
+                        file=matched_db_path,
                         department=dept,
                         is_active=True,
-                        ocr_status='pending'
+                        ocr_status='pending',
                     )
 
-                # If pending or not extracted, extract immediately
                 if getattr(record, 'ocr_status', None) != 'completed' or not getattr(record, 'extracted_text', ''):
-                    from Features.management.commands.extract_file_knowledge import process_single_eresource_file
                     process_single_eresource_file(record)
 
         except Exception as e:
@@ -275,18 +268,17 @@ class AutonomousKnowledgeDaemon:
 
         def _process(book):
             ok = process_single_eresource_file(book)
-            if not ok and (not getattr(book, 'summary', None) or not getattr(book, 'table_of_contents', None)):
-                from Features.Helpers.ocr_text_extractor import OCRTextExtractor
-                from Features.Helpers.ai_read_view_helper import AIReadViewHelper
-                breadcrumb = AIReadViewHelper._extract_file_breadcrumb(book)
-                synth = OCRTextExtractor.synthesize_domain_knowledge(getattr(book, 'name', ''), breadcrumb)
-                book.summary = synth.get('summary', '')
-                book.table_of_contents = synth.get('table_of_contents', '')
-                book.keywords = synth.get('keywords', '')
-                book.ocr_status = 'completed'
-                from django.utils import timezone
-                book.ocr_processed_at = timezone.now()
-                book.save(update_fields=['summary', 'table_of_contents', 'keywords', 'ocr_status', 'ocr_processed_at'])
+            if not ok:
+                from Features.management.commands.extract_file_knowledge import (
+                    _synthesize_missing_eresource_knowledge,
+                    resolve_file_on_disk,
+                )
+                if (
+                    not getattr(book, 'summary', None)
+                    or not getattr(book, 'table_of_contents', None)
+                    or not resolve_file_on_disk(getattr(book, 'file', None))
+                ):
+                    _synthesize_missing_eresource_knowledge(book)
 
         self._drain_pending_queryset(_fetch, _process, "EResourceFile")
 

@@ -38,7 +38,7 @@ export function mapLinksToTree(links: ManagedLink[]): TreeNodeData[] {
 }
 
 export function resolveResourceFilePath(rawPath: string | null | undefined): string {
-  if (!rawPath) return '/assets/sample.pdf';
+  if (!rawPath) return '';
   
   // If already a full URL (e.g. S3, Supabase, or external proxy)
   if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {

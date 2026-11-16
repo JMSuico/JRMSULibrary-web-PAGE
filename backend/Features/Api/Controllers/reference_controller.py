@@ -96,7 +96,7 @@ class ResearchReferenceViewSet(viewsets.ViewSet):
 
     @action(detail=True, methods=['get'], url_path='preview', permission_classes=[AllowAny])
     def preview(self, request, pk=None):
-        ref = self.service.repo.get_by_id(pk)
+        ref = self.service.get_reference_model_by_id(pk)
         if not ref or not ref.access_file:
             return Response({'detail': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
         

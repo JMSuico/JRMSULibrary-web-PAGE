@@ -11,6 +11,24 @@ import { usePdfExport } from '@/src/Hooks/usePdfExport';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
+const CSV_FORMULA_PREFIX_RE = /^[=+\-@\t\r]/;
+const CSV_TRIMMED_FORMULA_PREFIX_RE = /^[=+\-@]/;
+
+/**
+ * Neutralizes spreadsheet formula injection (CSV/DDE) and escapes embedded
+ * double quotes before wrapping the value in double quotes.
+ */
+export function sanitizeCsvCell(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '""';
+  }
+  let text = String(value);
+  if (CSV_FORMULA_PREFIX_RE.test(text) || CSV_TRIMMED_FORMULA_PREFIX_RE.test(text.trimStart())) {
+    text = `'${text}`;
+  }
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export function Reports() {
   const [reportType, setReportType] = useState('summary');
   const [dateRange, setDateRange] = useState('this-month');
@@ -157,17 +175,17 @@ export function Reports() {
   const handleExportCSV = () => {
     if (!reportData) return;
 
-    const rows: string[][] = [];
+    const rows: unknown[][] = [];
     rows.push(['JRMSU Katipunan Campus Library - Report']);
     const rType = activeReportInfo?.type || reportType;
     const rPeriod = activeReportInfo?.period || dateRange;
     rows.push([`Report Type: ${rType}`, `Period: ${rPeriod.replace('-', ' ').toUpperCase()}`]);
     rows.push([]);
     rows.push(['Metric', 'Value']);
-    rows.push(['Total Visits', String(reportData.total_visits)]);
-    rows.push(['Total Books', String(reportData.total_books)]);
-    rows.push(['Total Emails', String(reportData.total_emails)]);
-    rows.push(['Total Reservations', String(reportData.total_reservations)]);
+    rows.push(['Total Visits', reportData.total_visits]);
+    rows.push(['Total Books', reportData.total_books]);
+    rows.push(['Total Emails', reportData.total_emails]);
+    rows.push(['Total Reservations', reportData.total_reservations]);
     rows.push(['Average Rating', `${reportData.ratings_summary.average_rating} / 5`]);
     rows.push([]);
 
@@ -188,12 +206,13 @@ export function Reports() {
       });
     }
 
-    const csvContent = rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+    const csvContent = rows.map(r => r.map(sanitizeCsvCell).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+    const safePeriod = String(rPeriod).replace(/[^a-zA-Z0-9_-]/g, '_');
     link.href = url;
-    link.download = `jrmsu-library-report-${rPeriod}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `jrmsu-library-report-${safePeriod}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     showToast('CSV exported successfully', 'success');

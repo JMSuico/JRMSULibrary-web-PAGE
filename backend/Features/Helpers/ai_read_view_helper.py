@@ -9,6 +9,7 @@ or admin PII tables).
 """
 
 import html
+import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -1198,37 +1199,88 @@ class AIReadViewHelper:
         parts = [p for p in [head, mid, tail] if p]
         return " [...] ".join(parts)[:max_chars]
 
+    @staticmethod
+    def _normalize_doc_text(text: Any) -> str:
+        """Normalizes Unicode smart quotes/dashes to ASCII equivalents and lowercases text."""
+        s = str(text or "")
+        s = (
+            s.replace("\u2018", "'")
+            .replace("\u2019", "'")
+            .replace("\u201c", '"')
+            .replace("\u201d", '"')
+            .replace("\u2013", "-")
+            .replace("\u2014", "-")
+            .replace("\u2212", "-")
+        )
+        return s.lower().strip()
+
+    @staticmethod
+    def _compact_doc_punctuation(text: str) -> str:
+        """Collapses whitespace around '.', '-', '_' so spaced filenames match canonical filenames."""
+        collapsed = re.sub(r"\s*([.\-_])\s*", r"\1", text)
+        return re.sub(r"\s+", " ", collapsed).strip()
+
     @classmethod
-    def match_and_format_file_knowledge(
+    def _extract_doc_name(cls, doc: Any) -> str:
+        """Extracts a document's display name or title, falling back safely to its file basename."""
+        name_str = str(getattr(doc, "name", "") or getattr(doc, "title", "") or "").strip()
+        if not name_str:
+            file_field = getattr(doc, "file", None) or getattr(doc, "access_file", None)
+            file_path_val = (
+                file_field
+                if isinstance(file_field, str)
+                else getattr(file_field, "name", None)
+            )
+            if isinstance(file_path_val, str) and file_path_val.strip():
+                name_str = os.path.basename(file_path_val.replace("\\", "/").strip())
+        return name_str
+
+    @staticmethod
+    def _import_ocr_extractor() -> Optional[Any]:
+        """Imports OCRTextExtractor cleanly across both package and standalone test contexts."""
+        try:
+            from Features.Helpers.ocr_text_extractor import OCRTextExtractor
+            return OCRTextExtractor
+        except Exception:
+            try:
+                from .ocr_text_extractor import OCRTextExtractor
+                return OCRTextExtractor
+            except Exception:
+                return None
+
+    @classmethod
+    def match_eresource_files(
         cls,
         files: List[Any],
         query_tokens: List[str],
         raw_query: str = "",
-        limit: int = 3,
-    ) -> str:
+        limit: int = 5,
+    ) -> List[Any]:
         """
-        Matches EResourceFile instances against user query tokens using file name,
-        keywords, summary, table of contents, and full extracted document text.
-
-        Returns a concise, grounded knowledge context string citing:
-          - File name and parent Department breadcrumb
-          - Document summary
-          - Table of contents / chapters
-          - Key topics / concepts covered
-          - Full-text document excerpts
+        Matches and ranks active EResourceFile instances against query tokens and raw query text.
+        Normalizes Unicode punctuation and whitespace around filename delimiters ('.-', '-', '_').
         """
         if not files:
-            return ""
+            return []
+
+        clean_raw = cls._normalize_doc_text(raw_query)
+        clean_raw_compact = cls._compact_doc_punctuation(clean_raw)
+        clean_raw_norm = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", clean_raw)).strip()
 
         effective_tokens = [
-            t.lower()
+            cls._normalize_doc_text(t)
             for t in (query_tokens or [])
-            if t and t.lower() not in cls.STOP_WORDS
+            if t and cls._normalize_doc_text(t) not in cls.STOP_WORDS
         ]
-        clean_raw = (raw_query or "").lower().strip()
+        if not effective_tokens and clean_raw_norm:
+            effective_tokens = [
+                tok
+                for tok in clean_raw_norm.split()
+                if len(tok) > 1 and tok not in cls.STOP_WORDS
+            ]
 
         if not effective_tokens and not clean_raw:
-            return ""
+            return []
 
         scored_files: List[Tuple[float, str, Any]] = []
 
@@ -1236,7 +1288,7 @@ class AIReadViewHelper:
             if getattr(f, "is_active", True) is False:
                 continue
 
-            name_str = str(getattr(f, "name", "") or "").strip()
+            name_str = cls._extract_doc_name(f)
             if not name_str:
                 continue
 
@@ -1274,14 +1326,16 @@ class AIReadViewHelper:
 
             breadcrumb = cls._extract_file_breadcrumb(f)
 
-            name_l = name_str.lower()
-            kw_l = kw_str.lower()
-            summary_l = summary_str.lower()
-            breadcrumb_l = breadcrumb.lower()
-            toc_l = toc_str.lower()
-            topics_l = topics_str.lower()
+            name_l = cls._normalize_doc_text(name_str)
+            name_compact = cls._compact_doc_punctuation(name_l)
+            name_norm = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", name_l)).strip()
+            kw_l = cls._normalize_doc_text(kw_str)
+            summary_l = cls._normalize_doc_text(summary_str)
+            breadcrumb_l = cls._normalize_doc_text(breadcrumb)
+            toc_l = cls._normalize_doc_text(toc_str)
+            topics_l = cls._normalize_doc_text(topics_str)
             full_text_str = str(getattr(f, "extracted_text", "") or "").strip()
-            full_text_l = full_text_str.lower()
+            full_text_l = cls._normalize_doc_text(full_text_str)
 
             name_words = set(re.findall(r"[a-z0-9]+", name_l))
             kw_words = set(re.findall(r"[a-z0-9]+", kw_l))
@@ -1290,9 +1344,13 @@ class AIReadViewHelper:
 
             score = 0.0
 
-            # 1. Exact raw query phrase matching
+            # 1. Exact & delimiter-normalized phrase matching
             if len(clean_raw) >= 3:
-                if clean_raw in name_l:
+                if clean_raw in name_l or (len(name_compact) >= 5 and name_compact in clean_raw_compact):
+                    score += 20.0
+                if len(name_norm) >= 5 and name_norm in clean_raw_norm:
+                    score += 18.0
+                elif len(clean_raw_norm) >= 5 and clean_raw_norm in name_norm:
                     score += 15.0
                 if clean_raw in kw_l:
                     score += 10.0
@@ -1320,14 +1378,45 @@ class AIReadViewHelper:
                 scored_files.append((score, name_l, f))
 
         if not scored_files:
-            return ""
+            return []
 
         scored_files.sort(key=lambda item: (-item[0], item[1]))
-        top_files = [item[2] for item in scored_files[: max(1, limit)]]
+        return [item[2] for item in scored_files[: max(1, limit)]]
+
+    @classmethod
+    def match_and_format_file_knowledge(
+        cls,
+        files: List[Any],
+        query_tokens: List[str],
+        raw_query: str = "",
+        limit: int = 3,
+    ) -> str:
+        """
+        Matches EResourceFile instances against user query tokens using file name,
+        keywords, summary, table of contents, and full extracted document text.
+
+        Returns a concise, grounded knowledge context string citing:
+          - File name and parent Department breadcrumb
+          - Document summary
+          - Table of contents / chapters
+          - Key topics / concepts covered
+          - Full-text document excerpts
+        """
+        top_files = cls.match_eresource_files(
+            files, query_tokens, raw_query=raw_query, limit=limit
+        )
+        if not top_files:
+            return ""
+
+        effective_tokens = [
+            cls._normalize_doc_text(t)
+            for t in (query_tokens or [])
+            if t and cls._normalize_doc_text(t) not in cls.STOP_WORDS
+        ]
 
         lines: List[str] = ["[DOCUMENT & BOOK CONTENT KNOWLEDGE (E-Resource Course Files)]"]
         for f in top_files:
-            name_str = str(getattr(f, "name", "") or "Document").strip()
+            name_str = cls._extract_doc_name(f) or "Document"
             breadcrumb = cls._extract_file_breadcrumb(f)
             entry_lines = [f"- File: '{name_str}' (Department: {breadcrumb})"]
 
@@ -1382,7 +1471,7 @@ class AIReadViewHelper:
         return "\n".join(lines)
 
     @classmethod
-    def find_targeted_document(
+    def _resolve_targeted_document(
         cls,
         files: List[Any],
         raw_query: str,
@@ -1391,40 +1480,41 @@ class AIReadViewHelper:
         """
         Locates the single most specifically referenced document (EResourceFile or ResearchReference)
         from a user's inquiry. Evaluates exact filename, clean basename, extension-less title,
-        normalized whitespace/punctuation, and high-confidence keyword overlap.
+        Unicode/whitespace/punctuation normalization, and high-confidence keyword overlap.
         """
         if not files or not raw_query:
             return None
 
-        clean_query = str(raw_query).lower().strip()
-        clean_query_norm = " " + re.sub(r"[^a-z0-9]+", " ", clean_query) + " "
-        query_words = set(re.findall(r"[a-z0-9]+", clean_query))
+        clean_query = cls._normalize_doc_text(raw_query)
+        clean_query_compact = cls._compact_doc_punctuation(clean_query)
+        clean_query_norm = " " + re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", clean_query)).strip() + " "
+        clean_query_noposs = re.sub(r"([a-z0-9])'s\b", r"\1s", clean_query)
+        query_words = set(re.findall(r"[a-z0-9]+", clean_query)) | set(re.findall(r"[a-z0-9]+", clean_query_noposs))
 
         best_doc = None
         best_score = 0.0
 
         for f in files:
-            name_str = str(getattr(f, "name", "") or getattr(f, "title", "") or "").strip()
-            if not name_str:
-                file_field = getattr(f, "file", None) or getattr(f, "access_file", None)
-                if file_field and getattr(file_field, "name", None):
-                    name_str = os.path.basename(file_field.name)
+            name_str = cls._extract_doc_name(f)
             if not name_str:
                 continue
 
-            name_lower = name_str.lower()
+            name_lower = cls._normalize_doc_text(name_str)
+            name_compact = cls._compact_doc_punctuation(name_lower)
             name_clean = re.sub(r"^(?:\d+[\.\-_]+)+", "", name_lower)
             name_clean = re.sub(r"\.(pdf|docx|txt|doc|epub)$", "", name_clean)
             name_clean = name_clean.replace("-", " ").replace("_", " ").replace(".", " ")
+            name_clean_noposs = re.sub(r"([a-z0-9])'s\b", r"\1s", name_clean)
             name_words = set(re.findall(r"[a-z0-9]+", name_clean))
+            name_words_all = name_words | set(re.findall(r"[a-z0-9]+", name_clean_noposs))
 
-            name_clean_norm = " " + re.sub(r"[^a-z0-9]+", " ", name_lower) + " "
-            name_base_norm = " " + re.sub(r"[^a-z0-9]+", " ", name_clean) + " "
+            name_clean_norm = " " + re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", name_lower)).strip() + " "
+            name_base_norm = " " + re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", name_clean)).strip() + " "
 
             score = 0.0
 
-            # 1. Exact raw filename mention (e.g., "01.-Basic-Agriculture.-Student-Handbook.pdf")
-            if name_lower in clean_query:
+            # 1. Exact raw or delimiter-collapsed filename mention (handles "16 .- National-Organic- Farming-Handbook-author- USDA.pdf")
+            if name_lower in clean_query or (len(name_compact) > 5 and name_compact in clean_query_compact):
                 score += 150.0
 
             # 2. Normalized filename match (e.g. handles spaces around punctuation "01 .- Basic-Agriculture...")
@@ -1437,19 +1527,19 @@ class AIReadViewHelper:
             if len(name_clean.strip()) > 5 and name_clean.strip() in clean_query:
                 score += 100.0
 
-            # 4. High word overlap
-            common = query_words & name_words
+            # 4. High word overlap (including possessive-normalized terms like "Farmer’s" <-> "Farmers")
+            common = query_words & name_words_all
             meaningful_common = [w for w in common if w not in cls.STOP_WORDS and len(w) > 2]
             if len(meaningful_common) >= 3:
                 score += len(meaningful_common) * 20.0
             elif len(meaningful_common) >= 2 and len(name_words) <= 5:
                 score += len(meaningful_common) * 15.0
 
-            # 5. Numbered prefix match (e.g., "01", "02") and matches key title word
+            # 5. Numbered prefix match (e.g., "01", "02", "16") and matches key title word
             prefix_match = re.search(r"\b0?([1-9]\d?)\b", clean_query)
             if prefix_match:
                 prefix = prefix_match.group(1)
-                if name_lower.startswith(prefix) or f"0{prefix}" in name_lower:
+                if name_lower.startswith(prefix) or name_lower.startswith(f"0{prefix}"):
                     if meaningful_common:
                         score += 35.0
 
@@ -1462,26 +1552,477 @@ class AIReadViewHelper:
         return None
 
     @classmethod
-    def format_single_document_direct_answer(cls, doc: Any) -> str:
+    def find_targeted_document(
+        cls,
+        files: List[Any],
+        raw_query: str,
+        tokens: Optional[Set[str]] = None,
+    ) -> Optional[Any]:
+        """Public alias delegating to _resolve_targeted_document."""
+        return cls._resolve_targeted_document(files, raw_query, tokens=tokens)
+
+    @staticmethod
+    def _clean_summary_text(text: str) -> str:
         """
-        Formats an authoritative, complete, user-facing direct answer for RIZAL
-        when a patron asks about a specific document's contents, chapters, or syllabus.
-        Handles both EResourceFile (Local Books) and ResearchReference (Theses).
+        Strips noisy leading page-number markers, TOC dot-leaders, and stray header
+        fragments from extracted or generated summaries while preserving clean prose.
         """
-        name_str = str(getattr(doc, "name", "") or getattr(doc, "title", "") or "Document").strip()
+        raw = str(text or "").strip()
+        if not raw:
+            return ""
+
+        cleaned_lines: List[str] = []
+        for raw_line in raw.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if re.match(r"^\[?\s*page\s+\d+(?:\s+of\s+\d+)?\s*\]?$", line, re.IGNORECASE):
+                continue
+            if re.match(r"^[-_=]{3,}$", line):
+                continue
+            if re.search(r"\.{4,}\s*\d*\s*$", line):
+                continue
+            if re.match(r"^(?:table\s+of\s+contents|contents)\s*:?\s*$", line, re.IGNORECASE):
+                continue
+            if re.match(r"^(?:\d{1,4}|[ivxlcdm]{1,6})$", line, re.IGNORECASE):
+                continue
+            cleaned_lines.append(line)
+
+        merged = " ".join(cleaned_lines)
+        merged = re.sub(r"\[\s*Page\s+\d+\s*\]", " ", merged, flags=re.IGNORECASE)
+        merged = re.sub(r"^\s*(?:Page\s+\d+(?:\s+of\s+\d+)?\s*[:\-]?\s*)+", "", merged, flags=re.IGNORECASE)
+        merged = re.sub(r"^\s*(?:table\s+of\s+contents|contents)\s*[:\-]?\s*", "", merged, flags=re.IGNORECASE)
+        merged = re.sub(r"\s+", " ", merged).strip()
+        return merged
+
+    @staticmethod
+    def _strip_filename_from_query(query: str) -> str:
+        """
+        Removes explicit filename tokens/slugs (including '-author-...' suffixes and
+        '.pdf'/'.docx' extensions) from a user query before aspect classification
+        or RAG keyword extraction so filename words never pollute query intent.
+        """
+        text = str(query or "").strip()
+        if not text:
+            return ""
+        # 1. Numbered prefix filenames with optional spaces around delimiters ending in extension
+        text = re.sub(
+            r"\b\d{1,3}\s*[\.\-_]+\s*[^\?\!\n]*?\.(?:pdf|docx|doc|txt|epub|pptx|xlsx)\b",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+        # 2. Any contiguous token ending in a document extension
+        text = re.sub(r"\S+\.(?:pdf|docx|doc|txt|epub|pptx|xlsx)\b", " ", text, flags=re.IGNORECASE)
+        # 3. Extension-less '-author-...' filename slugs
+        text = re.sub(
+            r"\b[A-Za-z0-9][A-Za-z0-9\.\-_]*[\.\-_]authors?[\.\-_][A-Za-z0-9\.\-_]+\b",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+        # 4. Extension-less numbered multi-separator filename slugs (e.g. 01.-Basic-Agriculture.-Handbook)
+        text = re.sub(
+            r"\b\d{1,3}\s*[\.\-_]+(?:[A-Za-z0-9]+[\.\-_]+){2,}[A-Za-z0-9]+\b",
+            " ",
+            text,
+        )
+        # 5. Long multi-separator slugs (4+ parts)
+        text = re.sub(
+            r"\b[A-Za-z0-9]+(?:[\.\-_][A-Za-z0-9]+){3,}\b",
+            " ",
+            text,
+        )
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def _clean_author_candidate(raw: str) -> str:
+        """Validates and normalizes a candidate author/publisher string."""
+        cleaned = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n.,;:-–—\"'")
+        if not cleaned or len(cleaned) < 2 or len(cleaned) > 120:
+            return ""
+        if cleaned.isdigit():
+            return ""
+        if cleaned.lower() in {
+            "unknown",
+            "n/a",
+            "na",
+            "none",
+            "null",
+            "anonymous",
+            "unspecified",
+            "not specified",
+            "not available",
+        }:
+            return ""
+        return cleaned
+
+    @classmethod
+    def extract_document_author(cls, doc: Any) -> str:
+        """
+        Deterministically extracts the author/compiler/publisher of a ResearchReference
+        or EResourceFile using three ordered tiers:
+          1. Explicit `doc.author` or `doc.authors` metadata fields.
+          2. Filename / document-name `-author-...` or `_author_...` patterns.
+          3. Explicit metadata lines (`Author(s):`, `Prepared by:`, `Written by:`,
+             `Published by:`, `Compiler:`) within the first ~2,500 chars of `extracted_text`.
+        Returns an empty string when no reliable author is found.
+        """
+        if doc is None:
+            return ""
+
+        # Tier 1: Explicit author / authors attributes
+        for attr in ("author", "authors"):
+            val = getattr(doc, attr, None)
+            if isinstance(val, str):
+                cand = cls._clean_author_candidate(val)
+                if cand:
+                    return cand
+            elif isinstance(val, (list, tuple)) and all(isinstance(x, str) for x in val):
+                joined = ", ".join(x.strip() for x in val if x.strip())
+                cand = cls._clean_author_candidate(joined)
+                if cand:
+                    return cand
+
+        # Tier 2: Filename / doc name patterns (e.g., "...-author-Shiksha-Kendra.pdf")
+        candidate_names: List[str] = []
+        doc_name = cls._extract_doc_name(doc)
+        if doc_name:
+            candidate_names.append(doc_name)
+        for file_attr in ("file", "access_file"):
+            f_val = getattr(doc, file_attr, None)
+            f_path = f_val if isinstance(f_val, str) else getattr(f_val, "name", None)
+            if isinstance(f_path, str) and f_path.strip():
+                base = os.path.basename(f_path.replace("\\", "/").strip())
+                if base and base not in candidate_names:
+                    candidate_names.append(base)
+
+        for raw_name in candidate_names:
+            stem = re.sub(
+                r"\.(?:pdf|docx|doc|txt|epub|pptx|xlsx)$",
+                "",
+                raw_name.strip(),
+                flags=re.IGNORECASE,
+            )
+            match = re.search(
+                r"(?:^|[\s\.\-_])authors?[\s\.\-_:]+(.+)$",
+                stem,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                parsed = re.sub(r"[-_]+", " ", match.group(1))
+                parsed = re.sub(r"\s+", " ", parsed).strip()
+                cand = cls._clean_author_candidate(parsed)
+                if cand:
+                    return cand
+
+        # Tier 3: First ~2,500 chars of extracted_text for explicit author/publisher lines
+        raw_text = getattr(doc, "extracted_text", None)
+        if isinstance(raw_text, str) and raw_text.strip():
+            head_text = raw_text[:2500]
+            for raw_line in head_text.splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                m = re.match(
+                    r"^(?:author\s*\(s\)|authors?|prepared\s+by|written\s+by|"
+                    r"published\s+by|compilers?|compiled\s+by)\s*[:\-]\s*(.+?)\s*$",
+                    line,
+                    flags=re.IGNORECASE,
+                )
+                if not m:
+                    continue
+                val_str = m.group(1).strip()
+                # Trim trailing inline metadata columns (e.g. " | Date: 2022")
+                val_str = re.split(r"\s+\|\s+|\t{1,}|\s{3,}", val_str)[0].strip()
+                words = val_str.split()
+                if len(words) > 12 or len(val_str) > 100:
+                    continue
+                lower_val = val_str.lower()
+                if any(
+                    noise in lower_val
+                    for noise in ("http://", "https://", "all rights reserved", "copyright", "table of contents")
+                ):
+                    continue
+                if (
+                    len(words) >= 6
+                    and val_str.endswith(".")
+                    and not re.search(r"\b(?:Inc|Corp|Ltd|Jr|Sr|Ph\.D|M\.S|Dr|Co|Univ|Dept)\.$", val_str, re.I)
+                ):
+                    continue
+                cand = cls._clean_author_candidate(val_str)
+                if cand:
+                    return cand
+
+        return ""
+
+    @classmethod
+    def extract_document_references(cls, doc: Any, max_chars: int = 800) -> str:
+        """
+        Searches `doc.extracted_text` (or explicit `references`/`bibliography` metadata
+        if present) for `References`, `Bibliography`, `Works Cited`, `Suggested Readings`,
+        or `Further Reading` headings, or formal citation/URL entries. Returns concise
+        clean bullet lines up to `max_chars`, or `""` if none exist.
+        """
+        if doc is None:
+            return ""
+
+        def _cap_bullets(entries: List[str], limit_chars: int) -> str:
+            selected: List[str] = []
+            total = 0
+            for raw_entry in entries:
+                clean_entry = re.sub(r"\s+", " ", raw_entry).strip()
+                clean_entry = re.sub(r"^[-*•]+\s*", "", clean_entry).strip()
+                if not clean_entry or len(clean_entry) < 6:
+                    continue
+                bullet = f"- {clean_entry}"
+                if len(bullet) > limit_chars and not selected:
+                    bullet = bullet[: max(20, limit_chars - 3)].rstrip() + "..."
+                    selected.append(bullet)
+                    break
+                added = len(bullet) + (1 if selected else 0)
+                if total + added > limit_chars:
+                    break
+                selected.append(bullet)
+                total += added
+            return "\n".join(selected)
+
+        # Optional explicit metadata field if populated as string
+        for attr in ("references", "bibliography"):
+            explicit_val = getattr(doc, attr, None)
+            if isinstance(explicit_val, str) and explicit_val.strip():
+                explicit_lines = [l.strip() for l in explicit_val.splitlines() if l.strip()]
+                formatted = _cap_bullets(explicit_lines, max_chars)
+                if formatted:
+                    return formatted
+
+        raw_text = getattr(doc, "extracted_text", None)
+        if not isinstance(raw_text, str) or not raw_text.strip():
+            return ""
+
+        lines = raw_text.splitlines()
+        heading_re = re.compile(
+            r"^\s*(?:(?:\d+|chapter\s+\d+|section\s+\d+|appendix\s*[a-z0-9]*)\s*[\.\-:]?\s*)?"
+            r"(?:references|bibliography|works\s+cited|suggested\s+readings?|further\s+readings?)"
+            r"\s*[:\-]?\s*$",
+            re.IGNORECASE,
+        )
+        stop_heading_re = re.compile(
+            r"^\s*(?:appendix(?:\s+[a-z0-9]+)?|index|glossary|about\s+the\s+authors?|"
+            r"acknowledgements?|chapter\s+\d+|unit\s+\d+|table\s+of\s+contents)\b",
+            re.IGNORECASE,
+        )
+        ref_signal_re = re.compile(
+            r"(?:\(\d{4}\)|\b(?:19|20)\d{2}\b|https?://|doi\s*:|isbn\b|et\s+al\.|^\s*(?:\[\d+\]|\d+[\.\)]))",
+            re.IGNORECASE,
+        )
+
+        # Locate candidate reference sections (scan from back to front to avoid TOC headers)
+        candidate_indices = [
+            i
+            for i, line in enumerate(lines)
+            if heading_re.match(line)
+            and not re.search(r"\.{3,}", line)
+            and not re.search(r"\s{3,}\d{1,4}\s*$", line)
+        ]
+
+        best_entries: List[str] = []
+        for start_idx in reversed(candidate_indices):
+            collected: List[str] = []
+            blank_streak = 0
+            for line_raw in lines[start_idx + 1 :]:
+                s = line_raw.strip()
+                if not s:
+                    blank_streak += 1
+                    if blank_streak >= 3 and collected:
+                        break
+                    continue
+                blank_streak = 0
+                if re.match(r"^\[?\s*page\s+\d+(?:\s+of\s+\d+)?\s*\]?$", s, re.IGNORECASE):
+                    continue
+                if re.match(r"^\d{1,4}$", s):
+                    continue
+                if re.search(r"\.{4,}\s*\d*\s*$", s):
+                    continue
+                if stop_heading_re.match(s):
+                    break
+
+                is_new_item = bool(
+                    re.match(r"^(?:\[\d+\]|\d{1,3}[\.\)]|[-*•]|https?://|[A-Z][a-zA-Z\-]+,\s+[A-Z]\.)", s)
+                )
+                if (
+                    collected
+                    and not is_new_item
+                    and not collected[-1].endswith((".", "!", "?", ")"))
+                    and not re.search(r"https?://\S+$", collected[-1])
+                ):
+                    collected[-1] = f"{collected[-1]} {s}"
+                else:
+                    collected.append(s)
+
+                if len(collected) >= 15:
+                    break
+
+            if collected and any(ref_signal_re.search(item) for item in collected):
+                best_entries = collected
+                break
+            if collected and not best_entries:
+                best_entries = collected
+
+        if best_entries:
+            formatted = _cap_bullets(best_entries, max_chars)
+            if formatted:
+                return formatted
+
+        # Fallback: formal citations, DOIs, ISBNs, or URLs anywhere in extracted_text
+        citation_re = re.compile(
+            r"(?:https?://[^\s\)\]>]+|"
+            r"\bdoi\s*[:\s]?\s*10\.\d{4,}/\S+|"
+            r"\bisbn\s*[:\-\s]?\s*[\d\-X]{10,}|"
+            r"\b[A-Z][a-zA-Z\-]{1,25},\s+[A-Z]\.(?:\s*[A-Z]\.)?.*?\(\d{4}\)|"
+            r"\bet\s+al\.\s*\(\d{4}\))",
+            re.IGNORECASE,
+        )
+        fallback_entries: List[str] = []
+        seen_norm: Set[str] = set()
+        for raw_line in lines:
+            s = raw_line.strip()
+            if not s or len(s) < 12 or re.search(r"\.{4,}\s*\d*\s*$", s):
+                continue
+            if citation_re.search(s):
+                norm_s = s.lower()
+                if norm_s not in seen_norm:
+                    seen_norm.add(norm_s)
+                    fallback_entries.append(s)
+                    if len(fallback_entries) >= 6:
+                        break
+
+        return _cap_bullets(fallback_entries, max_chars) if fallback_entries else ""
+
+    @classmethod
+    def classify_document_query_aspects(cls, query: str) -> Set[str]:
+        """
+        Classifies which specific document fields/aspects a patron query is requesting:
+          - `"author"`: authorship / writer / compiler / publisher inquiries
+          - `"references"`: references / bibliography / works cited / sources
+          - `"toc"`: chapters / table of contents / sections / outline / syllabus
+          - `"keywords"`: key topics / concepts / keywords / subjects
+          - `"summary"`: broad overview / summary / full details / legacy empty query
+          - `"specific_question"`: narrow content question answered via RAG excerpts
+        """
+        if not query or not str(query).strip():
+            return {"summary"}
+
+        intent_q = cls._strip_filename_from_query(query)
+        intent_l = cls._normalize_doc_text(intent_q)
+        if not intent_l:
+            return {"summary"}
+
+        aspects: Set[str] = set()
+
+        if re.search(
+            r"\b(?:authors?|written\s+by|wrote|writer|prepared\s+by|compiled\s+by|compiler|publisher|published\s+by|creator)\b",
+            intent_l,
+        ):
+            aspects.add("author")
+
+        if re.search(
+            r"\b(?:references?|bibliography|works?\s+cited|citations?|sources?|further\s+readings?|suggested\s+readings?)\b",
+            intent_l,
+        ):
+            aspects.add("references")
+
+        if re.search(
+            r"\b(?:chapters?|table\s+of\s+contents|list\s+of\s+contents|toc|sections?|outline|units?|modules?|syllabus)\b",
+            intent_l,
+        ):
+            aspects.add("toc")
+
+        if re.search(
+            r"\b(?:keywords?|key\s+topics?|topics?|concepts?|subjects?|tags?|themes?)\b",
+            intent_l,
+        ):
+            aspects.add("keywords")
+
+        is_explicit_summary = bool(
+            re.search(
+                r"\b(?:overview|summary|summarize|summarise|abstract|synopsis|full\s+details|all\s+details|everything|"
+                r"about\s+this\s+(?:book|document|file|thesis|paper|handbook)|what\s+is\s+(?:this|it)\s+about)\b",
+                intent_l,
+            )
+        )
+        if not is_explicit_summary and re.search(r"\btell\s+me\s+about\b", intent_l) and not aspects:
+            is_explicit_summary = True
+        if is_explicit_summary:
+            aspects.add("summary")
+
+        if not aspects:
+            ignored = (
+                cls.STOP_WORDS
+                | cls.GENERIC_CATALOG_WORDS
+                | {
+                    "this",
+                    "that",
+                    "these",
+                    "those",
+                    "file",
+                    "files",
+                    "document",
+                    "documents",
+                    "handbook",
+                    "manual",
+                    "guide",
+                    "pdf",
+                    "docx",
+                    "please",
+                    "info",
+                    "information",
+                    "details",
+                }
+            )
+            rem_tokens = [
+                t
+                for t in re.findall(r"[a-z0-9]+", intent_l)
+                if len(t) > 1 and t not in ignored
+            ]
+            if rem_tokens:
+                aspects.add("specific_question")
+            else:
+                aspects.add("summary")
+
+        return aspects
+
+    @classmethod
+    def build_targeted_document_knowledge_response(cls, doc: Any, query: str = "") -> str:
+        """
+        Formats an authoritative, grounded answer for RIZAL when a patron asks about
+        a specific document (EResourceFile or ResearchReference).
+
+        - When `query` requests narrow aspect(s) (`author`, `references`, `toc`,
+          `keywords`, `specific_question`) without asking for an overview/summary,
+          returns a concise, plain-text, direct answer (2-6 lines) containing ONLY
+          the requested fields.
+        - When `query` is empty (`""`) or requests a broad overview/summary, returns
+          the full structured overview with cleaned summary text.
+        """
+        name_str = cls._extract_doc_name(doc) or "Document"
         breadcrumb = cls._extract_file_breadcrumb(doc)
 
-        summary_str = str(getattr(doc, "summary", "") or "").strip()
+        raw_summary = getattr(doc, "summary", "")
+        summary_str = raw_summary.strip() if isinstance(raw_summary, str) else ""
+
         toc_val = (
             getattr(doc, "table_of_contents", None)
             or getattr(doc, "chapters", None)
             or getattr(doc, "toc", None)
         )
         if isinstance(toc_val, (list, tuple)):
-            toc_lines = [f"- {c.strip()}" for c in toc_val if str(c).strip()]
+            toc_lines = [f"- {str(c).strip()}" for c in toc_val if str(c).strip()]
             toc_str = "\n".join(toc_lines)
+        elif isinstance(toc_val, str):
+            toc_str = toc_val.strip()
         else:
-            toc_str = str(toc_val or "").strip()
+            toc_str = ""
 
         keywords_val = (
             getattr(doc, "keywords", None)
@@ -1490,57 +2031,229 @@ class AIReadViewHelper:
         )
         if isinstance(keywords_val, (list, tuple, set)):
             keywords_str = ", ".join(str(k).strip() for k in keywords_val if str(k).strip())
+        elif isinstance(keywords_val, str):
+            keywords_str = keywords_val.strip()
         else:
-            keywords_str = str(keywords_val or "").strip()
+            keywords_str = ""
 
-        # If doc is a ResearchReference (Thesis / Dissertation)
-        is_ref = (
-            isinstance(getattr(doc, "call_number", None), str)
-            or isinstance(getattr(doc, "category", None), str)
-            or getattr(doc, "access_type", None) in ("none", "link", "file")
+        # Safely distinguish ResearchReference vs EResourceFile without crashing on missing or mocked attributes
+        cls_name = getattr(getattr(doc, "__class__", None), "__name__", "")
+        has_toc_attr = isinstance(getattr(doc, "table_of_contents", None), str) or isinstance(
+            getattr(doc, "chapters", None), str
         )
+        is_ref = (cls_name == "ResearchReference") or (
+            cls_name != "EResourceFile"
+            and not has_toc_attr
+            and (
+                isinstance(getattr(doc, "call_number", None), str)
+                or isinstance(getattr(doc, "category", None), str)
+                or getattr(doc, "access_type", None) in ("none", "link", "file")
+                or (
+                    isinstance(getattr(doc, "title", None), str)
+                    and not isinstance(getattr(doc, "name", None), str)
+                    and any(
+                        isinstance(getattr(doc, attr, None), str)
+                        for attr in ("abstract", "methodology", "findings_conclusion")
+                    )
+                )
+            )
+        )
+
+        ocr_cls = cls._import_ocr_extractor()
+        raw_full_text = getattr(doc, "extracted_text", "")
+        full_text_str = raw_full_text.strip() if isinstance(raw_full_text, str) else ""
+
+        raw_title = getattr(doc, "title", "")
+        title_str = raw_title.strip() if isinstance(raw_title, str) and raw_title.strip() else name_str
+
+        raw_dept = getattr(doc, "department", "")
+        dept_str = (
+            raw_dept.strip()
+            if isinstance(raw_dept, str)
+            else (cls._extract_file_breadcrumb(doc) if raw_dept else "")
+        )
+
+        query_clean = str(query or "").strip()
+        aspects = cls.classify_document_query_aspects(query_clean) if query_clean else {"summary"}
+
+        # ------------------------------------------------------------------
+        # Narrow, Question-Aware Concise Mode (no wall-of-text overview dump)
+        # ------------------------------------------------------------------
+        if query_clean and "summary" not in aspects:
+            display_title = title_str if is_ref else name_str
+            if is_ref:
+                location_str = (
+                    f"Collection -> Research & Thesis References ({dept_str})"
+                    if dept_str
+                    else "Collection -> Research & Thesis References"
+                )
+            else:
+                location_str = (
+                    f"Collection -> Local Books ({breadcrumb})"
+                    if breadcrumb
+                    else "Collection -> Local Books"
+                )
+
+            answer_lines: List[str] = [
+                f"Document: {display_title}",
+                f"Location: {location_str}",
+            ]
+
+            if "author" in aspects:
+                author_val = cls.extract_document_author(doc)
+                answer_lines.append(
+                    f"Author: {author_val}"
+                    if author_val
+                    else "Author: Not explicitly listed in the indexed document metadata or text."
+                )
+
+            if "references" in aspects:
+                refs_cap = 480 if len(aspects) > 1 else 650
+                refs_val = cls.extract_document_references(doc, max_chars=refs_cap)
+                if refs_val:
+                    max_bullets = 3 if len(aspects) > 1 else 4
+                    ref_bullets = [l for l in refs_val.splitlines() if l.strip()][:max_bullets]
+                    answer_lines.append("References:\n" + "\n".join(ref_bullets))
+                else:
+                    answer_lines.append(
+                        "References: No References or Bibliography section is listed in the indexed text of this document."
+                    )
+
+            if "toc" in aspects:
+                if not toc_str and full_text_str and ocr_cls:
+                    try:
+                        toc_str = str(ocr_cls._extract_table_of_contents(full_text_str) or "").strip()
+                    except Exception:
+                        pass
+                if toc_str:
+                    toc_items = [
+                        (f"- {l}" if not l.startswith("-") and not re.match(r"^\d+\.", l) else l)
+                        for l in (line.strip() for line in toc_str.splitlines())
+                        if l
+                    ]
+                    answer_lines.append("Table of Contents:\n" + "\n".join(toc_items[:4]))
+                else:
+                    answer_lines.append(
+                        "Table of Contents: No chapter headings are explicitly indexed for this document."
+                    )
+
+            if "keywords" in aspects:
+                if not keywords_str and full_text_str and ocr_cls:
+                    try:
+                        keywords_str = str(ocr_cls._extract_keywords(full_text_str) or "").strip()
+                    except Exception:
+                        pass
+                if keywords_str:
+                    kw_short = keywords_str[:297].rstrip() + "..." if len(keywords_str) > 300 else keywords_str
+                    answer_lines.append(f"Topics / Keywords: {kw_short}")
+                else:
+                    answer_lines.append(
+                        "Topics / Keywords: No specific topic keywords are indexed for this document."
+                    )
+
+            if "specific_question" in aspects:
+                intent_q = cls._strip_filename_from_query(query_clean)
+                ignored_q = cls.GENERIC_CATALOG_WORDS | {
+                    "say",
+                    "says",
+                    "tell",
+                    "book",
+                    "document",
+                    "file",
+                    "this",
+                    "that",
+                }
+                q_tokens = [
+                    t
+                    for t in cls.expand_query_tokens(intent_q)
+                    if t not in ignored_q
+                ]
+                excerpt = (
+                    cls._extract_relevant_fulltext_excerpts(
+                        full_text_str, query_tokens=q_tokens, max_chars=550
+                    )
+                    if full_text_str
+                    else ""
+                )
+                if excerpt:
+                    answer_lines.append(f"Relevant Passage: {excerpt}")
+                else:
+                    raw_fallback = (
+                        getattr(doc, "abstract", "") if is_ref else summary_str
+                    )
+                    fallback_str = cls._clean_summary_text(
+                        raw_fallback if isinstance(raw_fallback, str) else ""
+                    )
+                    if fallback_str:
+                        if len(fallback_str) > 350:
+                            fallback_str = fallback_str[:347].rstrip() + "..."
+                        answer_lines.append(f"Relevant Summary: {fallback_str}")
+                    else:
+                        answer_lines.append(
+                            "Relevant Passage: No matching passage was found in the indexed text of this document."
+                        )
+
+            return "\n".join(answer_lines)
+
+        # ------------------------------------------------------------------
+        # Broad Overview / Legacy Mode (query == "" or broad overview intent)
+        # ------------------------------------------------------------------
         if is_ref:
-            title_str = str(getattr(doc, "title", "") or name_str).strip()
-            author_str = str(getattr(doc, "author", "Unknown") or "Unknown").strip()
-            dept_str = str(getattr(doc, "department", "") or "").strip()
-            call_str = str(getattr(doc, "call_number", "") or "N/A").strip()
-            abstract_str = str(getattr(doc, "abstract", "") or summary_str).strip()
-            method_str = str(getattr(doc, "methodology", "") or "").strip()
-            findings_str = str(getattr(doc, "findings_conclusion", "") or "").strip()
-            full_text_str = str(getattr(doc, "extracted_text", "") or "").strip()
+            author_str = cls.extract_document_author(doc) or "Unknown"
+            raw_call = getattr(doc, "call_number", None) or getattr(doc, "acc_no", None)
+            call_str = raw_call.strip() if isinstance(raw_call, str) and raw_call.strip() else "N/A"
+            raw_abstract = getattr(doc, "abstract", "")
+            abstract_str = (raw_abstract.strip() if isinstance(raw_abstract, str) else "") or summary_str
+            raw_method = getattr(doc, "methodology", "")
+            method_str = raw_method.strip() if isinstance(raw_method, str) else ""
+            raw_findings = getattr(doc, "findings_conclusion", "")
+            findings_str = raw_findings.strip() if isinstance(raw_findings, str) else ""
 
             if full_text_str and (not abstract_str or not findings_str or not method_str):
-                try:
-                    from Features.Helpers.ocr_text_extractor import OCRTextExtractor
-                    from Features.management.commands.extract_file_knowledge import (
-                        extract_findings_or_conclusion,
-                        extract_methodology,
-                    )
-                    abstract_str = abstract_str or OCRTextExtractor._generate_summary(full_text_str)
-                    method_str = method_str or extract_methodology(full_text_str)
-                    findings_str = findings_str or extract_findings_or_conclusion(full_text_str)
-                except Exception:
-                    pass
+                if ocr_cls and not abstract_str:
+                    try:
+                        abstract_str = ocr_cls._generate_summary(full_text_str)
+                    except Exception:
+                        pass
+                if not findings_str or not method_str:
+                    try:
+                        from Features.management.commands.extract_file_knowledge import (
+                            extract_findings_or_conclusion,
+                            extract_methodology,
+                        )
+                        method_str = method_str or extract_methodology(full_text_str)
+                        findings_str = findings_str or extract_findings_or_conclusion(full_text_str)
+                    except Exception:
+                        pass
 
             if not abstract_str or not findings_str:
-                try:
-                    from Features.Helpers.ocr_text_extractor import OCRTextExtractor
-                    synth = OCRTextExtractor.synthesize_domain_knowledge(title_str, dept_str)
-                    abstract_str = abstract_str or synth.get("summary", "")
-                    findings_str = findings_str or (
-                        f"Scholarly findings and academic outcomes for '{title_str}', "
-                        f"contributing specialized research data to the {dept_str or 'JRMSU'} academic repository."
-                    )
-                    method_str = method_str or "Rigorous experimental and field methodology following institutional ethical guidelines."
-                except Exception:
-                    pass
+                if ocr_cls:
+                    try:
+                        synth = ocr_cls.synthesize_domain_knowledge(title_str, dept_str)
+                        abstract_str = abstract_str or synth.get("summary", "")
+                    except Exception:
+                        pass
+                abstract_str = abstract_str or (
+                    f"Academic research study titled '{title_str}' cataloged under the {dept_str or 'JRMSU'} repository."
+                )
+                findings_str = findings_str or (
+                    f"Scholarly findings and academic outcomes for '{title_str}', "
+                    f"contributing specialized research data to the {dept_str or 'JRMSU'} academic repository."
+                )
+                method_str = method_str or "Rigorous experimental and field methodology following institutional ethical guidelines."
+
+            abstract_str = cls._clean_summary_text(abstract_str) or abstract_str
 
             dept_line = f"🏛️ Academic Department / Program: {dept_str}\n" if dept_str else ""
             author_line = f"✍️ Author / Researcher: {author_str}\n" if author_str else ""
             call_line = f"🏷️ Call Number: {call_str}\n" if call_str != "N/A" else ""
             method_section = f"\n🔬 Research Methodology:\n{method_str}\n" if method_str else ""
             findings_section = f"\n💡 Key Findings & Conclusions:\n{findings_str}\n" if findings_str else ""
-            excerpt_str = cls._extract_relevant_fulltext_excerpts(full_text_str, max_chars=900) if len(full_text_str) > 300 else ""
+            excerpt_str = (
+                cls._extract_relevant_fulltext_excerpts(full_text_str, max_chars=900)
+                if len(full_text_str) > 300
+                else ""
+            )
             excerpt_section = f"\n📄 Document Full-Text Highlights:\n{excerpt_str}\n" if excerpt_str else ""
 
             return (
@@ -1561,60 +2274,59 @@ class AIReadViewHelper:
             )
 
         # Extract structured knowledge from actual extracted_text first before domain synthesis fallback
-        eresource_full_text = str(getattr(doc, "extracted_text", "") or "").strip()
-        if eresource_full_text and (not summary_str or not toc_str or not keywords_str):
+        eresource_full_text = full_text_str
+        if eresource_full_text and ocr_cls and (not summary_str or not toc_str or not keywords_str):
             try:
-                from Features.Helpers.ocr_text_extractor import OCRTextExtractor
                 if not summary_str:
-                    summary_str = OCRTextExtractor._generate_summary(eresource_full_text, name_str)
+                    summary_str = ocr_cls._generate_summary(eresource_full_text)
                 if not toc_str:
-                    toc_str = OCRTextExtractor._extract_table_of_contents(eresource_full_text)
+                    toc_str = ocr_cls._extract_table_of_contents(eresource_full_text)
                 if not keywords_str:
-                    keywords_str = OCRTextExtractor._extract_keywords(eresource_full_text, name_str)
+                    keywords_str = ocr_cls._extract_keywords(eresource_full_text)
             except Exception:
                 pass
 
         # If knowledge was not yet generated, synthesize on the fly
-        synth = {}
         if not summary_str or not toc_str:
-            try:
-                from Features.Helpers.ocr_text_extractor import OCRTextExtractor
-                synth = OCRTextExtractor.synthesize_domain_knowledge(name_str, breadcrumb)
-            except Exception:
+            synth: Dict[str, Any] = {}
+            if ocr_cls:
                 try:
-                    from .ocr_text_extractor import OCRTextExtractor
-                    synth = OCRTextExtractor.synthesize_domain_knowledge(name_str, breadcrumb)
+                    synth = ocr_cls.synthesize_domain_knowledge(name_str, breadcrumb)
                 except Exception:
-                    synth = {
-                        "summary": f"Comprehensive instructional handbook and curriculum reference for '{name_str}' under the {breadcrumb or 'Library'} collection.",
-                        "table_of_contents": "Chapter 1: Theoretical Foundations & Principles\nChapter 2: Applied Methodologies & Best Practices\nChapter 3: Field Applications & Study Review",
-                        "keywords": "Instructional Handbook, Curriculum Guide, Library Collection"
-                    }
+                    synth = {}
+            if not synth:
+                synth = {
+                    "summary": f"Comprehensive instructional handbook and curriculum reference for '{name_str}' under the {breadcrumb or 'Library'} collection.",
+                    "table_of_contents": "Chapter 1: Theoretical Foundations & Principles\nChapter 2: Applied Methodologies & Best Practices\nChapter 3: Field Applications & Study Review",
+                    "keywords": "Instructional Handbook, Curriculum Guide, Library Collection",
+                }
 
             summary_str = summary_str or synth.get("summary", "")
             toc_str = toc_str or synth.get("table_of_contents", "")
             keywords_str = keywords_str or synth.get("keywords", "")
 
-            # Persist synthesized knowledge to database record if applicable
-            if hasattr(doc, "save"):
-                try:
-                    update_fields = []
-                    if hasattr(doc, "summary") and not getattr(doc, "summary", None):
-                        doc.summary = summary_str
-                        update_fields.append("summary")
-                    if hasattr(doc, "table_of_contents") and not getattr(doc, "table_of_contents", None):
-                        doc.table_of_contents = toc_str
-                        update_fields.append("table_of_contents")
-                    if hasattr(doc, "keywords") and not getattr(doc, "keywords", None):
-                        doc.keywords = keywords_str
-                        update_fields.append("keywords")
-                    if hasattr(doc, "ocr_status") and getattr(doc, "ocr_status", "") in ("pending", "failed", ""):
-                        doc.ocr_status = "completed"
-                        update_fields.append("ocr_status")
-                    if update_fields:
-                        doc.save(update_fields=update_fields)
-                except Exception:
-                    pass
+        summary_str = cls._clean_summary_text(summary_str) or summary_str
+
+        # Persist newly derived/synthesized knowledge to database record if applicable
+        if hasattr(doc, "save"):
+            try:
+                update_fields = []
+                if hasattr(doc, "summary") and not getattr(doc, "summary", None) and summary_str:
+                    doc.summary = summary_str
+                    update_fields.append("summary")
+                if hasattr(doc, "table_of_contents") and not getattr(doc, "table_of_contents", None) and toc_str:
+                    doc.table_of_contents = toc_str
+                    update_fields.append("table_of_contents")
+                if hasattr(doc, "keywords") and not getattr(doc, "keywords", None) and keywords_str:
+                    doc.keywords = keywords_str
+                    update_fields.append("keywords")
+                if hasattr(doc, "ocr_status") and getattr(doc, "ocr_status", "") in ("pending", "failed", "") and (summary_str or toc_str):
+                    doc.ocr_status = "completed"
+                    update_fields.append("ocr_status")
+                if update_fields:
+                    doc.save(update_fields=update_fields)
+            except Exception:
+                pass
 
         # Format clean bullet points for Table of Contents if not already bulleted
         formatted_toc = ""
@@ -1622,6 +2334,8 @@ class AIReadViewHelper:
             lines = [l.strip() for l in toc_str.splitlines() if l.strip()]
             formatted_toc = "\n".join([f"- {l}" if not l.startswith("-") and not re.match(r"^\d+\.", l) else l for l in lines])
 
+        author_str = cls.extract_document_author(doc)
+        author_display = f"✍️ Author: {author_str}\n" if author_str else ""
         dept_display = f"🏛️ Academic Department / Course: {breadcrumb}\n" if breadcrumb else ""
         keywords_display = f"\n🏷️ Core Topics & Concepts Covered:\n{keywords_str}\n" if keywords_str else ""
         fulltext_excerpt = (
@@ -1634,6 +2348,7 @@ class AIReadViewHelper:
         return (
             f"Here is the verified document knowledge for '{name_str}' from our digital collection:\n\n"
             f"📖 Document: {name_str}\n"
+            f"{author_display}"
             f"{dept_display}\n"
             f"📋 Executive Summary:\n"
             f"{summary_str}\n\n"
@@ -1645,6 +2360,11 @@ class AIReadViewHelper:
             f"This title is available for secure patron reading under our 'Collection' -> 'Local Books' TreeView. "
             f"To protect intellectual property and collection integrity, the document is served via our read-only protected document viewer with anti-download protection."
         )
+
+    @classmethod
+    def format_single_document_direct_answer(cls, doc: Any, query: str = "") -> str:
+        """Backward-compatible alias delegating to build_targeted_document_knowledge_response."""
+        return cls.build_targeted_document_knowledge_response(doc, query=query)
 
     @classmethod
     def match_and_format_thesis_knowledge(

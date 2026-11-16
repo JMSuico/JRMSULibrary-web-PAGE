@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Use Docker-specific requirements (PostgreSQL instead of MSSQL)
 COPY requirements-docker.txt .
-RUN pip install --no-cache-dir -r requirements-docker.txt gunicorn
+RUN pip install --no-cache-dir --default-timeout=120 --retries=5 -r requirements-docker.txt gunicorn
 
 # Removed pip-audit to ensure robust builds across all devices
 

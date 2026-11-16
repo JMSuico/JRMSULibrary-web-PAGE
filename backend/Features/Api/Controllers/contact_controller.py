@@ -5,27 +5,12 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from Features.Api.Serializers.contact_serializer import ContactMessageSerializer
 from Features.Services.Implementations.contact_service import ContactService
 from Features.Services.Implementations.tasks import process_single_reply_task, process_bulk_reply_task
 
 
-class AdminUserRateThrottle(UserRateThrottle):
-    """Elevated throttle for authenticated admin users — prevents 429 on the admin panel."""
-    scope = 'user'
-
-
 class ContactMessageViewSet(viewsets.ViewSet):
-
-    def get_throttles(self):
-        # Authenticated admins get the generous user throttle (2000/hour).
-        # Public (anonymous) contact submissions get the strict 'contact' scope (10/hour).
-        if self.request and self.request.user and self.request.user.is_authenticated:
-            return [AdminUserRateThrottle()]
-        return [ScopedRateThrottle()]
-
-    throttle_scope = 'contact'
 
     def get_permissions(self):
         if self.action in ['create', 'validate_email', 'upload_attachment', 'check_replies']:

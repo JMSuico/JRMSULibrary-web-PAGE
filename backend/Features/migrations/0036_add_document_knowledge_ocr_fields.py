@@ -4,41 +4,11 @@
 
 from django.db import migrations, models
 
+from Features.Helpers.schema_helpers import ensure_document_knowledge_columns
+
 
 def add_columns_safely(apps, schema_editor):
-    connection = schema_editor.connection
-    vendor = connection.vendor
-
-    if vendor == 'postgresql':
-        statements = [
-            # EResourceFile fields (handles both capitalized and lowercase table conventions)
-            'ALTER TABLE "Features_eresourcefile" ADD COLUMN IF NOT EXISTS "extracted_text" text NULL;',
-            'ALTER TABLE "Features_eresourcefile" ADD COLUMN IF NOT EXISTS "summary" text NULL;',
-            'ALTER TABLE "Features_eresourcefile" ADD COLUMN IF NOT EXISTS "table_of_contents" text NULL;',
-            'ALTER TABLE "Features_eresourcefile" ADD COLUMN IF NOT EXISTS "keywords" text NULL;',
-            'ALTER TABLE "Features_eresourcefile" ADD COLUMN IF NOT EXISTS "ocr_status" varchar(20) DEFAULT \'pending\';',
-            'ALTER TABLE "Features_eresourcefile" ADD COLUMN IF NOT EXISTS "ocr_processed_at" timestamp with time zone NULL;',
-            'ALTER TABLE "features_eresourcefile" ADD COLUMN IF NOT EXISTS "extracted_text" text NULL;',
-            'ALTER TABLE "features_eresourcefile" ADD COLUMN IF NOT EXISTS "summary" text NULL;',
-            'ALTER TABLE "features_eresourcefile" ADD COLUMN IF NOT EXISTS "table_of_contents" text NULL;',
-            'ALTER TABLE "features_eresourcefile" ADD COLUMN IF NOT EXISTS "keywords" text NULL;',
-            'ALTER TABLE "features_eresourcefile" ADD COLUMN IF NOT EXISTS "ocr_status" varchar(20) DEFAULT \'pending\';',
-            'ALTER TABLE "features_eresourcefile" ADD COLUMN IF NOT EXISTS "ocr_processed_at" timestamp with time zone NULL;',
-
-            # ResearchReference fields
-            'ALTER TABLE "research_references" ADD COLUMN IF NOT EXISTS "extracted_text" text NULL;',
-            'ALTER TABLE "research_references" ADD COLUMN IF NOT EXISTS "abstract" text NULL;',
-            'ALTER TABLE "research_references" ADD COLUMN IF NOT EXISTS "methodology" text NULL;',
-            'ALTER TABLE "research_references" ADD COLUMN IF NOT EXISTS "findings_conclusion" text NULL;',
-            'ALTER TABLE "research_references" ADD COLUMN IF NOT EXISTS "ocr_status" varchar(20) DEFAULT \'pending\';',
-            'ALTER TABLE "research_references" ADD COLUMN IF NOT EXISTS "ocr_processed_at" timestamp with time zone NULL;',
-        ]
-        with connection.cursor() as cursor:
-            for sql in statements:
-                try:
-                    cursor.execute(sql)
-                except Exception:
-                    pass
+    ensure_document_knowledge_columns(apps, schema_editor)
 
 
 def reverse_add_columns(apps, schema_editor):

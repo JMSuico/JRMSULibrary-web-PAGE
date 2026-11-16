@@ -17,7 +17,10 @@ backend/media/
 
 # ---- ENVIRONMENT / SECRETS (NEVER COMMIT) ----
 .env
-.env.*
+.env*
+!.env.docker
+CommandStart/*.token
+CommandStart/cf-token*
 !.env.example
 !.env.docker.example
 
@@ -76,7 +79,10 @@ ProjectLocation.txt
 !CLOUDFLARE_TUNNEL_MIGRATION.md
 !CLOUDFLARE_SUBDOMAIN_PRODUCTION_DEPLOYMENT.md 
 backups/
+backups/*.sql
+backups/*.dump
 *.sql
+*.dump
 *.zip
 *.rar
 !MASTER_SYSTEM_ARCHITECTURE.md

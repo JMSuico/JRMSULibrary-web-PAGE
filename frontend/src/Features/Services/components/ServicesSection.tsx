@@ -51,7 +51,7 @@ export const ServicesSection: React.FC = () => {
       ]);
       setFiles(f.filter(file => file.is_active));
       setLinks(l.filter(link => link.is_active));
-      setServicesContent(c.find(item => item.slug === 'library_services') || null);
+      setServicesContent(c.find(item => item.slug === 'our_services' || item.slug === 'library_services') || null);
     } catch (e) {
       console.error('Failed to load assets from CMS', e);
     } finally {

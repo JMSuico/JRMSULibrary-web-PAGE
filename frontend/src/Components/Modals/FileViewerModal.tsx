@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 
@@ -9,6 +9,95 @@ interface FileViewerModalProps {
   onNavigate: (file: TreeNodeData) => void;
 }
 
+const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46, 0x2d] as const; // %PDF-
+const PROBE_TIMEOUT_MS = 1800;
+const SPLASH_MAX_MS = 1000;
+
+const normalizeSafePdfUrl = (rawPath: string): string | null => {
+  const trimmed = rawPath.trim();
+  if (!trimmed || trimmed.startsWith('//')) {
+    return null;
+  }
+  try {
+    const resolved = new URL(trimmed, window.location.origin);
+    if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') {
+      return null;
+    }
+    return resolved.href;
+  } catch {
+    return null;
+  }
+};
+
+const hasPdfMagicBytes = (bytes: Uint8Array): boolean =>
+  bytes.byteLength >= PDF_MAGIC_BYTES.length &&
+  PDF_MAGIC_BYTES.every((expectedByte, index) => bytes[index] === expectedByte);
+
+const readFirstFiveBytes = async (
+  res: Response,
+  probeController: AbortController
+): Promise<Uint8Array | null> => {
+  if (!res.body) {
+    const buffer = await res.arrayBuffer();
+    return buffer.byteLength >= 5 ? new Uint8Array(buffer.slice(0, 5)) : null;
+  }
+
+  const reader = res.body.getReader();
+  const header = new Uint8Array(5);
+  let offset = 0;
+
+  try {
+    while (offset < 5) {
+      const { value, done } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      const bytesToCopy = Math.min(5 - offset, value.byteLength);
+      header.set(value.subarray(0, bytesToCopy), offset);
+      offset += bytesToCopy;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Ignore stream cancel errors on aborted or already-closed responses.
+    }
+    probeController.abort();
+  }
+
+  return offset === 5 ? header : null;
+};
+
+const probePdfHeader = async (url: string, parentSignal: AbortSignal): Promise<boolean> => {
+  const probeController = new AbortController();
+  const timeoutId = setTimeout(() => probeController.abort(), PROBE_TIMEOUT_MS);
+  const onParentAbort = () => probeController.abort();
+
+  if (parentSignal.aborted) {
+    probeController.abort();
+  } else {
+    parentSignal.addEventListener('abort', onParentAbort, { once: true });
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers: { Range: 'bytes=0-4' },
+      signal: probeController.signal,
+    });
+    if (!res.ok) {
+      probeController.abort();
+      return false;
+    }
+    const headerBytes = await readFirstFiveBytes(res, probeController);
+    return headerBytes !== null && hasPdfMagicBytes(headerBytes);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+    parentSignal.removeEventListener('abort', onParentAbort);
+  }
+};
+
 export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList, onClose, onNavigate }) => {
   const currentIdx = fileList.findIndex((f) => 
     f.path === file.path || 
@@ -17,9 +106,22 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
   );
   const safeIdx = currentIdx >= 0 ? currentIdx : 0;
 
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [viewerError, setViewerError] = useState<string | null>(null);
+  const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSplashTimer = useCallback(() => {
+    if (splashTimerRef.current !== null) {
+      clearTimeout(splashTimerRef.current);
+      splashTimerRef.current = null;
+    }
+  }, []);
+
+  const handleIframeLoad = useCallback(() => {
+    clearSplashTimer();
+    setLoading(false);
+  }, [clearSplashTimer]);
 
   // Keyboard shortcut suppression (Ctrl+S, Ctrl+P, Ctrl+U, F12) and navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -51,83 +153,65 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
   const isPdf = Boolean(file.path && file.path.toLowerCase().endsWith('.pdf'));
   const isLink = Boolean(file.path && (file.path.startsWith('http://') || file.path.startsWith('https://')));
 
-  // Protected In-Memory Blob Generator:
-  // Reads file bytes into a memory buffer, validates %PDF- signature, and creates an ephemeral blob URL.
-  // Completely conceals physical server file paths and direct download URLs from browser Inspect Element.
+  // Fast Progressive HTTP Streaming & Header Verification:
+  // Probes only bytes 0-4 to verify %PDF- signature without buffering multi-MB files in RAM,
+  // then mounts the iframe directly for progressive streaming with a 1s max splash cap.
   useEffect(() => {
+    clearSplashTimer();
     setViewerError(null);
+    setStreamUrl(null);
+
     if (!isPdf || !file.path) {
-      setBlobUrl(null);
+      setLoading(false);
+      return;
+    }
+
+    const safeUrl = normalizeSafePdfUrl(file.path);
+    if (!safeUrl) {
+      setViewerError('Document preview is currently unavailable on the server.');
       setLoading(false);
       return;
     }
 
     let isMounted = true;
-    let activeUrl: string | null = null;
+    const unmountController = new AbortController();
     setLoading(true);
-    setBlobUrl(null);
 
-    const fetchValidatedPdfBlob = async (url: string): Promise<Blob | null> => {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        const rawBlob = await res.blob();
-        if (rawBlob.size < 5) return null;
-        const headerBytes = new Uint8Array(await rawBlob.slice(0, 5).arrayBuffer());
-        const isPdfMagic =
-          headerBytes[0] === 0x25 && // %
-          headerBytes[1] === 0x50 && // P
-          headerBytes[2] === 0x44 && // D
-          headerBytes[3] === 0x46 && // F
-          headerBytes[4] === 0x2d;   // -
-        if (!isPdfMagic) return null;
-        return rawBlob;
-      } catch {
-        return null;
+    const verifyAndStreamPdf = async () => {
+      const isValidPdf = await probePdfHeader(safeUrl, unmountController.signal);
+      if (!isMounted || unmountController.signal.aborted) {
+        return;
+      }
+
+      if (isValidPdf) {
+        setStreamUrl(safeUrl);
+        setViewerError(null);
+        clearSplashTimer();
+        splashTimerRef.current = setTimeout(() => {
+          if (isMounted) {
+            setLoading(false);
+          }
+          splashTimerRef.current = null;
+        }, SPLASH_MAX_MS);
+      } else {
+        setStreamUrl(null);
+        setViewerError('Document preview is currently unavailable on the server.');
+        setLoading(false);
       }
     };
 
-    const loadProtectedBlob = async () => {
-      try {
-        let pdfBlob = await fetchValidatedPdfBlob(file.path);
-
-        // Seamless institutional fallback if primary file is unseeded or physically missing
-        if (!pdfBlob && file.path !== '/assets/sample.pdf') {
-          pdfBlob = await fetchValidatedPdfBlob('/assets/sample.pdf');
-        }
-
-        if (pdfBlob && isMounted) {
-          const securePdfBlob = new Blob([pdfBlob], { type: 'application/pdf' });
-          const url = URL.createObjectURL(securePdfBlob);
-          activeUrl = url;
-          setBlobUrl(url);
-          setViewerError(null);
-          setLoading(false);
-        } else if (isMounted) {
-          setBlobUrl(null);
-          setViewerError('Document preview is currently unavailable on the server.');
-          setLoading(false);
-        }
-      } catch {
-        if (isMounted) {
-          setBlobUrl(null);
-          setViewerError('Document preview is currently unavailable on the server.');
-          setLoading(false);
-        }
-      }
-    };
-
-    loadProtectedBlob();
+    void verifyAndStreamPdf();
 
     return () => {
       isMounted = false;
-      if (activeUrl) {
-        URL.revokeObjectURL(activeUrl);
-      }
+      unmountController.abort();
+      clearSplashTimer();
     };
-  }, [file.path, isPdf]);
+  }, [file.path, isPdf, clearSplashTimer]);
 
   if (!file.path) return null;
+
+  const iframeUrl = streamUrl ? `${streamUrl}#toolbar=0&navpanes=0&scrollbar=0` : null;
 
   return createPortal(
     <div
@@ -180,12 +264,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
             onContextMenu={(e) => e.preventDefault()}
           >
             {isPdf ? (
-              loading ? (
-                <div className="flex flex-col items-center justify-center gap-2 text-gray-500 py-12">
-                  <span className="material-symbols-outlined animate-spin text-3xl text-blue-600">progress_activity</span>
-                  <span className="text-sm font-medium">Opening document for reading...</span>
-                </div>
-              ) : viewerError || !blobUrl ? (
+              viewerError && !loading ? (
                 <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full animate-modal-card">
                   <div className="w-20 h-20 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-6">
                     <span className="material-symbols-outlined text-4xl">description</span>
@@ -194,12 +273,27 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
                   <p className="text-gray-500 mb-2">{viewerError || 'Unable to render protected PDF preview.'}</p>
                 </div>
               ) : (
-                <iframe
-                  src={`${blobUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                  className="w-full h-full rounded-lg shadow-inner"
-                  style={{ minHeight: '60vh' }}
-                  title={file.name}
-                />
+                <div className="relative w-full h-full flex-1 self-stretch flex" style={{ minHeight: '60vh' }}>
+                  {iframeUrl && (
+                    <iframe
+                      key={iframeUrl}
+                      src={iframeUrl}
+                      onLoad={handleIframeLoad}
+                      className="w-full h-full flex-1 rounded-lg shadow-inner"
+                      style={{ minHeight: '60vh' }}
+                      title={file.name}
+                    />
+                  )}
+                  <div
+                    aria-hidden={!loading}
+                    className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-gray-500 bg-gray-100/95 rounded-lg transition-opacity duration-200 ${
+                      loading ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined animate-spin text-3xl text-blue-600">progress_activity</span>
+                    <span className="text-sm font-medium">Opening document for reading...</span>
+                  </div>
+                </div>
               )
             ) : isLink ? (
               <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full animate-modal-card">
