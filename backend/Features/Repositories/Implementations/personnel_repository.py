@@ -4,9 +4,12 @@ from django.db.models import Q
 from Features.Data.Models import Personnel
 from Features.Repositories.Interfaces import IPersonnelRepository
 
+MAX_PERSONNEL_ROWS = 100
+
+
 class PersonnelRepository(IPersonnelRepository):
     def get_all(self) -> List[Any]:
-        rows = list(Personnel.objects.all().order_by('order'))
+        rows = list(Personnel.objects.all().order_by('order')[:MAX_PERSONNEL_ROWS])
         if not any(getattr(p, 'order', None) == 1 or 'kiara' in str(getattr(p, 'name', '')).lower() for p in rows):
             rows.insert(
                 0,
@@ -27,7 +30,7 @@ class PersonnelRepository(IPersonnelRepository):
         token_query = Q()
         for token in valid_tokens:
             token_query |= Q(name__icontains=token) | Q(title__icontains=token)
-        return list(Personnel.objects.filter(token_query).order_by('order', 'id'))
+        return list(Personnel.objects.filter(token_query).order_by('order', 'id')[:MAX_PERSONNEL_ROWS])
 
     def get_by_id(self, personnel_id: int) -> Optional[Any]:
         return Personnel.objects.filter(id=personnel_id).first()

@@ -1378,17 +1378,19 @@ class AIService(IAIService):
             'ccs', 'bsis', 'bscs', 'cted', 'bpe', 'beed', 'caf', 'bsabe', 'biosystem', 'cba', 'agri',
             'worldcat', 'scribd', 'gutenberg', 'springer', 'eric', 'elib', 'vitalsource', 'scholaar'
         }
+        padded_norm = f" {norm} "
         has_eresource = (
-            any(k in norm for k in [
-                'eresource', 'e resource', 'e-resource', 'ebook', 'e book', 'e-book',
+            any(f" {k} " in padded_norm for k in [
+                'eresource', 'eresources', 'e resource', 'e resources', 'ebook', 'ebooks', 'e book', 'e books',
                 'vitalsource', 'vital source', 'bookshelf', 'scholaar', 'science direct', 'sciencedirect', 'gale',
-                'online database', 'online databases', 'proquest', 'ejournal', 'e journal', 'dost', 'starbooks',
-                'open access', 'open access journal', 'course folder', 'course folders', 'department folder',
-                'department folders', 'subject folder', 'subject folders', 'worldcat', 'scribd', 'gutenberg',
-                'springer', 'eric', 'elib', 'philippine e-journals', 'philippine ejournals', 'google books',
-                'internet archive', 'open library', 'getfreeebooks', 'free computer books', 'chirp', 'manybooks',
-                'cognizance', 'scimago', 'stanford encyclopedia', 'emerald publishing', 'taylor and francis',
-                'directory of open access', 'doaj', 'asean digital library', 'data structures', 'object oriented programming'
+                'online database', 'online databases', 'proquest', 'ejournal', 'ejournals', 'e journal', 'e journals',
+                'dost', 'starbooks', 'open access', 'open access journal', 'course folder', 'course folders',
+                'department folder', 'department folders', 'subject folder', 'subject folders', 'worldcat',
+                'scribd', 'gutenberg', 'springer', 'eric', 'elib', 'philippine e journals', 'philippine ejournals',
+                'google books', 'internet archive', 'open library', 'getfreeebooks', 'free computer books',
+                'chirp', 'manybooks', 'cognizance', 'scimago', 'stanford encyclopedia', 'emerald publishing',
+                'taylor and francis', 'directory of open access', 'doaj', 'asean digital library',
+                'data structures', 'object oriented programming'
             ])
             or bool(eresource_program_tokens & tokens)
             or ('department' in tokens and bool({'resource', 'resources', 'folder', 'folders', 'file', 'files', 'materials', 'courses', 'subjects'} & tokens))
@@ -1397,7 +1399,7 @@ class AIService(IAIService):
             or (bool({'database', 'databases', 'journal', 'journals'} & tokens) and bool({'online', 'subscribed', 'external', 'academic', 'available', 'open', 'access', 'what', 'list'} & tokens))
         )
 
-        if has_eresource and not is_document_knowledge_query:
+        if has_eresource and not is_document_knowledge_query and analyzed.intent != "book_topic_search":
             depts = self._get_all_eresource_depts()
             try:
                 active_files = list(self.eresource_file_repo.get_all_active())
@@ -1414,11 +1416,11 @@ class AIService(IAIService):
             courses_count = tree_counts.get("courses", 49) or 49
 
             matched_folders = AIReadViewHelper.match_eresource_folders(
-                depts, expanded_tokens, raw_query=user_message, limit=12
+                depts, expanded_tokens, raw_query=user_message, limit=6
             )
             positive_folder_matches = [f for f in matched_folders if f.get("score", 0) > 0]
-            folders_to_show = positive_folder_matches if positive_folder_matches else matched_folders[:8]
-            folder_lines = "\n".join([f"   - {f['breadcrumb']}" for f in folders_to_show])
+            folders_to_show = positive_folder_matches[:5] if positive_folder_matches else matched_folders[:5]
+            folder_lines = "\n".join([f"- {f['breadcrumb']}" for f in folders_to_show])
 
             try:
                 links = list(self.link_repo.get_all_active())
@@ -1427,45 +1429,20 @@ class AIService(IAIService):
 
             links_grouped = AIReadViewHelper.group_and_sort_managed_links(links, expanded_tokens)
             total_links = links_grouped.get("total_active", len(links)) or 23
-            by_cat = links_grouped.get("by_category", {})
-            cat_counts = links_grouped.get("category_counts", {})
             matched_links = links_grouped.get("matched_links", [])
-
-            cat_summary_lines = []
-            for cat_name in ["Acquired E-Resources", "Resources", "Open Access Journal"]:
-                cat_items = by_cat.get(cat_name, [])
-                c_count = cat_counts.get(cat_name, len(cat_items))
-                if cat_items:
-                    item_names = ", ".join([item["name"] for item in cat_items])
-                    cat_summary_lines.append(f"   - {cat_name} ({c_count}): {item_names}")
-            if not cat_summary_lines:
-                cat_summary_lines = [
-                    "   - Acquired E-Resources (2): Bookshelf (VitalSource), Scholaar",
-                    "   - Resources (9): Google Books, Internet Archive, Open Library, Project Gutenberg, Scribd, WorldCat, GetFreeEBooks, Free Computer Books, Chirp / Manybooks",
-                    "   - Open Access Journal (12): Directory of Open Access Journals, ERIC, Springer Open, Philippine E-Journals, Cognizance Journal, Scimago, Stanford Encyclopedia of Philosophy, Emerald Publishing, Taylor & Francis, ASEAN Digital Library",
-                ]
-            cat_summary_block = "\n".join(cat_summary_lines)
 
             matched_links_block = ""
             if matched_links:
-                top_lnk_lines = [f"   - {m['name']} [{m['category']}]: {m['url']}" for m in matched_links[:5]]
-                matched_links_block = "\nMatched Online Database Links:\n" + "\n".join(top_lnk_lines) + "\n"
-
-            files_note = (
-                f"Currently {file_count} downloadable PDF files are uploaded inside the folders."
-                if file_count > 0
-                else "Department folders are organized and ready as the library team uploads curriculum PDFs."
-            )
+                top_lnk_lines = [f"- {m['name']} [{m['category']}]: {m['url']}" for m in matched_links[:3]]
+                matched_links_block = "\nMatching Online Databases:\n" + "\n".join(top_lnk_lines) + "\n"
 
             return (
-                f"JRMSU Katipunan Campus Library provides extensive digital learning materials through our E-Resources collection:\n\n"
-                f"1. {dept_count_display} Academic Department Folders ({colleges_count} Colleges: AGRI, CAF, CBA, CCS, CTED | {programs_count} Programs | {courses_count} Course Folders — {files_note}):\n"
-                f"{folder_lines}\n\n"
-                f"2. {total_links} Online Databases & Academic Portals (Grouped by Category):\n"
-                f"{cat_summary_block}\n"
+                f"Our E-Resources collection (/collection) includes {dept_count_display} Academic Department Folders "
+                f"({colleges_count} Colleges: AGRI, CAF, CBA, CCS, CTED | {programs_count} Programs | {courses_count} Course Folders | {file_count} PDF files) "
+                f"and {total_links} Online Databases (VitalSource Bookshelf, Scholaar, Science Direct, ProQuest, Philippine E-Journals, Open Access Journals):\n\n"
+                f"{folder_lines}\n"
                 f"{matched_links_block}\n"
-                f"To access subscribed external databases (such as Bookshelf by VitalSource or Scholaar) or browse course folders, "
-                f"simply visit 'Collection' -> 'Local Books', 'Online Access', or 'External Libraries' on our website (/collection)!"
+                "Browse full folders and databases under 'Collection' -> 'Local Books', 'Online Access', or 'External Libraries' (/collection)."
             )
 
         # ---------------------------------------------------------
@@ -1746,7 +1723,31 @@ class AIService(IAIService):
 
             # Topic-aware live search across EResourceFileRepository, BookRepository, and ResearchReferenceRepository
             if topic_tokens:
+                modifier_words = {
+                    "basic", "basics", "intro", "introduction", "introductory",
+                    "general", "modern", "advanced", "applied", "principles",
+                    "principle", "fundamental", "fundamentals", "elementary",
+                    "guide", "handbook", "manual", "textbook",
+                }
+                broad_generic_nouns = {
+                    "science", "sciences", "studies", "study", "technology",
+                    "system", "systems", "education", "management",
+                }
+                core_topic_tokens = topic_tokens - modifier_words
+                if not core_topic_tokens:
+                    core_topic_tokens = set(topic_tokens)
+
+                ordered_topic_words: List[str] = []
+                for w in analyzed.normalized_query.split():
+                    if w in topic_tokens and w not in ordered_topic_words:
+                        ordered_topic_words.append(w)
+                topic_label = " ".join(ordered_topic_words) if ordered_topic_words else " ".join(sorted(topic_tokens))
+
+                def _doc_matches_token(tok: str, text_l: str, text_words: set) -> bool:
+                    return AIReadViewHelper._match_token_in_text(tok, text_l, text_words) > 0
+
                 matched_files = []
+                related_files = []
                 try:
                     candidate_files = []
                     if hasattr(self.eresource_file_repo, 'search_active_files'):
@@ -1755,9 +1756,26 @@ class AIService(IAIService):
                         candidate_files = list(self.eresource_file_repo.get_all_active())
                     elif not candidate_files and hasattr(self.eresource_file_repo, 'get_all'):
                         candidate_files = list(self.eresource_file_repo.get_all())
-                    matched_files = AIReadViewHelper.match_eresource_files(
-                        candidate_files, search_tokens, raw_query=user_message, limit=5
+                    ranked_files = AIReadViewHelper.match_eresource_files(
+                        candidate_files, list(topic_tokens), raw_query=topic_label, limit=8
                     )
+                    specific_core_tokens = core_topic_tokens - broad_generic_nouns
+                    for f in ranked_files:
+                        f_hay = (
+                            f"{AIReadViewHelper._extract_doc_name(f)} "
+                            f"{getattr(f, 'keywords', '')} "
+                            f"{getattr(f, 'summary', '')} "
+                            f"{getattr(f, 'key_topics', '')}"
+                        ).lower()
+                        f_words = set(re.findall(r"[a-z0-9]+", f_hay))
+                        if all(_doc_matches_token(tok, f_hay, f_words) for tok in core_topic_tokens):
+                            matched_files.append(f)
+                        elif specific_core_tokens and any(
+                            _doc_matches_token(tok, f_hay, f_words) for tok in specific_core_tokens
+                        ):
+                            related_files.append(f)
+                    matched_files = matched_files[:3]
+                    related_files = related_files[:3]
                 except Exception as e:
                     logger.warning(f"Topic EResourceFile search warning: {e}")
 
@@ -1766,15 +1784,14 @@ class AIService(IAIService):
                     try:
                         searched_books = list(self.book_repo.search_multi_token(search_tokens, limit=25))
                         if searched_books:
-                            matched_books = [
-                                b for b in AIReadViewHelper.rank_and_sort_books(
-                                    searched_books, search_tokens, raw_query=user_message, limit=5
-                                )
-                                if any(
-                                    tok in f"{getattr(b, 'title', '')} {getattr(b, 'category', '')} {getattr(b, 'author', '')}".lower()
-                                    for tok in topic_tokens
-                                )
-                            ]
+                            for b in AIReadViewHelper.rank_and_sort_books(
+                                searched_books, list(topic_tokens), raw_query=topic_label, limit=5
+                            ):
+                                b_hay = f"{getattr(b, 'title', '')} {getattr(b, 'category', '')} {getattr(b, 'author', '')}".lower()
+                                b_words = set(re.findall(r"[a-z0-9]+", b_hay))
+                                if all(_doc_matches_token(tok, b_hay, b_words) for tok in core_topic_tokens):
+                                    matched_books.append(b)
+                            matched_books = matched_books[:3]
                     except Exception as e:
                         logger.warning(f"Topic Book search warning: {e}")
 
@@ -1784,65 +1801,71 @@ class AIService(IAIService):
                     if hasattr(self.reference_repo, 'search_multi_token'):
                         searched_refs = list(self.reference_repo.search_multi_token(search_tokens, limit=10))
                     if searched_refs:
-                        topic_filtered_refs = [
-                            r for r in searched_refs
-                            if any(
-                                tok in f"{getattr(r, 'title', '')} {getattr(r, 'department', '')} {getattr(r, 'category', '')} {getattr(r, 'author', '')} {getattr(r, 'abstract', '')}".lower()
-                                for tok in topic_tokens
-                            )
-                        ]
+                        topic_filtered_refs = []
+                        for r in searched_refs:
+                            r_hay = f"{getattr(r, 'title', '')} {getattr(r, 'department', '')} {getattr(r, 'category', '')} {getattr(r, 'author', '')} {getattr(r, 'abstract', '')}".lower()
+                            r_words = set(re.findall(r"[a-z0-9]+", r_hay))
+                            if all(_doc_matches_token(tok, r_hay, r_words) for tok in core_topic_tokens):
+                                topic_filtered_refs.append(r)
                         if topic_filtered_refs:
                             matched_refs = AIReadViewHelper.rank_and_sort_references(
-                                topic_filtered_refs, search_tokens, raw_query=user_message, limit=3
+                                topic_filtered_refs, list(topic_tokens), raw_query=topic_label, limit=3
                             )
                 except Exception as e:
                     logger.warning(f"Topic ResearchReference search warning: {e}")
 
+                def _format_concise_file_line(f_obj: Any) -> str:
+                    f_name = AIReadViewHelper._extract_doc_name(f_obj) or "Document"
+                    f_author = AIReadViewHelper.extract_document_author(f_obj)
+                    f_crumb = AIReadViewHelper._extract_file_breadcrumb(f_obj)
+                    f_summary = str(getattr(f_obj, 'summary', '') or '').strip()
+                    line = f"- '{f_name}'"
+                    if f_author:
+                        line += f" by {f_author}"
+                    if f_crumb:
+                        line += f" ({f_crumb})"
+                    if f_summary:
+                        snippet = f_summary[:140].rstrip()
+                        if len(f_summary) > 140:
+                            snippet += "..."
+                        line += f" — {snippet}"
+                    return line
+
                 if matched_files or matched_books or matched_refs:
                     sections: List[str] = []
-                    ordered_topic_words: List[str] = []
-                    for w in analyzed.normalized_query.split():
-                        if w in topic_tokens and w not in ordered_topic_words:
-                            ordered_topic_words.append(w)
-                    topic_label = " ".join(ordered_topic_words) if ordered_topic_words else " ".join(sorted(topic_tokens))
                     if matched_files:
-                        file_lines = []
-                        for f in matched_files:
-                            f_name = AIReadViewHelper._extract_doc_name(f) or "Document"
-                            f_author = AIReadViewHelper.extract_document_author(f)
-                            f_crumb = AIReadViewHelper._extract_file_breadcrumb(f)
-                            f_summary = str(getattr(f, 'summary', '') or '').strip()
-                            line = f"- '{f_name}'"
-                            if f_author:
-                                line += f" by {f_author}"
-                            if f_crumb:
-                                line += f" (Department: {f_crumb})"
-                            if f_summary:
-                                snippet = f_summary[:180].rstrip()
-                                if len(f_summary) > 180:
-                                    snippet += "..."
-                                line += f" - {snippet}"
-                            file_lines.append(line)
-                        sections.append("Digital E-Resources (Collection -> Local Books):\n" + "\n".join(file_lines))
-
+                        sections.append("\n".join(_format_concise_file_line(f) for f in matched_files))
                     if matched_books:
                         book_lines = [
                             f"- '{getattr(b, 'title', 'Untitled')}' by {getattr(b, 'author', 'Unknown') or 'Unknown'} "
-                            f"(Category: {getattr(b, 'category', 'General') or 'General'}, Accession: {getattr(b, 'accession_number', 'N/A') or 'N/A'})"
+                            f"({getattr(b, 'category', 'General') or 'General'}, Accession: {getattr(b, 'accession_number', 'N/A') or 'N/A'})"
                             for b in matched_books
                         ]
-                        sections.append("Newly Acquired Books:\n" + "\n".join(book_lines))
-
+                        sections.append("\n".join(book_lines))
                     if matched_refs:
                         ref_lines = [f"- {self._format_ref(r)}" for r in matched_refs]
-                        sections.append("Research & Thesis References:\n" + "\n".join(ref_lines))
+                        sections.append("\n".join(ref_lines))
 
-                    joined_sections = "\n\n".join(sections)
+                    joined_sections = "\n".join(sections)
                     return (
-                        f"Here are verified resources matching '{topic_label}' in our library database:\n\n"
+                        f"Here are the verified resources matching '{topic_label}' in our library catalog:\n"
                         f"{joined_sections}\n\n"
-                        f"You can access these verified titles under 'Collection' -> 'Local Books', 'Newly Acquired Books', or 'Research & Thesis References' on our website (/collection).{dept_hint}"
+                        "You can read these under 'Collection' -> 'Local Books' or 'Newly Acquired Books' (/collection)."
                     )
+
+                if related_files:
+                    rel_lines = "\n".join(_format_concise_file_line(f) for f in related_files)
+                    return (
+                        f"We currently do not have a dedicated '{topic_label}' book in our catalog, "
+                        f"but here are the closest related titles in our Local Books collection:\n"
+                        f"{rel_lines}\n\n"
+                        "You can view these under 'Collection' -> 'Local Books' (/collection)."
+                    )
+
+                return (
+                    f"We currently do not have books specifically matching '{topic_label}' in our digital catalog.{dept_hint} "
+                    "You can browse our department folders under 'Collection' -> 'Local Books' (/collection) or check Union OPAC at /collection/union-opac."
+                )
 
             if total == 0:
                 return (
@@ -2053,20 +2076,20 @@ class AIService(IAIService):
         """
         concise_tier1_inst = (
             "TIER 1 (INSTANT MICRO-ANSWER):\n"
-            "INSTRUCTION-TUNED CONCISE MODE: Answer ONLY the exact question asked in 1–2 short, factual sentences "
-            "based strictly on the retrieved RAG context. Do NOT dump unrelated summaries, greetings, or boilerplate."
+            "INSTRUCTION-TUNED CONCISE MODE: Answer ONLY the exact question asked in 1–2 short, natural sentences "
+            "based strictly on the retrieved internal library context. Do NOT dump unrelated summaries, greetings, or boilerplate."
         )
         tier2_inst = (
-            "TIER 2 (STRUCTURED ACTION ANSWER):\n"
-            "1. Start with 1 direct lead sentence answering the prompt.\n"
-            "2. Provide 3-5 concise, structured bullet points citing verified database items or step-by-step procedures.\n"
-            "3. Conclude concisely with actionable guidance."
+            "TIER 2 (CONCISE DIRECT ANSWER):\n"
+            "1. Start with 1 short, direct sentence answering the user's question.\n"
+            "2. List at most 3–4 short bullet points citing verified library records if applicable.\n"
+            "3. Keep the total response brief, natural, and free of long boilerplate footers."
         )
         tier3_inst = (
-            "TIER 3 (DEEP ACADEMIC REASONING AND RRL):\n"
-            "1. Bottom Line Up Front (BLUF): Provide the direct core answer or recommendation in the very first sentence.\n"
-            "2. Systematic Reasoning: Explain the concepts, methodology, or reasoning clearly with logical progression.\n"
-            "3. Verified Database Grounding: Cite specific verified books, theses, or E-Resource course folders from the context to back up your explanation."
+            "TIER 3 (FOCUSED ACADEMIC ANSWER):\n"
+            "1. Bottom Line Up Front (BLUF): Give the direct core answer in the first sentence.\n"
+            "2. Explain concisely in 2–4 clear sentences citing verified books, theses, or E-Resource folders from the internal library context.\n"
+            "3. Avoid repetitive filler or long unrelated lists."
         )
         if not user_message:
             return "TIER_1", self._get_ollama_options("TIER_1"), concise_tier1_inst

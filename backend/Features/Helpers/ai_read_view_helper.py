@@ -82,6 +82,18 @@ class AIReadViewHelper:
         "as",
         "and",
         "or",
+        "found",
+        "finding",
+        "locate",
+        "located",
+        "suggest",
+        "suggested",
+        "recommend",
+        "recommended",
+        "want",
+        "need",
+        "know",
+        "looking",
     }
 
     # Generic catalog query words that should not exclude fallback results when no title matches.
@@ -96,6 +108,7 @@ class AIReadViewHelper:
         "jrmsu",
         "katipunan",
         "collection",
+        "collections",
         "holdings",
         "title",
         "titles",
@@ -105,6 +118,21 @@ class AIReadViewHelper:
         "resources",
         "eresource",
         "eresources",
+        "local",
+        "localbook",
+        "localbooks",
+        "localbok",
+        "localboks",
+        "ebook",
+        "ebooks",
+        "file",
+        "files",
+        "pdf",
+        "pdfs",
+        "document",
+        "documents",
+        "folder",
+        "folders",
     }
 
     # Domain synonym and college/program acronym expansion table.
@@ -301,17 +329,25 @@ class AIReadViewHelper:
         Deterministic token matcher against a text field and its extracted word tokens.
         - Strict whole-word match for short acronyms like 'it', 'pe', 'cs', 'ai', 'caf', 'cba'
           (len <= 3) to prevent arbitrary substring collisions (e.g. 'with', 'open', 'basics', 'daily').
-        - Prefix or whole-word match (5.0) or substring match (1.5) for longer tokens (len > 3).
+        - Whole-word or close stem/plural match (5.0) for longer tokens (len > 3), preventing
+          false prefix collisions like 'found' -> 'foundation'.
         """
         if not token or not text_lower:
             return 0.0
         if len(token) <= 3:
             # Strict whole-word match for short acronyms like 'it', 'pe', 'cs', 'ai', 'caf', 'cba'
             return 5.0 if token in text_words else 0.0
-        if token in text_words or any(w.startswith(token) for w in text_words):
+        if token in text_words:
             return 5.0
-        if token in text_lower:
-            return 1.5
+        if len(token) >= 5 and any(
+            w.startswith(token) and (len(w) - len(token) <= 4) for w in text_words
+        ):
+            return 5.0
+        if len(token) >= 6 and any(
+            token.startswith(w) and len(w) >= 5 and (len(token) - len(w) <= 4)
+            for w in text_words
+        ):
+            return 4.0
         return 0.0
 
     @staticmethod
@@ -661,7 +697,7 @@ class AIReadViewHelper:
         tokens = [
             t.lower()
             for t in (query_tokens or [])
-            if t and t.lower() not in cls.GENERIC_CATALOG_WORDS
+            if t and t.lower() not in cls.GENERIC_CATALOG_WORDS and t.lower() not in cls.STOP_WORDS
         ]
         matched_codes = [t for t in tokens if t in cls.COLLEGE_PROGRAM_CODES]
 
@@ -671,13 +707,14 @@ class AIReadViewHelper:
             breadcrumb_l = node["breadcrumb"].lower()
             depth = int(node["depth"])
             order_val = int(node["order"])
+            name_words = set(re.findall(r"[a-z0-9]+", name_l))
             breadcrumb_words = set(re.findall(r"[a-z0-9]+", breadcrumb_l))
 
             score = 0.0
 
             # 1. College/program code boost for descendant folders
             for code in matched_codes:
-                if code in breadcrumb_words or code in breadcrumb_l:
+                if code in breadcrumb_words:
                     if depth >= 2:
                         score += 8.0
                     elif depth == 1:
@@ -691,9 +728,9 @@ class AIReadViewHelper:
 
             # 3. Token matches in folder name (+5.0) and breadcrumb (+3.0)
             for tok in tokens:
-                if tok in name_l:
+                if cls._match_token_in_text(tok, name_l, name_words) > 0:
                     score += 5.0
-                if tok in breadcrumb_l:
+                if cls._match_token_in_text(tok, breadcrumb_l, breadcrumb_words) > 0:
                     score += 3.0
 
             if score > 0.0:
