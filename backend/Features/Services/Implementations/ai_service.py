@@ -14,6 +14,8 @@ import re
 import random
 import difflib
 import hashlib
+import queue
+import threading
 import time
 import uuid
 from urllib.parse import urlparse
@@ -88,6 +90,9 @@ AI_IDEMPOTENCY_RESULT_TTL = 120
 AI_IDEMPOTENCY_POLL_MAX_SECONDS = 8.0
 AI_IDEMPOTENCY_POLL_STEP_SECONDS = 0.25
 AI_OPENING_BUFFER_MAX_CHARS = 180
+AI_LATE_SHADOW_CACHE_PREFIX = "rizal:ai:late_shadow_cache:"
+AI_LATE_SHADOW_CACHE_TTL = 600  # 10 minutes temporary cache for late model responses
+AI_PRIMARY_GREEN_PRIORITY_WINDOW_SECONDS = 1.5
 
 APPROVED_LIBRARY_DOMAINS = (
     'jrmsukc-library.online',
@@ -121,6 +126,7 @@ class AIService(IAIService):
         self.ollama_url = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434/api/chat')
         self.model_name = 'qwen2.5:0.5b'
         self.request_timeout = self._resolve_request_timeout()
+        self.primary_green_priority_window_seconds = AI_PRIMARY_GREEN_PRIORITY_WINDOW_SECONDS
 
         # All Permitted Public/Student-Facing Repositories Wired
         self.personnel_repo = personnel_repo or PersonnelRepository()
@@ -1175,6 +1181,12 @@ class AIService(IAIService):
             'reference' in tokens and not any(p in norm for p in ['for your reference', 'reference number', 'reference section'])
         ) or (
             'research' in tokens
+            and bool({
+                'paper', 'papers', 'reference', 'references', 'catalog', 'database',
+                'theses', 'thesis', 'dissertation', 'list', 'available', 'show',
+                'any', 'have', 'find', 'search', 'softcopy', 'copy', 'copies',
+                'title', 'titles',
+            } & tokens)
             and not any(w in norm for w in ['social learning', 'learning zone', 'zone', 'research section', '1st floor', '2nd floor', 'first floor', 'second floor'])
         )
 
@@ -2493,6 +2505,107 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
         except Exception as e:
             logger.warning(f"Idempotency result cache write warning: {e}")
 
+    def _late_shadow_cache_key(self, user_message: str) -> str:
+        norm = self._normalize_question(user_message)
+        digest = hashlib.sha256(norm.encode("utf-8")).hexdigest()
+        return f"{AI_LATE_SHADOW_CACHE_PREFIX}{digest}"
+
+    def _store_late_shadow_cache(self, user_message: str, provider_id: str, text: str) -> None:
+        if not user_message or not text or not str(text).strip():
+            return
+        sanitized = self._sanitize_llm_output(
+            str(text),
+            user_message=user_message,
+            strip_unapproved_urls=True,
+            trim_incomplete=False,
+        )
+        cleaned_text = self._finalize_complete_sentence(
+            sanitized,
+            has_prior_complete_sentence=False,
+        ).strip()
+        if not cleaned_text or self._is_incapability_dodge(cleaned_text):
+            return
+        payload = {
+            "provider_id": str(provider_id or ""),
+            "text": cleaned_text,
+            "cached_at": time.time(),
+        }
+        try:
+            cache.set(
+                self._late_shadow_cache_key(user_message),
+                payload,
+                timeout=AI_LATE_SHADOW_CACHE_TTL,
+            )
+        except Exception as exc:
+            logger.warning(f"Late shadow cache write warning ({provider_id}): {exc}")
+
+    def _get_late_shadow_cache(self, user_message: str) -> Optional[str]:
+        if not user_message:
+            return None
+        try:
+            val = cache.get(self._late_shadow_cache_key(user_message))
+            if isinstance(val, dict) and isinstance(val.get("text"), str) and val["text"].strip():
+                return val["text"].strip()
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        except Exception as exc:
+            logger.warning(f"Late shadow cache read warning: {exc}")
+        return None
+
+    def get_ai_provider_status(self) -> Dict[str, Any]:
+        summary_fn = getattr(self.provider_registry, "get_provider_status_summary", None)
+        if callable(summary_fn):
+            try:
+                summary = summary_fn()
+                if isinstance(summary, dict):
+                    return summary
+            except Exception as exc:
+                logger.warning(f"Provider status summary error: {exc}")
+
+        mode = (
+            self.provider_registry.resolve_mode()
+            if hasattr(self.provider_registry, "resolve_mode")
+            else "claude_first"
+        )
+        ordered = (
+            list(self.provider_registry.get_ordered_strategies())
+            if hasattr(self.provider_registry, "get_ordered_strategies")
+            else []
+        )
+        active_provider = ordered[0].provider_id if ordered else "ollama"
+        providers_info: Dict[str, Any] = {}
+        for pid in ("claude", "ollama"):
+            prov = (
+                self.provider_registry.get_provider(pid)
+                if hasattr(self.provider_registry, "get_provider")
+                else None
+            )
+            configured = bool(prov and prov.is_configured())
+            tripped = (
+                bool(self.provider_registry.is_tripped(pid))
+                if hasattr(self.provider_registry, "is_tripped")
+                else False
+            )
+            providers_info[pid] = {
+                "provider_id": pid,
+                "configured": configured,
+                "tripped": tripped,
+                "healthy": configured and not tripped,
+                "status": "green" if (configured and not tripped) else ("yellow" if tripped else "unconfigured"),
+                "model": getattr(prov, "model_name", ""),
+            }
+        claude_green = bool(providers_info.get("claude", {}).get("healthy"))
+        return {
+            "mode": mode,
+            "active_provider": active_provider,
+            "primary_provider": "claude",
+            "fallback_provider": "ollama",
+            "claude_green": claude_green,
+            "indicator": "green" if claude_green else "fallback",
+            "status": "green" if claude_green else "fallback",
+            "providers": providers_info,
+        }
+
     def _acquire_idempotency_lease(self, idempotency_key: Optional[str]) -> Tuple[Optional[str], Optional[str], bool]:
         """
         Single-Winner Redis Idempotency Lease:
@@ -2653,6 +2766,303 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             )
             gen_config = self._build_llm_generation_config(options)
             strategies = list(self.provider_registry.get_ordered_strategies())
+
+            if len(strategies) >= 2:
+                primary_strategy = strategies[0]
+                secondary_strategy = strategies[1]
+                winner_lock = threading.Lock()
+                winner_holder: Dict[str, Optional[str]] = {"id": None}
+
+                def _make_worker_state(strat: ILLMProviderStrategy) -> Dict[str, Any]:
+                    return {
+                        "strategy": strat,
+                        "opening_ready_event": threading.Event(),
+                        "done_event": threading.Event(),
+                        "chunk_queue": queue.Queue(),
+                        "opening_chunk": None,
+                        "failed": False,
+                        "collected_parts": [],
+                        "shadow_cached": False,
+                    }
+
+                p_state = _make_worker_state(primary_strategy)
+                s_state = _make_worker_state(secondary_strategy)
+
+                def _run_hedged_worker(state: Dict[str, Any]) -> None:
+                    strat: ILLMProviderStrategy = state["strategy"]
+                    has_opening = False
+                    opening_buffer = ""
+                    stream_buffer = ""
+                    try:
+                        for token in strat.stream_chat(messages, gen_config, self.session):
+                            if not token:
+                                continue
+
+                            if not has_opening:
+                                opening_buffer += token
+                                stripped_opening = opening_buffer.lstrip()
+                                if not stripped_opening:
+                                    continue
+
+                                flush_idx = self._find_sentence_flush_index(stripped_opening)
+                                if flush_idx == -1:
+                                    if len(stripped_opening) < AI_OPENING_BUFFER_MAX_CHARS:
+                                        continue
+                                    last_space = stripped_opening.rfind(' ')
+                                    flush_idx = (last_space + 1) if last_space > 40 else len(stripped_opening)
+
+                                lead_len = len(opening_buffer) - len(stripped_opening)
+                                split_at = lead_len + flush_idx
+                                opening_segment = opening_buffer[:split_at]
+                                remainder = opening_buffer[split_at:]
+
+                                if self._is_incapability_dodge(opening_segment):
+                                    logger.info(
+                                        "Hedged worker discarded dodge opening from %s.",
+                                        strat.provider_id,
+                                    )
+                                    state["failed"] = True
+                                    return
+
+                                trailing_ws = opening_segment[len(opening_segment.rstrip()):]
+                                sanitized_opening = self._sanitize_llm_output(
+                                    opening_segment,
+                                    user_message=user_message,
+                                    strip_unapproved_urls=True,
+                                    trim_incomplete=False,
+                                )
+                                if self._is_incapability_dodge(sanitized_opening):
+                                    logger.info(
+                                        "Hedged worker discarded dodge sanitized opening from %s.",
+                                        strat.provider_id,
+                                    )
+                                    state["failed"] = True
+                                    return
+
+                                if not sanitized_opening:
+                                    opening_buffer = remainder
+                                    continue
+
+                                has_opening = True
+                                opening_buffer = ""
+                                out_chunk = sanitized_opening + trailing_ws
+                                state["opening_chunk"] = out_chunk
+                                state["collected_parts"].append(out_chunk)
+                                state["opening_ready_event"].set()
+
+                                if remainder:
+                                    stream_buffer += remainder
+                            else:
+                                stream_buffer += token
+
+                            if has_opening:
+                                while stream_buffer:
+                                    flush_idx = self._find_sentence_flush_index(stream_buffer)
+                                    if flush_idx == -1:
+                                        break
+                                    segment = stream_buffer[:flush_idx]
+                                    stream_buffer = stream_buffer[flush_idx:]
+                                    trailing_ws = segment[len(segment.rstrip()):]
+                                    sanitized = self._sanitize_llm_output(
+                                        segment,
+                                        user_message=user_message,
+                                        strip_unapproved_urls=True,
+                                        trim_incomplete=False,
+                                    )
+                                    if sanitized:
+                                        seg_chunk = sanitized + trailing_ws
+                                        state["collected_parts"].append(seg_chunk)
+                                        state["chunk_queue"].put(seg_chunk)
+
+                        if not has_opening:
+                            if opening_buffer.strip():
+                                if self._is_incapability_dodge(opening_buffer):
+                                    state["failed"] = True
+                                    return
+                                trailing_ws = opening_buffer[len(opening_buffer.rstrip()):]
+                                sanitized_opening = self._sanitize_llm_output(
+                                    opening_buffer,
+                                    user_message=user_message,
+                                    strip_unapproved_urls=True,
+                                    trim_incomplete=False,
+                                )
+                                sanitized_opening = self._finalize_complete_sentence(
+                                    sanitized_opening,
+                                    has_prior_complete_sentence=False,
+                                )
+                                if sanitized_opening and not self._is_incapability_dodge(sanitized_opening):
+                                    has_opening = True
+                                    out_chunk = sanitized_opening + trailing_ws
+                                    state["opening_chunk"] = out_chunk
+                                    state["collected_parts"].append(out_chunk)
+                                    state["opening_ready_event"].set()
+                            if not has_opening:
+                                state["failed"] = True
+                                return
+                        elif stream_buffer:
+                            sanitized = self._sanitize_llm_output(
+                                stream_buffer,
+                                user_message=user_message,
+                                strip_unapproved_urls=True,
+                                trim_incomplete=False,
+                            )
+                            prior_complete = self._ends_with_sentence_terminator("".join(state["collected_parts"]))
+                            finalized = self._finalize_complete_sentence(
+                                sanitized,
+                                has_prior_complete_sentence=prior_complete,
+                            )
+                            stream_buffer = ""
+                            if finalized:
+                                state["collected_parts"].append(finalized)
+                                state["chunk_queue"].put(finalized)
+
+                        if has_opening:
+                            self._safe_clear_circuit(strat.provider_id)
+
+                    except ProviderUnavailableError as err:
+                        logger.warning(
+                            "Hedged provider %s unavailable (has_opening=%s): %s",
+                            strat.provider_id,
+                            has_opening,
+                            err,
+                        )
+                        self._safe_trip_circuit(
+                            strat.provider_id,
+                            retry_after_seconds=getattr(err, "retry_after_seconds", 60),
+                            reason=str(err),
+                            is_permanent_or_auth=bool(getattr(err, "is_permanent_or_auth", False)),
+                        )
+                        if not has_opening:
+                            state["failed"] = True
+                        elif stream_buffer:
+                            sanitized = self._sanitize_llm_output(
+                                stream_buffer,
+                                user_message=user_message,
+                                strip_unapproved_urls=True,
+                                trim_incomplete=False,
+                            )
+                            prior_complete = self._ends_with_sentence_terminator("".join(state["collected_parts"]))
+                            finalized = self._finalize_complete_sentence(
+                                sanitized,
+                                has_prior_complete_sentence=prior_complete,
+                            )
+                            stream_buffer = ""
+                            if finalized:
+                                state["collected_parts"].append(finalized)
+                                state["chunk_queue"].put(finalized)
+                    except Exception as exc:
+                        logger.error(
+                            "Hedged provider %s error (has_opening=%s): %s",
+                            strat.provider_id,
+                            has_opening,
+                            exc,
+                        )
+                        if not has_opening:
+                            self._safe_trip_circuit(
+                                strat.provider_id,
+                                retry_after_seconds=60,
+                                reason=str(exc),
+                            )
+                            state["failed"] = True
+                    finally:
+                        state["chunk_queue"].put(None)
+                        state["done_event"].set()
+                        state["opening_ready_event"].set()
+                        with winner_lock:
+                            win_id = winner_holder["id"]
+                            if (
+                                win_id is not None
+                                and win_id != strat.provider_id
+                                and not state["shadow_cached"]
+                                and state["collected_parts"]
+                            ):
+                                state["shadow_cached"] = True
+                                full_late_text = "".join(state["collected_parts"]).strip()
+                            else:
+                                full_late_text = ""
+                        if full_late_text:
+                            self._store_late_shadow_cache(user_message, strat.provider_id, full_late_text)
+
+                t_primary = threading.Thread(target=_run_hedged_worker, args=(p_state,), daemon=True)
+                t_secondary = threading.Thread(target=_run_hedged_worker, args=(s_state,), daemon=True)
+                race_start = time.monotonic()
+                t_primary.start()
+                t_secondary.start()
+
+                is_tripped_fn = getattr(self.provider_registry, "is_tripped", None)
+                primary_tripped = (
+                    bool(is_tripped_fn(primary_strategy.provider_id))
+                    if callable(is_tripped_fn)
+                    else False
+                )
+                primary_green = (primary_strategy.provider_id == "claude" and not primary_tripped)
+                priority_window = float(
+                    getattr(
+                        self,
+                        "primary_green_priority_window_seconds",
+                        AI_PRIMARY_GREEN_PRIORITY_WINDOW_SECONDS,
+                    )
+                )
+
+                winner_state: Optional[Dict[str, Any]] = None
+                loser_state: Optional[Dict[str, Any]] = None
+
+                while winner_state is None:
+                    p_ready = p_state["opening_chunk"] is not None
+                    s_ready = s_state["opening_chunk"] is not None
+                    p_dead = p_state["failed"] or (p_state["done_event"].is_set() and not p_ready)
+                    s_dead = s_state["failed"] or (s_state["done_event"].is_set() and not s_ready)
+
+                    if p_ready:
+                        winner_state = p_state
+                        loser_state = s_state
+                        break
+
+                    if s_ready:
+                        elapsed = time.monotonic() - race_start
+                        if p_dead or not primary_green or elapsed >= priority_window:
+                            winner_state = s_state
+                            loser_state = p_state
+                            break
+
+                    if p_dead and s_dead:
+                        break
+
+                    time.sleep(0.015)
+
+                if winner_state is not None and winner_state["opening_chunk"] is not None:
+                    late_to_cache = ""
+                    loser_id = ""
+                    with winner_lock:
+                        winner_holder["id"] = winner_state["strategy"].provider_id
+                        if (
+                            loser_state is not None
+                            and loser_state["done_event"].is_set()
+                            and not loser_state["shadow_cached"]
+                            and loser_state["collected_parts"]
+                        ):
+                            loser_state["shadow_cached"] = True
+                            late_to_cache = "".join(loser_state["collected_parts"]).strip()
+                            loser_id = loser_state["strategy"].provider_id
+                    if late_to_cache and loser_id:
+                        self._store_late_shadow_cache(user_message, loser_id, late_to_cache)
+
+                    committed_parts: List[str] = [winner_state["opening_chunk"]]
+                    yield winner_state["opening_chunk"]
+
+                    while True:
+                        next_chunk = winner_state["chunk_queue"].get()
+                        if next_chunk is None:
+                            break
+                        committed_parts.append(next_chunk)
+                        yield next_chunk
+
+                    final_text = "".join(committed_parts).strip()
+                    if final_text:
+                        self._commit_idempotency_result(idempotency_key, final_text)
+                    return
+
+                strategies = strategies[2:]
 
             for idx, strategy in enumerate(strategies):
                 has_backup = idx < (len(strategies) - 1)
@@ -2844,6 +3254,12 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                     if final_text:
                         self._commit_idempotency_result(idempotency_key, final_text)
                     return
+
+            shadow_fallback = self._get_late_shadow_cache(user_message)
+            if shadow_fallback:
+                self._commit_idempotency_result(idempotency_key, shadow_fallback)
+                yield from self._yield_word_chunks(shadow_fallback)
+                return
 
             yield (
                 "I'm currently unable to reach my AI engines right now. "

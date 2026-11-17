@@ -24,7 +24,7 @@ class ClaudeLLMProvider(ILLMProviderStrategy):
 
     DEFAULT_MODEL = "claude-haiku-4-5"
     DEFAULT_TIMEOUT = 45.0
-    DEFAULT_CONNECT_TIMEOUT = 2.5
+    DEFAULT_CONNECT_TIMEOUT = 1.5
     DEFAULT_API_URL = "https://api.anthropic.com/v1/messages"
     DEFAULT_API_VERSION = "2023-06-01"
 
