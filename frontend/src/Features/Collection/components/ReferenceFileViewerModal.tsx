@@ -22,6 +22,24 @@ interface ReferenceFileViewerModalProps {
   onClose: () => void;
 }
 
+const isBlockedReferenceShortcut = (e: KeyboardEvent): boolean => {
+  const key = e.key.toLowerCase();
+  const hasPrimaryModifier = e.ctrlKey || e.metaKey;
+  return (
+    e.key === 'F12' ||
+    key === 'f12' ||
+    (hasPrimaryModifier && e.shiftKey && (key === 'i' || key === 'c' || key === 'j')) ||
+    (e.metaKey && e.altKey && (key === 'i' || key === 'c' || key === 'j')) ||
+    (hasPrimaryModifier && (key === 'u' || key === 's' || key === 'p'))
+  );
+};
+
+const isRenderingCancelled = (err: unknown): boolean =>
+  typeof err === 'object' &&
+  err !== null &&
+  'name' in err &&
+  (err as { name: unknown }).name === 'RenderingCancelledException';
+
 export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: ReferenceFileViewerModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +51,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const renderTaskRef = useRef<any>(null);
+  const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
   const loadingTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
@@ -46,18 +64,23 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
     }
   }, [securityWarning]);
 
-  // Keyboard shortcut suppression & security guards (Ctrl+S, Ctrl+P, Ctrl+U, F12)
+  // Body scroll lock & print suppression marker class while modal is mounted
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('readonly-viewer-active');
+    return () => {
+      document.body.style.overflow = '';
+      document.body.classList.remove('readonly-viewer-active');
+    };
+  }, []);
+
+  // Defense-in-depth keyboard shortcut suppression for read-only viewer (Inspect, View-Source, Save, Print)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isSave = (e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S');
-      const isPrint = (e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P');
-      const isViewSource = (e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U');
-      const isInspect = e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'i', 'C', 'c', 'J', 'j'].includes(e.key));
-
-      if (isSave || isPrint || isViewSource || isInspect) {
+      if (isBlockedReferenceShortcut(e)) {
         e.preventDefault();
         e.stopPropagation();
-        setSecurityWarning?.('Right-click and export shortcuts are disabled to protect JRMSU Library collection materials.');
+        setSecurityWarning('Inspect, save, and print shortcuts are disabled to protect JRMSU Library collection materials.');
         return;
       }
 
@@ -67,10 +90,8 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
-    document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
-      document.body.style.overflow = '';
     };
   }, [onClose]);
 
@@ -106,7 +127,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
         setNumPages(pdf.numPages);
         setPageNumber(1);
         setLoading(false);
-      } catch (err: any) {
+      } catch {
         if (!isMounted) return;
         setError('Failed to load PDF document.');
         setLoading(false);
@@ -129,9 +150,10 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
           setError('Preview not supported for this file type.');
           setLoading(false);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!isMounted) return;
-        setError(err.message || 'Failed to load document preview.');
+        const message = err instanceof Error ? err.message : 'Failed to load document preview.';
+        setError(message);
         setLoading(false);
       }
     };
@@ -207,6 +229,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
       canvas.width = viewport.width;
 
       const renderContext = {
+        canvas: null,
         canvasContext: ctx,
         viewport: viewport
       };
@@ -227,8 +250,8 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
       ctx.fillStyle = 'rgba(0, 43, 127, 0.15)'; // Primary Navy #002B7F with 15% opacity
       ctx.fillText('JRMSU KATIPUNAN CAMPUS LIBRARY • OFFICIAL READ-ONLY PATRON COPY • DO NOT DISTRIBUTE', 0, 0);
       ctx.restore();
-    } catch (err: any) {
-      if (err?.name !== 'RenderingCancelledException' && !isCancelled()) {
+    } catch (err: unknown) {
+      if (!isRenderingCancelled(err) && !isCancelled()) {
         console.error('Error rendering page:', err);
       }
     }
@@ -239,12 +262,13 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-[9999] animate-modal-overlay select-none"
+      data-readonly-viewer="true"
+      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-[9999] animate-modal-overlay readonly-viewer-surface select-none"
       onClick={onClose}
       onDragStart={(e) => e.preventDefault()}
       onContextMenu={(e) => {
         e.preventDefault();
-        setSecurityWarning?.('Right-click is disabled to protect JRMSU Library collection materials.');
+        setSecurityWarning('Right-click is disabled to protect JRMSU Library collection materials.');
       }}
     >
       {/* Real-Time Floating Security Warning Toast */}

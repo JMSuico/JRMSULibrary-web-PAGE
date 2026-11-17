@@ -8,6 +8,7 @@ import os
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from Features.Services.Interfaces.i_llm_provider import (
     ILLMProviderStrategy,
@@ -23,6 +24,7 @@ class ClaudeLLMProvider(ILLMProviderStrategy):
 
     DEFAULT_MODEL = "claude-haiku-4-5"
     DEFAULT_TIMEOUT = 45.0
+    DEFAULT_CONNECT_TIMEOUT = 2.5
     DEFAULT_API_URL = "https://api.anthropic.com/v1/messages"
     DEFAULT_API_VERSION = "2023-06-01"
 
@@ -53,6 +55,7 @@ class ClaudeLLMProvider(ILLMProviderStrategy):
         timeout_seconds: Optional[float] = None,
         api_url: Optional[str] = None,
         api_version: Optional[str] = None,
+        connect_timeout_seconds: Optional[float] = None,
     ) -> None:
         raw_key = (
             api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY", "")
@@ -78,6 +81,22 @@ class ClaudeLLMProvider(ILLMProviderStrategy):
         self.api_url = str(raw_url or "").strip()
         self.api_version = str(raw_version or "").strip() or self.DEFAULT_API_VERSION
         self.timeout_seconds = self._resolve_timeout(timeout_seconds)
+        self.connect_timeout_seconds = self._resolve_connect_timeout(connect_timeout_seconds)
+        self._session = self._create_pooled_session()
+
+    @staticmethod
+    def _create_pooled_session() -> requests.Session:
+        """Creates a persistent HTTP keep-alive session for low-latency Cloud calls."""
+        sess = requests.Session()
+        adapter = HTTPAdapter(pool_connections=4, pool_maxsize=8)
+        sess.mount("https://", adapter)
+        sess.mount("http://", adapter)
+        sess.headers.update({"Connection": "keep-alive"})
+        return sess
+
+    @property
+    def session(self) -> requests.Session:
+        return self._session
 
     @classmethod
     def _resolve_timeout(cls, override: Optional[float]) -> float:
@@ -87,6 +106,19 @@ class ClaudeLLMProvider(ILLMProviderStrategy):
             return parsed if parsed > 0 else cls.DEFAULT_TIMEOUT
         except (TypeError, ValueError):
             return cls.DEFAULT_TIMEOUT
+
+    @classmethod
+    def _resolve_connect_timeout(cls, override: Optional[float]) -> float:
+        raw = (
+            override
+            if override is not None
+            else os.environ.get("AI_CLAUDE_CONNECT_TIMEOUT", cls.DEFAULT_CONNECT_TIMEOUT)
+        )
+        try:
+            parsed = float(raw)
+            return parsed if parsed > 0 else cls.DEFAULT_CONNECT_TIMEOUT
+        except (TypeError, ValueError):
+            return cls.DEFAULT_CONNECT_TIMEOUT
 
     @property
     def provider_id(self) -> str:
@@ -241,13 +273,19 @@ class ClaudeLLMProvider(ILLMProviderStrategy):
                 retry_after_seconds=900,
             )
 
-        client = session if session is not None else requests
+        client = session if session is not None else self._session
         read_timeout = (
             min(float(config.read_timeout_seconds), self.timeout_seconds)
             if config.read_timeout_seconds and config.read_timeout_seconds > 0
             else self.timeout_seconds
         )
-        timeout = (float(config.connect_timeout_seconds), read_timeout)
+        cfg_connect = float(config.connect_timeout_seconds or 0.0)
+        connect_timeout = (
+            min(cfg_connect, self.connect_timeout_seconds)
+            if cfg_connect > 0
+            else self.connect_timeout_seconds
+        )
+        timeout = (connect_timeout, read_timeout)
 
         try:
             response = client.post(

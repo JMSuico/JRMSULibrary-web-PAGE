@@ -131,6 +131,7 @@ def secure_media_serve(request, path, document_root=None, show_indexes=False):
         raise Http404("Media file not found.")
 
     from django.http import FileResponse, HttpResponse, StreamingHttpResponse
+    from django.utils.http import http_date, parse_http_date_safe
 
     content_type, _ = mimetypes.guess_type(resolved_path)
     if not content_type:
@@ -139,19 +140,46 @@ def secure_media_serve(request, path, document_root=None, show_indexes=False):
         else:
             content_type = "application/octet-stream"
 
-    file_size = os.path.getsize(resolved_path)
+    file_stat = os.stat(resolved_path)
+    file_size = file_stat.st_size
+    etag = f'"{file_stat.st_mtime_ns:x}-{file_size:x}"'
+    last_modified = http_date(int(file_stat.st_mtime))
+
     meta = getattr(request, "META", None) or {}
     range_header = (meta.get("HTTP_RANGE") or "").strip()
+    if_range_header = (meta.get("HTTP_IF_RANGE") or "").strip()
+    if_none_match = (meta.get("HTTP_IF_NONE_MATCH") or "").strip()
+    if_modified_since = (meta.get("HTTP_IF_MODIFIED_SINCE") or "").strip()
 
     def _apply_security_headers(resp):
         resp["Accept-Ranges"] = "bytes"
         resp["X-Content-Type-Options"] = "nosniff"
         resp["Content-Disposition"] = "inline"
-        resp["Cache-Control"] = "private, no-transform, max-age=3600"
+        resp["Cache-Control"] = "public, no-transform, max-age=86400"
+        resp["ETag"] = etag
+        resp["Last-Modified"] = last_modified
+        resp["Vary"] = "Range"
         resp["X-Frame-Options"] = "SAMEORIGIN"
         return resp
 
-    if range_header:
+    if not range_header:
+        if if_none_match and (if_none_match == "*" or etag in [t.strip() for t in if_none_match.split(",")]):
+            return _apply_security_headers(HttpResponse(status=304))
+        if if_modified_since:
+            ims_ts = parse_http_date_safe(if_modified_since)
+            if ims_ts is not None and int(file_stat.st_mtime) <= ims_ts:
+                return _apply_security_headers(HttpResponse(status=304))
+
+    # Respect If-Range when serving partial ranges (fall back to full 200 if stale).
+    serve_range = bool(range_header)
+    if serve_range and if_range_header:
+        if if_range_header.startswith('"') or if_range_header.startswith('W/"'):
+            serve_range = if_range_header == etag
+        else:
+            ir_ts = parse_http_date_safe(if_range_header)
+            serve_range = ir_ts is not None and int(file_stat.st_mtime) <= ir_ts
+
+    if serve_range:
         def _unsatisfiable_416():
             resp = HttpResponse(status=416)
             resp["Content-Range"] = f"bytes */{file_size}"
@@ -192,7 +220,7 @@ def secure_media_serve(request, path, document_root=None, show_indexes=False):
 
         length = end - start + 1
 
-        def _file_chunk_iterator(file_path, offset, remaining, chunk_size=65536):
+        def _file_chunk_iterator(file_path, offset, remaining, chunk_size=262144):
             with open(file_path, "rb") as f:
                 f.seek(offset)
                 while remaining > 0:

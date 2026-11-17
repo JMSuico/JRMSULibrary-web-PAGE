@@ -2,54 +2,65 @@ import { useEffect } from 'react';
 import { initDomObfuscator } from '@/src/Libs/domObfuscator';
 
 /**
- * Global lifecycle listener for DOM element encoding, atomic class obfuscation,
- * and DevTools security.
- * Allows inspection of the DOM so auditors/users see obfuscated Meta/StyleX atomic tokens
- * and custom style variables rather than project internals.
+ * Global lifecycle listener for DOM/runtime integrity and visitor DevTools/export protection.
+ * Blocks inspection, view-source, save, print, and context menu for public visitors and
+ * whenever a read-only viewer modal (`[data-readonly-viewer="true"]`) is open, while
+ * preserving normal Admin usability on `/admin/*` outside read-only viewer modals.
  */
+const isAdminRoutePath = (pathname: string): boolean => /^\/admin(?:\/|$)/.test(pathname);
+
+const isGuardActive = (): boolean => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+  return (
+    !isAdminRoutePath(window.location.pathname) ||
+    Boolean(document.querySelector('[data-readonly-viewer="true"]'))
+  );
+};
+
 export const useDevToolsProtection = () => {
   useEffect(() => {
     // 1. Initialize Runtime Anti-Debugging & Security Traps
     initDomObfuscator();
 
-    // 2. Protect Page Source Saving (Ctrl+S / Cmd+S) and block DevTools shortcuts.
-    //    Also blocks F12, Ctrl+Shift+I (Elements), Ctrl+Shift+J (Console), Ctrl+U (View Source).
+    // 2. Intercept DevTools, View-Source, Save, and Print shortcuts in capture phase.
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Block Ctrl+S / Cmd+S (Prevent full page source saving)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'S' || e.key === 's')) {
+      if (!isGuardActive()) return;
+
+      const key = e.key.toLowerCase();
+      const hasPrimaryModifier = e.ctrlKey || e.metaKey;
+
+      const isDevToolsShortcut =
+        e.key === 'F12' ||
+        key === 'f12' ||
+        (hasPrimaryModifier && e.shiftKey && (key === 'i' || key === 'c' || key === 'j')) ||
+        (e.metaKey && e.altKey && (key === 'i' || key === 'c' || key === 'j'));
+
+      const isRestrictedAction =
+        hasPrimaryModifier && (key === 'u' || key === 's' || key === 'p');
+
+      if (isDevToolsShortcut || isRestrictedAction) {
         e.preventDefault();
-      }
-      // Block F12 (Opens DevTools)
-      if (e.key === 'F12') {
-        e.preventDefault();
-      }
-      // Block Ctrl+Shift+I (Elements / DevTools panel)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
-        e.preventDefault();
-      }
-      // Block Ctrl+Shift+J (Console panel)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
-        e.preventDefault();
-      }
-      // Block Ctrl+U (View Page Source)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u')) {
-        e.preventDefault();
+        e.stopPropagation();
       }
     };
 
-    // 3. Block Right-Click Context Menu (prevents casual "Inspect Element" access)
+    // 3. Block Right-Click Context Menu in capture phase when guard is active
+    //    (prevents Inspect / Save as / Print from browser context menu).
     const handleContextMenu = (e: MouseEvent) => {
+      if (!isGuardActive()) return;
       e.preventDefault();
     };
 
-    // Attach listeners
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('contextmenu', handleContextMenu);
+    // Attach capture-phase listeners
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('contextmenu', handleContextMenu, { capture: true });
 
     // Cleanup
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('contextmenu', handleContextMenu, { capture: true });
     };
   }, []);
 };

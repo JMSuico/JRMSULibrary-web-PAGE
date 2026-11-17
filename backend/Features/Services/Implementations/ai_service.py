@@ -46,6 +46,7 @@ from Features.Services.Interfaces.i_llm_provider import (
 from Features.Infrastructure.AiProviders.ollama_provider import OllamaLLMProvider
 from Features.Infrastructure.AiProviders.provider_registry import LLMProviderRegistry
 from Features.Helpers.ai_read_view_helper import AIReadViewHelper
+from Features.Helpers.ai_query_analyzer import AIQueryAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,16 @@ FAQ_DATASET_CACHE_KEY = "rizal_faq_dataset"
 L1_QUESTION_CACHE_PREFIX = "rizal_l1_faq:"
 CACHE_TTL_LONG = 3600  # 1 hour
 CACHE_TTL_L1 = 86400    # 24 hours
+FAST_CACHE_MAX_BUDGET_SECONDS = 0.9
+
+CANONICAL_RESERVATION_ROOMS = (
+    "Discussion Room 1",
+    "Discussion Room 2",
+    "Tutorium Room 1",
+    "Tutorium Room 2",
+    "Multimedia Room",
+    "Library ComLab (Computer Laboratory)",
+)
 
 # Idempotency & Single-Winner Gate constants
 AI_IDEMPOTENCY_LOCK_PREFIX = "ai_idem_lock:"
@@ -245,9 +256,43 @@ class AIService(IAIService):
         text = str(text).lower()
         return re.sub(r'[^a-z0-9\s]', '', text).strip()
 
+    def _get_room_availability_map(self) -> Dict[str, bool]:
+        """Reads live SiteSettings.room_availability across all 6 canonical rooms."""
+        availability: Dict[str, bool] = {room: True for room in CANONICAL_RESERVATION_ROOMS}
+        try:
+            settings = self.settings_repo.get_settings()
+            raw_avail = getattr(settings, 'room_availability', None)
+            if isinstance(raw_avail, str):
+                try:
+                    raw_avail = json.loads(raw_avail)
+                except ValueError:
+                    raw_avail = None
+            if isinstance(raw_avail, dict):
+                for room in CANONICAL_RESERVATION_ROOMS:
+                    if room in raw_avail and isinstance(raw_avail[room], bool):
+                        availability[room] = raw_avail[room]
+        except Exception as e:
+            logger.warning(f"Room availability read warning: {e}")
+        return availability
+
+    def _format_room_availability_lines(self) -> List[str]:
+        """Formats canonical library reservation rooms with live Available/Unavailable status."""
+        avail_map = self._get_room_availability_map()
+        return [
+            f"- {room}: {'Available' if is_avail else 'Unavailable (Currently Closed/Reserved)'}"
+            for room, is_avail in avail_map.items()
+        ]
+
     def _get_cached_answer(self, question: str, seen_answers: Optional[list] = None) -> tuple[Optional[str], Optional[str]]:
         if seen_answers is None:
             seen_answers = []
+
+        start_ts = time.monotonic()
+        analyzed = AIQueryAnalyzer.analyze(question)
+        budget_s = min(
+            FAST_CACHE_MAX_BUDGET_SECONDS,
+            max(0.05, float(analyzed.cache_budget_ms) / 1000.0),
+        )
 
         norm_q = self._normalize_question(question)
         if not norm_q:
@@ -258,6 +303,8 @@ class AIService(IAIService):
         l1_key = f"{L1_QUESTION_CACHE_PREFIX}{hash_q}"
         try:
             l1_answers = cache.get(l1_key)
+            if time.monotonic() - start_ts >= budget_s:
+                return None, None
             if l1_answers and isinstance(l1_answers, list):
                 unseen = [ans for ans in l1_answers if ans not in seen_answers]
                 if unseen:
@@ -265,37 +312,71 @@ class AIService(IAIService):
         except Exception as e:
             logger.warning(f"Redis L1 read warning: {e}")
 
-        # 2. Check L2 Fuzzy Semantic Matching
+        if time.monotonic() - start_ts >= budget_s:
+            return None, None
+
+        # 2. Check L2 Fuzzy Semantic Matching with strict <1.0s budget & topic/intent verification
         try:
             faq_entries = cache.get(FAQ_DATASET_CACHE_KEY)
+            if time.monotonic() - start_ts >= budget_s:
+                return None, None
+
             if faq_entries is None:
                 db_entries = list(self.faq_repo.get_all())
-                faq_entries = {entry.question: entry.answers for entry in db_entries if entry.answers}
+                if time.monotonic() - start_ts >= budget_s:
+                    return None, None
+                faq_entries = {
+                    entry.question: entry.answers
+                    for entry in db_entries
+                    if getattr(entry, 'answers', None)
+                }
                 cache.set(FAQ_DATASET_CACHE_KEY, faq_entries, timeout=CACHE_TTL_LONG)
 
-            if not faq_entries:
+            if not faq_entries or (time.monotonic() - start_ts >= budget_s):
                 return None, None
 
-            matches = difflib.get_close_matches(norm_q, list(faq_entries.keys()), n=1, cutoff=0.85)
-            if not matches:
+            scored_candidates: List[Tuple[float, str]] = []
+            for cand_q in faq_entries.keys():
+                if time.monotonic() - start_ts >= budget_s:
+                    return None, None
+                norm_cand = self._normalize_question(cand_q)
+                if not norm_cand:
+                    continue
+                sm = difflib.SequenceMatcher(None, norm_q, norm_cand)
+                if sm.quick_ratio() < analyzed.min_cache_score:
+                    continue
+                ratio = sm.ratio()
+                if ratio >= analyzed.min_cache_score:
+                    scored_candidates.append((ratio, cand_q))
+
+            if not scored_candidates:
                 return None, None
 
-            matched_q = matches[0]
-            answers_list = faq_entries.get(matched_q, [])
-            if not isinstance(answers_list, list) or not answers_list:
-                return None, None
+            scored_candidates.sort(key=lambda item: -item[0])
+            for ratio, matched_q in scored_candidates[:5]:
+                if time.monotonic() - start_ts >= budget_s:
+                    return None, None
+                if not AIQueryAnalyzer.is_cache_candidate_accurate(analyzed, matched_q, ratio):
+                    continue
 
-            unseen_indices = [i for i in range(len(answers_list)) if answers_list[i] not in seen_answers]
-            if not unseen_indices:
-                return None, None
+                answers_list = faq_entries.get(matched_q, [])
+                if not isinstance(answers_list, list) or not answers_list:
+                    continue
 
-            selected_answer = answers_list[random.choice(unseen_indices)]
-            # Also populate L1 for exact subsequent hits with this phrasing
-            try:
-                cache.set(l1_key, answers_list, timeout=CACHE_TTL_L1)
-            except Exception:
-                pass
-            return selected_answer, matched_q
+                unseen_indices = [
+                    i for i in range(len(answers_list)) if answers_list[i] not in seen_answers
+                ]
+                if not unseen_indices:
+                    continue
+
+                selected_answer = answers_list[random.choice(unseen_indices)]
+                try:
+                    cache.set(l1_key, answers_list, timeout=CACHE_TTL_L1)
+                except Exception:
+                    pass
+                return selected_answer, matched_q
+
+            return None, None
         except Exception as e:
             logger.error(f"Error reading FAQ cache: {e}")
             return None, None
@@ -894,6 +975,7 @@ class AIService(IAIService):
         norm = re.sub(r'[^a-z0-9\s]', ' ', raw_lower).strip()
         tokens = set(norm.split())
         expanded_tokens = self._extract_query_tokens(user_message)
+        analyzed = AIQueryAnalyzer.analyze(user_message)
 
         # ---------------------------------------------------------
         # Guardrail: Non-Existent Floor Inquiries (Building has 2 floors)
@@ -988,23 +1070,24 @@ class AIService(IAIService):
 
         # ---------------------------------------------------------
         # Intent 1: Room Reservation Intent
-        # ('reserve', 'reservation', 'room', 'discussion room', 'tutorium', 'multimedia')
+        # ('reserve', 'reservation', 'room', 'discussion room', 'tutorium', 'multimedia', 'comlab')
         # ---------------------------------------------------------
         has_room_phrase = any(phrase in norm for phrase in [
-            'discussion room', 'tutorium', 'multimedia room', 'reserve room', 'reserve a room',
-            'book a room', 'room reservation', 'reserve a space', 'book discussion', 'reservation of room'
+            'discussion room', 'tutorium', 'multimedia room', 'library comlab', 'computer lab',
+            'computer laboratory', 'reserve room', 'reserve a room', 'book a room',
+            'room reservation', 'reserve a space', 'book discussion', 'reservation of room',
+            'room availability', 'available room', 'available rooms'
         ])
-        has_room_token = bool({'tutorium', 'reservation'} & tokens) or (
+        has_room_token = bool({'tutorium', 'reservation', 'comlab'} & tokens) or (
             'reserve' in tokens and bool({'room', 'rooms', 'facility', 'space'} & tokens)
-        ) or ('room' in tokens and bool({'reserve', 'book', 'discussion', 'multimedia', 'reservation'} & tokens))
+        ) or ('room' in tokens and bool({'reserve', 'book', 'discussion', 'multimedia', 'reservation', 'available'} & tokens))
 
         if has_room_phrase or has_room_token:
+            room_lines = "\n".join(self._format_room_availability_lines())
             return (
-                "We offer the following reservable spaces at JRMSU Katipunan Campus Library:\n"
-                "- Discussion Room 1 & 2\n"
-                "- Tutorium Room 1 & 2\n"
-                "- Multimedia Room\n\n"
-                "To reserve a room, simply click the 'Reserve a Room' button right below this chat window, "
+                "We offer the following reservable spaces at JRMSU Katipunan Campus Library (live room status):\n"
+                f"{room_lines}\n\n"
+                "To reserve an available room, simply click the 'Reserve a Room' button right below this chat window, "
                 "fill in your details, and submit! Our library staff will review and email you an approval. "
                 "(You can also check replies here)."
             )
@@ -1087,7 +1170,8 @@ class AIService(IAIService):
             or ('reference' in tokens and (has_specific_book_or_file_cue or has_explicit_file_pattern) and bool({'author', 'authors'} & tokens))
         )
 
-        is_document_knowledge_query = not is_non_doc_topic and (
+        is_book_topic_search = analyzed.intent == "book_topic_search" and not has_explicit_file_pattern
+        is_document_knowledge_query = not is_non_doc_topic and not is_book_topic_search and (
             any(p in norm for p in doc_knowledge_triggers)
             or (has_doc_cue and has_doc_content_action)
             or has_doc_author_or_ref_cue
@@ -1207,7 +1291,7 @@ class AIService(IAIService):
                         "If you have the exact title or call number, please let me know!"
                     )
 
-                if is_document_knowledge_query:
+                if is_document_knowledge_query and analyzed.intent != "book_topic_search":
                     return None
 
             except Exception as dke:
@@ -1619,7 +1703,7 @@ class AIService(IAIService):
             'available' in tokens and bool({'book', 'books', 'catalog', 'collection', 'reading', 'inventory', 'titles'} & tokens)
         )
 
-        if (has_book_phrase or has_book_token) and not is_document_knowledge_query:
+        if (has_book_phrase or has_book_token or analyzed.intent == "book_topic_search") and not is_document_knowledge_query:
             inv_summary = self._get_book_inventory_summary()
             display_batch = self._get_display_batch()
             batch_name = getattr(display_batch, 'name', 'Batch 1 2026') if display_batch else 'Batch 1 2026'
@@ -1628,14 +1712,16 @@ class AIService(IAIService):
             picture_count = inv_summary.get('picture_count', 0)
             named_count = inv_summary.get('named_count', 0)
             named_books = inv_summary.get('named_books', [])
+            topic_tokens = set(analyzed.topic_tokens)
+            search_tokens = list(dict.fromkeys(list(analyzed.topic_tokens) + list(expanded_tokens)))
 
             # Recommend exact matching course folders from the 60 E-Resource departments using AIReadViewHelper
             dept_hint = ""
-            if expanded_tokens:
+            if search_tokens:
                 try:
                     all_depts = self._get_all_eresource_depts()
                     matched_folders = AIReadViewHelper.match_eresource_folders(
-                        all_depts, expanded_tokens, raw_query=user_message, limit=4
+                        all_depts, search_tokens, raw_query=user_message, limit=4
                     )
                     positive_breadcrumbs = [
                         f["breadcrumb"] for f in matched_folders if f.get("score", 0) > 0
@@ -1649,6 +1735,106 @@ class AIService(IAIService):
                         dept_hint = f" For your subject, you can also check these matching E-Resource course folders: {', '.join(positive_breadcrumbs[:4])}."
                 except Exception:
                     pass
+
+            # Topic-aware live search across EResourceFileRepository, BookRepository, and ResearchReferenceRepository
+            if topic_tokens:
+                matched_files = []
+                try:
+                    candidate_files = []
+                    if hasattr(self.eresource_file_repo, 'search_active_files'):
+                        candidate_files = list(self.eresource_file_repo.search_active_files(search_tokens, limit=15))
+                    if not candidate_files and hasattr(self.eresource_file_repo, 'get_all_active'):
+                        candidate_files = list(self.eresource_file_repo.get_all_active())
+                    elif not candidate_files and hasattr(self.eresource_file_repo, 'get_all'):
+                        candidate_files = list(self.eresource_file_repo.get_all())
+                    matched_files = AIReadViewHelper.match_eresource_files(
+                        candidate_files, search_tokens, raw_query=user_message, limit=5
+                    )
+                except Exception as e:
+                    logger.warning(f"Topic EResourceFile search warning: {e}")
+
+                matched_books = []
+                if named_count > 0:
+                    try:
+                        searched_books = list(self.book_repo.search_multi_token(search_tokens, limit=25))
+                        if searched_books:
+                            matched_books = [
+                                b for b in AIReadViewHelper.rank_and_sort_books(
+                                    searched_books, search_tokens, raw_query=user_message, limit=5
+                                )
+                                if any(
+                                    tok in f"{getattr(b, 'title', '')} {getattr(b, 'category', '')} {getattr(b, 'author', '')}".lower()
+                                    for tok in topic_tokens
+                                )
+                            ]
+                    except Exception as e:
+                        logger.warning(f"Topic Book search warning: {e}")
+
+                matched_refs = []
+                try:
+                    searched_refs = []
+                    if hasattr(self.reference_repo, 'search_multi_token'):
+                        searched_refs = list(self.reference_repo.search_multi_token(search_tokens, limit=10))
+                    if searched_refs:
+                        topic_filtered_refs = [
+                            r for r in searched_refs
+                            if any(
+                                tok in f"{getattr(r, 'title', '')} {getattr(r, 'department', '')} {getattr(r, 'category', '')} {getattr(r, 'author', '')} {getattr(r, 'abstract', '')}".lower()
+                                for tok in topic_tokens
+                            )
+                        ]
+                        if topic_filtered_refs:
+                            matched_refs = AIReadViewHelper.rank_and_sort_references(
+                                topic_filtered_refs, search_tokens, raw_query=user_message, limit=3
+                            )
+                except Exception as e:
+                    logger.warning(f"Topic ResearchReference search warning: {e}")
+
+                if matched_files or matched_books or matched_refs:
+                    sections: List[str] = []
+                    ordered_topic_words: List[str] = []
+                    for w in analyzed.normalized_query.split():
+                        if w in topic_tokens and w not in ordered_topic_words:
+                            ordered_topic_words.append(w)
+                    topic_label = " ".join(ordered_topic_words) if ordered_topic_words else " ".join(sorted(topic_tokens))
+                    if matched_files:
+                        file_lines = []
+                        for f in matched_files:
+                            f_name = AIReadViewHelper._extract_doc_name(f) or "Document"
+                            f_author = AIReadViewHelper.extract_document_author(f)
+                            f_crumb = AIReadViewHelper._extract_file_breadcrumb(f)
+                            f_summary = str(getattr(f, 'summary', '') or '').strip()
+                            line = f"- '{f_name}'"
+                            if f_author:
+                                line += f" by {f_author}"
+                            if f_crumb:
+                                line += f" (Department: {f_crumb})"
+                            if f_summary:
+                                snippet = f_summary[:180].rstrip()
+                                if len(f_summary) > 180:
+                                    snippet += "..."
+                                line += f" - {snippet}"
+                            file_lines.append(line)
+                        sections.append("Digital E-Resources (Collection -> Local Books):\n" + "\n".join(file_lines))
+
+                    if matched_books:
+                        book_lines = [
+                            f"- '{getattr(b, 'title', 'Untitled')}' by {getattr(b, 'author', 'Unknown') or 'Unknown'} "
+                            f"(Category: {getattr(b, 'category', 'General') or 'General'}, Accession: {getattr(b, 'accession_number', 'N/A') or 'N/A'})"
+                            for b in matched_books
+                        ]
+                        sections.append("Newly Acquired Books:\n" + "\n".join(book_lines))
+
+                    if matched_refs:
+                        ref_lines = [f"- {self._format_ref(r)}" for r in matched_refs]
+                        sections.append("Research & Thesis References:\n" + "\n".join(ref_lines))
+
+                    joined_sections = "\n\n".join(sections)
+                    return (
+                        f"Here are verified resources matching '{topic_label}' in our library database:\n\n"
+                        f"{joined_sections}\n\n"
+                        f"You can access these verified titles under the 'Collection' or 'E-Resources' tabs on our website.{dept_hint}"
+                    )
 
             if total == 0:
                 return (
@@ -1806,6 +1992,7 @@ class AIService(IAIService):
             compiled = f"""DYNAMIC DATABASE KNOWLEDGE (13 PERMITTED TABLES):
 - Operating Hours: Mon-Fri: {hours_mon_fri}, Sat: {hours_sat}, Sun: {hours_sun}
 - Contact Email: {contact_email}
+- Room Reservation Availability (6 Canonical Spaces): {"; ".join(line.lstrip("- ") for line in self._format_room_availability_lines())}
 - Library Personnel: {personnel_text}
 - Official Managed Documents: {files_text}
 - E-Resource Academic Departments: {dept_count} departments ({root_str})
@@ -1832,19 +2019,32 @@ class AIService(IAIService):
     def _classify_query_complexity(self, user_message: str) -> tuple[str, dict, str]:
         """
         Adaptive 3-Tier Complexity Classifier and Instruction-Tuned Generation Controls:
-        - Tier 1: Precision Micro-Answer / Factoid: Factual checks, Yes/No, hours, author, references, title (temperature 0.05, 160 tokens).
-        - Tier 2: Structured Action Answer: Recommendations, procedural how-tos, lists (temperature 0.2, 550 tokens).
-        - Tier 3: Deep Academic Reasoning: RRL formulation, capstone analysis, methodology (temperature 0.3, 850 tokens).
+        - Tier 1: Precision Micro-Answer / Factoid (temperature 0.05, 420 tokens).
+        - Tier 2: Structured Action Answer / Catalog & Book Topic Queries (temperature 0.2, 700 tokens).
+        - Tier 3: Deep Academic Reasoning (temperature 0.3, 1000 tokens).
         """
         concise_tier1_inst = (
             "TIER 1 (INSTANT MICRO-ANSWER):\n"
             "INSTRUCTION-TUNED CONCISE MODE: Answer ONLY the exact question asked in 1–2 short, factual sentences "
             "based strictly on the retrieved RAG context. Do NOT dump unrelated summaries, greetings, or boilerplate."
         )
+        tier2_inst = (
+            "TIER 2 (STRUCTURED ACTION ANSWER):\n"
+            "1. Start with 1 direct lead sentence answering the prompt.\n"
+            "2. Provide 3-5 concise, structured bullet points citing verified database items or step-by-step procedures.\n"
+            "3. Conclude concisely with actionable guidance."
+        )
+        tier3_inst = (
+            "TIER 3 (DEEP ACADEMIC REASONING AND RRL):\n"
+            "1. Bottom Line Up Front (BLUF): Provide the direct core answer or recommendation in the very first sentence.\n"
+            "2. Systematic Reasoning: Explain the concepts, methodology, or reasoning clearly with logical progression.\n"
+            "3. Verified Database Grounding: Cite specific verified books, theses, or E-Resource course folders from the context to back up your explanation."
+        )
         if not user_message:
             return "TIER_1", self._get_ollama_options("TIER_1"), concise_tier1_inst
 
-        msg_clean = re.sub(r'[^a-z0-9\s]', ' ', str(user_message).lower()).strip()
+        analyzed = AIQueryAnalyzer.analyze(user_message)
+        msg_clean = analyzed.normalized_query
         words = msg_clean.split()
         word_set = set(words)
         word_count = len(words)
@@ -1866,12 +2066,10 @@ class AIService(IAIService):
             for trig in deep_reasoning_only
         )
         is_factoid_query = (
-            any(p in msg_clean for p in factoid_phrases)
-            or bool(factoid_tokens & word_set)
-        ) and not has_deep_reasoning
-
-        if is_factoid_query:
-            return "TIER_1", self._get_ollama_options("TIER_1"), concise_tier1_inst
+            (any(p in msg_clean for p in factoid_phrases) or bool(factoid_tokens & word_set))
+            and not has_deep_reasoning
+            and not analyzed.is_catalog_question
+        )
 
         tier3_triggers = {
             'why', 'explain', 'analyze', 'analysis', 'compare', 'comparison', 'thesis', 'capstone',
@@ -1887,33 +2085,35 @@ class AIService(IAIService):
         }
 
         # Check Tier 3: Deep Academic Reasoning
-        if any((trig in word_set if ' ' not in trig else trig in msg_clean) for trig in tier3_triggers) or (
-            word_count > 15 and any(w in word_set for w in ('how', 'what', 'research'))
+        if (
+            analyzed.complexity_tier == "TIER_3"
+            or any((trig in word_set if ' ' not in trig else trig in msg_clean) for trig in tier3_triggers)
+            or (word_count > 15 and any(w in word_set for w in ('how', 'what', 'research')))
         ):
             options = self._get_ollama_options("TIER_3")
-            inst = (
-                "TIER 3 (DEEP ACADEMIC REASONING AND RRL):\n"
-                "1. Bottom Line Up Front (BLUF): Provide the direct core answer or recommendation in the very first sentence.\n"
-                "2. Systematic Reasoning: Explain the concepts, methodology, or reasoning clearly with logical progression.\n"
-                "3. Verified Database Grounding: Cite specific verified books, theses, or E-Resource course folders from the context to back up your explanation."
-            )
-            return "TIER_3", options, inst
+            options["num_predict"] = max(int(options.get("num_predict", 1000)), analyzed.recommended_max_tokens)
+            return "TIER_3", options, tier3_inst
 
-        # Check Tier 2: Structured Action / Recommendation
-        if any((trig in word_set if ' ' not in trig else trig in msg_clean) for trig in tier2_triggers) or (
-            word_count > 7 and bool({'book', 'books'} & word_set)
+        if is_factoid_query and analyzed.complexity_tier == "TIER_1":
+            options = self._get_ollama_options("TIER_1")
+            options["num_predict"] = max(int(options.get("num_predict", 420)), analyzed.recommended_max_tokens)
+            return "TIER_1", options, concise_tier1_inst
+
+        # Check Tier 2: Structured Action / Catalog / Book Topic / Facility Queries
+        if (
+            analyzed.complexity_tier == "TIER_2"
+            or analyzed.is_catalog_question
+            or any((trig in word_set if ' ' not in trig else trig in msg_clean) for trig in tier2_triggers)
+            or (word_count > 7 and bool({'book', 'books'} & word_set))
         ):
             options = self._get_ollama_options("TIER_2")
-            inst = (
-                "TIER 2 (STRUCTURED ACTION ANSWER):\n"
-                "1. Start with 1 direct lead sentence answering the prompt.\n"
-                "2. Provide 3-5 concise, structured bullet points citing verified database items or step-by-step procedures.\n"
-                "3. Conclude concisely with actionable guidance."
-            )
-            return "TIER_2", options, inst
+            options["num_predict"] = max(int(options.get("num_predict", 700)), analyzed.recommended_max_tokens)
+            return "TIER_2", options, tier2_inst
 
-        # Tier 1: Instant Micro-Answer
-        return "TIER_1", self._get_ollama_options("TIER_1"), concise_tier1_inst
+        # Tier 1: Instant Micro-Answer (non-truncating >= 420 tokens)
+        options = self._get_ollama_options("TIER_1")
+        options["num_predict"] = max(int(options.get("num_predict", 420)), analyzed.recommended_max_tokens)
+        return "TIER_1", options, concise_tier1_inst
 
     def _build_dynamic_system_prompt(
         self,
@@ -2015,6 +2215,10 @@ class AIService(IAIService):
                     + "\n"
                 )
 
+        live_room_status_text = "; ".join(
+            line.lstrip("- ") for line in self._format_room_availability_lines()
+        )
+
         return f"""You are Rizal, the AI assistant for JRMSU Katipunan Campus Library. The user is a student or visitor. NEVER address the user as 'Rizal'. NEVER invent external books (e.g. The Art of War, Sapiens, The Alchemist, Braveheart). If no catalog items match, state clearly that none were found.
 
 CRITICAL BEHAVIOR RULES:
@@ -2039,7 +2243,8 @@ CRITICAL BEHAVIOR RULES:
    - If it indicates "Physical Copy Only", explain that it is available for physical room use inside the library (Special Collections / Archives).
    - If asked for the newest or oldest books or theses, cite the exact titles and authors provided in the dynamic database knowledge below.
 8. ROOM RESERVATION RULES:
-   - Reservable rooms are: Discussion Room 1 & 2, Tutorium Room 1 & 2, Multimedia Room.
+   - Reservable rooms are: Discussion Room 1, Discussion Room 2, Tutorium Room 1, Tutorium Room 2, Multimedia Room, and Library ComLab (Computer Laboratory).
+   - Always report exact live room availability from LIBRARY CONTEXT below (Available vs Unavailable).
    - Instruct users to click the 'Reserve a Room' button right below the chat window. NEVER mention UOPAC for room reservations.
 9. BOOK CONTENTS, CHAPTERS & THESIS FINDINGS (ZERO HALLUCINATIONS):
    - When asked what is covered inside a book, handbook, syllabus, or course document, or asked about its chapters, table of contents, or key concepts: you MUST answer strictly using the verified DOCUMENT & BOOK CONTENT KNOWLEDGE provided in the context below. State the exact document name, parent department breadcrumb, summary, chapters/TOC, and key topics. If the document or its chapters are not in the context, state clearly and politely that the specific contents or chapters are not yet indexed in the database. NEVER invent or hallucinate chapters, authors, or topics!
@@ -2054,7 +2259,7 @@ LIBRARY CONTEXT & LIVE INFORMATION:
 - Location: JRMSU Katipunan Campus, Katipunan, Zamboanga del Norte, Philippines.
 - Email: {email}
 - Services Available: Book Borrowing, Reading Area, Discussion Rooms, Internet Access, Printing Service, Scanning Service, E-Resources (VitalSource/Bookshelf, Scholaar, Science Direct, Gale).
-- Available Rooms/Spaces for Reservation: Discussion Room 1, Discussion Room 2, Tutorium Room 1, Tutorium Room 2, and Multimedia Room.
+- Available Rooms/Spaces for Reservation (Live Status): {live_room_status_text}
 - Borrowing Limits: Students can borrow up to 3 books for 3 days. Faculty can borrow up to 5 books for 1 week.
 - UOPAC Borrow/Return Guidance: To borrow or return books, students must use the Main Campus UOPAC system. The default login is usually their Student ID. They should search the OPAC catalog, filter for Katipunan Campus, and bring their ID to the circulation desk.
 
@@ -2067,12 +2272,12 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
 """
 
     def _get_ollama_options(self, complexity_tier: str = "TIER_2") -> dict:
-        """Adaptive inference options for Ollama tuned to query complexity."""
+        """Adaptive inference options for Ollama tuned to query complexity (all tiers >= 420 tokens)."""
         if complexity_tier == "TIER_1":
-            return {"num_ctx": 2048, "num_predict": 160, "temperature": 0.05, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15, "num_thread": 4}
+            return {"num_ctx": 2048, "num_predict": 420, "temperature": 0.05, "top_k": 15, "top_p": 0.75, "repeat_penalty": 1.15, "num_thread": 4}
         elif complexity_tier == "TIER_3":
-            return {"num_ctx": 4096, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15, "num_thread": 4}
-        return {"num_ctx": 2048, "num_predict": 550, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15, "num_thread": 4}
+            return {"num_ctx": 4096, "num_predict": 1000, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15, "num_thread": 4}
+        return {"num_ctx": 2048, "num_predict": 700, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15, "num_thread": 4}
 
     _DODGE_PHRASE_PATTERNS = (
         re.compile(r"\bi\s+(?:don't|do\s+not)\s+know\b", re.IGNORECASE),
@@ -2091,6 +2296,55 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             return True
         normalized = text.replace("\u2019", "'").replace("\u2018", "'").strip()
         return any(pattern.search(normalized) for pattern in cls._DODGE_PHRASE_PATTERNS)
+
+    @staticmethod
+    def _ends_with_sentence_terminator(text: str) -> bool:
+        stripped = (text or "").rstrip()
+        if not stripped:
+            return False
+        return stripped.endswith((".", "!", "?", '."', '!"', '?"', ")"))
+
+    @classmethod
+    def _finalize_complete_sentence(
+        cls,
+        text: str,
+        has_prior_complete_sentence: bool = False,
+    ) -> str:
+        """
+        Ensures streamed output on EOF never leaves a dangling mid-sentence fragment.
+        - Returns text unchanged if it already ends cleanly on sentence punctuation.
+        - Trims back to the last internal `.!?` when trailing text is incomplete.
+        - Drops an unpunctuated trailing fragment when a complete sentence was already flushed.
+        - Closes a single unpunctuated clause cleanly after stripping trailing dangling connectors.
+        """
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return ""
+        if cls._ends_with_sentence_terminator(cleaned):
+            return cleaned
+
+        match = re.search(r"([.!?])(?:\s+[^.!?]*$)", cleaned)
+        if match:
+            trimmed = cleaned[: match.start() + 1].strip()
+            if trimmed:
+                return trimmed
+
+        if has_prior_complete_sentence:
+            return ""
+
+        cleaned = re.sub(r"[,;:\-\s]+$", "", cleaned)
+        cleaned = re.sub(
+            r"\b(?:and|or|but|with|to|of|for|in|on|at|by|from|the|a|an|that|which|is|are)\s*$",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        ).strip()
+        cleaned = re.sub(r"[,;:\-\s]+$", "", cleaned)
+        if not cleaned:
+            return ""
+        if not cls._ends_with_sentence_terminator(cleaned):
+            cleaned = f"{cleaned}."
+        return cleaned
 
     @staticmethod
     def _find_sentence_flush_index(text: str) -> int:
@@ -2435,6 +2689,10 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                                 strip_unapproved_urls=True,
                                 trim_incomplete=False,
                             )
+                            sanitized_opening = self._finalize_complete_sentence(
+                                sanitized_opening,
+                                has_prior_complete_sentence=False,
+                            )
                             if sanitized_opening and not (has_backup and self._is_incapability_dodge(sanitized_opening)):
                                 has_flushed = True
                                 out_chunk = sanitized_opening + trailing_ws
@@ -2449,10 +2707,15 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                             strip_unapproved_urls=True,
                             trim_incomplete=False,
                         )
+                        prior_complete = self._ends_with_sentence_terminator("".join(committed_parts))
+                        finalized = self._finalize_complete_sentence(
+                            sanitized,
+                            has_prior_complete_sentence=prior_complete,
+                        )
                         stream_buffer = ""
-                        if sanitized:
-                            committed_parts.append(sanitized)
-                            yield sanitized
+                        if finalized:
+                            committed_parts.append(finalized)
+                            yield finalized
 
                     if has_flushed:
                         self._safe_clear_circuit(strategy.provider_id)
@@ -2482,9 +2745,14 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                                 strip_unapproved_urls=True,
                                 trim_incomplete=False,
                             )
-                            if sanitized:
-                                committed_parts.append(sanitized)
-                                yield sanitized
+                            prior_complete = self._ends_with_sentence_terminator("".join(committed_parts))
+                            finalized = self._finalize_complete_sentence(
+                                sanitized,
+                                has_prior_complete_sentence=prior_complete,
+                            )
+                            if finalized:
+                                committed_parts.append(finalized)
+                                yield finalized
                         final_text = "".join(committed_parts).strip()
                         if final_text:
                             self._commit_idempotency_result(idempotency_key, final_text)
