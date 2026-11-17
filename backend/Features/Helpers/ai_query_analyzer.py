@@ -10,6 +10,10 @@ import re
 from typing import Dict, FrozenSet, List, Pattern, Set, Tuple
 
 from Features.Helpers.ai_read_view_helper import AIReadViewHelper
+from Features.Helpers.library_system_knowledge import (
+    HONORIFIC_TOKENS,
+    strip_person_honorifics,
+)
 
 
 @dataclass(frozen=True)
@@ -164,7 +168,10 @@ class AIQueryAnalyzer:
                     r"\b(?:discussion\s+rooms?|tutorium(?:\s+rooms?)?|multimedia\s+rooms?|"
                     r"library\s+comlab|computer\s+lab(?:oratory)?|comlab|"
                     r"reserve\s+(?:a\s+)?room|room\s+reservation|book\s+(?:a\s+)?room|"
-                    r"available\s+rooms?|room\s+availability|physical\s+setup|workstations?)\b",
+                    r"available\s+rooms?|room\s+availability|physical\s+setup|workstations?|"
+                    r"1st\s+floor|first\s+floor|2nd\s+floor|second\s+floor|"
+                    r"circulation\s+section|fiction\s+section|periodical\s+section|"
+                    r"multimedia\s+section|special\s+collection)\b",
                     re.IGNORECASE,
                 ),
             ),
@@ -276,12 +283,18 @@ class AIQueryAnalyzer:
             "laboratory",
             "lab",
             "workstation",
+            "workstations",
             "baggage",
             "circulation",
             "honesty",
             "faculty",
         }
     )
+
+    @staticmethod
+    def strip_honorifics(text: str) -> str:
+        """Strips Filipino & English honorific titles for person/personnel matching."""
+        return strip_person_honorifics(text)
 
     @staticmethod
     def normalize(text: str) -> str:
@@ -320,8 +333,8 @@ class AIQueryAnalyzer:
             return frozenset()
         normalized_markers: Set[str] = set()
         for m in matched:
-            if m in {"computer", "laboratory", "lab", "comlab"}:
-                normalized_markers.add("comlab")
+            if m in {"computer", "laboratory", "lab", "comlab", "workstation", "workstations"}:
+                normalized_markers.add("workstation")
             else:
                 normalized_markers.add(m)
         return frozenset(normalized_markers)

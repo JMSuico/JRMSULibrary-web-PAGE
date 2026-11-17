@@ -23,6 +23,7 @@ from Features.Helpers.email_helper import (
 from Features.Services.Interfaces.contact_service_interface import ContactServiceInterface
 import threading
 import logging
+from typing import Optional
 import bleach
 from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
 
@@ -36,7 +37,7 @@ class ContactService(ContactServiceInterface):
         self.recycle_repository = RecycleBinRepository()
         self.settings_service = settings_service or SettingsService()
 
-    def _resolve_requested_room(self, data: dict, subject: str):
+    def _resolve_requested_room(self, data: dict, subject: str) -> Optional[str]:
         raw_room_name = bleach.clean(sanitize_input(str(data.get('room_name') or ''))).strip()
         candidates = sorted(DEFAULT_RESERVATION_ROOMS, key=len, reverse=True)
 
@@ -47,8 +48,16 @@ class ContactService(ContactServiceInterface):
             for room in candidates:
                 if room.lower() in lowered:
                     return room
-            if 'library comlab' in lowered or 'comlab' in lowered or 'computer laboratory' in lowered:
-                return 'Library ComLab (Computer Laboratory)'
+            workstation_aliases = (
+                'library comlab (computer laboratory)',
+                'library comlab',
+                'comlab',
+                'computer laboratory',
+                'computer lab',
+                'workstation',
+            )
+            if any(alias in lowered for alias in workstation_aliases):
+                return 'Workstation'
             return None
 
         return _match_room_text(raw_room_name) or _match_room_text(subject)

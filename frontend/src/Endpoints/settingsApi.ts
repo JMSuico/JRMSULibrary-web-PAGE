@@ -6,10 +6,16 @@ export const RESERVATION_ROOMS = [
   'Tutorium Room 1',
   'Tutorium Room 2',
   'Multimedia Room',
-  'Library ComLab (Computer Laboratory)',
+  'Workstation',
 ] as const;
 
 export type ReservationRoomName = (typeof RESERVATION_ROOMS)[number];
+
+const LEGACY_WORKSTATION_KEYS = [
+  'Library ComLab (Computer Laboratory)',
+  'Library ComLab',
+  'ComLab',
+] as const;
 
 export interface SiteSettings {
   library_name: string;
@@ -31,7 +37,16 @@ export const normalizeRoomAvailability = (
 ): Record<string, boolean> => {
   const normalized: Record<string, boolean> = {};
   for (const room of RESERVATION_ROOMS) {
-    normalized[room] = raw && typeof raw[room] === 'boolean' ? raw[room] : true;
+    if (raw && typeof raw[room] === 'boolean') {
+      normalized[room] = raw[room];
+    } else if (room === 'Workstation' && raw) {
+      const legacyKey = LEGACY_WORKSTATION_KEYS.find(
+        (key) => typeof raw[key] === 'boolean'
+      );
+      normalized[room] = legacyKey !== undefined ? raw[legacyKey] : true;
+    } else {
+      normalized[room] = true;
+    }
   }
   return normalized;
 };

@@ -11,7 +11,13 @@ DEFAULT_RESERVATION_ROOMS = (
     "Tutorium Room 1",
     "Tutorium Room 2",
     "Multimedia Room",
+    "Workstation",
+)
+
+LEGACY_COMLAB_KEYS = (
     "Library ComLab (Computer Laboratory)",
+    "Library ComLab",
+    "ComLab",
 )
 
 
@@ -45,6 +51,22 @@ def normalize_room_availability(raw=None, existing=None) -> dict:
     for room in DEFAULT_RESERVATION_ROOMS:
         if room in raw and raw[room] is not None:
             normalized[room] = _coerce_room_bool(raw[room])
+    if "Workstation" not in raw or raw["Workstation"] is None:
+        for legacy_key in LEGACY_COMLAB_KEYS:
+            if legacy_key in raw and raw[legacy_key] is not None:
+                normalized["Workstation"] = _coerce_room_bool(raw[legacy_key])
+                break
+        else:
+            lowered_raw = {
+                str(k).strip().lower(): v
+                for k, v in raw.items()
+                if v is not None
+            }
+            for legacy_key in LEGACY_COMLAB_KEYS:
+                key_lower = legacy_key.lower()
+                if key_lower in lowered_raw:
+                    normalized["Workstation"] = _coerce_room_bool(lowered_raw[key_lower])
+                    break
     return normalized
 
 
