@@ -710,28 +710,63 @@ def _has_whole_phrase(norm: str, phrase: str) -> bool:
 def _format_services_charter_response(norm: str, live: Dict[str, Any]) -> str:
     tokens = set(norm.split())
     has_elib = _has_whole_phrase(norm, "e library") or "elibrary" in tokens
-    wants_17_list = (
-        any(
-            _has_whole_phrase(norm, p)
-            for p in (
-                "17 services",
-                "17 official",
-                "library services",
-                "services offered",
-                "what services",
-                "services available",
-                "services do you offer",
-                "printing service",
-                "scanning service",
-                "referral service",
-                "orientation service",
-            )
+
+    matched_workflows: List[Dict[str, Any]] = []
+    for wf in CANONICAL_CITIZENS_CHARTER:
+        if any(_has_whole_phrase(norm, kw) for kw in wf["keywords"]):
+            matched_workflows.append(wf)
+
+    has_charter_topic = (
+        bool(matched_workflows)
+        or bool(
+            {
+                "charter",
+                "overdue",
+                "fine",
+                "fines",
+                "penalty",
+                "penalties",
+                "clearance",
+                "elibrary",
+                "semester",
+                "borrow",
+                "borrowing",
+                "return",
+                "returning",
+                "receipt",
+                "osas",
+                "edp",
+                "arms",
+            }
+            & tokens
         )
-        or (
-            "services" in tokens
-            and bool({"library", "offer", "offered", "available", "what", "list", "all"} & tokens)
-            and not bool({"charter", "overdue", "fine", "fines", "penalty", "penalties", "clearance", "elibrary", "semester"} & tokens)
-            and not has_elib
+        or has_elib
+    )
+
+    explicit_17_request = any(
+        _has_whole_phrase(norm, p) for p in ("17 services", "17 official")
+    )
+    wants_17_list = explicit_17_request or (
+        not has_charter_topic
+        and (
+            any(
+                _has_whole_phrase(norm, p)
+                for p in (
+                    "library services",
+                    "services offered",
+                    "what services",
+                    "services available",
+                    "services do you offer",
+                    "printing service",
+                    "scanning service",
+                    "referral service",
+                    "orientation service",
+                )
+            )
+            or (
+                "services" in tokens
+                and bool({"library", "offer", "offered", "available", "what", "list", "all"} & tokens)
+            )
         )
     )
 
@@ -745,11 +780,6 @@ def _format_services_charter_response(norm: str, live: Dict[str, Any]) -> str:
             f"{numbered}\n\n"
             "Visit our Services & Citizens Charter page at /services for step-by-step transaction workflows, requirements, and fees."
         )
-
-    matched_workflows: List[Dict[str, Any]] = []
-    for wf in CANONICAL_CITIZENS_CHARTER:
-        if any(_has_whole_phrase(norm, kw) for kw in wf["keywords"]):
-            matched_workflows.append(wf)
 
     if not matched_workflows:
         matched_workflows = list(CANONICAL_CITIZENS_CHARTER)

@@ -32,7 +32,7 @@ def _coerce_bool(value) -> bool:
 
 def rename_comlab_to_workstation(apps, schema_editor):
     SiteSettings = apps.get_model("Features", "SiteSettings")
-    for row in SiteSettings.objects.all():
+    for row in SiteSettings.objects.order_by("id")[:100]:
         raw = row.room_availability
         if isinstance(raw, str):
             try:
@@ -79,7 +79,7 @@ def rename_comlab_to_workstation(apps, schema_editor):
 def rename_workstation_to_comlab(apps, schema_editor):
     SiteSettings = apps.get_model("Features", "SiteSettings")
     legacy_key = "Library ComLab (Computer Laboratory)"
-    for row in SiteSettings.objects.all():
+    for row in SiteSettings.objects.order_by("id")[:100]:
         raw = row.room_availability
         if isinstance(raw, str):
             try:
@@ -98,22 +98,6 @@ def rename_workstation_to_comlab(apps, schema_editor):
         if updated != row.room_availability:
             row.room_availability = updated
             row.save(update_fields=["room_availability"])
-
-    # Ensure canonical Chief Librarian & Library Staff exist in Personnel table
-    Personnel = apps.get_model("Features", "Personnel")
-    default_personnel = (
-        ("Kiara Keren M. Alavanza", "Campus Librarian", 1),
-        ("Marquita P. Morata", "Staff, Library", 2),
-        ("Bernie Rey L. Palon", "Staff, Library", 3),
-        ("Reizel C. Rosauro", "Staff, Library", 4),
-    )
-    for full_name, role_title, order_num in default_personnel:
-        if not Personnel.objects.filter(name__iexact=full_name).exists():
-            Personnel.objects.create(
-                name=full_name,
-                title=role_title,
-                order=order_num,
-            )
 
 
 class Migration(migrations.Migration):

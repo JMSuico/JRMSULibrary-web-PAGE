@@ -551,6 +551,63 @@ class TestAIServiceGroundingFastCacheAndAntiCutoff(unittest.TestCase):
             f"Expected response to end cleanly on a complete sentence, got: {full_response!r}",
         )
 
+    def test_data_science_books_queries_never_trigger_eresource_dump_or_foundation_false_match(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+
+        ccs_dept = SimpleNamespace(id=1, pk=1, name="CCS > BSIS", parent=None, order=1)
+        caf_dept = SimpleNamespace(id=2, pk=2, name="CAF > BS Forestry", parent=None, order=2)
+        cted_dept = SimpleNamespace(id=3, pk=3, name="CTED > BPE", parent=None, order=3)
+
+        dsa_file = SimpleNamespace(
+            id=201,
+            pk=201,
+            name="Data Structures and Algorithms.pdf",
+            file="e_resources/Data Structures and Algorithms.pdf",
+            is_active=True,
+            department=ccs_dept,
+            summary="Covers arrays, trees, graphs, and sorting algorithms.",
+            keywords="data structures, algorithms, ccs, bsis",
+        )
+        sts_file = SimpleNamespace(
+            id=202,
+            pk=202,
+            name="Science, Technology and Society.pdf",
+            file="e_resources/Science, Technology and Society.pdf",
+            is_active=True,
+            department=caf_dept,
+            summary="Interdisciplinary study of science and technology in society.",
+            keywords="science, technology, society",
+        )
+        found_file = SimpleNamespace(
+            id=203,
+            pk=203,
+            name="Foundation of Special and Inclusive Education.pdf",
+            file="e_resources/Foundation of Special and Inclusive Education.pdf",
+            is_active=True,
+            department=cted_dept,
+            summary="Foundations of inclusive education.",
+            keywords="foundation, special education, inclusive",
+        )
+        files = [dsa_file, sts_file, found_file]
+        service.eresource_dept_repo.get_all.return_value = [ccs_dept, caf_dept, cted_dept]
+        service.eresource_dept_repo.get_all_with_parents.return_value = [ccs_dept, caf_dept, cted_dept]
+        service.eresource_file_repo.get_all_active.return_value = files
+        service.eresource_file_repo.get_all.return_value = files
+        service.eresource_file_repo.search_active_files.return_value = files
+
+        for query in (
+            "do you have any data science books?",
+            "suggest data science books found in the Localboks",
+            "Any Data Science Books?",
+        ):
+            cache.clear()
+            resp = "".join(service.generate_chat_stream(query)).strip()
+            lower = resp.lower()
+            self.assertNotIn("23 online databases", lower)
+            self.assertNotIn("foundation of special and inclusive education", lower)
+            self.assertNotIn("science, technology and society", lower)
+            self.assertIn("data structures and algorithms", lower)
+
     def test_all_tier_generation_configs_have_max_tokens_at_least_380(self):
         service = _make_empty_ai_service()
         for tier in ("TIER_1", "TIER_2", "TIER_3"):
@@ -823,6 +880,13 @@ class TestRound2SevenSectionInternalKnowledge(unittest.TestCase):
             service.generate_chat_stream("clearance online")
         ).strip()
         self.assertIn("jrmsu-arms.online", clearance_resp.lower())
+
+        # Mixed "library services" + "overdue" queries must NOT be misclassified into the 17-service list
+        mixed_overdue_resp = "".join(
+            service.generate_chat_stream("what are the library services overdue fines?")
+        ).strip()
+        self.assertIn("php 10", mixed_overdue_resp.lower())
+        self.assertNotIn("offers 17 official library services", mixed_overdue_resp.lower())
 
     def test_administration_library_manual_and_org_structure_guide_to_administration_route(self):
         service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
