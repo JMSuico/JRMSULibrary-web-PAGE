@@ -8,6 +8,10 @@ class IPersonnelRepository(ABC):
         pass
 
     @abstractmethod
+    def search_by_name_tokens(self, tokens: List[str]) -> List[Any]:
+        pass
+
+    @abstractmethod
     def get_by_id(self, personnel_id: int) -> Optional[Any]:
         pass
 

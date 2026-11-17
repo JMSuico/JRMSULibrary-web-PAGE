@@ -732,34 +732,36 @@ class AIReadViewHelper:
     # 5. Algorithm 3: Physical Setup & Library Zone Grouping + Sorting
     # -------------------------------------------------------------------------
     @staticmethod
-    def normalize_zone_name(raw_title: str) -> Tuple[str, str]:
+    def normalize_zone_name(raw_title: str, section_label: str = "") -> Tuple[str, str]:
         """
-        Normalizes a physical setup title into `(base_zone_name, floor_label)`.
+        Normalizes a physical setup title + section_label into `(base_zone_name, floor_label)`.
         Examples:
           - 'WORKSTATION 12' -> ('WORKSTATION', '1st Floor / Main')
           - 'READING AREA 1 - 2nd floor' -> ('READING AREA', '2nd Floor')
           - 'SOCIAL LEARNING ZONE 3' -> ('SOCIAL LEARNING ZONE', '1st Floor / Main')
         """
         title = (raw_title or "").strip()
-        if not title:
+        sec = (section_label or "").strip()
+        if not title and not sec:
             return ("UNSPECIFIED ZONE", "1st Floor / Main")
 
+        combined_floor_text = f"{title} {sec}".strip()
         floor_label = "1st Floor / Main"
-        if re.search(r"2nd\s*floor", title, flags=re.IGNORECASE):
+        if re.search(r"(?:2nd|second)\s*floor", combined_floor_text, flags=re.IGNORECASE):
             floor_label = "2nd Floor"
-        elif re.search(r"1st\s*floor|ground\s*floor", title, flags=re.IGNORECASE):
-            floor_label = "1st Floor / Main"
+        elif re.search(r"(?:1st|first|ground)\s*floor", combined_floor_text, flags=re.IGNORECASE):
+            floor_label = "1st Floor"
 
         # Strip floor suffix e.g. "- 2nd floor"
         cleaned = re.sub(
-            r"\s*[-–—]?\s*\b(1st|2nd|3rd|ground)\s*floor\b.*$",
+            r"\s*[-–—]?\s*\b(1st|first|2nd|second|ground)\s*floor\b.*$",
             "",
             title,
             flags=re.IGNORECASE,
         ).strip()
         # Strip trailing numbers e.g. "WORKSTATION 12" -> "WORKSTATION"
         cleaned = re.sub(r"\s+\d+\s*$", "", cleaned).strip()
-        return (cleaned.upper() or title.upper(), floor_label)
+        return (cleaned.upper() or title.upper() or sec.upper(), floor_label)
 
     @classmethod
     def group_and_sort_physical_zones(
@@ -768,11 +770,11 @@ class AIReadViewHelper:
         query_tokens: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
-        Algorithm 3: Separates `LibraryImage` records into:
+        Algorithm 3: Separates `LibraryInteriorImage` records into:
           - `physical_setup_rows`: 37 named Physical Setup zones (title does not start with 'IMG')
           - `interior_photo_rows`: 17 interior photos (title starts with 'IMG' or section_label == 'Library Interior')
-        Normalizes base zone names and returns a deterministically sorted list of grouped
-        zone summaries plus matched specific zones when `query_tokens` is provided.
+        Uses only verified `LibraryInteriorImage` fields (`title`, `section_label`, `is_active`).
+        Normalizes base zone names + floors and returns deterministically sorted summaries.
         """
         physical_setup_rows: List[Any] = []
         interior_photo_rows: List[Any] = []
@@ -799,13 +801,8 @@ class AIReadViewHelper:
 
         for img in physical_setup_rows:
             raw_title = str(getattr(img, "title", "") or "").strip()
-            desc = str(
-                getattr(img, "description", None)
-                or getattr(img, "caption", "")
-                or ""
-            ).strip()
             section_label = str(getattr(img, "section_label", "") or "").strip()
-            base_zone, floor_label = cls.normalize_zone_name(raw_title)
+            base_zone, floor_label = cls.normalize_zone_name(raw_title, section_label=section_label)
 
             grp = groups.setdefault(
                 base_zone,
@@ -814,7 +811,6 @@ class AIReadViewHelper:
                     "count": 0,
                     "floors": set(),
                     "titles": [],
-                    "descriptions": [],
                     "section_labels": set(),
                 },
             )
@@ -822,13 +818,11 @@ class AIReadViewHelper:
             grp["floors"].add(floor_label)
             if raw_title and raw_title not in grp["titles"]:
                 grp["titles"].append(raw_title)
-            if desc and desc not in grp["descriptions"]:
-                grp["descriptions"].append(desc)
             if section_label:
                 grp["section_labels"].add(section_label)
 
             if tokens:
-                haystack = f"{raw_title} {base_zone} {desc} {section_label} {floor_label}".lower()
+                haystack = f"{raw_title} {base_zone} {section_label} {floor_label}".lower()
                 score = sum(4.0 for tok in tokens if tok in haystack)
                 if score > 0:
                     matched_zones.append(
@@ -837,7 +831,6 @@ class AIReadViewHelper:
                             "title": raw_title,
                             "base_zone": base_zone,
                             "floor": floor_label,
-                            "description": desc,
                             "section_label": section_label,
                             "score": score,
                         }
@@ -846,17 +839,14 @@ class AIReadViewHelper:
         grouped_zones: List[Dict[str, Any]] = []
         for base_zone, data in groups.items():
             floors_sorted = sorted(data["floors"])
-            desc_sample = data["descriptions"][0] if data["descriptions"] else ""
             count = data["count"]
             floor_note = (
-                " (includes 2nd Floor)"
+                " (1st Floor & 2nd Floor)"
                 if "2nd Floor" in floors_sorted and len(floors_sorted) > 1
-                else (" (2nd Floor)" if floors_sorted == ["2nd Floor"] else "")
+                else (" (2nd Floor)" if floors_sorted == ["2nd Floor"] else (" (1st Floor)" if floors_sorted == ["1st Floor"] else ""))
             )
             unit_str = f"{count} unit{'s' if count != 1 else ''}" if count > 1 else "1 area"
             summary_line = f"{base_zone}: {unit_str}{floor_note}"
-            if desc_sample:
-                summary_line += f" — {desc_sample}"
 
             grouped_zones.append(
                 {
@@ -864,7 +854,6 @@ class AIReadViewHelper:
                     "count": count,
                     "floors": floors_sorted,
                     "titles": sorted(data["titles"]),
-                    "description": desc_sample,
                     "section_labels": sorted(data["section_labels"]),
                     "formatted_summary": summary_line,
                 }

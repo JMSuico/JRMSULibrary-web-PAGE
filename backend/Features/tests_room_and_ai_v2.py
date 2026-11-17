@@ -80,7 +80,7 @@ CANONICAL_RESERVATION_ROOMS = [
     "Tutorium Room 1",
     "Tutorium Room 2",
     "Multimedia Room",
-    "Library ComLab (Computer Laboratory)",
+    "Workstation",
 ]
 
 
@@ -147,6 +147,7 @@ def _make_empty_ai_service(providers=None) -> AIService:
         library_name="JRMSU Katipunan Library",
         address="Katipunan, Zamboanga del Norte",
         contact_email="katipunan.library@jrmsu.edu.ph",
+        alternate_email="jrmsukclibrary@gmail.com",
         opening_hours_mon_fri="7:00 AM - 7:00 PM",
         opening_hours_sat="Closed",
         opening_hours_sun="Closed",
@@ -224,19 +225,40 @@ class TestSiteSettingsRoomAvailability(TestCase):
         expected = {room: True for room in CANONICAL_RESERVATION_ROOMS}
         self.assertEqual(serialized["room_availability"], expected)
 
+    def test_default_room_availability_and_legacy_comlab_normalization_to_workstation(self):
+        from Features.Data.Models.site_settings_model import (
+            default_room_availability,
+            normalize_room_availability,
+        )
+
+        defaults = default_room_availability()
+        self.assertEqual(set(defaults.keys()), set(CANONICAL_RESERVATION_ROOMS))
+        self.assertNotIn("Library ComLab (Computer Laboratory)", defaults)
+        self.assertTrue(all(defaults[r] is True for r in CANONICAL_RESERVATION_ROOMS))
+
+        normalized = normalize_room_availability(
+            {"Library ComLab (Computer Laboratory)": False}
+        )
+        self.assertEqual(set(normalized.keys()), set(CANONICAL_RESERVATION_ROOMS))
+        self.assertNotIn("Library ComLab (Computer Laboratory)", normalized)
+        self.assertIs(normalized["Workstation"], False)
+        for room in CANONICAL_RESERVATION_ROOMS:
+            if room != "Workstation":
+                self.assertIs(normalized[room], True)
+
     def test_partial_room_availability_update_via_service_preserves_all_six_keys(self):
         svc = SettingsService()
         updated = svc.update_settings(
-            {"room_availability": {"Library ComLab (Computer Laboratory)": False}}
+            {"room_availability": {"Workstation": False}}
         )
         serialized = SiteSettingsSerializer(updated).data
 
         self.assertIn("room_availability", serialized)
         availability = serialized["room_availability"]
         self.assertEqual(set(availability.keys()), set(CANONICAL_RESERVATION_ROOMS))
-        self.assertIs(availability["Library ComLab (Computer Laboratory)"], False)
+        self.assertIs(availability["Workstation"], False)
         for room in CANONICAL_RESERVATION_ROOMS:
-            if room != "Library ComLab (Computer Laboratory)":
+            if room != "Workstation":
                 self.assertIs(availability[room], True)
 
     def test_partial_room_availability_update_via_serializer_preserves_all_six_keys(self):
@@ -245,7 +267,7 @@ class TestSiteSettingsRoomAvailability(TestCase):
 
         serializer = SiteSettingsSerializer(
             instance=settings_obj,
-            data={"room_availability": {"Library ComLab (Computer Laboratory)": False}},
+            data={"room_availability": {"Workstation": False}},
             partial=True,
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
@@ -253,9 +275,9 @@ class TestSiteSettingsRoomAvailability(TestCase):
 
         out = SiteSettingsSerializer(saved).data["room_availability"]
         self.assertEqual(set(out.keys()), set(CANONICAL_RESERVATION_ROOMS))
-        self.assertIs(out["Library ComLab (Computer Laboratory)"], False)
+        self.assertIs(out["Workstation"], False)
         for room in CANONICAL_RESERVATION_ROOMS:
-            if room != "Library ComLab (Computer Laboratory)":
+            if room != "Workstation":
                 self.assertIs(out[room], True)
 
 
@@ -275,8 +297,8 @@ class TestContactServiceRoomAvailabilityEnforcement(TestCase):
             {
                 "name": "Juan Dela Cruz",
                 "email": "juan@jrmsu.edu.ph",
-                "subject": "Reservation: Library ComLab (Computer Laboratory) - Study",
-                "message": "Reserving ComLab for capstone encoding.",
+                "subject": "Reservation: Workstation - Study",
+                "message": "Reserving Workstation for capstone encoding.",
                 "message_type": "RESERVATION",
             }
         )
@@ -289,7 +311,7 @@ class TestContactServiceRoomAvailabilityEnforcement(TestCase):
         self, _mock_domain, _mock_notify
     ):
         SettingsService().update_settings(
-            {"room_availability": {"Library ComLab (Computer Laboratory)": False}}
+            {"room_availability": {"Workstation": False}}
         )
         svc = ContactService()
         with self.assertRaises(ValueError) as ctx:
@@ -297,8 +319,40 @@ class TestContactServiceRoomAvailabilityEnforcement(TestCase):
                 {
                     "name": "Juan Dela Cruz",
                     "email": "juan@jrmsu.edu.ph",
-                    "subject": "Reservation: Library ComLab (Computer Laboratory) - Study",
-                    "message": "Reserving ComLab for capstone encoding.",
+                    "subject": "Reservation: Workstation - Study",
+                    "message": "Reserving Workstation for capstone encoding.",
+                    "message_type": "RESERVATION",
+                }
+            )
+        self.assertIn("unavailable", str(ctx.exception).lower())
+
+    @patch("Features.Services.Implementations.contact_service.send_notification_to_library")
+    @patch("Features.Services.Implementations.contact_service.is_email_domain_valid", return_value=True)
+    def test_submit_contact_accepts_and_rejects_legacy_comlab_alias_based_on_workstation_availability(
+        self, _mock_domain, _mock_notify
+    ):
+        svc = ContactService()
+        accepted = svc.submit_contact(
+            {
+                "name": "Juan Dela Cruz",
+                "email": "juan.alias@jrmsu.edu.ph",
+                "subject": "Reservation: ComLab",
+                "message": "Using legacy ComLab subject alias while Workstation is open.",
+                "message_type": "RESERVATION",
+            }
+        )
+        self.assertIsNotNone(accepted.pk)
+
+        SettingsService().update_settings(
+            {"room_availability": {"Workstation": False}}
+        )
+        with self.assertRaises(ValueError) as ctx:
+            svc.submit_contact(
+                {
+                    "name": "Juan Dela Cruz",
+                    "email": "juan.alias2@jrmsu.edu.ph",
+                    "subject": "Reservation: ComLab",
+                    "message": "Trying legacy ComLab alias when Workstation is closed.",
                     "message_type": "RESERVATION",
                 }
             )
@@ -550,6 +604,327 @@ class TestAIServiceGroundingFastCacheAndAntiCutoff(unittest.TestCase):
             full_response.endswith((".", "!", "?", ")")),
             f"Expected no dangling trailing fragment, got: {full_response!r}",
         )
+
+
+class TestRound2PersonnelAndClosedWorldPolicy(unittest.TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_personnel_lookup_strips_honorific_maam_kiara_without_llm_hallucination(self):
+        actress_provider = _FakeLLMProvider(
+            ["Maam Kiara is a Filipino actress known for TV dramas."]
+        )
+        service = _make_empty_ai_service(providers=[actress_provider])
+        service.personnel_repo.get_all.return_value = [
+            SimpleNamespace(
+                id=1,
+                pk=1,
+                name="Kiara Keren M. Alavanza",
+                title="Campus Librarian",
+                order=1,
+            )
+        ]
+
+        response = "".join(service.generate_chat_stream("who is Maam Kiara")).strip()
+        lower = response.lower()
+
+        self.assertEqual(
+            actress_provider.calls,
+            [],
+            "Personnel lookup for 'who is Maam Kiara' must resolve deterministically without calling LLM",
+        )
+        self.assertIn("kiara keren m. alavanza", lower)
+        self.assertIn("campus librarian", lower)
+        self.assertNotIn("actress", lower)
+
+    def test_closed_world_blocks_unlisted_maam_kiara_when_personnel_empty(self):
+        actress_provider = _FakeLLMProvider(
+            ["Maam Kiara is a Filipino actress known for TV dramas."]
+        )
+        service = _make_empty_ai_service(providers=[actress_provider])
+        service.personnel_repo.get_all.return_value = []
+
+        response = "".join(service.generate_chat_stream("who is Maam Kiara")).strip()
+        lower = response.lower()
+
+        self.assertEqual(
+            actress_provider.calls,
+            [],
+            "Tier 1 closed-world check must block unlisted person queries before LLM fallback",
+        )
+        self.assertNotIn("actress", lower)
+        self.assertNotIn("tv dramas", lower)
+        self.assertIn("jrmsu", lower)
+        self.assertTrue(
+            any(
+                phrase in lower
+                for phrase in ("not found", "no record", "not listed", "not in", "cannot find")
+            ),
+            f"Expected clean closed-world not-found message, got: {response!r}",
+        )
+
+    def test_closed_world_blocks_external_celebrity_queries_at_tier1_for_local_and_claude(self):
+        for provider_id, query, hall_text in [
+            (
+                "ollama",
+                "who is Kathryn Bernardo",
+                "Kathryn Bernardo is a Filipino actress known for TV dramas and films.",
+            ),
+            (
+                "anthropic",
+                "who is Taylor Swift",
+                "Taylor Swift is an American singer-songwriter and pop star.",
+            ),
+        ]:
+            with self.subTest(provider_id=provider_id, query=query):
+                provider = _FakeLLMProvider([hall_text], provider_id=provider_id)
+                service = _make_empty_ai_service(providers=[provider])
+
+                response = "".join(service.generate_chat_stream(query)).strip()
+                lower = response.lower()
+
+                self.assertEqual(
+                    provider.calls,
+                    [],
+                    f"Tier 1 closed-world check must intercept {query!r} before {provider_id} LLM",
+                )
+                self.assertNotIn("actress", lower)
+                self.assertNotIn("singer", lower)
+                self.assertIn("jrmsu", lower)
+                self.assertTrue(
+                    any(
+                        phrase in lower
+                        for phrase in ("not found", "no record", "not listed", "not in", "cannot find")
+                    ),
+                    f"Expected closed-world message for {query!r}, got: {response!r}",
+                )
+
+    def test_sanitize_llm_output_blocks_external_celebrity_and_actress_hallucinations(self):
+        service = _make_empty_ai_service()
+
+        for query, raw_llm_output, forbidden_tokens in [
+            (
+                "who is Kathryn Bernardo",
+                "Kathryn Bernardo is a Filipino actress known for TV dramas and romantic comedies.",
+                ("actress", "tv dramas", "romantic comedies"),
+            ),
+            (
+                "who is Taylor Swift",
+                "Taylor Swift is an American singer-songwriter known for pop albums.",
+                ("singer-songwriter", "pop albums"),
+            ),
+        ]:
+            with self.subTest(query=query):
+                sanitized = service._sanitize_llm_output(
+                    raw_llm_output,
+                    user_message=query,
+                ).strip()
+                lower = sanitized.lower()
+                for tok in forbidden_tokens:
+                    self.assertNotIn(tok, lower)
+                self.assertIn("jrmsu", lower)
+                self.assertTrue(
+                    any(
+                        phrase in lower
+                        for phrase in ("not found", "no record", "not listed", "not in", "cannot find")
+                    ),
+                    f"Expected _sanitize_llm_output to enforce closed-world policy, got: {sanitized!r}",
+                )
+
+
+class TestRound2SevenSectionInternalKnowledge(unittest.TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_home_gps_location_alternate_email_and_uopac_registration_link(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+
+        response = "".join(
+            service.generate_chat_stream(
+                "what is the GPS location or alternate email or UOPAC registration link?"
+            )
+        ).strip()
+        lower = response.lower()
+
+        self.assertIn("barangay dos", lower)
+        self.assertIn("8.510047", lower)
+        self.assertIn("123.286297", lower)
+        self.assertIn("https://library.jrmsu.edu.ph/opac/registration", lower)
+        self.assertIn("jrmsukclibrary@gmail.com", lower)
+
+    def test_about_five_quality_objectives_and_full_presidents_history_without_800_char_cutoff(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+        long_history_html = (
+            "<p>"
+            + (
+                "Jose Rizal Memorial State University (JRMSU) began as Katipunan National Agricultural School "
+                "and grew into a premier state university in Zamboanga del Norte. On December 15, 2009, "
+                "Republic Act No. 9852 elevated the institution to university status, uniting its campuses "
+                "under a shared commitment to instruction, research, extension, and production. "
+            ) * 3
+            + "Past and present university presidents in the history of JRMSU include "
+            "Dr. Felipe O. Ligan, Dr. Henry A. Sojor, and Dr. Edgar S. Balbuena."
+            "</p>"
+        )
+        self.assertGreater(len(long_history_html), 850)
+
+        def _get_by_slug(slug):
+            if slug == "about_history":
+                return SimpleNamespace(slug="about_history", title="History", content=long_history_html)
+            return None
+
+        service.page_content_repo.get_by_slug.side_effect = _get_by_slug
+
+        obj_resp = "".join(
+            service.generate_chat_stream("what are the 5 quality objectives")
+        ).strip()
+        self.assertIn("quality objectives", obj_resp.lower())
+        for idx in ("1.", "2.", "3.", "4.", "5."):
+            self.assertIn(idx, obj_resp)
+
+        hist_resp = "".join(
+            service.generate_chat_stream("who are the presidents in the history of JRMSU")
+        ).strip()
+        hist_lower = hist_resp.lower()
+        self.assertIn("dr. felipe o. ligan", hist_lower)
+        self.assertIn("dr. henry a. sojor", hist_lower)
+        self.assertIn("dr. edgar s. balbuena", hist_lower)
+
+    def test_services_citizens_charter_overdue_fine_elibrary_hours_and_online_clearance(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+
+        fine_resp = "".join(
+            service.generate_chat_stream("how much is the overdue fine")
+        ).strip()
+        self.assertIn("php 10", fine_resp.lower())
+        self.assertTrue(
+            "/hr" in fine_resp.lower() or "per hour" in fine_resp.lower(),
+            f"Expected hourly overdue fine rate (PHP 10/hr), got: {fine_resp!r}",
+        )
+
+        elib_resp = "".join(
+            service.generate_chat_stream("what are the E-Library hours per semester")
+        ).strip()
+        self.assertIn("30", elib_resp.lower())
+        self.assertTrue(
+            "hrs/semester" in elib_resp.lower()
+            or "hours per semester" in elib_resp.lower()
+            or "hours/semester" in elib_resp.lower(),
+            f"Expected 30 hrs/semester E-Library allowance, got: {elib_resp!r}",
+        )
+
+        clearance_resp = "".join(
+            service.generate_chat_stream("clearance online")
+        ).strip()
+        self.assertIn("jrmsu-arms.online", clearance_resp.lower())
+
+    def test_administration_library_manual_and_org_structure_guide_to_administration_route(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+
+        manual_resp = "".join(
+            service.generate_chat_stream("where is the library manual")
+        ).strip()
+        self.assertIn("/administration", manual_resp.lower())
+        self.assertNotIn("/about", manual_resp.lower())
+
+        org_resp = "".join(
+            service.generate_chat_stream("show administration organizational structure")
+        ).strip()
+        self.assertIn("/administration", org_resp.lower())
+        self.assertNotIn("/about", org_resp.lower())
+        self.assertNotIn("about page", org_resp.lower())
+
+    def test_collection_union_opac_and_newly_acquired_books_location_no_home_or_eresources_tab(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+        service.book_repo.get_inventory_summary.return_value = {
+            "total": 135,
+            "picture_count": 135,
+            "named_count": 0,
+            "named_books": [],
+        }
+
+        opac_resp = "".join(
+            service.generate_chat_stream("where is the Union OPAC")
+        ).strip()
+        opac_lower = opac_resp.lower()
+        self.assertIn("https://library.jrmsu.edu.ph/opac/", opac_lower)
+        self.assertNotIn("home page", opac_lower)
+        self.assertNotIn("e-resources tab", opac_lower)
+        self.assertNotIn("'e-resources' tab", opac_lower)
+
+        books_resp = "".join(
+            service.generate_chat_stream("newly acquired books location")
+        ).strip()
+        books_lower = books_resp.lower()
+        self.assertIn("collection", books_lower)
+        self.assertIn("newly acquired books", books_lower)
+        self.assertNotIn("home page", books_lower)
+        self.assertNotIn("e-resources tab", books_lower)
+        self.assertNotIn("'e-resources' tab", books_lower)
+
+    def test_physical_setup_first_and_second_floor_resolve_without_3rd_floor_hallucination(self):
+        provider = _FakeLLMProvider(["Fallback."])
+        service = _make_empty_ai_service(providers=[provider])
+        service.gallery_repo.get_all_active.return_value = [
+            SimpleNamespace(
+                id=1,
+                title="WORKSTATION 1 - 1st Floor",
+                description="High-speed computer workstation on the ground floor.",
+                section_label="Physical Setup",
+                is_active=True,
+            ),
+            SimpleNamespace(
+                id=2,
+                title="CIRCULATION SECTION - 1st Floor",
+                description="Borrowing and returning counter near entrance.",
+                section_label="Physical Setup",
+                is_active=True,
+            ),
+            SimpleNamespace(
+                id=3,
+                title="READING AREA 1 - 2nd Floor",
+                description="Quiet individual study carrels on the second floor.",
+                section_label="Physical Setup",
+                is_active=True,
+            ),
+            SimpleNamespace(
+                id=4,
+                title="FACULTY CORNER 1 - 2nd Floor",
+                description="Dedicated research lounge for faculty members.",
+                section_label="Physical Setup",
+                is_active=True,
+            ),
+        ]
+
+        floor1_resp = "".join(
+            service.generate_chat_stream("what is on the 1st floor")
+        ).strip()
+        floor1_lower = floor1_resp.lower()
+        self.assertEqual(provider.calls, [])
+        self.assertIn("1st floor", floor1_lower)
+        self.assertTrue(
+            "workstation" in floor1_lower or "circulation" in floor1_lower,
+            f"Expected 1st floor Physical Setup zones, got: {floor1_resp!r}",
+        )
+        self.assertNotIn("3rd floor", floor1_lower)
+
+        floor2_resp = "".join(
+            service.generate_chat_stream("what is on the 2nd floor")
+        ).strip()
+        floor2_lower = floor2_resp.lower()
+        self.assertEqual(provider.calls, [])
+        self.assertIn("2nd floor", floor2_lower)
+        self.assertTrue(
+            "reading area" in floor2_lower or "faculty corner" in floor2_lower,
+            f"Expected 2nd floor Physical Setup zones, got: {floor2_resp!r}",
+        )
+        self.assertNotIn("3rd floor", floor2_lower)
 
 
 if __name__ == "__main__":

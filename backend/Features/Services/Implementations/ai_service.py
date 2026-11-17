@@ -37,6 +37,7 @@ from Features.Repositories.Implementations.eresource_repository import (
     EResourceDepartmentRepository,
     EResourceFileRepository,
 )
+from Features.Repositories.Implementations.analytics_repository import SiteVisitRepository
 from Features.Services.Interfaces.i_ai_service import IAIService
 from Features.Services.Interfaces.i_llm_provider import (
     ILLMProviderStrategy,
@@ -47,6 +48,18 @@ from Features.Infrastructure.AiProviders.ollama_provider import OllamaLLMProvide
 from Features.Infrastructure.AiProviders.provider_registry import LLMProviderRegistry
 from Features.Helpers.ai_read_view_helper import AIReadViewHelper
 from Features.Helpers.ai_query_analyzer import AIQueryAnalyzer
+from Features.Helpers.library_system_knowledge import (
+    CANONICAL_17_LIBRARY_SERVICES,
+    CANONICAL_ABOUT_HISTORY,
+    CANONICAL_HOME_INFO,
+    CANONICAL_QUALITY_OBJECTIVES,
+    CANONICAL_VMGO,
+    build_closed_world_refusal,
+    extract_ungrounded_person_query,
+    is_external_hallucination_output,
+    match_personnel_records,
+    resolve_static_system_section,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +77,7 @@ CANONICAL_RESERVATION_ROOMS = (
     "Tutorium Room 1",
     "Tutorium Room 2",
     "Multimedia Room",
-    "Library ComLab (Computer Laboratory)",
+    "Workstation",
 )
 
 # Idempotency & Single-Winner Gate constants
@@ -80,6 +93,8 @@ APPROVED_LIBRARY_DOMAINS = (
     'jrmsukc-library.online',
     'jrmsukclibrary.com',
     'jrmsu.edu.ph',
+    'jrmsu-arms.online',
+    'jrmsu.online',
 )
 
 
@@ -100,13 +115,14 @@ class AIService(IAIService):
         managed_file_repo: Optional[ManagedFileRepository] = None,
         page_image_repo: Optional[PageImageRepository] = None,
         provider_registry: Optional[LLMProviderRegistry] = None,
+        site_visit_repo: Optional[SiteVisitRepository] = None,
     ):
         # Use OLLAMA_URL env var if available (useful for Docker to reach host), else fallback
         self.ollama_url = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434/api/chat')
         self.model_name = 'qwen2.5:0.5b'
         self.request_timeout = self._resolve_request_timeout()
 
-        # All 13 Permitted Public/Student-Facing Repositories Wired
+        # All Permitted Public/Student-Facing Repositories Wired
         self.personnel_repo = personnel_repo or PersonnelRepository()
         self.link_repo = link_repo or ManagedLinkRepository()
         self.managed_file_repo = managed_file_repo or ManagedFileRepository()
@@ -120,6 +136,7 @@ class AIService(IAIService):
         self.settings_repo = settings_repo or SettingsRepository()
         self.eresource_dept_repo = eresource_dept_repo or EResourceDepartmentRepository()
         self.eresource_file_repo = eresource_file_repo or EResourceFileRepository()
+        self.site_visit_repo = site_visit_repo or SiteVisitRepository()
 
         # Persistent HTTP connection pool for LLM provider APIs
         self.session = requests.Session()
@@ -271,9 +288,28 @@ class AIService(IAIService):
                 for room in CANONICAL_RESERVATION_ROOMS:
                     if room in raw_avail and isinstance(raw_avail[room], bool):
                         availability[room] = raw_avail[room]
+                if "Workstation" not in raw_avail and "Library ComLab (Computer Laboratory)" in raw_avail:
+                    legacy_val = raw_avail["Library ComLab (Computer Laboratory)"]
+                    if isinstance(legacy_val, bool):
+                        availability["Workstation"] = legacy_val
         except Exception as e:
             logger.warning(f"Room availability read warning: {e}")
         return availability
+
+    def _get_site_visit_count(self) -> int:
+        """Safely retrieves total SiteVisit count from repository or model."""
+        try:
+            if hasattr(self.site_visit_repo, 'get_total_count'):
+                val = self.site_visit_repo.get_total_count()
+                if isinstance(val, int):
+                    return val
+        except Exception:
+            pass
+        try:
+            from Features.Data.Models.site_visit_model import SiteVisit
+            return int(SiteVisit.objects.count())
+        except Exception:
+            return 0
 
     def _format_room_availability_lines(self) -> List[str]:
         """Formats canonical library reservation rooms with live Available/Unavailable status."""
@@ -811,6 +847,10 @@ class AIService(IAIService):
         if not cleaned:
             return cleaned
 
+        if is_external_hallucination_output(cleaned):
+            subject = extract_ungrounded_person_query(user_message) or ""
+            return build_closed_world_refusal(subject)
+
         lower_out = cleaned.lower()
         hallucination_markers = [
             'alibaba cloud',
@@ -1070,16 +1110,18 @@ class AIService(IAIService):
 
         # ---------------------------------------------------------
         # Intent 1: Room Reservation Intent
-        # ('reserve', 'reservation', 'room', 'discussion room', 'tutorium', 'multimedia', 'comlab')
+        # ('reserve', 'reservation', 'room', 'discussion room', 'tutorium', 'multimedia', 'comlab', 'workstation')
         # ---------------------------------------------------------
         has_room_phrase = any(phrase in norm for phrase in [
             'discussion room', 'tutorium', 'multimedia room', 'library comlab', 'computer lab',
             'computer laboratory', 'reserve room', 'reserve a room', 'book a room',
             'room reservation', 'reserve a space', 'book discussion', 'reservation of room',
-            'room availability', 'available room', 'available rooms'
+            'room availability', 'available room', 'available rooms',
+            'reserve workstation', 'reserve a workstation', 'workstation availability',
+            'is workstation available', 'are workstations available'
         ])
         has_room_token = bool({'tutorium', 'reservation', 'comlab'} & tokens) or (
-            'reserve' in tokens and bool({'room', 'rooms', 'facility', 'space'} & tokens)
+            bool({'reserve', 'book', 'availability'} & tokens) and bool({'room', 'rooms', 'facility', 'space', 'workstation', 'workstations'} & tokens)
         ) or ('room' in tokens and bool({'reserve', 'book', 'discussion', 'multimedia', 'reservation', 'available'} & tokens))
 
         if has_room_phrase or has_room_token:
@@ -1093,16 +1135,48 @@ class AIService(IAIService):
             )
 
         # ---------------------------------------------------------
+        # Intent 1B: Direct Personnel Name Lookup (Honorific-Stripping Live DB Match)
+        # Resolves queries like "who is Maam Kiara" immediately at Tier 1 (< 50ms)
+        # ---------------------------------------------------------
+        try:
+            staff_objs = list(self.personnel_repo.get_all())
+        except Exception:
+            staff_objs = []
+        matched_personnel = match_personnel_records(user_message, staff_objs)
+        if matched_personnel:
+            try:
+                settings = self.settings_repo.get_settings()
+                mon_fri = getattr(settings, 'opening_hours_mon_fri', '7:00 AM - 7:00 PM') or '7:00 AM - 7:00 PM'
+            except Exception:
+                mon_fri = '7:00 AM - 7:00 PM'
+
+            if len(matched_personnel) == 1:
+                person = matched_personnel[0]
+                return (
+                    f"{person.name} — {person.title} at the JRMSU Katipunan Campus Library.\n\n"
+                    f"You can view our Library Personnel directory at /personnel (Available Monday to Friday, {mon_fri})."
+                )
+            lines = [f"- {p.name}: {p.title}" for p in matched_personnel]
+            return (
+                "Matching JRMSU Katipunan Campus Library Personnel:\n\n"
+                + "\n".join(lines)
+                + f"\n\nYou can view our complete Library Personnel directory at /personnel (Monday to Friday, {mon_fri})."
+            )
+
+        # ---------------------------------------------------------
         # Intent 2: Reference / Thesis Intent
         # ('reference', 'reference books', 'thesis', 'dissertation', 'research', 'softcopy')
         # ---------------------------------------------------------
         has_ref_phrase = any(phrase in norm for phrase in [
             'reference book', 'reference books', 'research reference', 'research paper', 'research papers',
-            'thesis', 'theses', 'dissertation', 'dissertations', 'softcopy', 'special collection', 'research section'
+            'thesis', 'theses', 'dissertation', 'dissertations', 'softcopy'
         ])
         has_ref_token = bool({'thesis', 'theses', 'dissertation', 'dissertations', 'softcopy'} & tokens) or (
-            'reference' in tokens and not any(p in norm for p in ['for your reference', 'reference number'])
-        ) or ('research' in tokens and not any(w in norm for w in ['social learning', 'learning zone', 'zone']))
+            'reference' in tokens and not any(p in norm for p in ['for your reference', 'reference number', 'reference section'])
+        ) or (
+            'research' in tokens
+            and not any(w in norm for w in ['social learning', 'learning zone', 'zone', 'research section', '1st floor', '2nd floor', 'first floor', 'second floor'])
+        )
 
         # Check if user inquiry is asking for generative academic reasoning
         is_academic_reasoning_prompt = any(p in norm for p in [
@@ -1391,21 +1465,25 @@ class AIService(IAIService):
                 f"{cat_summary_block}\n"
                 f"{matched_links_block}\n"
                 f"To access subscribed external databases (such as Bookshelf by VitalSource or Scholaar) or browse course folders, "
-                f"simply visit the 'E-Resources' tab on our website!"
+                f"simply visit 'Collection' -> 'Local Books', 'Online Access', or 'External Libraries' on our website (/collection)!"
             )
 
         # ---------------------------------------------------------
         # Intent 4: Physical Setup & Interior Gallery Intent
         # ---------------------------------------------------------
+        asks_1st_floor = any(p in norm for p in ('1st floor', 'first floor', 'ground floor'))
+        asks_2nd_floor = any(p in norm for p in ('2nd floor', 'second floor'))
         has_setup_phrase = any(phrase in norm for phrase in [
             'physical setup', 'physical layout', 'library sections', 'physical sections', 'workstation', 'workstations',
-            'facilities', 'baggage', 'social learning', 'honesty store', 'floor plan', 'layout', 'quiet reading',
-            'faculty corner', 'information counter', 'receiving area', 'periodical section', 'library interior',
-            'interior photos', 'library gallery', 'reading area', '2nd floor', 'second floor'
+            'facilities', 'baggage', 'baggage section', 'social learning', 'honesty store', 'floor plan', 'layout',
+            'quiet reading', 'faculty corner', 'information counter', 'receiving area', 'periodical section',
+            'circulation section', 'fiction section', 'multimedia section', 'special collection',
+            'reference section', 'research section', 'library interior', 'interior photos', 'library gallery',
+            'reading area', '1st floor', 'first floor', 'ground floor', '2nd floor', 'second floor'
         ])
         has_setup_token = bool({'workstation', 'workstations', 'baggage', 'facilities'} & tokens) or (
-            bool({'sections', 'areas', 'zones', 'gallery', 'interior'} & tokens)
-            and bool({'library', 'physical', 'inside', 'setup', 'floor', 'zones', 'what', 'photos', 'images'} & tokens)
+            bool({'sections', 'areas', 'zones', 'gallery', 'interior', 'floor'} & tokens)
+            and bool({'library', 'physical', 'inside', 'setup', 'floor', 'zones', 'what', 'photos', 'images', '1st', 'first', '2nd', 'second', 'ground'} & tokens)
         )
 
         if has_setup_phrase or has_setup_token:
@@ -1420,31 +1498,48 @@ class AIService(IAIService):
             total_gallery = zone_summary.get("total_count") or (zone_count + interior_count)
             grouped_zones = zone_summary.get("grouped_zones", [])
             matched_zones = zone_summary.get("matched_zones", [])
+            physical_rows = zone_summary.get("physical_setup_rows", [])
+
+            if asks_1st_floor or asks_2nd_floor:
+                target_floor = "2nd Floor" if asks_2nd_floor and not asks_1st_floor else "1st Floor"
+                floor_items: List[str] = []
+                for row in physical_rows:
+                    r_title = str(getattr(row, "title", "") or "").strip()
+                    r_label = str(getattr(row, "section_label", "") or "").strip()
+                    _, r_floor = AIReadViewHelper.normalize_zone_name(r_title, section_label=r_label)
+                    is_2nd = r_floor == "2nd Floor"
+                    if (target_floor == "2nd Floor" and is_2nd) or (target_floor == "1st Floor" and not is_2nd):
+                        if r_title:
+                            floor_items.append(f"- {r_title} ({r_floor})")
+                if floor_items:
+                    return (
+                        f"JRMSU Katipunan Campus Library — {target_floor} Physical Setup Zones "
+                        f"(our library is a 2-storey building with 1st Floor and 2nd Floor):\n\n"
+                        + "\n".join(floor_items[:15])
+                        + "\n\nYou can view high-resolution photos and details of each area on our Physical Setup page at /physical-setup."
+                    )
 
             if grouped_zones:
                 grouped_lines = "\n".join([f"- {g['formatted_summary']}" for g in grouped_zones])
             else:
                 grouped_lines = (
-                    "- WORKSTATION: 5 units (Workstations 1 to 5 with high-speed internet)\n"
-                    "- SOCIAL LEARNING ZONE: 5 units (Social Learning Zones 1 to 5)\n"
+                    "- WORKSTATION: 5 units (1st Floor — Workstations 1 to 5 with high-speed internet)\n"
+                    "- SOCIAL LEARNING ZONE: 5 units (1st Floor — Social Learning Zones 1 to 5)\n"
                     "- READING AREA: 4 units (1st Floor & 2nd Floor Quiet Reading Areas)\n"
                     "- RECEIVING AREA: 2 units (1st Floor & 2nd Floor)\n"
-                    "- CIRCULATION SECTION & BAGGAGE SECTION (Baggage 1 & 2)\n"
+                    "- CIRCULATION SECTION & BAGGAGE SECTION (1st Floor — Baggage 1 & 2)\n"
                     "- REFERENCE SECTION, RESEARCH & FICTION SECTION (1 & 2), SPECIAL COLLECTION & PERIODICAL SECTION\n"
-                    "- MULTIMEDIA SECTION, HONESTY STORE, FACULTY CORNER (1 & 2), INFORMATION COUNTER (1 & 2)\n"
+                    "- MULTIMEDIA SECTION, HONESTY STORE, FACULTY CORNER (2nd Floor — 1 & 2), INFORMATION COUNTER (1 & 2)\n"
                     "- STUDENT LOG-IN / LOG-OUT STATIONS & LIBRARY POLICY GUIDES"
                 )
 
             matched_block = ""
             if matched_zones:
-                m_lines = [
-                    f"- {m['title']} ({m['floor']})" + (f": {m['description']}" if m.get('description') else "")
-                    for m in matched_zones[:6]
-                ]
+                m_lines = [f"- {m['title']} ({m['floor']})" for m in matched_zones[:6]]
                 matched_block = "Specific Matching Physical Setup Zones:\n" + "\n".join(m_lines) + "\n\n"
 
             return (
-                f"The JRMSU Katipunan Campus Library features {zone_count} mapped Physical Setup zones and {interior_count} Library Interior photos ({total_gallery} total active gallery items):\n\n"
+                f"The JRMSU Katipunan Campus Library is a 2-storey facility (1st Floor and 2nd Floor) featuring {zone_count} mapped Physical Setup zones and {interior_count} Library Interior photos ({total_gallery} total active gallery items):\n\n"
                 f"{matched_block}"
                 f"Grouped Physical Setup Zones ({zone_count} zones across 1st & 2nd Floors):\n"
                 f"{grouped_lines}\n\n"
@@ -1452,51 +1547,10 @@ class AIService(IAIService):
             )
 
         # ---------------------------------------------------------
-        # Intent 4B: CMS PageContent & ManagedFile
-        # (17 Library Services, History, Quality Objectives, Librarian's Corner, Organizational Structure)
+        # Intent 4B: 7-Section System Knowledge & Live CMS / ManagedFile / PageContent
+        # (Home, About Full History + 5 Quality Objectives, Services & 7 Citizens Charter,
+        #  Administration / Manual / OrgStructure, Collection Portals, Librarian's Corner)
         # ---------------------------------------------------------
-        has_services = any(p in norm for p in [
-            'library services', 'services offered', 'what services', 'services available', 'services do you offer',
-            'printing service', 'scanning service', 'referral service', 'orientation service', '17 services'
-        ]) or ('services' in tokens and bool({'library', 'offer', 'offered', 'available', 'what', 'list', 'all'} & tokens))
-
-        if has_services:
-            svc_items = []
-            try:
-                svc_obj = self._get_services_page_content()
-                if svc_obj and getattr(svc_obj, 'content', ''):
-                    svc_items = AIReadViewHelper.extract_html_list_items(svc_obj.content)
-            except Exception as e:
-                logger.warning(f"Error reading library_services PageContent: {e}")
-
-            if not svc_items:
-                svc_items = [
-                    "LIBRARY ORIENTATION",
-                    "BOOK BORROWING & RETURNING (CIRCULATION)",
-                    "INTERNET / COMPUTER ACCESS SERVICE",
-                    "SCANNING SERVICE",
-                    "PRINTING SERVICE",
-                    "REFERENCE AND INFORMATION SERVICE",
-                    "DISCUSSION ROOM RESERVATION",
-                    "TUTORIUM ROOM RESERVATION",
-                    "MULTIMEDIA ROOM USE",
-                    "E-RESOURCES & ONLINE DATABASES ACCESS",
-                    "RESEARCH & THESIS CONSULTATION",
-                    "REFERRAL SERVICE",
-                    "CURRENT AWARENESS SERVICE",
-                    "BAGGAGE DEPOSITORY SERVICE",
-                    "SOCIAL LEARNING ZONE ACCESS",
-                    "FACULTY CORNER & RESEARCH ASSISTANCE",
-                    "HONESTY STORE SERVICE",
-                ]
-
-            numbered_services = "\n".join([f"{i}. {item}" for i, item in enumerate(svc_items, 1)])
-            return (
-                f"The JRMSU Katipunan Campus Library offers {len(svc_items)} official Library Services (from our live CMS PageContent database):\n\n"
-                f"{numbered_services}\n\n"
-                "You can view the full list of 17 services on our Home and About pages!"
-            )
-
         has_librarians_corner = any(p in norm for p in [
             'librarians corner', 'librarian corner', 'librarian s corner',
             'from pages to possibilities', 'padayon', 'message from the librarian', 'librarian message'
@@ -1516,15 +1570,10 @@ class AIService(IAIService):
                 corner_text = (
                     "Hello and warm greetings to our dear students, faculty, and researchers! "
                     "Whether you are diving into your first research project, exploring a new subject, or simply looking for a quiet space to think, "
-                    "our library is here to support your academic journey. Padayon, and happy learning!"
+                    "our library is here to support your academic journey. Padayon, JRMSUans!"
                 )
 
-            try:
-                staff_objs = list(self.personnel_repo.get_all())
-                staff_lines = "\n".join([f"- {p.name}: {p.title}" for p in staff_objs])
-            except Exception:
-                staff_lines = "- Kiara Keren M. Alavanza: Campus Librarian"
-
+            staff_lines = "\n".join([f"- {p.name}: {p.title}" for p in staff_objs]) if staff_objs else "- Kiara Keren M. Alavanza: Campus Librarian"
             return (
                 f"{corner_title}\n\n"
                 f"{corner_text}\n\n"
@@ -1532,103 +1581,62 @@ class AIService(IAIService):
                 f"{staff_lines}"
             )
 
-        has_org_or_files = any(p in norm for p in [
-            'organizational structure', 'org structure', 'org chart', 'organization chart',
-            'organization structure', 'excellence in information', 'managed file', 'managed files',
-            'official documents', 'downloadable documents'
-        ])
-        if has_org_or_files:
-            try:
-                files_objs = list(self.managed_file_repo.get_all_active())
-                file_lines = [
-                    f"- {f.name} (Category: {getattr(f, 'category', 'Official Document')}, File: {getattr(f.file, 'name', '') or getattr(f, 'file', '')})"
-                    for f in files_objs
-                ]
-            except Exception:
-                file_lines = []
-
-            if not file_lines:
-                file_lines = [
-                    "- Organizational Structure (Category: organizational-structure)",
-                    "- Excellence in Information (Category: excellence-in-information)",
-                ]
-
-            try:
-                staff_objs = list(self.personnel_repo.get_all())
-                staff_lines = [f"- {p.name}: {p.title}" for p in staff_objs]
-            except Exception:
-                staff_lines = ["- Kiara Keren M. Alavanza: Campus Librarian"]
-
-            return (
-                "JRMSU Katipunan Campus Library Official Documents & Organizational Structure:\n\n"
-                "Downloadable Managed Files (`ManagedFile`):\n"
-                + "\n".join(file_lines)
-                + "\n\nLibrary Personnel & Organizational Team (`Personnel`):\n"
-                + "\n".join(staff_lines)
-                + "\n\nYou can view and download these official visuals on our About page!"
+        live_section_data: Dict[str, Any] = {}
+        try:
+            live_section_data["settings"] = self.settings_repo.get_settings()
+        except Exception:
+            live_section_data["settings"] = None
+        live_section_data["site_visit_count"] = self._get_site_visit_count()
+        try:
+            svc_obj = self._get_services_page_content()
+            live_section_data["services_items"] = (
+                AIReadViewHelper.extract_html_list_items(svc_obj.content)
+                if svc_obj and getattr(svc_obj, 'content', '')
+                else []
             )
-
-        has_history = any(p in norm for p in [
-            'history of jrmsu', 'library history', 'history of the library', 'when was jrmsu', 'republic act 9852', 'ra 9852'
-        ]) or ('history' in tokens and bool({'library', 'jrmsu', 'campus', 'katipunan'} & tokens))
-
-        if has_history:
-            try:
-                hist_obj = self.page_content_repo.get_by_slug('about_history')
-                hist_text = self._strip_html(getattr(hist_obj, 'content', '')) if hist_obj else ''
-            except Exception:
-                hist_text = ''
-            if hist_text:
-                return f"JRMSU Katipunan Campus Library History:\n\n{hist_text[:800]}"
-            return (
-                "Jose Rizal Memorial State University (JRMSU) was elevated to university status on December 15, 2009 "
-                "by virtue of Republic Act No. 9852. The JRMSU Katipunan Campus Library serves the academic community "
-                "of Katipunan, Zamboanga del Norte with physical collections, 60 E-Resource department folders, and modern learning zones."
+        except Exception:
+            live_section_data["services_items"] = []
+        try:
+            hist_obj = self.page_content_repo.get_by_slug('about_history')
+            live_section_data["about_history_text"] = (
+                self._strip_html(getattr(hist_obj, 'content', '')) if hist_obj else ''
             )
-
-        has_quality_or_vmgo = any(p in norm for p in [
-            'quality objectives', 'quality policy', 'vision and mission', 'library vision', 'library mission', 'library goals',
-            'core values', 'core value', 'values for the jrmsu', 'jrmsu core values', 'library core values', 'what is the core values'
-        ]) or bool({'vision', 'mission'} & tokens) or ('quality' in tokens and bool({'objective', 'objectives', 'policy'} & tokens)) or ('core' in tokens and 'values' in tokens) or ('core' in tokens and 'value' in tokens)
-
-        if has_quality_or_vmgo:
-            try:
-                qual_obj = self.page_content_repo.get_by_slug('about_quality')
-                qual_items = AIReadViewHelper.extract_html_list_items(getattr(qual_obj, 'content', '')) if qual_obj else []
-            except Exception:
-                qual_items = []
-
-            resp_lines = [
-                "JRMSU Katipunan Campus Library Quality Objectives & Core Commitments:\n"
-            ]
-            if qual_items:
-                for idx, item in enumerate(qual_items, 1):
-                    resp_lines.append(f"{idx}. {item}")
-            else:
-                resp_lines.append(
-                    "1. Continuous acquisition of updated print and digital information resources.\n"
-                    "2. Equitable and inclusive access to research and academic facilities.\n"
-                    "3. Modern technology integration and online database services.\n"
-                    "4. Professional development and user-centered library assistance.\n"
-                    "5. Collaborative engagement supporting university instruction, research, and production."
-                )
-
-            resp_lines.append(
-                "\n\nJRMSU Vision, Mission & Core Values:\n"
-                "- Vision: A dynamic and diverse internationally recognized university.\n"
-                "- Mission: Jose Rizal Memorial State University delivers quality education, transformative research, sustainable extension services, and innovative production.\n"
-                "- Core Values: God-centeredness, Excellence, Commitment, Integrity, Collaboration, and Accountability."
+        except Exception:
+            live_section_data["about_history_text"] = ''
+        try:
+            qual_obj = self.page_content_repo.get_by_slug('about_quality')
+            live_section_data["about_quality_items"] = (
+                AIReadViewHelper.extract_html_list_items(getattr(qual_obj, 'content', ''))
+                if qual_obj
+                else []
             )
-            return "\n".join(resp_lines)
+        except Exception:
+            live_section_data["about_quality_items"] = []
+        try:
+            live_section_data["managed_files"] = list(self.managed_file_repo.get_all_active())
+        except Exception:
+            live_section_data["managed_files"] = []
+        live_section_data["personnel"] = staff_objs
+        live_section_data["book_inventory"] = self._get_book_inventory_summary()
+        disp_batch = self._get_display_batch()
+        live_section_data["batch_name"] = getattr(disp_batch, 'name', 'Batch 1 2026') if disp_batch else 'Batch 1 2026'
+
+        static_section_answer = resolve_static_system_section(user_message, live_data=live_section_data)
+        if static_section_answer:
+            return static_section_answer
 
         # ---------------------------------------------------------
         # Intent 5: Personnel / Hours Intent
         # ('personnel', 'staff', 'librarian', 'operating hours', 'hours', 'schedule', 'open', 'close', 'what time')
         # ---------------------------------------------------------
-        has_hours = any(p in norm for p in [
-            'operating hours', 'opening hours', 'library hours', 'what time', 'schedule',
-            'when do you open', 'when do you close', 'what time do you', 'closing time', 'opening time', 'open today', 'are you open'
-        ]) or bool({'hours', 'schedule'} & tokens) or ('time' in tokens and bool({'open', 'close'} & tokens))
+        has_hours = (
+            any(p in norm for p in [
+                'operating hours', 'opening hours', 'library hours', 'what time', 'schedule',
+                'when do you open', 'when do you close', 'what time do you', 'closing time', 'opening time', 'open today', 'are you open'
+            ])
+            or bool({'hours', 'schedule'} & tokens)
+            or ('time' in tokens and bool({'open', 'close'} & tokens))
+        ) and not (bool({'elibrary', 'semester'} & tokens) or ' e library ' in f' {norm} ' or ' e-library ' in f' {norm} ')
 
         has_personnel = any(p in norm for p in [
             'personnel', 'staff', 'librarian', 'librarians', 'who works', 'who is the librarian', 'library staff', 'campus librarian'
@@ -1833,20 +1841,20 @@ class AIService(IAIService):
                     return (
                         f"Here are verified resources matching '{topic_label}' in our library database:\n\n"
                         f"{joined_sections}\n\n"
-                        f"You can access these verified titles under the 'Collection' or 'E-Resources' tabs on our website.{dept_hint}"
+                        f"You can access these verified titles under 'Collection' -> 'Local Books', 'Newly Acquired Books', or 'Research & Thesis References' on our website (/collection).{dept_hint}"
                     )
 
             if total == 0:
                 return (
                     "Currently, there are 0 newly acquired books uploaded in the digital catalog database (inventory is currently empty). "
-                    f"You can still browse our E-Resources by department or visit the Katipunan Campus Circulation Desk in person!{dept_hint}"
+                    f"You can still browse our Collection -> Local Books by academic department or visit the Katipunan Campus Circulation Desk in person!{dept_hint}"
                 )
 
             if picture_count > 0 and named_count == 0:
                 return (
                     f"We currently have {picture_count} Newly Acquired Book cover photos in '{batch_name}' available in our visual picture inventory! "
-                    f"Because these are uploaded as physical book cover photos (without text titles in the database), you can view their covers directly in the 3D Carousel on the Home Page "
-                    f"or under the 'Collection' -> 'Newly Acquired Books' tab. For digital reading, check our 'E-Resources' tab across 60 academic departments!{dept_hint}"
+                    f"Because these are uploaded as physical book cover photos (without text titles in the database), you can view their covers under 'Collection' -> 'Newly Acquired Books' (/collection/newly-acquired). "
+                    f"For digital reading across 60 academic departments, check 'Collection' -> 'Local Books' (/collection/local-books) or 'Online Access'!{dept_hint}"
                 )
 
             if named_count > 0:
@@ -1873,8 +1881,16 @@ class AIService(IAIService):
                 return (
                     f"Here are Newly Acquired Books available in our catalog:\n\n"
                     f"{books_list}\n\n"
-                    f"You can view full book details under the 'Collection' -> 'Newly Acquired Books' tab on our website!{dept_hint}"
+                    f"You can view full book details under 'Collection' -> 'Newly Acquired Books' (/collection/newly-acquired) on our website!{dept_hint}"
                 )
+
+        # ---------------------------------------------------------
+        # Intent 7: Strict Closed-World Person / Off-System Gate
+        # Blocks ungrounded external person/celebrity queries before Tier 2 / Tier 3 LLM
+        # ---------------------------------------------------------
+        ungrounded_person = extract_ungrounded_person_query(user_message)
+        if ungrounded_person:
+            return build_closed_world_refusal(ungrounded_person)
 
         return None
 
@@ -1935,7 +1951,7 @@ class AIService(IAIService):
                 + (", ".join([g["formatted_summary"] for g in grouped_zones[:12]]) if grouped_zones else "Circulation, Reference, Research, Social Learning Zone, Workstations 1-5, Baggage, Honesty Store")
             )
 
-            # Dynamic CMS PageContent
+            # Dynamic CMS PageContent (full content, no 220-char truncation)
             cms_summary_parts = []
             try:
                 for slug, label in [
@@ -1950,21 +1966,31 @@ class AIService(IAIService):
                         else self.page_content_repo.get_by_slug(slug)
                     )
                     if obj and getattr(obj, 'content', ''):
-                        clean_cms = self._strip_html(obj.content).replace('\n', ' ')[:220]
+                        clean_cms = self._strip_html(obj.content).replace('\n', ' ')
                         cms_summary_parts.append(f"{label}: {clean_cms}")
             except Exception:
                 pass
-            cms_summary_text = " | ".join(cms_summary_parts) if cms_summary_parts else "JRMSU elevated to university via RA 9852 (Dec 15, 2009); 17 Library Services available."
+            cms_summary_text = " | ".join(cms_summary_parts) if cms_summary_parts else (
+                f"History: {CANONICAL_ABOUT_HISTORY} | "
+                f"Quality Objectives: {'; '.join(CANONICAL_QUALITY_OBJECTIVES)} | "
+                f"17 Services: {', '.join(CANONICAL_17_LIBRARY_SERVICES)}"
+            )
 
-            # Dynamic settings
+            # Dynamic settings & Home telemetry
             try:
                 settings = self.settings_repo.get_settings()
                 hours_mon_fri = getattr(settings, 'opening_hours_mon_fri', '7:00 AM - 7:00 PM') or '7:00 AM - 7:00 PM'
                 hours_sat = getattr(settings, 'opening_hours_sat', 'Closed') or 'Closed'
                 hours_sun = getattr(settings, 'opening_hours_sun', 'Closed') or 'Closed'
-                contact_email = getattr(settings, 'contact_email', 'katipunan.library@jrmsu.edu.ph') or 'katipunan.library@jrmsu.edu.ph'
+                contact_email = getattr(settings, 'contact_email', CANONICAL_HOME_INFO['contact_email']) or CANONICAL_HOME_INFO['contact_email']
+                alt_email = getattr(settings, 'alternate_email', CANONICAL_HOME_INFO['alternate_email']) or CANONICAL_HOME_INFO['alternate_email']
+                address = getattr(settings, 'address', CANONICAL_HOME_INFO['address']) or CANONICAL_HOME_INFO['address']
             except Exception:
-                hours_mon_fri, hours_sat, hours_sun, contact_email = '7:00 AM - 7:00 PM', 'Closed', 'Closed', 'katipunan.library@jrmsu.edu.ph'
+                hours_mon_fri, hours_sat, hours_sun = '7:00 AM - 7:00 PM', 'Closed', 'Closed'
+                contact_email = CANONICAL_HOME_INFO['contact_email']
+                alt_email = CANONICAL_HOME_INFO['alternate_email']
+                address = CANONICAL_HOME_INFO['address']
+            site_visit_count = self._get_site_visit_count()
 
             # Dynamic E-Resources
             try:
@@ -1989,12 +2015,14 @@ class AIService(IAIService):
             ref_count = self._get_reference_count()
             ref_note = f"{ref_count} thesis/research references uploaded" if ref_count > 0 else "0 thesis/research references uploaded in digital catalog (physical copy in library)"
 
-            compiled = f"""DYNAMIC DATABASE KNOWLEDGE (13 PERMITTED TABLES):
+            compiled = f"""DYNAMIC DATABASE KNOWLEDGE (7 SYSTEM SECTIONS & LIVE TABLES):
+- Home & Contact: {address} ({CANONICAL_HOME_INFO['address']}), GPS: {CANONICAL_HOME_INFO['gps']}, Email: {contact_email}, Alternate Email: {alt_email}, Facebook: {CANONICAL_HOME_INFO['facebook_url']}, UOPAC Registration: {CANONICAL_HOME_INFO['uopac_registration_url']}, Total Site Visits: {site_visit_count}
 - Operating Hours: Mon-Fri: {hours_mon_fri}, Sat: {hours_sat}, Sun: {hours_sun}
-- Contact Email: {contact_email}
 - Room Reservation Availability (6 Canonical Spaces): {"; ".join(line.lstrip("- ") for line in self._format_room_availability_lines())}
-- Library Personnel: {personnel_text}
-- Official Managed Documents: {files_text}
+- Library Personnel (/personnel): {personnel_text}
+- Administration & Managed Documents (/administration): {files_text}
+- Citizens Charter Rules (/services): Overdue fine PHP 10/hr (Cashier + Official Receipt), E-Library 30 hrs/semester (barcode swipe), Online Clearance at jrmsu-arms.online, Borrowing requirements (OSAS ID, Registrar EDP)
+- Collection Portals (/collection): Newly Acquired Books (/collection/newly-acquired), Local Books (/collection/local-books), Online Access (/collection/online), External Libraries (VitalBooks & Scholaar), Union OPAC (https://library.jrmsu.edu.ph/opac/), Research & Thesis References
 - E-Resource Academic Departments: {dept_count} departments ({root_str})
 - Newly Acquired Books Inventory State: {book_inv_note}
 - Newly Acquired Books (Newest): {recent_books_text}
@@ -2003,7 +2031,7 @@ class AIService(IAIService):
 - Research & Thesis References (Newest): {recent_theses_text}
 - Research & Thesis References (Oldest Archive): {oldest_theses_text}
 - Online Databases & Links ({links_grouped.get('total_active', 23)} total): {links_text}
-- Physical Setup & Library Sections: {gallery_text}
+- Physical Setup & Library Sections (1st Floor & 2nd Floor ONLY): {gallery_text}
 - Institutional CMS Highlights: {cms_summary_text}"""
 
             try:
@@ -2155,6 +2183,16 @@ class AIService(IAIService):
                     for f in matched_folders:
                         if f.get("score", 0) > 0:
                             targeted_matches.append(f"- [E-Resource Folder] {f['breadcrumb']}")
+
+                    staff_pool = list(self.personnel_repo.get_all())
+                    matched_staff = match_personnel_records(user_message, staff_pool)
+                    for person in matched_staff[:4]:
+                        targeted_matches.append(f"- [Library Personnel] {person.name} ({person.title})")
+
+                    gallery_pool = list(self.gallery_repo.get_all_active())
+                    zone_info = AIReadViewHelper.group_and_sort_physical_zones(gallery_pool, query_tokens)
+                    for mz in zone_info.get("matched_zones", [])[:5]:
+                        targeted_matches.append(f"- [Physical Setup Zone] {mz['title']} ({mz['floor']})")
                 except Exception as e:
                     logger.warning(f"Targeted search warning: {e}")
 
@@ -2221,6 +2259,11 @@ class AIService(IAIService):
 
         return f"""You are Rizal, the AI assistant for JRMSU Katipunan Campus Library. The user is a student or visitor. NEVER address the user as 'Rizal'. NEVER invent external books (e.g. The Art of War, Sapiens, The Alchemist, Braveheart). If no catalog items match, state clearly that none were found.
 
+STRICT CLOSED-WORLD SYSTEM-ONLY POLICY (BOTH LOCAL OLLAMA AND CLAUDE):
+- You MUST answer strictly and exclusively from JRMSU Katipunan Campus Library's 7 verified system sections (Home, About, Services & Citizens Charter, Administration, Personnel, Collection, Physical Setup) and live database context below.
+- NEVER use external pre-trained knowledge about celebrities, actresses, actors, singers, TV shows, movies, pop culture, or unverified outside facts.
+- If a person, book, or topic is NOT present in the provided library context or live database records, state clearly that it was not found in JRMSU Katipunan Campus Library's system records and direct the user to /personnel or 'Send an Email'.
+
 CRITICAL BEHAVIOR RULES:
 1. Be polite, professional, concise, and helpful. 
 2. ADAPTIVE LENGTH & INSTRUCTION TUNING RULE:
@@ -2232,10 +2275,10 @@ CRITICAL BEHAVIOR RULES:
      a. Politely correct or clarify the false premise immediately using verified library facts.
      b. State clearly that the requested title or item is not in our collection.
      c. Immediately offer the closest available verified alternative titles, research references, or E-Resource department folders from the database that match their topic.
-     d. If newly acquired books are in visual cover-only processing, inform the user they can view cover photos in the 3D Carousel on the Home Page or ask at the Circulation Counter.
+     d. If newly acquired books are in visual cover-only processing, inform the user they can view cover photos under Collection -> Newly Acquired Books (/collection/newly-acquired) or ask at the Circulation Counter.
 4. VERY IMPORTANT: If a user casually greets you (e.g. "Good morning", "Hi", "Hello", "Hey"), DO NOT reply with the exact same repetitive phrase. Always vary your greetings naturally (e.g. "Hello there!", "Good morning, how can I help you?", "Hey! Welcome to the library.", "Greetings!").
 5. Do not use markdown formatting (like **bold** or *italics*) because the chat UI displays raw text. Just use plain text with line breaks.
-6. If asked a question you don't know the answer to based on the context, politely advise them to use the 'Send an Email' option to contact the human librarian at {email}. Do not hallucinate answers.
+6. If asked a question you don't know the answer to based on the context, state clearly that it is not found in JRMSU Katipunan Campus Library's system records and advise them to use 'Send an Email' to contact the human librarian at {email}. Do not hallucinate answers.
 7. SOFTCOPY & DOCUMENT ACCESS RULES:
    - When asked about research papers, theses, or books, reference their availability and softcopy status accurately from the context below.
    - If a research paper or thesis indicates "Softcopy PDF File Available", inform the user they can read or download the full text online on the website under the 'Collection' -> 'Research & Thesis References' tab by clicking 'View File'.
@@ -2243,7 +2286,7 @@ CRITICAL BEHAVIOR RULES:
    - If it indicates "Physical Copy Only", explain that it is available for physical room use inside the library (Special Collections / Archives).
    - If asked for the newest or oldest books or theses, cite the exact titles and authors provided in the dynamic database knowledge below.
 8. ROOM RESERVATION RULES:
-   - Reservable rooms are: Discussion Room 1, Discussion Room 2, Tutorium Room 1, Tutorium Room 2, Multimedia Room, and Library ComLab (Computer Laboratory).
+   - Reservable rooms are: Discussion Room 1, Discussion Room 2, Tutorium Room 1, Tutorium Room 2, Multimedia Room, and Workstation.
    - Always report exact live room availability from LIBRARY CONTEXT below (Available vs Unavailable).
    - Instruct users to click the 'Reserve a Room' button right below the chat window. NEVER mention UOPAC for room reservations.
 9. BOOK CONTENTS, CHAPTERS & THESIS FINDINGS (ZERO HALLUCINATIONS):
@@ -2256,19 +2299,21 @@ CRITICAL BEHAVIOR RULES:
 {anti_repetition_block}
 LIBRARY CONTEXT & LIVE INFORMATION:
 - Operating Hours: Monday to Friday, {mon_fri} (Philippine Time). Closed on weekends and regular holidays.
-- Location: JRMSU Katipunan Campus, Katipunan, Zamboanga del Norte, Philippines.
-- Email: {email}
-- Services Available: Book Borrowing, Reading Area, Discussion Rooms, Internet Access, Printing Service, Scanning Service, E-Resources (VitalSource/Bookshelf, Scholaar, Science Direct, Gale).
+- Location: Barangay Dos, Katipunan, Zamboanga del Norte, Philippines (GPS: 8.510047, 123.286297).
+- Email: {email} | Alternate Email: {CANONICAL_HOME_INFO['alternate_email']} | Facebook: {CANONICAL_HOME_INFO['facebook_url']}
+- Services & Citizens Charter (/services): 17 Official Services; Overdue fine PHP 10/hr (Cashier + Official Receipt); E-Library 30 hrs/semester; Online Clearance at jrmsu-arms.online; Borrowing requirements: Validated Student/Faculty ID (OSAS) & EDP (Registrar).
+- Administration (/administration): Organizational Structure (OrgStructure) & Library Manual & Policies (Manual).
+- Collection (/collection): Newly Acquired Books, Local Books (60 department folders), Online Access, External Libraries (VitalBooks, Scholaar), Union OPAC (https://library.jrmsu.edu.ph/opac/ | Registration: https://library.jrmsu.edu.ph/opac/registration), Research & Thesis References.
 - Available Rooms/Spaces for Reservation (Live Status): {live_room_status_text}
 - Borrowing Limits: Students can borrow up to 3 books for 3 days. Faculty can borrow up to 5 books for 1 week.
-- UOPAC Borrow/Return Guidance: To borrow or return books, students must use the Main Campus UOPAC system. The default login is usually their Student ID. They should search the OPAC catalog, filter for Katipunan Campus, and bring their ID to the circulation desk.
+- UOPAC Borrow/Return Guidance: To borrow or return books, students can search Union OPAC (https://library.jrmsu.edu.ph/opac/) and bring their validated OSAS ID and Registrar EDP to the Circulation Desk.
 
 {institutional_context}
 
 SPECIFIC SEARCH RESULTS FOR USER INQUIRY:
 {targeted_matches_text}
 
-FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Library. NEVER claim to be created by Alibaba Cloud or Qwen, NEVER greet the user as 'Rizal', and NEVER invent external book titles.
+FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Library. Follow the STRICT CLOSED-WORLD POLICY at all times: NEVER claim to be created by Alibaba Cloud or Qwen, NEVER greet the user as 'Rizal', NEVER invent external book titles, and NEVER answer with external celebrity or entertainment knowledge.
 """
 
     def _get_ollama_options(self, complexity_tier: str = "TIER_2") -> dict:
