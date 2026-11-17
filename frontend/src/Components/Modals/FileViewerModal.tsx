@@ -9,9 +9,18 @@ interface FileViewerModalProps {
   onNavigate: (file: TreeNodeData) => void;
 }
 
-const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46, 0x2d] as const; // %PDF-
-const PROBE_TIMEOUT_MS = 1800;
-const SPLASH_MAX_MS = 1000;
+const SPLASH_MAX_MS = 800;
+
+// ============================================================================
+// [ENABLE_ANTI_DOWNLOAD] TEMPORARILY DISABLED ANTI-DOWNLOAD PROTECTIONS
+// Restored direct native <iframe> file streaming (98fc44a behavior) so all PDFs
+// open immediately without fetch()/probePdfHeader gating or viewer traps.
+// To restore anti-download protections, uncomment the [ENABLE_ANTI_DOWNLOAD]
+// blocks (a, b, c, d) in this file.
+// ============================================================================
+// [ENABLE_ANTI_DOWNLOAD - a] Temporarily disabled fetch() / probePdfHeader / Blob validation gating:
+// const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46, 0x2d] as const; // %PDF-
+// const PROBE_TIMEOUT_MS = 1800;
 
 const normalizeSafePdfUrl = (rawPath: string): string | null => {
   const trimmed = rawPath.trim();
@@ -29,86 +38,89 @@ const normalizeSafePdfUrl = (rawPath: string): string | null => {
   }
 };
 
-const hasPdfMagicBytes = (bytes: Uint8Array): boolean =>
-  bytes.byteLength >= PDF_MAGIC_BYTES.length &&
-  PDF_MAGIC_BYTES.every((expectedByte, index) => bytes[index] === expectedByte);
-
-const readFirstFiveBytes = async (
-  res: Response,
-  probeController: AbortController
-): Promise<Uint8Array | null> => {
-  if (!res.body) {
-    const buffer = await res.arrayBuffer();
-    return buffer.byteLength >= 5 ? new Uint8Array(buffer.slice(0, 5)) : null;
-  }
-
-  const reader = res.body.getReader();
-  const header = new Uint8Array(5);
-  let offset = 0;
-
-  try {
-    while (offset < 5) {
-      const { value, done } = await reader.read();
-      if (done || !value) {
-        break;
-      }
-      const bytesToCopy = Math.min(5 - offset, value.byteLength);
-      header.set(value.subarray(0, bytesToCopy), offset);
-      offset += bytesToCopy;
-    }
-  } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      // Ignore stream cancel errors on aborted or already-closed responses.
-    }
-    probeController.abort();
-  }
-
-  return offset === 5 ? header : null;
-};
-
-const probePdfHeader = async (url: string, parentSignal: AbortSignal): Promise<boolean> => {
-  const probeController = new AbortController();
-  const timeoutId = setTimeout(() => probeController.abort(), PROBE_TIMEOUT_MS);
-  const onParentAbort = () => probeController.abort();
-
-  if (parentSignal.aborted) {
-    probeController.abort();
-  } else {
-    parentSignal.addEventListener('abort', onParentAbort, { once: true });
-  }
-
-  try {
-    const res = await fetch(url, {
-      headers: { Range: 'bytes=0-4' },
-      signal: probeController.signal,
-    });
-    if (!res.ok) {
-      probeController.abort();
-      return false;
-    }
-    const headerBytes = await readFirstFiveBytes(res, probeController);
-    return headerBytes !== null && hasPdfMagicBytes(headerBytes);
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeoutId);
-    parentSignal.removeEventListener('abort', onParentAbort);
-  }
-};
+// [ENABLE_ANTI_DOWNLOAD - a] Temporarily disabled PDF header probe helpers:
+// const hasPdfMagicBytes = (bytes: Uint8Array): boolean =>
+//   bytes.byteLength >= PDF_MAGIC_BYTES.length &&
+//   PDF_MAGIC_BYTES.every((expectedByte, index) => bytes[index] === expectedByte);
+//
+// const readFirstFiveBytes = async (
+//   res: Response,
+//   probeController: AbortController
+// ): Promise<Uint8Array | null> => {
+//   if (!res.body) {
+//     const buffer = await res.arrayBuffer();
+//     return buffer.byteLength >= 5 ? new Uint8Array(buffer.slice(0, 5)) : null;
+//   }
+//
+//   const reader = res.body.getReader();
+//   const header = new Uint8Array(5);
+//   let offset = 0;
+//
+//   try {
+//     while (offset < 5) {
+//       const { value, done } = await reader.read();
+//       if (done || !value) {
+//         break;
+//       }
+//       const bytesToCopy = Math.min(5 - offset, value.byteLength);
+//       header.set(value.subarray(0, bytesToCopy), offset);
+//       offset += bytesToCopy;
+//     }
+//   } finally {
+//     try {
+//       await reader.cancel();
+//     } catch {
+//       // Ignore stream cancel errors on aborted or already-closed responses.
+//     }
+//     probeController.abort();
+//   }
+//
+//   return offset === 5 ? header : null;
+// };
+//
+// const probePdfHeader = async (url: string, parentSignal: AbortSignal): Promise<boolean> => {
+//   const probeController = new AbortController();
+//   const timeoutId = setTimeout(() => probeController.abort(), PROBE_TIMEOUT_MS);
+//   const onParentAbort = () => probeController.abort();
+//
+//   if (parentSignal.aborted) {
+//     probeController.abort();
+//   } else {
+//     parentSignal.addEventListener('abort', onParentAbort, { once: true });
+//   }
+//
+//   try {
+//     const res = await fetch(url, {
+//       headers: { Range: 'bytes=0-4' },
+//       signal: probeController.signal,
+//     });
+//     if (!res.ok) {
+//       probeController.abort();
+//       return false;
+//     }
+//     const headerBytes = await readFirstFiveBytes(res, probeController);
+//     return headerBytes !== null && hasPdfMagicBytes(headerBytes);
+//   } catch {
+//     return false;
+//   } finally {
+//     clearTimeout(timeoutId);
+//     parentSignal.removeEventListener('abort', onParentAbort);
+//   }
+// };
 
 export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList, onClose, onNavigate }) => {
-  const currentIdx = fileList.findIndex((f) => 
-    f.path === file.path || 
-    f.name === file.name || 
+  const currentIdx = fileList.findIndex((f) =>
+    f.path === file.path ||
+    f.name === file.name ||
     (Boolean(f.path) && Boolean(file.path) && f.path.split('/').pop() === file.path.split('/').pop())
   );
   const safeIdx = currentIdx >= 0 ? currentIdx : 0;
 
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [viewerError, setViewerError] = useState<string | null>(null);
+  const isPdf = Boolean(file.path && file.path.toLowerCase().endsWith('.pdf'));
+  const isLink = Boolean(file.path && (file.path.startsWith('http://') || file.path.startsWith('https://')));
+  const safeDirectUrl = isPdf && file.path ? normalizeSafePdfUrl(file.path) : null;
+
+  const [loading, setLoading] = useState<boolean>(Boolean(safeDirectUrl));
   const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearSplashTimer = useCallback(() => {
@@ -123,18 +135,19 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
     setLoading(false);
   }, [clearSplashTimer]);
 
-  // Keyboard shortcut suppression (Ctrl+S, Ctrl+P, Ctrl+U, F12) and navigation
+  // Keyboard navigation (Escape, ArrowLeft, ArrowRight)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const isSave = (e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S');
-    const isPrint = (e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P');
-    const isViewSource = (e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U');
-    const isInspect = e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'i', 'C', 'c', 'J', 'j'].includes(e.key));
-
-    if (isSave || isPrint || isViewSource || isInspect) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
+    // [ENABLE_ANTI_DOWNLOAD - b] Temporarily disabled keyboard shortcut blocking (Ctrl+S, Ctrl+P, Ctrl+U, F12, DevTools):
+    // const isSave = (e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S');
+    // const isPrint = (e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P');
+    // const isViewSource = (e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U');
+    // const isInspect = e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'i', 'C', 'c', 'J', 'j'].includes(e.key));
+    //
+    // if (isSave || isPrint || isViewSource || isInspect) {
+    //   e.preventDefault();
+    //   e.stopPropagation();
+    //   return;
+    // }
 
     if (e.key === 'Escape') onClose();
     if (e.key === 'ArrowLeft' && safeIdx > 0) onNavigate(fileList[safeIdx - 1]);
@@ -150,79 +163,44 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
     };
   }, [handleKeyDown]);
 
-  const isPdf = Boolean(file.path && file.path.toLowerCase().endsWith('.pdf'));
-  const isLink = Boolean(file.path && (file.path.startsWith('http://') || file.path.startsWith('https://')));
-
-  // Fast Progressive HTTP Streaming & Header Verification:
-  // Probes only bytes 0-4 to verify %PDF- signature without buffering multi-MB files in RAM,
-  // then mounts the iframe directly for progressive streaming with a 1s max splash cap.
+  // Direct native <iframe> streaming with a brief <= 800ms non-blocking spinner cap.
+  // [ENABLE_ANTI_DOWNLOAD - a] Temporarily disabled fetch() / probePdfHeader / Blob validation gating:
+  // Previously verified %PDF- bytes via fetch(..., { headers: { Range: 'bytes=0-4' } }) before mounting <iframe>.
   useEffect(() => {
     clearSplashTimer();
-    setViewerError(null);
-    setStreamUrl(null);
 
-    if (!isPdf || !file.path) {
+    if (!safeDirectUrl) {
       setLoading(false);
       return;
     }
 
-    const safeUrl = normalizeSafePdfUrl(file.path);
-    if (!safeUrl) {
-      setViewerError('Document preview is currently unavailable on the server.');
-      setLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    const unmountController = new AbortController();
     setLoading(true);
-
-    const verifyAndStreamPdf = async () => {
-      const isValidPdf = await probePdfHeader(safeUrl, unmountController.signal);
-      if (!isMounted || unmountController.signal.aborted) {
-        return;
-      }
-
-      if (isValidPdf) {
-        setStreamUrl(safeUrl);
-        setViewerError(null);
-        clearSplashTimer();
-        splashTimerRef.current = setTimeout(() => {
-          if (isMounted) {
-            setLoading(false);
-          }
-          splashTimerRef.current = null;
-        }, SPLASH_MAX_MS);
-      } else {
-        setStreamUrl(null);
-        setViewerError('Document preview is currently unavailable on the server.');
-        setLoading(false);
-      }
-    };
-
-    void verifyAndStreamPdf();
+    splashTimerRef.current = setTimeout(() => {
+      setLoading(false);
+      splashTimerRef.current = null;
+    }, SPLASH_MAX_MS);
 
     return () => {
-      isMounted = false;
-      unmountController.abort();
       clearSplashTimer();
     };
-  }, [file.path, isPdf, clearSplashTimer]);
+  }, [safeDirectUrl, clearSplashTimer]);
 
   if (!file.path) return null;
 
-  const iframeUrl = streamUrl ? `${streamUrl}#toolbar=0&navpanes=0&scrollbar=0` : null;
+  // [ENABLE_ANTI_DOWNLOAD - d] Temporarily disabled PDF toolbar hiding suffix so native browser controls load reliably:
+  // const iframeUrl = safeDirectUrl ? `${safeDirectUrl}#toolbar=0&navpanes=0&scrollbar=0` : null;
 
   return createPortal(
+    // [ENABLE_ANTI_DOWNLOAD - c] Temporarily disabled `select-none` and `onContextMenu={(e) => e.preventDefault()}` anti-download traps
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999] select-none"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]"
       onClick={onClose}
-      onContextMenu={(e) => e.preventDefault()}
+      // onContextMenu={(e) => e.preventDefault()}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl max-h-[90vh] flex flex-col animate-modal-card"
         onClick={(e) => e.stopPropagation()}
-        onContextMenu={(e) => e.preventDefault()}
+        // onContextMenu={(e) => e.preventDefault()}
         role="dialog"
         aria-modal="true"
         aria-label={`Viewing: ${file.name}`}
@@ -259,42 +237,30 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
             </button>
           )}
 
-          <div 
+          <div
             className="flex-1 bg-gray-100 p-4 flex items-center justify-center overflow-auto min-h-[60vh] relative"
-            onContextMenu={(e) => e.preventDefault()}
+            // [ENABLE_ANTI_DOWNLOAD - c] onContextMenu={(e) => e.preventDefault()}
           >
-            {isPdf ? (
-              viewerError && !loading ? (
-                <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full animate-modal-card">
-                  <div className="w-20 h-20 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <span className="material-symbols-outlined text-4xl">description</span>
-                  </div>
-                  <h3 className="font-headline-md font-bold text-2xl text-navy-dark mb-3">{file.name}</h3>
-                  <p className="text-gray-500 mb-2">{viewerError || 'Unable to render protected PDF preview.'}</p>
+            {isPdf && safeDirectUrl ? (
+              <div className="relative w-full h-full flex-1 self-stretch flex" style={{ minHeight: '60vh' }}>
+                <iframe
+                  key={safeDirectUrl}
+                  src={safeDirectUrl}
+                  onLoad={handleIframeLoad}
+                  className="w-full h-full flex-1 rounded-lg shadow-inner"
+                  style={{ minHeight: '60vh' }}
+                  title={file.name}
+                />
+                <div
+                  aria-hidden={!loading}
+                  className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-gray-500 bg-gray-100/95 rounded-lg transition-opacity duration-200 ${
+                    loading ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                  }`}
+                >
+                  <span className="material-symbols-outlined animate-spin text-3xl text-blue-600">progress_activity</span>
+                  <span className="text-sm font-medium">Opening document for reading...</span>
                 </div>
-              ) : (
-                <div className="relative w-full h-full flex-1 self-stretch flex" style={{ minHeight: '60vh' }}>
-                  {iframeUrl && (
-                    <iframe
-                      key={iframeUrl}
-                      src={iframeUrl}
-                      onLoad={handleIframeLoad}
-                      className="w-full h-full flex-1 rounded-lg shadow-inner"
-                      style={{ minHeight: '60vh' }}
-                      title={file.name}
-                    />
-                  )}
-                  <div
-                    aria-hidden={!loading}
-                    className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-gray-500 bg-gray-100/95 rounded-lg transition-opacity duration-200 ${
-                      loading ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined animate-spin text-3xl text-blue-600">progress_activity</span>
-                    <span className="text-sm font-medium">Opening document for reading...</span>
-                  </div>
-                </div>
-              )
+              </div>
             ) : isLink ? (
               <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full animate-modal-card">
                 <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -304,10 +270,10 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
                 <p className="text-gray-600 mb-8 max-w-md mx-auto">
                   You are about to navigate away from the JRMSU Library website to access <span className="font-semibold text-navy-dark">{file.name}</span>.
                 </p>
-                <a 
-                  href={file.path} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={file.path}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="btn btn-primary inline-flex items-center justify-center gap-2 px-8 py-3 rounded-full font-bold shadow-lg hover:-translate-y-1 transition-all"
                   onClick={onClose}
                 >

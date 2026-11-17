@@ -14,6 +14,8 @@ import re
 import random
 import difflib
 import hashlib
+import time
+import uuid
 from urllib.parse import urlparse
 from typing import Generator, List, Dict, Any, Tuple, Optional
 from django.core.cache import cache
@@ -36,6 +38,13 @@ from Features.Repositories.Implementations.eresource_repository import (
     EResourceFileRepository,
 )
 from Features.Services.Interfaces.i_ai_service import IAIService
+from Features.Services.Interfaces.i_llm_provider import (
+    ILLMProviderStrategy,
+    LLMGenerationConfig,
+    ProviderUnavailableError,
+)
+from Features.Infrastructure.AiProviders.ollama_provider import OllamaLLMProvider
+from Features.Infrastructure.AiProviders.provider_registry import LLMProviderRegistry
 from Features.Helpers.ai_read_view_helper import AIReadViewHelper
 
 logger = logging.getLogger(__name__)
@@ -46,6 +55,15 @@ FAQ_DATASET_CACHE_KEY = "rizal_faq_dataset"
 L1_QUESTION_CACHE_PREFIX = "rizal_l1_faq:"
 CACHE_TTL_LONG = 3600  # 1 hour
 CACHE_TTL_L1 = 86400    # 24 hours
+
+# Idempotency & Single-Winner Gate constants
+AI_IDEMPOTENCY_LOCK_PREFIX = "ai_idem_lock:"
+AI_IDEMPOTENCY_RESULT_PREFIX = "ai_idem_res:"
+AI_IDEMPOTENCY_LOCK_TTL = 90
+AI_IDEMPOTENCY_RESULT_TTL = 120
+AI_IDEMPOTENCY_POLL_MAX_SECONDS = 8.0
+AI_IDEMPOTENCY_POLL_STEP_SECONDS = 0.25
+AI_OPENING_BUFFER_MAX_CHARS = 180
 
 APPROVED_LIBRARY_DOMAINS = (
     'jrmsukc-library.online',
@@ -70,6 +88,7 @@ class AIService(IAIService):
         page_content_repo: Optional[PageContentRepository] = None,
         managed_file_repo: Optional[ManagedFileRepository] = None,
         page_image_repo: Optional[PageImageRepository] = None,
+        provider_registry: Optional[LLMProviderRegistry] = None,
     ):
         # Use OLLAMA_URL env var if available (useful for Docker to reach host), else fallback
         self.ollama_url = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434/api/chat')
@@ -91,12 +110,24 @@ class AIService(IAIService):
         self.eresource_dept_repo = eresource_dept_repo or EResourceDepartmentRepository()
         self.eresource_file_repo = eresource_file_repo or EResourceFileRepository()
 
-        # Persistent HTTP connection pool for Ollama API
+        # Persistent HTTP connection pool for LLM provider APIs
         self.session = requests.Session()
         retries = Retry(total=2, backoff_factor=0.2, status_forcelist=[502, 503, 504])
         adapter = HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=retries)
         self.session.mount('http://', adapter)
         self.session.mount('https://', adapter)
+
+        # Twin Strategy Registry (Ollama Local + Optional Anthropic Claude)
+        self.provider_registry = (
+            provider_registry
+            if provider_registry is not None
+            else LLMProviderRegistry(
+                ollama_provider=OllamaLLMProvider(
+                    ollama_url=self.ollama_url,
+                    model_name=self.model_name,
+                )
+            )
+        )
 
     @staticmethod
     def _resolve_request_timeout() -> float:
@@ -2043,40 +2074,176 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             return {"num_ctx": 4096, "num_predict": 850, "temperature": 0.3, "top_k": 25, "top_p": 0.90, "repeat_penalty": 1.15, "num_thread": 4}
         return {"num_ctx": 2048, "num_predict": 550, "temperature": 0.2, "top_k": 20, "top_p": 0.85, "repeat_penalty": 1.15, "num_thread": 4}
 
-    def generate_chat_stream(self, user_message: str, chat_history: Optional[list] = None, seen_answers: Optional[list] = None) -> Generator[str, None, None]:
-        """
-        Streams Ollama chunks or yields cached/deterministic answer token stream immediately without artificial sleep.
-        3-Tier Hybrid RAG Architecture:
-        - Tier 1 (Live DB Priority): Deterministic Live Database Intent Resolver (PostgreSQL models)
-        - Tier 2 (Curated FAQ Cache): High-Speed Redis L1 / L2 Fuzzy FAQ matching (<1ms)
-        - Tier 3 (RAG + Output Guardrail): Ollama LLM Fallback with dynamic context & _sanitize_llm_output
-        """
-        # Tier 1: Deterministic Live Database Intent Resolver (Always reflects live PostgreSQL state first)
-        deterministic_answer = self._resolve_deterministic_database_intent(user_message)
-        if deterministic_answer:
-            is_long_overview = len(deterministic_answer) > 450 and deterministic_answer.count('\n') >= 4
-            suppress_duplicate_tier1 = (
-                is_long_overview
-                and self._is_duplicate_seen_answer(deterministic_answer, seen_answers)
-                and not self._is_verbatim_repeated_question(user_message, chat_history)
+    _DODGE_PHRASE_PATTERNS = (
+        re.compile(r"\bi\s+(?:don't|do\s+not)\s+know\b", re.IGNORECASE),
+        re.compile(r"\bnot\s+reachable\b", re.IGNORECASE),
+        re.compile(r"\b(?:i\s+am|i'm|as)\s+an\s+ai\b", re.IGNORECASE),
+        re.compile(r"\b(?:cannot|can't|unable\s+to)\s+answer\b", re.IGNORECASE),
+        re.compile(r"\b(?:i\s+am|i'm)\s+not\s+sure\b", re.IGNORECASE),
+        re.compile(r"\bcurrently\s+offline\b", re.IGNORECASE),
+        re.compile(r"\bbeyond\s+my\s+(?:knowledge|capabilities)\b", re.IGNORECASE),
+    )
+
+    @classmethod
+    def _is_incapability_dodge(cls, text: str) -> bool:
+        """Detects empty output or obvious local incapability/dodge phrases before stream flush."""
+        if not text or not text.strip():
+            return True
+        normalized = text.replace("\u2019", "'").replace("\u2018", "'").strip()
+        return any(pattern.search(normalized) for pattern in cls._DODGE_PHRASE_PATTERNS)
+
+    @staticmethod
+    def _find_sentence_flush_index(text: str) -> int:
+        """Returns index immediately after first newline or sentence terminator + whitespace, or -1."""
+        newline_idx = text.find('\n')
+        sent_match = re.search(r'[.!?]\s', text)
+        if newline_idx != -1 and (not sent_match or newline_idx < sent_match.end()):
+            return newline_idx + 1
+        if sent_match:
+            return sent_match.end()
+        return -1
+
+    def _build_llm_generation_config(self, options: Optional[Dict[str, Any]] = None) -> LLMGenerationConfig:
+        """Converts adaptive tier option dicts into immutable LLMGenerationConfig."""
+        opts = options or {}
+        return LLMGenerationConfig(
+            max_tokens=int(opts.get("num_predict", 550)),
+            temperature=float(opts.get("temperature", 0.2)),
+            top_k=opts.get("top_k", 20),
+            top_p=opts.get("top_p", 0.85),
+            repeat_penalty=opts.get("repeat_penalty", 1.15),
+            num_ctx=opts.get("num_ctx", 2048),
+            num_thread=opts.get("num_thread", 4),
+            connect_timeout_seconds=10.0,
+            read_timeout_seconds=float(self.request_timeout),
+        )
+
+    def _safe_trip_circuit(
+        self,
+        provider_id: str,
+        retry_after_seconds: int = 60,
+        reason: str = "",
+        is_permanent_or_auth: bool = False,
+    ) -> None:
+        try:
+            trip_reason = str(reason or "")
+            if is_permanent_or_auth and "auth" not in trip_reason.lower() and "401" not in trip_reason:
+                trip_reason = f"[auth] {trip_reason}".strip()
+            self.provider_registry.trip_circuit(
+                provider_id,
+                retry_after_seconds=retry_after_seconds,
+                reason=trip_reason,
             )
-            if not suppress_duplicate_tier1:
-                words = deterministic_answer.split(' ')
-                for i, word in enumerate(words):
-                    yield word + (" " if i < len(words) - 1 else "")
-                return
+        except Exception as e:
+            logger.warning(f"Circuit trip warning for {provider_id}: {e}")
 
-        # Tier 2: Curated Institutional FAQ Cache (Redis L1 + L2 Fuzzy)
-        cached_answer, matched_q = self._get_cached_answer(user_message, seen_answers)
-        if cached_answer:
-            words = cached_answer.split(' ')
-            for i, word in enumerate(words):
-                yield word + (" " if i < len(words) - 1 else "")
+    def _safe_clear_circuit(self, provider_id: str) -> None:
+        try:
+            if hasattr(self.provider_registry, 'clear_circuit'):
+                self.provider_registry.clear_circuit(provider_id)
+        except Exception as e:
+            logger.warning(f"Circuit clear warning for {provider_id}: {e}")
+
+    @staticmethod
+    def _release_idempotency_lease(idempotency_key: Optional[str], owner: Optional[str]) -> None:
+        if not idempotency_key or not owner:
             return
+        clean_key = str(idempotency_key).strip()
+        if not clean_key:
+            return
+        lock_key = f"{AI_IDEMPOTENCY_LOCK_PREFIX}{clean_key}"
+        try:
+            if cache.get(lock_key) == owner:
+                cache.delete(lock_key)
+        except Exception as e:
+            logger.warning(f"Idempotency lock release warning: {e}")
 
-        # Tier 3: Ollama LLM Fallback with Output Guardrail and Adaptive 3-Tier Tuning
-        tier, options, tier_inst = self._classify_query_complexity(user_message)
-        messages = [{
+    @staticmethod
+    def _commit_idempotency_result(idempotency_key: Optional[str], text: str) -> None:
+        if not idempotency_key or not text or not text.strip():
+            return
+        clean_key = str(idempotency_key).strip()
+        if not clean_key:
+            return
+        res_key = f"{AI_IDEMPOTENCY_RESULT_PREFIX}{clean_key}"
+        try:
+            cache.set(res_key, text, timeout=AI_IDEMPOTENCY_RESULT_TTL)
+        except Exception as e:
+            logger.warning(f"Idempotency result cache write warning: {e}")
+
+    def _acquire_idempotency_lease(self, idempotency_key: Optional[str]) -> Tuple[Optional[str], Optional[str], bool]:
+        """
+        Single-Winner Redis Idempotency Lease:
+        Returns (cached_result, lock_owner_uuid, busy_timeout).
+        """
+        if not idempotency_key:
+            return None, None, False
+        clean_key = str(idempotency_key).strip()
+        if not clean_key:
+            return None, None, False
+
+        res_key = f"{AI_IDEMPOTENCY_RESULT_PREFIX}{clean_key}"
+        lock_key = f"{AI_IDEMPOTENCY_LOCK_PREFIX}{clean_key}"
+
+        try:
+            existing = cache.get(res_key)
+            if isinstance(existing, str) and existing:
+                return existing, None, False
+        except Exception as e:
+            logger.warning(f"Idempotency result cache read warning: {e}")
+
+        owner = uuid.uuid4().hex
+        try:
+            acquired = cache.add(lock_key, owner, timeout=AI_IDEMPOTENCY_LOCK_TTL)
+        except Exception as e:
+            logger.warning(f"Idempotency lock acquire warning: {e}")
+            return None, None, False
+
+        if acquired:
+            try:
+                existing_after = cache.get(res_key)
+                if isinstance(existing_after, str) and existing_after:
+                    self._release_idempotency_lease(clean_key, owner)
+                    return existing_after, None, False
+            except Exception:
+                pass
+            return None, owner, False
+
+        deadline = time.monotonic() + AI_IDEMPOTENCY_POLL_MAX_SECONDS
+        while time.monotonic() < deadline:
+            time.sleep(AI_IDEMPOTENCY_POLL_STEP_SECONDS)
+            try:
+                populated = cache.get(res_key)
+                if isinstance(populated, str) and populated:
+                    return populated, None, False
+                if cache.get(lock_key) is None:
+                    if cache.add(lock_key, owner, timeout=AI_IDEMPOTENCY_LOCK_TTL):
+                        existing_after = cache.get(res_key)
+                        if isinstance(existing_after, str) and existing_after:
+                            self._release_idempotency_lease(clean_key, owner)
+                            return existing_after, None, False
+                        return None, owner, False
+            except Exception as e:
+                logger.warning(f"Idempotency poll warning: {e}")
+                return None, None, False
+
+        return None, None, True
+
+    @staticmethod
+    def _yield_word_chunks(text: str) -> Generator[str, None, None]:
+        words = text.split(' ')
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
+
+    def _build_tier3_messages(
+        self,
+        user_message: str,
+        chat_history: Optional[list],
+        tier: str,
+        tier_inst: str,
+        seen_answers: Optional[list],
+    ) -> List[Dict[str, str]]:
+        messages: List[Dict[str, str]] = [{
             "role": "system",
             "content": self._build_dynamic_system_prompt(
                 user_message,
@@ -2107,96 +2274,271 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             "role": "user",
             "content": f"<untrusted_user_query>\n{safe_user_message}\n</untrusted_user_query>",
         })
+        return messages
 
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
-            "stream": True,
-            "keep_alive": -1,
-            "options": options
-        }
+    def generate_chat_stream(
+        self,
+        user_message: str,
+        chat_history: Optional[list] = None,
+        seen_answers: Optional[list] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> Generator[str, None, None]:
+        """
+        Streams AI chunks or yields cached/deterministic answer token stream immediately without artificial sleep.
+        3-Tier Hybrid RAG + Twin Provider Single-Winner Gate + Redis Idempotency:
+        - Tier 1 (Live DB Priority): Deterministic Live Database Intent Resolver (PostgreSQL models)
+        - Tier 2 (Curated FAQ Cache): High-Speed Redis L1 / L2 Fuzzy FAQ matching (<1ms)
+        - Tier 3 (Twin LLM Registry + Pre-Flush Single-Winner Gate + Output Guardrail)
+        """
+        cached_idem, lock_owner, busy_timeout = self._acquire_idempotency_lease(idempotency_key)
+        if cached_idem is not None:
+            yield from self._yield_word_chunks(cached_idem)
+            return
+        if busy_timeout:
+            yield "Your previous identical request is still being processed. Please wait a moment and try again if needed."
+            return
 
         try:
-            response = self.session.post(self.ollama_url, json=payload, stream=True, timeout=(10.0, self.request_timeout))
-            response.raise_for_status()
-
-            stream_buffer = ""
-
-            for line in response.iter_lines():
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except Exception:
-                    continue
-
-                if 'message' in data and 'content' in data['message']:
-                    token = data['message']['content']
-                    if token:
-                        stream_buffer += token
-
-                # Flush at newlines or sentence terminators followed by whitespace (keeps URLs intact)
-                while stream_buffer:
-                    newline_idx = stream_buffer.find('\n')
-                    sent_match = re.search(r'[.!?]\s', stream_buffer)
-                    flush_idx = -1
-                    if newline_idx != -1 and (not sent_match or newline_idx < sent_match.end()):
-                        flush_idx = newline_idx + 1
-                    elif sent_match:
-                        flush_idx = sent_match.end()
-
-                    if flush_idx == -1:
-                        break
-
-                    segment = stream_buffer[:flush_idx]
-                    stream_buffer = stream_buffer[flush_idx:]
-                    trailing_ws = segment[len(segment.rstrip()):]
-                    sanitized = self._sanitize_llm_output(
-                        segment,
-                        user_message=user_message,
-                        strip_unapproved_urls=True,
-                        trim_incomplete=False,
-                    )
-                    if sanitized:
-                        yield sanitized + trailing_ws
-
-                if data.get('done', False) and stream_buffer:
-                    sanitized = self._sanitize_llm_output(
-                        stream_buffer,
-                        user_message=user_message,
-                        strip_unapproved_urls=True,
-                        trim_incomplete=False,
-                    )
-                    stream_buffer = ""
-                    if sanitized:
-                        yield sanitized
-
-            if stream_buffer:
-                sanitized = self._sanitize_llm_output(
-                    stream_buffer,
-                    user_message=user_message,
-                    strip_unapproved_urls=True,
-                    trim_incomplete=False,
+            # Tier 1: Deterministic Live Database Intent Resolver (Always reflects live PostgreSQL state first)
+            deterministic_answer = self._resolve_deterministic_database_intent(user_message)
+            if deterministic_answer:
+                is_long_overview = len(deterministic_answer) > 450 and deterministic_answer.count('\n') >= 4
+                suppress_duplicate_tier1 = (
+                    is_long_overview
+                    and self._is_duplicate_seen_answer(deterministic_answer, seen_answers)
+                    and not self._is_verbatim_repeated_question(user_message, chat_history)
                 )
-                if sanitized:
-                    yield sanitized
+                if not suppress_duplicate_tier1:
+                    self._commit_idempotency_result(idempotency_key, deterministic_answer)
+                    yield from self._yield_word_chunks(deterministic_answer)
+                    return
 
-        except requests.exceptions.ConnectionError:
-            logger.error(f"Failed to connect to Ollama at {self.ollama_url}")
-            yield "I'm currently offline because my AI engine (Ollama) is not reachable. Please ask the administrator to verify Ollama status."
-        except requests.exceptions.Timeout:
-            logger.error("Ollama request timed out.")
-            yield "I'm thinking too hard and my response timed out. Please try asking again in a moment."
-        except Exception as e:
-            logger.error(f"Error communicating with Ollama: {str(e)}")
-            yield "I'm sorry, an internal error occurred while processing your request."
+            # Tier 2: Curated Institutional FAQ Cache (Redis L1 + L2 Fuzzy)
+            cached_answer, matched_q = self._get_cached_answer(user_message, seen_answers)
+            if cached_answer:
+                self._commit_idempotency_result(idempotency_key, cached_answer)
+                yield from self._yield_word_chunks(cached_answer)
+                return
 
-    def generate_chat_response(self, user_message: str, chat_history: Optional[list] = None, seen_answers: Optional[list] = None) -> str:
-        chunks = list(self.generate_chat_stream(user_message, chat_history, seen_answers))
+            # Tier 3: Twin LLM Registry with Single-Winner Pre-Flush Gate & Output Guardrail
+            tier, options, tier_inst = self._classify_query_complexity(user_message)
+            messages = self._build_tier3_messages(
+                user_message=user_message,
+                chat_history=chat_history,
+                tier=tier,
+                tier_inst=tier_inst,
+                seen_answers=seen_answers,
+            )
+            gen_config = self._build_llm_generation_config(options)
+            strategies = list(self.provider_registry.get_ordered_strategies())
+
+            for idx, strategy in enumerate(strategies):
+                has_backup = idx < (len(strategies) - 1)
+                has_flushed = False
+                opening_buffer = ""
+                stream_buffer = ""
+                committed_parts: List[str] = []
+
+                try:
+                    for token in strategy.stream_chat(messages, gen_config, self.session):
+                        if not token:
+                            continue
+
+                        if not has_flushed:
+                            opening_buffer += token
+                            stripped_opening = opening_buffer.lstrip()
+                            if not stripped_opening:
+                                continue
+
+                            flush_idx = self._find_sentence_flush_index(stripped_opening)
+                            if flush_idx == -1:
+                                if len(stripped_opening) < AI_OPENING_BUFFER_MAX_CHARS:
+                                    continue
+                                last_space = stripped_opening.rfind(' ')
+                                flush_idx = (last_space + 1) if last_space > 40 else len(stripped_opening)
+
+                            lead_len = len(opening_buffer) - len(stripped_opening)
+                            split_at = lead_len + flush_idx
+                            opening_segment = opening_buffer[:split_at]
+                            remainder = opening_buffer[split_at:]
+
+                            if has_backup and self._is_incapability_dodge(opening_segment):
+                                logger.info(
+                                    "Single-Winner gate discarded dodge opening from %s; escalating to backup.",
+                                    strategy.provider_id,
+                                )
+                                opening_buffer = ""
+                                break
+
+                            trailing_ws = opening_segment[len(opening_segment.rstrip()):]
+                            sanitized_opening = self._sanitize_llm_output(
+                                opening_segment,
+                                user_message=user_message,
+                                strip_unapproved_urls=True,
+                                trim_incomplete=False,
+                            )
+                            if has_backup and (not sanitized_opening or self._is_incapability_dodge(sanitized_opening)):
+                                logger.info(
+                                    "Single-Winner gate discarded empty/dodge sanitized opening from %s; escalating.",
+                                    strategy.provider_id,
+                                )
+                                opening_buffer = ""
+                                break
+
+                            if not sanitized_opening:
+                                opening_buffer = remainder
+                                continue
+
+                            # Opening check passed: lock this strategy as Single Winner for the rest of the turn
+                            has_flushed = True
+                            opening_buffer = ""
+                            out_chunk = sanitized_opening + trailing_ws
+                            committed_parts.append(out_chunk)
+                            yield out_chunk
+
+                            if remainder:
+                                stream_buffer += remainder
+                        else:
+                            stream_buffer += token
+
+                        if has_flushed:
+                            while stream_buffer:
+                                flush_idx = self._find_sentence_flush_index(stream_buffer)
+                                if flush_idx == -1:
+                                    break
+                                segment = stream_buffer[:flush_idx]
+                                stream_buffer = stream_buffer[flush_idx:]
+                                trailing_ws = segment[len(segment.rstrip()):]
+                                sanitized = self._sanitize_llm_output(
+                                    segment,
+                                    user_message=user_message,
+                                    strip_unapproved_urls=True,
+                                    trim_incomplete=False,
+                                )
+                                if sanitized:
+                                    out_chunk = sanitized + trailing_ws
+                                    committed_parts.append(out_chunk)
+                                    yield out_chunk
+
+                    if not has_flushed:
+                        if opening_buffer.strip():
+                            if has_backup and self._is_incapability_dodge(opening_buffer):
+                                logger.info(
+                                    "Single-Winner gate discarded EOF dodge from %s; escalating to backup.",
+                                    strategy.provider_id,
+                                )
+                                continue
+                            trailing_ws = opening_buffer[len(opening_buffer.rstrip()):]
+                            sanitized_opening = self._sanitize_llm_output(
+                                opening_buffer,
+                                user_message=user_message,
+                                strip_unapproved_urls=True,
+                                trim_incomplete=False,
+                            )
+                            if sanitized_opening and not (has_backup and self._is_incapability_dodge(sanitized_opening)):
+                                has_flushed = True
+                                out_chunk = sanitized_opening + trailing_ws
+                                committed_parts.append(out_chunk)
+                                yield out_chunk
+                        if not has_flushed:
+                            continue
+                    elif stream_buffer:
+                        sanitized = self._sanitize_llm_output(
+                            stream_buffer,
+                            user_message=user_message,
+                            strip_unapproved_urls=True,
+                            trim_incomplete=False,
+                        )
+                        stream_buffer = ""
+                        if sanitized:
+                            committed_parts.append(sanitized)
+                            yield sanitized
+
+                    if has_flushed:
+                        self._safe_clear_circuit(strategy.provider_id)
+                        final_text = "".join(committed_parts).strip()
+                        if final_text:
+                            self._commit_idempotency_result(idempotency_key, final_text)
+                        return
+
+                except ProviderUnavailableError as err:
+                    logger.warning(
+                        "Provider %s unavailable (has_flushed=%s): %s",
+                        strategy.provider_id,
+                        has_flushed,
+                        err,
+                    )
+                    self._safe_trip_circuit(
+                        strategy.provider_id,
+                        retry_after_seconds=getattr(err, "retry_after_seconds", 60),
+                        reason=str(err),
+                        is_permanent_or_auth=bool(getattr(err, "is_permanent_or_auth", False)),
+                    )
+                    if has_flushed:
+                        if stream_buffer:
+                            sanitized = self._sanitize_llm_output(
+                                stream_buffer,
+                                user_message=user_message,
+                                strip_unapproved_urls=True,
+                                trim_incomplete=False,
+                            )
+                            if sanitized:
+                                committed_parts.append(sanitized)
+                                yield sanitized
+                        final_text = "".join(committed_parts).strip()
+                        if final_text:
+                            self._commit_idempotency_result(idempotency_key, final_text)
+                        return
+                    continue
+                except Exception as exc:
+                    logger.error(
+                        "Error communicating with provider %s (has_flushed=%s): %s",
+                        strategy.provider_id,
+                        has_flushed,
+                        exc,
+                    )
+                    if not has_flushed:
+                        self._safe_trip_circuit(
+                            strategy.provider_id,
+                            retry_after_seconds=60,
+                            reason=str(exc),
+                        )
+                        continue
+                    final_text = "".join(committed_parts).strip()
+                    if final_text:
+                        self._commit_idempotency_result(idempotency_key, final_text)
+                    return
+
+            yield (
+                "I'm currently unable to reach my AI engines right now. "
+                "Please try again in a moment, or use the 'Send an Email' option to contact our Campus Librarian."
+            )
+        finally:
+            self._release_idempotency_lease(idempotency_key, lock_owner)
+
+    def generate_chat_response(
+        self,
+        user_message: str,
+        chat_history: Optional[list] = None,
+        seen_answers: Optional[list] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> str:
+        chunks = list(
+            self.generate_chat_stream(
+                user_message,
+                chat_history,
+                seen_answers,
+                idempotency_key=idempotency_key,
+            )
+        )
         response = "".join(chunks)
         return self._sanitize_llm_output(response, user_message)
 
-    def generate_email_reply_draft(self, message_data: dict) -> str:
+    def generate_email_reply_draft(
+        self,
+        message_data: dict,
+        idempotency_key: Optional[str] = None,
+    ) -> str:
         raw_name = message_data.get('sender_name') or 'Student/Patron'
         raw_subject = message_data.get('subject') or 'General Inquiry'
         raw_message = message_data.get('message_text') or ''
@@ -2208,6 +2550,19 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
         safe_subject = self._sanitize_unapproved_external_urls(self._strip_dangerous_html_and_scripts(safe_subject)).strip() or 'General Inquiry'
 
         safe_message = self._sanitize_untrusted_prompt_text(raw_message, max_len=3000, single_line=False)
+
+        fallback_draft = (
+            f"Dear {safe_name},\n\n"
+            f"Thank you for reaching out to JRMSU Katipunan Campus Library regarding \"{safe_subject}\". "
+            f"We have received your inquiry and our library staff will assist you shortly.\n\n"
+            f"Warm regards,\nJRMSU-Katipunan Campus Library Staff"
+        )
+
+        cached_idem, lock_owner, busy_timeout = self._acquire_idempotency_lease(idempotency_key)
+        if cached_idem is not None:
+            return cached_idem
+        if busy_timeout:
+            return fallback_draft
 
         system_prompt = (
             "You are a helpful and polite library staff assistant at Jose Rizal Memorial State University (JRMSU) Katipunan Campus.\n"
@@ -2235,34 +2590,51 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             f"</untrusted_email_data>"
         )
 
-        try:
-            payload = {
-                "model": self.model_name,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "stream": False,
-                "keep_alive": -1,
-                "options": {
-                    "temperature": 0.4,
-                    "num_predict": 512
-                }
-            }
-            resp = self.session.post(self.ollama_url, json=payload, timeout=(10.0, self.request_timeout))
-            if resp.status_code == 200:
-                data = resp.json()
-                draft = data.get('message', {}).get('content', '').strip()
-                if draft:
-                    sanitized_draft = self._sanitize_llm_output(
-                        draft,
-                        user_message=safe_message,
-                        strip_unapproved_urls=True,
-                        trim_incomplete=False,
-                    ).strip()
-                    if sanitized_draft:
-                        return sanitized_draft
-        except Exception as e:
-            logger.warning(f"Ollama draft reply unavailable: {e}. Using fallback.")
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        gen_config = self._build_llm_generation_config({
+            "temperature": 0.4,
+            "num_predict": 512,
+        })
 
-        return f"Dear {safe_name},\n\nThank you for reaching out to JRMSU Katipunan Campus Library regarding \"{safe_subject}\". We have received your inquiry and our library staff will assist you shortly.\n\nWarm regards,\nJRMSU-Katipunan Campus Library Staff"
+        try:
+            for strategy in self.provider_registry.get_ordered_strategies():
+                try:
+                    raw_draft = strategy.complete_chat(messages, gen_config, self.session)
+                    draft = str(raw_draft or "").strip()
+                    if draft:
+                        sanitized_draft = self._sanitize_llm_output(
+                            draft,
+                            user_message=safe_message,
+                            strip_unapproved_urls=True,
+                            trim_incomplete=False,
+                        ).strip()
+                        if sanitized_draft:
+                            self._safe_clear_circuit(strategy.provider_id)
+                            self._commit_idempotency_result(idempotency_key, sanitized_draft)
+                            return sanitized_draft
+                except ProviderUnavailableError as err:
+                    logger.warning(
+                        "Draft reply provider %s unavailable: %s",
+                        strategy.provider_id,
+                        err,
+                    )
+                    self._safe_trip_circuit(
+                        strategy.provider_id,
+                        retry_after_seconds=getattr(err, "retry_after_seconds", 60),
+                        reason=str(err),
+                        is_permanent_or_auth=bool(getattr(err, "is_permanent_or_auth", False)),
+                    )
+                except Exception as e:
+                    logger.warning(f"Draft reply provider {strategy.provider_id} failed: {e}. Trying next.")
+                    self._safe_trip_circuit(
+                        strategy.provider_id,
+                        retry_after_seconds=60,
+                        reason=str(e),
+                    )
+        finally:
+            self._release_idempotency_lease(idempotency_key, lock_owner)
+
+        return fallback_draft

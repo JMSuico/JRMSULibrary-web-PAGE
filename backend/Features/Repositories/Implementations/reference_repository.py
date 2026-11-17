@@ -5,12 +5,14 @@ from Features.Repositories.Interfaces.i_reference_repository import IResearchRef
 
 
 class ResearchReferenceRepository(IResearchReferenceRepository):
+    _DEFERRED_HEAVY_FIELDS = ('extracted_text',)
+
     def get_all(self):
-        return ResearchReference.objects.all().order_by('-created_at')
+        return ResearchReference.objects.defer(*self._DEFERRED_HEAVY_FIELDS).order_by('-created_at')
 
     def get_by_id(self, reference_id):
         try:
-            return ResearchReference.objects.get(id=reference_id)
+            return ResearchReference.objects.defer(*self._DEFERRED_HEAVY_FIELDS).get(id=reference_id)
         except ResearchReference.DoesNotExist:
             return None
 
@@ -18,13 +20,13 @@ class ResearchReferenceRepository(IResearchReferenceRepository):
         return ResearchReference.objects.count()
 
     def get_recent(self, limit: int = 10):
-        return list(ResearchReference.objects.all().order_by('-created_at')[:limit])
+        return list(ResearchReference.objects.defer(*self._DEFERRED_HEAVY_FIELDS).order_by('-created_at')[:limit])
 
     def get_oldest(self, limit: int = 10):
-        return list(ResearchReference.objects.all().order_by('created_at')[:limit])
+        return list(ResearchReference.objects.defer(*self._DEFERRED_HEAVY_FIELDS).order_by('created_at')[:limit])
 
     def search(self, query=None, category=None, department=None, ordering='-created_at'):
-        qs = ResearchReference.objects.all()
+        qs = ResearchReference.objects.defer(*self._DEFERRED_HEAVY_FIELDS)
         if ordering:
             qs = qs.order_by(ordering)
         else:

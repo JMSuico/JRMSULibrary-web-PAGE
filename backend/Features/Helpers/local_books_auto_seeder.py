@@ -178,7 +178,10 @@ def _heal_legacy_sample_poisoning(
     from Features.management.commands.extract_file_knowledge import process_single_eresource_file
 
     poisoned_records: List[Tuple[Any, str]] = []
-    for record in EResourceFile.objects.filter(is_active=True):
+    # Only metadata fields are needed to inspect filename/path poisoning; skip 360+ MB extracted_text blobs.
+    for record in EResourceFile.objects.filter(is_active=True).select_related("department").only(
+        "id", "name", "file", "department__id", "department__name"
+    ):
         if not _is_legacy_sample_poisoned(record):
             continue
         canonical_path = _resolve_canonical_tree_path(

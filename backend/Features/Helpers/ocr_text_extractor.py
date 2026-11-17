@@ -92,6 +92,11 @@ class OCRTextExtractor:
         "total", "sample", "template", "fill", "values", "project", "campus"
     }
 
+    MAX_PDF_EXTRACT_PAGES = int(os.environ.get("OCR_MAX_PDF_PAGES", "400"))
+    MAX_HUGE_PDF_EXTRACT_PAGES = int(os.environ.get("OCR_MAX_HUGE_PDF_PAGES", "80"))
+    MAX_HUGE_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
+    MAX_EXTRACTED_CHARS = int(os.environ.get("OCR_MAX_EXTRACTED_CHARS", "400000"))
+
     # Common regex patterns to detect section headers in plain text
     SECTION_HEADER_PATTERNS = [
         re.compile(r"^(?:chapter|unit|module|section|part)\s+[0-9ivxlcdm]+(?:[:\s\.\-].*)?$", re.IGNORECASE),
@@ -508,15 +513,34 @@ class OCRTextExtractor:
                         return cls._create_empty_result(f"PDF is encrypted: {dec_err}")
 
                 page_count = len(reader.pages)
+                max_pages = (
+                    cls.MAX_HUGE_PDF_EXTRACT_PAGES
+                    if file_size >= cls.MAX_HUGE_PDF_BYTES
+                    else cls.MAX_PDF_EXTRACT_PAGES
+                )
                 page_texts: List[str] = []
+                collected_chars = 0
 
                 for idx, page in enumerate(reader.pages):
+                    if idx >= max_pages or collected_chars >= cls.MAX_EXTRACTED_CHARS:
+                        logger.info(
+                            "[PDF Extractor] Reached extraction cap (%d pages, %d chars) for %s; stopping early to bound RAM.",
+                            idx, collected_chars, file_path
+                        )
+                        break
                     try:
                         pt = page.extract_text() or ""
-                        if pt.strip():
-                            page_texts.append(pt.strip())
+                        stripped = pt.strip()
+                        if stripped:
+                            remaining = cls.MAX_EXTRACTED_CHARS - collected_chars
+                            if len(stripped) > remaining:
+                                stripped = stripped[:remaining]
+                            page_texts.append(stripped)
+                            collected_chars += len(stripped)
                     except Exception as pe:
                         logger.warning(f"[PDF Extractor] Failed reading page {idx + 1} of {file_path}: {pe}")
+                    if file_size >= 10 * 1024 * 1024 and (idx + 1) % 50 == 0:
+                        gc.collect()
 
                 extracted_text = cls._clean_text("\n\n".join(page_texts))
                 page_texts.clear()

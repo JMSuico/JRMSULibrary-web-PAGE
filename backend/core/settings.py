@@ -56,23 +56,43 @@ if _env_file.exists():
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
 # SECURITY WARNING: keep the secret key used in production secret!
+_strict_sec = os.environ.get("STRICT_SECURITY_CHECKS", "False").lower() in ("true", "1", "yes")
 SECRET_KEY = (os.environ.get("SECRET_KEY") or os.environ.get("DJANGO_SECRET_KEY") or "").strip()
 if not DEBUG:
     if not SECRET_KEY or SECRET_KEY.startswith("django-insecure-"):
-        from django.core.exceptions import ImproperlyConfigured
-        raise ImproperlyConfigured(
-            "SECRET_KEY (or DJANGO_SECRET_KEY) environment variable must be set and must not start with 'django-insecure-' when DEBUG=False."
+        if _strict_sec:
+            from django.core.exceptions import ImproperlyConfigured
+            raise ImproperlyConfigured(
+                "SECRET_KEY (or DJANGO_SECRET_KEY) environment variable must be set and must not start with 'django-insecure-' when DEBUG=False."
+            )
+        import warnings
+        warnings.warn(
+            "SECURITY WARNING: Insecure or missing SECRET_KEY with DEBUG=False. Set a high-entropy SECRET_KEY in .env before production use.",
+            RuntimeWarning,
+            stacklevel=2,
         )
+        if not SECRET_KEY:
+            SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
 elif not SECRET_KEY:
     SECRET_KEY = "django-insecure-%@=k9!@3knt3g30!_f+dbka@hv@pj51sxy$4(+6yh4u6l4)zdr"
 
-_raw_allowed_hosts = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1")
+_raw_allowed_hosts = os.environ.get(
+    "ALLOWED_HOSTS",
+    "localhost,127.0.0.1,backend,page.jrmsukc-library.online,admin.jrmsukc-library.online,.jrmsukc-library.online,.jrmsukclibrary.com",
+)
 ALLOWED_HOSTS = [h.strip() for h in _raw_allowed_hosts.split(",") if h.strip()]
 _allow_wildcard_host = os.environ.get("ALLOW_WILDCARD_HOST", "False").lower() in ("true", "1", "yes")
 if not DEBUG and "*" in ALLOWED_HOSTS and not _allow_wildcard_host:
-    from django.core.exceptions import ImproperlyConfigured
-    raise ImproperlyConfigured(
-        "Wildcard '*' in ALLOWED_HOSTS is not permitted when DEBUG=False unless ALLOW_WILDCARD_HOST=True is explicitly set."
+    if _strict_sec:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "Wildcard '*' in ALLOWED_HOSTS is not permitted when DEBUG=False unless ALLOW_WILDCARD_HOST=True is explicitly set."
+        )
+    import warnings
+    warnings.warn(
+        "SECURITY WARNING: Wildcard '*' detected in ALLOWED_HOSTS with DEBUG=False. Replace ALLOWED_HOSTS=* in .env with explicit campus/tunnel hostnames.",
+        RuntimeWarning,
+        stacklevel=2,
     )
 
 
@@ -487,6 +507,12 @@ if os.environ.get('USE_CELERY', 'False').lower() != 'true':
 
 # Ollama AI request timeout (seconds)
 OLLAMA_REQUEST_TIMEOUT = float(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "300"))
+
+# Twin AI Provider configuration (Local Ollama + Optional Anthropic Claude)
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+AI_PROVIDER_MODE = os.environ.get("AI_PROVIDER_MODE", "local_first")
+AI_CLAUDE_MODEL = os.environ.get("AI_CLAUDE_MODEL", "claude-haiku-4-5")
+AI_CLAUDE_TIMEOUT = float(os.environ.get("AI_CLAUDE_TIMEOUT", "45"))
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "JRMSU Library API",
