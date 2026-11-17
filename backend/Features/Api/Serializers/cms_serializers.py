@@ -32,15 +32,20 @@ class EResourceDepartmentSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'parent', 'order', 'children', 'files']
 
     def get_children(self, obj):
-        return EResourceDepartmentSerializer(obj.children.all(), many=True).data
+        cache = getattr(obj, '_prefetched_objects_cache', None)
+        children = cache['children'] if cache is not None and 'children' in cache else obj.children.all().order_by('order', 'id')
+        return EResourceDepartmentSerializer(children, many=True, context=self.context).data
 
     def get_files(self, obj):
         # Admin (authenticated) sees all files; public sees only active ones
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            files = obj.files.all().order_by('name')
+        is_auth = bool(request and getattr(request, 'user', None) and request.user.is_authenticated)
+        cache = getattr(obj, '_prefetched_objects_cache', None)
+        if cache is not None and 'files' in cache:
+            files = cache['files'] if is_auth else [f for f in cache['files'] if f.is_active]
         else:
-            files = obj.files.filter(is_active=True).order_by('name')
+            qs = obj.files.defer('extracted_text', 'summary', 'table_of_contents', 'keywords')
+            files = (qs.all() if is_auth else qs.filter(is_active=True)).order_by('name')
         return EResourceFileSerializer(files, many=True, context=self.context).data
 
 

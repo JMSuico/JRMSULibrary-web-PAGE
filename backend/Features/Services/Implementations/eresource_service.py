@@ -96,8 +96,9 @@ class EResourceFileService(IEResourceFileService):
         file_obj = self._repo.create(data)
         if getattr(file_obj, 'file', None):
             try:
-                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
-                process_single_eresource_file(file_obj)
+                # Extract in background so uploading large PDFs does not block HTTP until Nginx 504 timeout.
+                from Features.signals import trigger_background_file_extraction
+                trigger_background_file_extraction("EResourceFile", file_obj.pk)
                 from django.core.cache import cache
                 cache.delete("rizal_institution_context")
             except Exception:
@@ -108,8 +109,8 @@ class EResourceFileService(IEResourceFileService):
         updated = self._repo.update(id, data)
         if updated and getattr(updated, 'file', None):
             try:
-                from Features.management.commands.extract_file_knowledge import process_single_eresource_file
-                process_single_eresource_file(updated)
+                from Features.signals import trigger_background_file_extraction
+                trigger_background_file_extraction("EResourceFile", updated.pk)
                 from django.core.cache import cache
                 cache.delete("rizal_institution_context")
             except Exception:

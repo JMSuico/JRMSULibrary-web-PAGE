@@ -1,12 +1,35 @@
 # [Layer: Repositories/Implementations] — eresource_repository.py
 from typing import List, Optional, Any
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from Features.Data.Models import EResourceDepartment, EResourceFile
 from Features.Repositories.Interfaces import IEResourceDepartmentRepository, IEResourceFileRepository
 
+# Heavy document blobs are excluded from list/tree queries to prevent 100s of MB of TCP/RAM overhead.
+_DEFERRED_FILE_LIST_FIELDS = ('extracted_text', 'summary', 'table_of_contents', 'keywords')
+_DEFERRED_FILE_AI_FIELDS = ('extracted_text',)
+_TREE_PREFETCH_MAX_DEPTH = 6
+
+
+def _build_department_tree_prefetches(max_depth: int = _TREE_PREFETCH_MAX_DEPTH) -> List[Prefetch]:
+    """Build Prefetch descriptors so tree serialization avoids N+1 queries and heavy text blobs."""
+    prefetches: List[Prefetch] = []
+    deferred_files_qs = EResourceFile.objects.defer(*_DEFERRED_FILE_LIST_FIELDS).order_by('name')
+    ordered_children_qs = EResourceDepartment.objects.order_by('order', 'id')
+    for depth in range(max_depth):
+        prefix = 'children__' * depth
+        prefetches.append(Prefetch(f'{prefix}files', queryset=deferred_files_qs))
+        if depth + 1 < max_depth:
+            prefetches.append(Prefetch(f'{prefix}children', queryset=ordered_children_qs))
+    return prefetches
+
+
 class EResourceDepartmentRepository(IEResourceDepartmentRepository):
     def get_root_departments(self) -> List[Any]:
-        return list(EResourceDepartment.objects.filter(parent=None).order_by('order', 'id'))
+        return list(
+            EResourceDepartment.objects.filter(parent=None)
+            .prefetch_related(*_build_department_tree_prefetches())
+            .order_by('order', 'id')
+        )
 
     def get_all(self):
         return list(EResourceDepartment.objects.all())
@@ -34,10 +57,11 @@ class EResourceDepartmentRepository(IEResourceDepartmentRepository):
 
 class EResourceFileRepository(IEResourceFileRepository):
     def get_all_active(self) -> List[Any]:
-        return list(EResourceFile.objects.filter(is_active=True))
+        # Defer extracted_text (hundreds of MB across 500+ books); keep summary/TOC/keywords for AI matching.
+        return list(EResourceFile.objects.filter(is_active=True).defer(*_DEFERRED_FILE_AI_FIELDS))
 
     def get_all(self):
-        return list(EResourceFile.objects.all())
+        return list(EResourceFile.objects.defer(*_DEFERRED_FILE_LIST_FIELDS))
 
     def search_active_files(self, tokens: List[str], limit: int = 5) -> List[Any]:
         clean_tokens = [tok.strip() for tok in (tokens or []) if tok and tok.strip()]

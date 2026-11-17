@@ -203,8 +203,8 @@ class AutonomousKnowledgeDaemon:
         fetch_qs_fn,
         process_item_fn,
         label: str,
-        batch_size: int = 50,
-        max_batches: int = 12,
+        batch_size: int = 10,
+        max_batches: int = 20,
     ) -> None:
         """Drains pending extraction records in bounded batches without holding stale DB connections."""
         seen_pks = set()
@@ -264,7 +264,7 @@ class AutonomousKnowledgeDaemon:
         def _fetch():
             return EResourceFile.objects.filter(
                 Q(ocr_status='pending') | Q(ocr_status__isnull=True) | Q(extracted_text__isnull=True) | Q(extracted_text='')
-            ).exclude(ocr_status='failed')
+            ).exclude(ocr_status='failed').defer('extracted_text', 'summary', 'table_of_contents', 'keywords')
 
         def _process(book):
             ok = process_single_eresource_file(book)

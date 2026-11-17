@@ -30,8 +30,9 @@ class ResearchReferenceService(IResearchReferenceService):
             ref = self.repo.create(serializer.validated_data)
             if getattr(ref, 'access_type', None) == 'file' and getattr(ref, 'access_file', None):
                 try:
-                    from Features.management.commands.extract_file_knowledge import process_single_research_reference
-                    process_single_research_reference(ref, force=True)
+                    # Run OCR extraction asynchronously via background worker so large uploads do not 504 at Nginx.
+                    from Features.signals import trigger_background_file_extraction
+                    trigger_background_file_extraction("ResearchReference", ref.pk)
                     from django.core.cache import cache
                     cache.delete("rizal_institution_context")
                 except Exception:
@@ -61,8 +62,8 @@ class ResearchReferenceService(IResearchReferenceService):
             updated_ref = self.repo.update(ref, serializer.validated_data)
             if getattr(updated_ref, 'access_type', None) == 'file' and getattr(updated_ref, 'access_file', None):
                 try:
-                    from Features.management.commands.extract_file_knowledge import process_single_research_reference
-                    process_single_research_reference(updated_ref, force=file_replaced)
+                    from Features.signals import trigger_background_file_extraction
+                    trigger_background_file_extraction("ResearchReference", updated_ref.pk)
                     from django.core.cache import cache
                     cache.delete("rizal_institution_context")
                 except Exception:
