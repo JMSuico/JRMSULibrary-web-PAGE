@@ -285,6 +285,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoMode, setVideoMode] = useState<'waving' | 'reading'>('waving');
+  const [isClaudeGreenLight, setIsClaudeGreenLight] = useState<boolean>(true);
 
   // Draggable magnetic bubble
   const { ref: bubbleRef, style: bubbleStyle, isDragging, side, bottomPx } = useDraggableBubble({
@@ -344,12 +345,26 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     }
   }, [chatFlowState, isExpanded, isTyping]);
 
-  // Abort in-flight requests when chat modal is closed
+  // Abort in-flight requests when chat modal is closed, or refresh AI status when opened
   useEffect(() => {
-    if (!isExpanded && abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    if (!isExpanded) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      return;
     }
+
+    let isCancelled = false;
+    void aiApi.getStatus().then((status) => {
+      if (!isCancelled) {
+        setIsClaudeGreenLight(Boolean(status.claude_green_light));
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [isExpanded]);
 
   // Abort on component unmount
@@ -1027,7 +1042,21 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-900 to-blue-600 p-4 text-white relative flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-lg font-bold">RIZAL</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold">RIZAL</h3>
+                  <span
+                    className={`inline-block w-2.5 h-2.5 rounded-full ${
+                      isClaudeGreenLight
+                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]'
+                        : 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]'
+                    }`}
+                    title={
+                      isClaudeGreenLight
+                        ? 'Primary Cloud AI Active (Fast Hedged Mode)'
+                        : 'Secondary Local AI Active (Offline/Fallback Mode)'
+                    }
+                  />
+                </div>
                 <p className="text-xs text-blue-200">Your Friendly Library Assistant</p>
               </div>
               <div className="flex items-center gap-1">

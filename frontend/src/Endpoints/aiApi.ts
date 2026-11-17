@@ -82,6 +82,16 @@ export interface ChatMessage {
   text: string;
 }
 
+export interface AIProviderStatus {
+  mode: string;
+  primary_provider: string;
+  claude_configured: boolean;
+  claude_green_light: boolean;
+  ollama_configured: boolean;
+  ollama_healthy: boolean;
+  strategy_approach?: string;
+}
+
 function getSeenAnswers(): string[] {
   const cacheStr = localStorage.getItem('ai_seen_answers');
   const cacheDate = localStorage.getItem('ai_seen_date');
@@ -111,6 +121,27 @@ function addSeenAnswer(answer: string) {
 }
 
 export const aiApi = {
+  /**
+   * Fetch current AI provider routing and health status
+   */
+  getStatus: async (): Promise<AIProviderStatus> => {
+    try {
+      const data: AIProviderStatus = await apiClient('/ai/status/', {
+        method: 'GET',
+      });
+      return data;
+    } catch {
+      return {
+        mode: 'claude_first',
+        primary_provider: 'claude',
+        claude_configured: true,
+        claude_green_light: true,
+        ollama_configured: true,
+        ollama_healthy: true,
+      };
+    }
+  },
+
   /**
    * Send a message to the backend AI service (Ollama)
    * @param message The user's new message

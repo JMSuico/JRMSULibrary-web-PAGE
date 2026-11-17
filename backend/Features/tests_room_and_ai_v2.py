@@ -991,5 +991,111 @@ class TestRound2SevenSectionInternalKnowledge(unittest.TestCase):
         self.assertNotIn("3rd floor", floor2_lower)
 
 
+class _TimedFakeLLMProvider(ILLMProviderStrategy):
+    """Fake LLM provider with configurable initial delay for testing speculative parallel hedging."""
+
+    def __init__(self, chunks, provider_id="claude", delay_seconds=0.0):
+        self._chunks = list(chunks)
+        self._provider_id = provider_id
+        self._delay_seconds = float(delay_seconds)
+        self.calls = []
+
+    @property
+    def provider_id(self) -> str:
+        return self._provider_id
+
+    def is_configured(self) -> bool:
+        return True
+
+    def stream_chat(self, messages, config: LLMGenerationConfig, session):
+        self.calls.append((messages, config))
+        if self._delay_seconds > 0:
+            time.sleep(self._delay_seconds)
+        for chunk in self._chunks:
+            yield chunk
+
+    def complete_chat(self, messages, config: LLMGenerationConfig, session) -> str:
+        self.calls.append((messages, config))
+        if self._delay_seconds > 0:
+            time.sleep(self._delay_seconds)
+        return "".join(self._chunks)
+
+
+class TestSpeculativeParallelHedgingAndShadowCache(unittest.TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_default_provider_mode_is_claude_first_and_reports_green_light_status(self):
+        claude = _TimedFakeLLMProvider(["Claude primary answer."], provider_id="claude")
+        ollama = _TimedFakeLLMProvider(["Ollama backup answer."], provider_id="ollama")
+        registry = LLMProviderRegistry(providers=[ollama, claude], cache_backend=cache)
+
+        self.assertEqual(registry.resolve_mode(), "claude_first")
+        ordered = registry.get_ordered_strategies()
+        self.assertEqual([s.provider_id for s in ordered], ["claude", "ollama"])
+        self.assertTrue(registry.is_claude_green_light())
+
+        status_summary = registry.get_provider_status_summary()
+        self.assertTrue(status_summary["claude_green_light"])
+        self.assertEqual(status_summary["primary_provider"], "claude")
+        self.assertIn("Speculative Parallel Hedging", status_summary["strategy_approach"])
+
+    def test_claude_green_light_priority_wins_and_stores_late_local_response_in_shadow_cache(self):
+        claude = _TimedFakeLLMProvider(
+            ["Claude primary answer from JRMSU Katipunan Campus Library."],
+            provider_id="claude",
+            delay_seconds=0.05,
+        )
+        ollama = _TimedFakeLLMProvider(
+            ["Local Ollama late response stored in temporary cache."],
+            provider_id="ollama",
+            delay_seconds=0.18,
+        )
+        service = _make_empty_ai_service(providers=[claude, ollama])
+
+        query = "can you explain how to structure a study schedule in the library?"
+        response = "".join(service.generate_chat_stream(query)).strip()
+
+        self.assertIn("Claude primary answer", response)
+        self.assertNotIn("Local Ollama late response", response)
+
+        # Wait briefly for background shadow cache harvest thread to finish
+        deadline = time.monotonic() + 1.0
+        shadow_cached = None
+        while time.monotonic() < deadline:
+            shadow_cached = service._get_late_shadow_cache(query)
+            if shadow_cached:
+                break
+            time.sleep(0.03)
+
+        self.assertIsNotNone(shadow_cached)
+        self.assertIn("Local Ollama late response", shadow_cached)
+
+    def test_first_to_respond_local_wins_immediately_when_claude_is_slow_or_offline(self):
+        slow_claude = _TimedFakeLLMProvider(
+            ["Slow Claude response that arrives after timeout window."],
+            provider_id="claude",
+            delay_seconds=0.60,
+        )
+        fast_ollama = _TimedFakeLLMProvider(
+            ["Fast Local Ollama response when internet is slow."],
+            provider_id="ollama",
+            delay_seconds=0.02,
+        )
+        service = _make_empty_ai_service(providers=[slow_claude, fast_ollama])
+        service.primary_green_priority_window_seconds = 0.15
+
+        query = "how can I improve my reading comprehension for research?"
+        t0 = time.monotonic()
+        response = "".join(service.generate_chat_stream(query)).strip()
+        elapsed = time.monotonic() - t0
+
+        self.assertIn("Fast Local Ollama response", response)
+        self.assertLess(elapsed, 0.50)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

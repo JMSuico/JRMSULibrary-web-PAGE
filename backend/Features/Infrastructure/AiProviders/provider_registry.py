@@ -21,7 +21,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 AI_PROVIDER_MODE_CACHE_KEY = "rizal:ai_provider_mode"
-DEFAULT_AI_PROVIDER_MODE = "local_first"
+DEFAULT_AI_PROVIDER_MODE = "claude_first"
 
 MODE_ORDER_MAP: Dict[str, Tuple[str, ...]] = {
     "local_first": ("ollama", "claude"),
@@ -29,6 +29,8 @@ MODE_ORDER_MAP: Dict[str, Tuple[str, ...]] = {
     "local_only": ("ollama",),
     "claude_only": ("claude",),
 }
+
+_BUILTIN_PROVIDER_IDS = {"ollama", "claude"}
 
 _PERMANENT_REASON_TOKENS = (
     "401",
@@ -164,6 +166,31 @@ class LLMProviderRegistry:
     def clear_circuit(self, provider_id: str) -> None:
         self._cache_delete(self._circuit_key(provider_id))
 
+    def is_claude_green_light(self) -> bool:
+        claude = self._strategies.get("claude")
+        return bool(
+            claude is not None
+            and claude.is_configured()
+            and not self.is_tripped("claude")
+        )
+
+    def get_provider_status_summary(self) -> Dict[str, Any]:
+        claude_strategy = self._strategies.get("claude")
+        ollama_strategy = self._strategies.get("ollama")
+        claude_configured = bool(claude_strategy is not None and claude_strategy.is_configured())
+        ollama_configured = bool(ollama_strategy is not None and ollama_strategy.is_configured())
+        claude_green = self.is_claude_green_light()
+        ollama_healthy = bool(ollama_configured and not self.is_tripped("ollama"))
+        return {
+            "mode": self.resolve_mode(),
+            "primary_provider": "claude" if claude_green else ("ollama" if ollama_healthy else "none"),
+            "claude_configured": claude_configured,
+            "claude_green_light": claude_green,
+            "ollama_configured": ollama_configured,
+            "ollama_healthy": ollama_healthy,
+            "strategy_approach": "Speculative Parallel Hedging with Priority Preemption & Write-Behind Shadow Caching",
+        }
+
     def get_ordered_strategies(
         self,
         mode_override: Optional[str] = None,
@@ -177,6 +204,11 @@ class LLMProviderRegistry:
             strategy = self._strategies.get(pid)
             if strategy is not None and strategy.is_configured():
                 configured.append(strategy)
+
+        for pid, strategy in self._strategies.items():
+            if pid not in ordered_ids and pid not in _BUILTIN_PROVIDER_IDS:
+                if strategy is not None and strategy.is_configured():
+                    configured.append(strategy)
 
         healthy: List[ILLMProviderStrategy] = []
         tripped: List[ILLMProviderStrategy] = []

@@ -164,6 +164,10 @@ class AIViewSet(viewsets.ViewSet):
         response['Cache-Control'] = 'no-cache, no-transform'
         return response
 
+    @action(detail=False, methods=['get'], url_path='status', permission_classes=[permissions.AllowAny])
+    def provider_status(self, request):
+        return Response(self.service.get_ai_provider_status(), status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['post'], url_path='draft-reply', permission_classes=[permissions.IsAuthenticated])
     def draft_reply(self, request):
         """
