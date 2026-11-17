@@ -1,8 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Mail, Calendar, Star } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Mail, Calendar, Star, ChevronDown } from 'lucide-react';
 import { contactApi } from '@/src/Endpoints/contactApi';
 import { feedbackApi } from '@/src/Endpoints/feedbackApi';
 import { aiApi } from '@/src/Endpoints/aiApi';
+import {
+  settingsApi,
+  RESERVATION_ROOMS,
+  normalizeRoomAvailability,
+} from '@/src/Endpoints/settingsApi';
 import { ensureCsrfToken } from '@/src/Libs/apiClient';
 import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
 
@@ -375,18 +380,37 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
   const [formFiles, setFormFiles] = useState<File[]>([]);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [roomAvailability, setRoomAvailability] = useState<Record<string, boolean>>(() =>
+    normalizeRoomAvailability()
+  );
+  const [isRoomDropdownOpen, setIsRoomDropdownOpen] = useState(false);
+
+  const refreshRoomAvailability = useCallback(async () => {
+    try {
+      const settings = await settingsApi.getSettings();
+      const normalized = normalizeRoomAvailability(settings.room_availability);
+      setRoomAvailability(normalized);
+      setFormRoom((prev) => (prev && normalized[prev] === false ? '' : prev));
+    } catch {
+      // Retain existing availability state if settings fetch fails
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshRoomAvailability();
+  }, [refreshRoomAvailability]);
+
+  useEffect(() => {
+    if (chatFlowState === 'reservation-form') {
+      void refreshRoomAvailability();
+    } else {
+      setIsRoomDropdownOpen(false);
+    }
+  }, [chatFlowState, refreshRoomAvailability]);
 
   const videoSrc = videoMode === 'waving'
     ? '/assets/rizal waiving 2.mp4'
     : '/assets/rizal reading.mp4';
-
-  const rooms = [
-    'Discussion Room 1',
-    'Discussion Room 2',
-    'Tutorium Room 1',
-    'Tutorium Room 2',
-    'Multimedia Room',
-  ];
 
   const resetFormFields = () => {
     setFormName('');
@@ -397,6 +421,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     setFormRating(0);
     setFormFiles([]);
     setFormError('');
+    setIsRoomDropdownOpen(false);
   };
 
   const getDailyRatingCount = () => {
@@ -471,6 +496,9 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     ]);
     setChatFlowState(`${type}-form` as ChatFlowState);
     resetFormFields();
+    if (type === 'reservation') {
+      void refreshRoomAvailability();
+    }
   };
 
   const handleChatTextSubmit = async (e: React.FormEvent) => {
@@ -597,10 +625,16 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
 
   const handleReservationFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isSelectedRoomAvailable = Boolean(formRoom && roomAvailability[formRoom] !== false);
+    if (!isSelectedRoomAvailable) {
+      setFormError('Please select an available room or table.');
+      return;
+    }
+    setFormError('');
     setIsSubmitting(true);
     try {
       await ensureCsrfToken();
-      const validation = await contactApi.validateEmail(formEmail);
+      await contactApi.validateEmail(formEmail);
       // TODO(Temporary): Commented out for testing fake emails per user request
       // if (validation.is_disposable || !validation.is_domain_valid) {
       //   throw new Error('Temporary or disposable email addresses are not accepted, or domain is invalid.');
@@ -619,10 +653,11 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       }]);
       setChatFlowState('suggestions');
       resetFormFields();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      const isRateLimit = err.message?.toLowerCase().includes('throttle') || err.message?.toLowerCase().includes('too many');
-      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (err.message || 'Sorry, there was an error submitting your reservation. Please try again.');
+      const errMessage = err instanceof Error ? err.message : '';
+      const isRateLimit = errMessage.toLowerCase().includes('throttle') || errMessage.toLowerCase().includes('too many');
+      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (errMessage || 'Sorry, there was an error submitting your reservation. Please try again.');
       setChatMessages(prev => [...prev, { sender: 'rizal', text: errorMessage }]);
       setChatFlowState('suggestions');
     } finally {
@@ -798,20 +833,122 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     }
 
     if (chatFlowState === 'reservation-form') {
+      const allRoomsUnavailable = RESERVATION_ROOMS.every(
+        (room) => roomAvailability[room] === false
+      );
+      const isSelectedRoomValid = Boolean(formRoom && roomAvailability[formRoom] !== false);
+
       return (
         <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
           <form onSubmit={handleReservationFormSubmit} className="space-y-2">
-            <select required value={formRoom} onChange={e => setFormRoom(e.target.value)} className={`${inputClass} bg-white`}>
+            {/* Synced native select for form state consistency */}
+            <select
+              aria-hidden="true"
+              tabIndex={-1}
+              value={formRoom}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val || roomAvailability[val] !== false) {
+                  setFormRoom(val);
+                  setFormError('');
+                }
+              }}
+              className="sr-only"
+            >
               <option value="" disabled>Select Room/Table</option>
-              {rooms.map(room => <option key={room} value={room}>{room}</option>)}
+              {RESERVATION_ROOMS.map((room) => (
+                <option key={room} value={room} disabled={roomAvailability[room] === false}>
+                  {room}
+                </option>
+              ))}
             </select>
+
+            <div className="relative">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={isRoomDropdownOpen}
+                onClick={() => setIsRoomDropdownOpen((prev) => !prev)}
+                className={`${inputClass} bg-white flex items-center justify-between gap-2 text-left cursor-pointer ${
+                  formRoom ? 'text-gray-800' : 'text-gray-500'
+                }`}
+              >
+                <span className="truncate">{formRoom || 'Select Room/Table'}</span>
+                <ChevronDown
+                  size={16}
+                  className={`text-gray-400 shrink-0 transition-transform ${
+                    isRoomDropdownOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {isRoomDropdownOpen && (
+                <div
+                  role="listbox"
+                  aria-label="Room or Table Availability"
+                  className="mt-1.5 flex flex-col gap-1 p-1.5 rounded-lg border border-gray-200 bg-gray-50/80 shadow-inner"
+                >
+                  {RESERVATION_ROOMS.map((room) => {
+                    const isAvailable = roomAvailability[room] !== false;
+                    const isSelected = formRoom === room;
+                    return (
+                      <button
+                        key={room}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        disabled={!isAvailable}
+                        aria-disabled={!isAvailable}
+                        onClick={() => {
+                          if (!isAvailable) return;
+                          setFormRoom(room);
+                          setFormError('');
+                          setIsRoomDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-md border text-xs font-medium text-left transition-colors ${
+                          isAvailable
+                            ? isSelected
+                              ? 'text-blue-700 bg-blue-50 border-blue-400 cursor-pointer'
+                              : 'text-gray-800 bg-white hover:bg-blue-50 border-gray-200 cursor-pointer'
+                            : 'bg-gray-100 text-gray-400 border-gray-200 opacity-55 cursor-not-allowed pointer-events-none select-none'
+                        }`}
+                      >
+                        <span className="truncate">{room}</span>
+                        {!isAvailable && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-200/80 text-gray-400">
+                            Unavailable
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {allRoomsUnavailable && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 font-medium">
+                All rooms and tables are currently unavailable for reservation. Please check back later.
+              </div>
+            )}
+
+            {formError && (
+              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2 font-medium">
+                {formError}
+              </div>
+            )}
+
             <input required type="text" placeholder="Name" value={formName} onChange={e => setFormName(e.target.value)} className={inputClass} />
             <input required type="email" placeholder="Email" value={formEmail} onChange={e => setFormEmail(e.target.value)} className={inputClass} />
             <input required type="text" placeholder="Subject" value={formSubject} onChange={e => setFormSubject(e.target.value)} className={inputClass} />
             <textarea required placeholder="Message" rows={3} value={formMessage} onChange={e => setFormMessage(e.target.value)} className={`${inputClass} resize-none`} />
             <div className="flex gap-2">
               <button type="button" onClick={handleCancelForm} className="flex-1 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors cursor-pointer">Cancel</button>
-              <button type="submit" disabled={isSubmitting} className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50">
+              <button
+                type="submit"
+                disabled={isSubmitting || allRoomsUnavailable || !isSelectedRoomValid}
+                className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 {isSubmitting ? 'Submitting...' : 'Submit'}
               </button>
             </div>

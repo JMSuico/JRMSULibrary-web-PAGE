@@ -26,6 +26,12 @@ import { Pagination } from '@/src/Components/Shared/Pagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { aiApi } from '@/src/Endpoints/aiApi';
+import {
+  settingsApi,
+  RESERVATION_ROOMS,
+  ReservationRoomName,
+  normalizeRoomAvailability,
+} from '@/src/Endpoints/settingsApi';
 
 interface AttachmentUploaderProps {
   file: File;
@@ -120,6 +126,57 @@ export function EmailMessage() {
   const [viewMessageModal, setViewMessageModal] = useState<ContactMessage | null>(null);
   const [actionLoading, setActionLoading] = useState<{ id: number, action: string } | null>(null);
   const [isDraftingAI, setIsDraftingAI] = useState(false);
+  const [roomAvailability, setRoomAvailability] = useState<Record<string, boolean>>(() =>
+    normalizeRoomAvailability()
+  );
+  const [selectedRoom, setSelectedRoom] = useState<ReservationRoomName>(RESERVATION_ROOMS[0]);
+  const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadRoomAvailability = async () => {
+      try {
+        const settings = await settingsApi.getSettings();
+        if (mounted) {
+          setRoomAvailability(normalizeRoomAvailability(settings.room_availability));
+        }
+      } catch {
+        // Keep normalized defaults when settings fail to load
+      }
+    };
+    loadRoomAvailability();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleToggleRoomAvailability = async () => {
+    if (isUpdatingRoom) return;
+    const previousMap = roomAvailability;
+    const currentAvailable = previousMap[selectedRoom] ?? true;
+    const nextAvailable = !currentAvailable;
+    const updatedMap: Record<string, boolean> = {
+      ...previousMap,
+      [selectedRoom]: nextAvailable,
+    };
+
+    setRoomAvailability(updatedMap);
+    setIsUpdatingRoom(true);
+    try {
+      const saved = await settingsApi.updateSettings({ room_availability: updatedMap });
+      setRoomAvailability(normalizeRoomAvailability(saved.room_availability ?? updatedMap));
+      showToast(
+        `${selectedRoom} is now ${nextAvailable ? 'Available' : 'Unavailable'}`,
+        nextAvailable ? 'success' : 'info'
+      );
+    } catch (err: unknown) {
+      setRoomAvailability(previousMap);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update room availability';
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsUpdatingRoom(false);
+    }
+  };
 
   const handleAutoDraftReply = async () => {
     if (!replyModal) return;
@@ -553,6 +610,52 @@ export function EmailMessage() {
               />
               <span className="whitespace-nowrap">Show Archived</span>
             </label>
+
+            {/* Vertical divider */}
+            <div className="h-6 w-px bg-gray-200 shrink-0" />
+
+            {/* Room/Table Availability Switcher */}
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                htmlFor="admin-room-availability-select"
+                className="text-xs font-semibold text-gray-500 whitespace-nowrap"
+              >
+                Room/Table:
+              </label>
+              <select
+                id="admin-room-availability-select"
+                value={selectedRoom}
+                onChange={(e) => setSelectedRoom(e.target.value as ReservationRoomName)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
+              >
+                {RESERVATION_ROOMS.map((room) => (
+                  <option key={room} value={room}>
+                    {room}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleToggleRoomAvailability}
+                disabled={isUpdatingRoom}
+                aria-pressed={roomAvailability[selectedRoom] ?? true}
+                title={`Toggle ${selectedRoom} availability`}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait ${
+                  (roomAvailability[selectedRoom] ?? true)
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200/70'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    (roomAvailability[selectedRoom] ?? true) ? 'bg-emerald-500' : 'bg-slate-400'
+                  }`}
+                />
+                <span className="whitespace-nowrap">
+                  {(roomAvailability[selectedRoom] ?? true) ? 'Available' : 'Unavailable'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 

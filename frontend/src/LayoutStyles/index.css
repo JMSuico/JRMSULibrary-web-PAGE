@@ -11,3 +11,18 @@
 @import "./FontSyle/fontStyles.css";
 @import "./MainLayout.css";
 @import "./PartLayout.css";
+
+/* Suppress read-only document viewers during browser print / print preview */
+@media print {
+  [data-readonly-viewer="true"],
+  .readonly-viewer-surface {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body.readonly-viewer-active,
+  body.readonly-viewer-active * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}

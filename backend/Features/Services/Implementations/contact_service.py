@@ -5,6 +5,11 @@
 from Features.Repositories.Implementations.contact_repository import ContactRepository
 from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
 from Features.Api.Serializers.contact_serializer import ContactMessageSerializer
+from Features.Data.Models.site_settings_model import (
+    DEFAULT_RESERVATION_ROOMS,
+    normalize_room_availability,
+)
+from Features.Services.Implementations.settings_service import SettingsService
 from Features.Helpers.input_sanitizer import sanitize_input
 from Features.Helpers.email_helper import (
     is_disposable_email,
@@ -26,9 +31,27 @@ logger = logging.getLogger(__name__)
 
 class ContactService(ContactServiceInterface):
 
-    def __init__(self):
+    def __init__(self, settings_service: SettingsService = None):
         self.repository = ContactRepository()
         self.recycle_repository = RecycleBinRepository()
+        self.settings_service = settings_service or SettingsService()
+
+    def _resolve_requested_room(self, data: dict, subject: str):
+        raw_room_name = bleach.clean(sanitize_input(str(data.get('room_name') or ''))).strip()
+        candidates = sorted(DEFAULT_RESERVATION_ROOMS, key=len, reverse=True)
+
+        def _match_room_text(raw_text: str) -> Optional[str]:
+            lowered = (raw_text or '').strip().lower()
+            if not lowered:
+                return None
+            for room in candidates:
+                if room.lower() in lowered:
+                    return room
+            if 'library comlab' in lowered or 'comlab' in lowered or 'computer laboratory' in lowered:
+                return 'Library ComLab (Computer Laboratory)'
+            return None
+
+        return _match_room_text(raw_room_name) or _match_room_text(subject)
 
     def submit_contact(self, data: dict, files: list = None):
         sanitized = {
@@ -47,6 +70,16 @@ class ContactService(ContactServiceInterface):
 
         if not is_email_domain_valid(email):
              raise ValueError(f"The email domain appears to be invalid or unreachable: {email}")
+
+        if sanitized['message_type'] == 'RESERVATION':
+            matched_room = self._resolve_requested_room(data, sanitized['subject'])
+            if matched_room:
+                site_settings = self.settings_service.get_settings()
+                availability = normalize_room_availability(
+                    getattr(site_settings, 'room_availability', None)
+                )
+                if availability.get(matched_room, True) is False:
+                    raise ValueError(f"{matched_room} is currently unavailable for reservation.")
 
         # Batching logic: check if same email sent same type of message within last hour
         recent_message = self.repository.get_recent_by_email_and_type(
