@@ -1,53 +1,85 @@
-import React, { useState, useEffect } from 'react';
-import { Trash2, RotateCcw, AlertTriangle, Clock, Search, FileArchive } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Trash2, RotateCcw, Clock, Search } from 'lucide-react';
 import { recycleApi, RecycleBinItem } from '@/src/Endpoints/recycleApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 
 export function RecycleBin() {
-  const [items, setItems] = useState<RecycleBinItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [moduleFilter, setModuleFilter] = useState<string>('ALL');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isRemoving, setIsRemoving] = useState(false);
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
+
   const { showToast, removeToast } = useToast();
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const fetchItems = async () => {
-    try {
-      setLoading(true);
-      const data = await recycleApi.getAll();
-      setItems(data);
-    } catch (err: any) {
-      showToast('Failed to load recycle bin', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: cachedItems,
+    isLoading,
+    error,
+    refetch: fetchItems,
+    mutate: mutateItems,
+  } = useCachedQuery<RecycleBinItem[]>({
+    key: 'admin:recycle-bin',
+    fetcher: () => recycleApi.getAll(),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const items = cachedItems ?? [];
+  const itemsRef = useRef<RecycleBinItem[]>(items);
+  itemsRef.current = items;
 
   useEffect(() => {
-    fetchItems();
-  }, []);
+    if (error) {
+      showToast('Failed to load recycle bin', 'error');
+    }
+  }, [error, showToast]);
+
+  const filteredItems = useMemo(() => {
+    const query = debouncedSearch.toLowerCase();
+    return items.filter((item) => {
+      const matchesSearch = item.item_name.toLowerCase().includes(query);
+      const matchesModule = moduleFilter === 'ALL' || item.source_module === moduleFilter;
+      return matchesSearch && matchesModule;
+    });
+  }, [items, debouncedSearch, moduleFilter]);
+
+  const {
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    paginatedItems,
+    setPage,
+    setPageSize,
+  } = usePagination<RecycleBinItem>({
+    items: filteredItems,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_recycle_page_size',
+  });
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, moduleFilter, setPage]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedIds(paginatedItems.map(item => item.id));
+      setSelectedIds(paginatedItems.map((item) => item.id));
     } else {
       setSelectedIds([]);
     }
   };
 
   const handleSelectOne = (id: number) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
   };
 
@@ -56,15 +88,16 @@ export function RecycleBin() {
     try {
       setIsRemoving(true);
       const count = selectedIds.length;
-      setItems(prev => prev.filter(i => !selectedIds.includes(i.id)));
+      mutateItems(itemsRef.current.filter((i) => !selectedIds.includes(i.id)));
       const toastId = showToast(`${count} items restoring in background...`, 'loading');
       await bulkApi.restore(selectedIds);
+      invalidateCacheByPrefix('admin:');
       showToast(`${count} items queued for restoration`, 'success');
       setSelectedIds([]);
       removeToast(toastId);
-    } catch (err: any) {
+    } catch {
       showToast('Failed to queue restoration', 'error');
-      fetchItems();
+      await fetchItems();
     } finally {
       setIsRemoving(false);
     }
@@ -72,37 +105,41 @@ export function RecycleBin() {
 
   const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
+    const idsSnapshot = [...selectedIds];
     setConfirmModal({
       isOpen: true,
       title: 'Delete Permanently',
-      message: `Are you sure you want to permanently delete ${selectedIds.length} items? This action cannot be undone.`,
+      message: `Are you sure you want to permanently delete ${idsSnapshot.length} items? This action cannot be undone.`,
       onConfirm: async () => {
         try {
           setIsRemoving(true);
-          const count = selectedIds.length;
-          setItems(prev => prev.filter(i => !selectedIds.includes(i.id)));
+          const count = idsSnapshot.length;
+          mutateItems(itemsRef.current.filter((i) => !idsSnapshot.includes(i.id)));
           const toastId = showToast(`${count} items deleting in background...`, 'loading');
-          await bulkApi.hardDelete(selectedIds);
+          await bulkApi.hardDelete(idsSnapshot);
+          invalidateCacheByPrefix('admin:recycle-bin');
           showToast(`${count} items queued for permanent deletion`, 'success');
           setSelectedIds([]);
           removeToast(toastId);
-        } catch (err: any) {
+        } catch {
           showToast('Failed to queue permanent deletion', 'error');
-          fetchItems();
+          await fetchItems();
         } finally {
           setIsRemoving(false);
         }
-      }
+      },
     });
   };
 
   const handleRestore = async (id: number) => {
     try {
       await recycleApi.restore(id);
+      invalidateCacheByPrefix('admin:');
       showToast('Item restored successfully', 'success');
-      fetchItems();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to restore item', 'error');
+      await fetchItems();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to restore item';
+      showToast(message, 'error');
     }
   };
 
@@ -114,27 +151,17 @@ export function RecycleBin() {
       onConfirm: async () => {
         try {
           await recycleApi.deletePermanently(id);
+          invalidateCacheByPrefix('admin:recycle-bin');
           showToast('Item deleted permanently', 'success');
-          fetchItems();
-        } catch (err: any) {
+          await fetchItems();
+        } catch {
           showToast('Failed to delete item', 'error');
         }
-      }
+      },
     });
   };
 
-  const filteredItems = items.filter(item => {
-    const matchesSearch = item.item_name.toLowerCase().includes(debouncedSearch.toLowerCase());
-    const matchesModule = moduleFilter === 'ALL' || item.source_module === moduleFilter;
-    return matchesSearch && matchesModule;
-  });
-
-  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
-  const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, moduleFilter]);
+  const loading = isLoading && items.length === 0;
 
   return (
     <>
@@ -219,7 +246,7 @@ export function RecycleBin() {
                   <th className="w-12 text-center">
                     <input
                       type="checkbox"
-                      checked={selectedIds.length > 0 && selectedIds.length === paginatedItems.length}
+                      checked={paginatedItems.length > 0 && selectedIds.length === paginatedItems.length}
                       onChange={handleSelectAll}
                       disabled={isRemoving}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
@@ -232,7 +259,9 @@ export function RecycleBin() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedItems.map((item) => (
+                {paginatedItems.map((item) => {
+                  const sourceModule: string = item.source_module;
+                  return (
                   <tr key={item.id} className={selectedIds.includes(item.id) ? 'bg-blue-50/50' : ''}>
                     <td className="text-center">
                       <input
@@ -248,19 +277,19 @@ export function RecycleBin() {
                     </td>
                     <td>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                        item.source_module === 'BOOKS' ? 'bg-blue-100 text-blue-800' :
-                        item.source_module === 'BATCH' ? 'bg-amber-100 text-amber-800' :
-                        item.source_module === 'PERSONNEL' ? 'bg-emerald-100 text-emerald-800' :
-                        item.source_module === 'RESEARCH_REF' ? 'bg-teal-100 text-teal-800' :
-                        item.source_module.startsWith('CMS_') ? 'bg-indigo-100 text-indigo-800' :
-                        item.source_module.startsWith('ERESOURCE_') ? 'bg-cyan-100 text-cyan-800' :
+                        sourceModule === 'BOOKS' ? 'bg-blue-100 text-blue-800' :
+                        sourceModule === 'BATCH' ? 'bg-amber-100 text-amber-800' :
+                        sourceModule === 'PERSONNEL' ? 'bg-emerald-100 text-emerald-800' :
+                        sourceModule === 'RESEARCH_REF' ? 'bg-teal-100 text-teal-800' :
+                        sourceModule.startsWith('CMS_') ? 'bg-indigo-100 text-indigo-800' :
+                        sourceModule.startsWith('ERESOURCE_') ? 'bg-cyan-100 text-cyan-800' :
                         'bg-purple-100 text-purple-800'
                       }`}>
-                        {item.source_module === 'BATCH' ? 'Batch' : 
-                         item.source_module === 'RESEARCH_REF' ? 'Research Ref' : 
-                         item.source_module === 'CMS_FILE' ? 'Manual File' :
-                         item.source_module === 'CMS_LINK' ? 'External Link' :
-                         item.source_module.replace('_', ' ').toLowerCase()}
+                        {sourceModule === 'BATCH' ? 'Batch' :
+                         sourceModule === 'RESEARCH_REF' ? 'Research Ref' :
+                         sourceModule === 'CMS_FILE' ? 'Manual File' :
+                         sourceModule === 'CMS_LINK' ? 'External Link' :
+                         sourceModule.replace('_', ' ').toLowerCase()}
                       </span>
                     </td>
                     <td>
@@ -268,7 +297,7 @@ export function RecycleBin() {
                         <Clock size={14} className="mr-1.5" />
                         {new Date(item.deleted_at).toLocaleString('en-US', {
                           month: 'short', day: 'numeric', year: 'numeric',
-                          hour: 'numeric', minute: '2-digit'
+                          hour: 'numeric', minute: '2-digit',
                         })}
                       </div>
                     </td>
@@ -291,18 +320,21 @@ export function RecycleBin() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
-            
-            {filteredItems.length > itemsPerPage && (
+
+            {totalItems > 0 && (
               <div className="p-4 border-t border-gray-100">
-                <Pagination 
+                <Pagination
                   currentPage={currentPage}
                   totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                  totalItems={filteredItems.length}
-                  itemsPerPage={itemsPerPage}
+                  onPageChange={setPage}
+                  totalItems={totalItems}
+                  itemsPerPage={pageSize}
+                  onPageSizeChange={setPageSize}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                 />
               </div>
             )}
@@ -310,9 +342,9 @@ export function RecycleBin() {
         )}
       </div>
 
-      <ConfirmModal 
-        isOpen={!!confirmModal} 
-        title={confirmModal?.title || ''} 
+      <ConfirmModal
+        isOpen={!!confirmModal}
+        title={confirmModal?.title || ''}
         message={confirmModal?.message || ''}
         confirmText="Empty Bin"
         type="danger"
@@ -320,10 +352,8 @@ export function RecycleBin() {
           confirmModal?.onConfirm();
           setConfirmModal(null);
         }}
-        onCancel={() => setConfirmModal(null)} 
+        onCancel={() => setConfirmModal(null)}
       />
     </>
   );
 }
-
-

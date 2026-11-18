@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getImageUrl } from '@/src/Libs/apiClient';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { getImageUrl, getThumbnailUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { ClassicHorizontalCarousel } from '@/src/Components/Shared/ClassicHorizontalCarousel';
@@ -12,7 +12,84 @@ interface GalleryModalItem {
   label: string;
 }
 
+type ImageStage = 'thumb' | 'full' | 'hidden';
 
+interface SectionProgressiveImageProps {
+  src: string;
+  alt: string;
+  preferThumbnail: boolean;
+  isHighPriority?: boolean;
+  loading?: 'eager' | 'lazy';
+  className: string;
+  shimmerClass?: string;
+  draggable?: boolean;
+  onClick?: (e: React.MouseEvent<HTMLImageElement>) => void;
+}
+
+const SectionProgressiveImage: React.FC<SectionProgressiveImageProps> = ({
+  src,
+  alt,
+  preferThumbnail,
+  isHighPriority = false,
+  loading = 'lazy',
+  className,
+  shimmerClass = 'skeleton-shimmer',
+  draggable = false,
+  onClick,
+}) => {
+  const thumbUrl = getThumbnailUrl(src);
+  const fullUrl = getImageUrl(src);
+  const hasDistinctThumb = Boolean(preferThumbnail && thumbUrl && thumbUrl !== fullUrl);
+
+  const [stage, setStage] = useState<ImageStage>(() => (hasDistinctThumb ? 'thumb' : 'full'));
+  const [loaded, setLoaded] = useState<boolean>(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setStage(hasDistinctThumb ? 'thumb' : 'full');
+    setLoaded(false);
+  }, [src, hasDistinctThumb]);
+
+  const resolvedSrc = stage === 'thumb' ? thumbUrl : stage === 'full' ? fullUrl : '';
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setLoaded(true);
+    }
+  }, [resolvedSrc]);
+
+  if (stage === 'hidden' || !resolvedSrc) {
+    return null;
+  }
+
+  return (
+    <>
+      {!loaded && <div className={`absolute inset-0 ${shimmerClass}`} aria-hidden="true" />}
+      <img
+        ref={imgRef}
+        src={resolvedSrc}
+        alt={alt}
+        className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        loading={loading}
+        decoding="async"
+        fetchPriority={isHighPriority ? 'high' : 'auto'}
+        draggable={draggable}
+        onClick={onClick}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          setLoaded(false);
+          if (stage === 'thumb') {
+            setStage('full');
+          } else {
+            setStage('hidden');
+            setLoaded(true);
+          }
+        }}
+      />
+    </>
+  );
+};
 
 /** Resolve a GalleryImage from the backend into a displayable src URL */
 function resolveImageSrc(img: GalleryImage): string {
@@ -26,7 +103,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
   const [page, setPage] = useState(0);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  
+
   const PER_PAGE = 30;
   const totalPages = Math.max(1, Math.ceil(images.length / PER_PAGE));
   const currentPage = Math.min(page, totalPages - 1);
@@ -38,7 +115,7 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 ] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-modal-overlay z-[9999]" onClick={onClose}>
+    <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-modal-overlay z-[9999]" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="font-headline-md text-lg font-bold text-primary">Library Section Gallery</h2>
@@ -72,23 +149,23 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
           {viewMode === 'card' ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {pageItems.map((img, idx) => (
-                <div key={currentPage * PER_PAGE + idx} 
-                     className="rounded-xl overflow-hidden shadow-md border border-gray-100 cursor-pointer group"
-                     onClick={() => setSelectedImage(img.src)}
+                <div
+                  key={currentPage * PER_PAGE + idx}
+                  className="rounded-xl overflow-hidden shadow-md border border-gray-100 cursor-pointer group"
+                  onClick={() => setSelectedImage(img.src)}
                 >
-                  <div className="overflow-hidden relative" style={{ aspectRatio: '4 / 3' }}>
-                    <img 
-                      src={getImageUrl(img.src)} 
-                      alt={img.label} 
-                      className="w-full h-full object-cover block transition-transform duration-500 group-hover:scale-110" 
-                      loading="lazy" 
-                      draggable={false} 
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
+                  <div className="overflow-hidden relative bg-slate-100" style={{ aspectRatio: '4 / 3' }}>
+                    <SectionProgressiveImage
+                      src={img.src}
+                      alt={img.label}
+                      preferThumbnail={true}
+                      loading="lazy"
+                      className="w-full h-full object-cover block transition-transform duration-500 group-hover:scale-110"
+                      shimmerClass="skeleton-shimmer"
+                      draggable={false}
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                       <span className="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity">zoom_in</span>
+                      <span className="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity">zoom_in</span>
                     </div>
                   </div>
                   <p className="text-xs text-gray-600 p-2 text-center font-medium truncate">{img.label}</p>
@@ -112,14 +189,16 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
                       <tr key={realIdx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedImage(img.src)}>
                         <td className="py-3 px-3 text-gray-400 text-xs">{realIdx}</td>
                         <td className="py-3 px-3">
-                          <img 
-                            src={getImageUrl(img.src)} 
-                            alt={img.label} 
-                            className="w-16 h-10 object-cover rounded" 
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
+                          <div className="relative w-16 h-10 rounded overflow-hidden bg-slate-100">
+                            <SectionProgressiveImage
+                              src={img.src}
+                              alt={img.label}
+                              preferThumbnail={true}
+                              loading="lazy"
+                              className="w-16 h-10 object-cover rounded block"
+                              shimmerClass="skeleton-shimmer"
+                            />
+                          </div>
                         </td>
                         <td className="py-3 px-3 text-primary font-medium">{img.label}</td>
                       </tr>
@@ -132,13 +211,19 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
         </div>
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0}
-              className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-transparent">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={currentPage === 0}
+              className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-transparent"
+            >
               Previous
             </button>
             <span className="text-sm text-gray-500">Page {currentPage + 1} of {totalPages}</span>
-            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={currentPage >= totalPages - 1}
-              className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-transparent">
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={currentPage >= totalPages - 1}
+              className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-transparent"
+            >
               Next
             </button>
           </div>
@@ -146,26 +231,28 @@ const GalleryViewModal: React.FC<{ images: GalleryModalItem[]; isOpen: boolean; 
 
         {/* Lightbox Overlay */}
         {selectedImage && (
-          <div 
-            className="fixed inset-0 ] flex items-center justify-center bg-black/90 p-4 animate-modal-overlay z-[9999]" 
+          <div
+            className="fixed inset-0 flex items-center justify-center bg-black/90 p-4 animate-modal-overlay z-[9999]"
             onClick={() => setSelectedImage(null)}
           >
-            <button 
+            <button
               className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors z-[210] cursor-pointer"
               onClick={() => setSelectedImage(null)}
               aria-label="Close enlarged image"
             >
               <span className="material-symbols-outlined text-4xl">close</span>
             </button>
-            <img 
-              src={getImageUrl(selectedImage)} 
-              alt="Enlarged view" 
-              className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl animate-modal-card" 
-              onClick={(e) => e.stopPropagation()} 
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
+            <div className="relative min-w-[240px] min-h-[180px] flex items-center justify-center rounded-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <SectionProgressiveImage
+                src={selectedImage}
+                alt="Enlarged view"
+                preferThumbnail={false}
+                isHighPriority={true}
+                loading="eager"
+                className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl animate-modal-card"
+                shimmerClass="skeleton-shimmer-navy"
+              />
+            </div>
           </div>
         )}
       </div>
@@ -197,12 +284,12 @@ export const LibrarySectionCarousel: React.FC = () => {
     }
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const data = await galleryApi.getAllImages();
-      const activeImages = data.filter(img => img.is_active);
+      const activeImages = data.filter((img) => img.is_active);
       if (activeImages.length > 0) {
-        const mapped = activeImages.map(img => {
+        const mapped = activeImages.map((img) => {
           let label = img.title || 'Library Section';
           if (img.section_label && img.section_label !== 'Physical Setup' && img.section_label !== 'Library Interior') {
             label = img.section_label;
@@ -227,16 +314,17 @@ export const LibrarySectionCarousel: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   useAutoRefresh(loadData, 30000);
 
   const goTo = useCallback((idx: number) => {
     const len = sectionImages.length;
+    if (len === 0) return;
     const wrapped = ((idx % len) + len) % len;
     setActiveIdx(wrapped);
   }, [sectionImages.length]);
@@ -245,9 +333,10 @@ export const LibrarySectionCarousel: React.FC = () => {
   const next = useCallback(() => goTo(activeIdx + 1), [goTo, activeIdx]);
 
   useEffect(() => {
+    if (sectionImages.length <= 1) return;
     const id = setInterval(next, 5000);
     return () => clearInterval(id);
-  }, [next]);
+  }, [next, sectionImages.length]);
 
   const getPosition = (idx: number): 'active' | 'right' | 'left' | 'far-right' | 'far-left' | 'hidden' => {
     const len = sectionImages.length;
@@ -261,7 +350,7 @@ export const LibrarySectionCarousel: React.FC = () => {
   };
 
   return (
-    <div id="library-section" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <div id="library-section" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={(el) => { ref.current = el; }}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-8">
           <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>
@@ -275,7 +364,7 @@ export const LibrarySectionCarousel: React.FC = () => {
         <div className="p-6 md:p-10 bg-transparent min-h-[340px]">
           {isLoading && sectionImages.length === 0 ? (
             <div className="flex gap-4 overflow-hidden py-4 max-w-5xl mx-auto justify-center">
-              {[1, 2, 3, 4].map(idx => (
+              {[1, 2, 3, 4].map((idx) => (
                 <div
                   key={idx}
                   className="w-56 h-72 rounded-2xl skeleton-shimmer-navy shrink-0 border border-gold-light/20 shadow-lg"
@@ -292,7 +381,7 @@ export const LibrarySectionCarousel: React.FC = () => {
           ) : carouselStyle === 'classic' ? (
             <>
               <ClassicHorizontalCarousel
-                items={sectionImages.map(img => ({ src: img.src, label: img.label }))}
+                items={sectionImages.map((img) => ({ src: img.src, label: img.label }))}
               />
               <div className="flex justify-center mt-6 relative z-40">
                 <button
@@ -311,56 +400,60 @@ export const LibrarySectionCarousel: React.FC = () => {
                   <span className="material-symbols-outlined">chevron_left</span>
                 </button>
 
-            <div className="carousel-3d-stage relative min-h-[450px] md:min-h-[550px] w-full">
-              {sectionImages.map((img, idx) => {
-                const pos = getPosition(idx);
-                return (
-                  <div
-                    key={idx}
-                    className={`carousel-3d-card ${pos}`}
-                    style={{
-                      width: pos === 'active' ? '100%' : pos === 'right' || pos === 'left' ? '85%' : '70%',
-                      maxWidth: pos === 'active' ? '800px' : pos === 'right' || pos === 'left' ? '650px' : '500px',
-                    }}
-                    onClick={() => {
-                      if (pos === 'active') {
-                        setExpandedImage(img);
-                      } else {
-                        goTo(idx);
-                      }
-                    }}
-                  >
-                    <div className="w-full" style={{ aspectRatio: '16 / 10' }}>
-                      <img
-                        src={getImageUrl(img.src)}
-                        alt={img.label}
-                        className="w-full h-full object-cover block"
-                        loading="lazy"
-                        draggable={false}
-                      />
-                    </div>
-                    {pos === 'active' && (
-                      <div 
-                        className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity cursor-zoom-in"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedImage(img);
+                <div className="carousel-3d-stage relative min-h-[450px] md:min-h-[550px] w-full">
+                  {sectionImages.map((img, idx) => {
+                    const pos = getPosition(idx);
+                    const isActive = pos === 'active';
+                    return (
+                      <div
+                        key={idx}
+                        className={`carousel-3d-card ${pos}`}
+                        style={{
+                          width: isActive ? '100%' : pos === 'right' || pos === 'left' ? '85%' : '70%',
+                          maxWidth: isActive ? '800px' : pos === 'right' || pos === 'left' ? '650px' : '500px',
+                        }}
+                        onClick={() => {
+                          if (isActive) {
+                            setExpandedImage(img);
+                          } else {
+                            goTo(idx);
+                          }
                         }}
                       >
-                        <span className="text-white font-medium flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
-                          <span className="material-symbols-outlined text-sm">fullscreen</span>
-                          Click to expand
-                        </span>
+                        <div className="w-full relative overflow-hidden bg-primary" style={{ aspectRatio: '16 / 10' }}>
+                          <SectionProgressiveImage
+                            src={img.src}
+                            alt={img.label}
+                            preferThumbnail={true}
+                            isHighPriority={isActive}
+                            loading={isActive ? 'eager' : 'lazy'}
+                            className="w-full h-full object-cover block"
+                            shimmerClass="skeleton-shimmer-navy"
+                            draggable={false}
+                          />
+                        </div>
+                        {isActive && (
+                          <div
+                            className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity cursor-zoom-in"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedImage(img);
+                            }}
+                          >
+                            <span className="text-white font-medium flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
+                              <span className="material-symbols-outlined text-sm">fullscreen</span>
+                              Click to expand
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
 
-            <button className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-50" onClick={next} aria-label="Next section picture">
-              <span className="material-symbols-outlined">chevron_right</span>
-            </button>
+                <button className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-50" onClick={next} aria-label="Next section picture">
+                  <span className="material-symbols-outlined">chevron_right</span>
+                </button>
               </div>
 
               <div className="flex items-center justify-center gap-2 mt-8 relative z-40">
@@ -393,14 +486,14 @@ export const LibrarySectionCarousel: React.FC = () => {
         </div>
       </div>
       <GalleryViewModal images={sectionImages} isOpen={galleryOpen} onClose={() => setGalleryOpen(false)} />
-      
+
       {/* Floating Modal for Picture Expansion */}
       {expandedImage && createPortal(
-        <div 
-          className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 z-[9999] animate-modal-overlay" 
+        <div
+          className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 z-[9999] animate-modal-overlay"
           onClick={() => setExpandedImage(null)}
         >
-          <button 
+          <button
             className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors z-[210] cursor-pointer"
             onClick={() => setExpandedImage(null)}
             aria-label="Close enlarged image"
@@ -408,11 +501,17 @@ export const LibrarySectionCarousel: React.FC = () => {
             <span className="material-symbols-outlined text-4xl">close</span>
           </button>
           <div className="flex flex-col items-center animate-modal-card" onClick={(e) => e.stopPropagation()}>
-            <img 
-              src={getImageUrl(expandedImage.src)} 
-              alt={expandedImage.label} 
-              className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
-            />
+            <div className="relative min-w-[240px] min-h-[180px] flex items-center justify-center rounded-lg overflow-hidden">
+              <SectionProgressiveImage
+                src={expandedImage.src}
+                alt={expandedImage.label}
+                preferThumbnail={false}
+                isHighPriority={true}
+                loading="eager"
+                className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+                shimmerClass="skeleton-shimmer-navy"
+              />
+            </div>
             <p className="text-white font-headline-md font-bold text-2xl mt-6 tracking-wide drop-shadow-md">
               {expandedImage.label}
             </p>

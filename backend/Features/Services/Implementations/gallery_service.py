@@ -22,17 +22,35 @@ class LibraryInteriorImageService(ILibraryInteriorImageService):
     def get_by_id(self, image_id: int):
         return self._repo.get_by_id(image_id)
 
-    def create(self, data: dict):
+    @staticmethod
+    def _prepare_gallery_data(data: dict) -> dict:
         from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
-        if 'image' in data and data['image']:
-            MalwareScannerHelper.verify_image_safety(data['image'])
-        return self._repo.create(data)
+        from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
+
+        data_copy = dict(data)
+        image = data_copy.get('image')
+        if image and hasattr(image, 'read'):
+            MalwareScannerHelper.verify_image_safety(image)
+            data_copy['image'] = ImageOptimizerHelper.optimize_uploaded_image(image)
+        return data_copy
+
+    def create(self, data: dict):
+        from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
+
+        data_copy = self._prepare_gallery_data(data)
+        item = self._repo.create(data_copy)
+        if item and getattr(item, 'image', None):
+            ImageOptimizerHelper.ensure_thumbnail_for_field(item.image)
+        return item
 
     def update(self, image_id: int, data: dict):
-        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
-        if 'image' in data and data['image']:
-            MalwareScannerHelper.verify_image_safety(data['image'])
-        return self._repo.update(image_id, data)
+        from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
+
+        data_copy = self._prepare_gallery_data(data)
+        item = self._repo.update(image_id, data_copy)
+        if item and getattr(item, 'image', None) and 'image' in data_copy:
+            ImageOptimizerHelper.ensure_thumbnail_for_field(item.image)
+        return item
 
     def delete(self, image_id: int, user_id: int = None) -> bool:
         item = self._repo.get_by_id(image_id)

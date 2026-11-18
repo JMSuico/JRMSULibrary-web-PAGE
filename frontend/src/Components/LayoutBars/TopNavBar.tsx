@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { assets } from '@/src/Libs/Assets/data';
-import { settingsApi } from '@/src/Endpoints/settingsApi';
+import { settingsApi, type SiteSettings } from '@/src/Endpoints/settingsApi';
+import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
+import { prefetchRoute } from '@/src/Libs/routePrefetch';
 
 export const TopNavBar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
-  // Settings state
-  const [libraryName, setLibraryName] = useState('JRMSU Katipunan Campus Library');
+
+  const { data: settings } = useCachedQuery<SiteSettings>({
+    key: 'public:settings',
+    fetcher: () => settingsApi.getSettings(),
+    staleTimeMs: 60000,
+    persistStorage: true,
+    listenCmsUpdate: true,
+  });
+
+  const libraryName = settings?.library_name || 'JRMSU Katipunan Campus Library';
 
   // State for dropdowns
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -22,15 +31,6 @@ export const TopNavBar: React.FC = () => {
       setScrolled(window.scrollY > 60);
     };
     window.addEventListener('scroll', handleScroll);
-    
-    // Fetch settings
-    settingsApi.getSettings()
-      .then(data => {
-        if (data && data.library_name) {
-          setLibraryName(data.library_name);
-        }
-      })
-      .catch(err => console.error(err));
 
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -109,6 +109,8 @@ export const TopNavBar: React.FC = () => {
 
           {/* Logo — links to home on desktop, also triggers sidebar on mobile via parent div */}
           <button
+            onMouseEnter={() => prefetchRoute('/')}
+            onFocus={() => prefetchRoute('/')}
             onClick={() => handleNavClick('/')}
             className="flex items-center gap-3 cursor-pointer bg-transparent border-none p-0"
             aria-label="Go to Home"
@@ -136,6 +138,7 @@ export const TopNavBar: React.FC = () => {
               key={link.path} 
               className="relative"
               onMouseEnter={() => {
+                prefetchRoute(link.path);
                 if (link.label === 'About') setAboutOpen(true);
                 if (link.label === 'Administration') setAdministrationOpen(true);
                 if (link.label === 'Collection') setCollectionOpen(true);
@@ -152,6 +155,7 @@ export const TopNavBar: React.FC = () => {
                     className={`transition-colors relative nav-underline cursor-pointer bg-transparent border-none p-0 flex items-center ${
                       isActive(link.path) ? 'text-gold-light' : 'text-white/80 hover:text-gold-light'
                     }`}
+                    onFocus={() => prefetchRoute(link.path)}
                     onClick={() => {
                       closeAllDropdowns();
                       if (link.label === 'About') { setAboutOpen(!aboutOpen); handleNavClick(link.path); }
@@ -184,6 +188,8 @@ export const TopNavBar: React.FC = () => {
                           <button
                             key={item.label}
                             className="w-full text-left px-5 py-3 text-sm text-on-surface hover:bg-primary/5 hover:text-primary transition-colors border-b border-outline-variant/50 last:border-b-0 cursor-pointer bg-transparent"
+                            onMouseEnter={() => prefetchRoute(item.path)}
+                            onFocus={() => prefetchRoute(item.path)}
                             onClick={() => handleNavClick(item.path)}
                           >
                             {item.label}
@@ -198,6 +204,8 @@ export const TopNavBar: React.FC = () => {
                   className={`transition-colors relative nav-underline cursor-pointer bg-transparent border-none p-0 flex items-center ${
                     isActive(link.path) ? 'text-gold-light' : 'text-white/80 hover:text-gold-light'
                   }`}
+                  onMouseEnter={() => prefetchRoute(link.path)}
+                  onFocus={() => prefetchRoute(link.path)}
                   onClick={() => handleNavClick(link.path)}
                 >
                   {link.label}
@@ -285,6 +293,8 @@ export const TopNavBar: React.FC = () => {
                         <button
                           key={item.label}
                           className="w-full text-left text-on-primary/60 hover:text-gold-light transition-colors py-2.5 text-xs uppercase tracking-wider cursor-pointer bg-transparent border-none"
+                          onMouseEnter={() => prefetchRoute(item.path)}
+                          onFocus={() => prefetchRoute(item.path)}
                           onClick={() => handleNavClick(item.path)}
                         >
                           {item.label}
@@ -298,6 +308,8 @@ export const TopNavBar: React.FC = () => {
                   className={`w-full text-left py-3 border-b border-gold-light/10 text-sm uppercase tracking-wider font-medium cursor-pointer bg-transparent border-none ${
                     isActive(link.path) ? 'text-gold-light' : 'text-on-primary/80 hover:text-gold-light'
                   }`}
+                  onMouseEnter={() => prefetchRoute(link.path)}
+                  onFocus={() => prefetchRoute(link.path)}
                   onClick={() => handleNavClick(link.path)}
                 >
                   {link.label}

@@ -17,6 +17,9 @@ export interface RatingsSummary {
 
 export interface ReportSummary {
   total_visits: number;
+  all_time_visits?: number;
+  this_week_visits?: number;
+  this_month_visits?: number;
   total_books: number;
   total_emails: number;
   total_reservations: number;
@@ -31,6 +34,10 @@ export interface ReportSummary {
     name: string;
     visits: number;
     books: number;
+  }[];
+  weekly_trend_data?: {
+    name: string;
+    visits: number;
   }[];
   recent_books: {
     id: number;

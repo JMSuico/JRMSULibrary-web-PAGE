@@ -24,50 +24,84 @@ import {
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
 import { useEffect, useState, useMemo } from 'react';
 import { useToast } from '@/src/Hooks/useToast';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { createPortal } from 'react-dom';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 
 export function Dashboard() {
-  const [data, setData] = useState<ReportSummary | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showAllBooksModal, setShowAllBooksModal] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
   const debouncedBookSearch = useDebounce(bookSearch, 400);
-  const [currentPage, setCurrentPage] = useState(1);
   const { showToast } = useToast();
 
-  const loadData = async () => {
-    try {
-      const summary = await reportApi.getSummary();
-      setData(summary);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load dashboard data', 'error');
-    } finally {
-      setLoading(false);
+  const { data, isLoading, error } = useCachedQuery<ReportSummary>({
+    key: 'admin:dashboard:summary',
+    fetcher: () => reportApi.getSummary(),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  useEffect(() => {
+    if (error) {
+      showToast(error.message || 'Failed to load dashboard data', 'error');
     }
-  };
+  }, [error, showToast]);
 
+  const sortedRecentBooks = useMemo(() => {
+    return (data?.recent_books || [])
+      .slice()
+      .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
+  }, [data?.recent_books]);
+
+  const filteredModalBooks = useMemo(() => {
+    const query = debouncedBookSearch.toLowerCase();
+    return (data?.recent_books || [])
+      .slice()
+      .sort((a, b) => a.dateAdded.localeCompare(b.dateAdded))
+      .filter(
+        (b) =>
+          !query ||
+          b.title.toLowerCase().includes(query) ||
+          b.author.toLowerCase().includes(query) ||
+          b.category.toLowerCase().includes(query),
+      );
+  }, [data?.recent_books, debouncedBookSearch]);
+
+  const recentBooksPagination = usePagination<ReportSummary['recent_books'][number]>({
+    items: sortedRecentBooks,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_dashboard_recent_page_size',
+  });
+
+  const modalBooksPagination = usePagination<ReportSummary['recent_books'][number]>({
+    items: filteredModalBooks,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_dashboard_modal_page_size',
+  });
+
+  const { setPage: setModalPage } = modalBooksPagination;
   useEffect(() => {
-    loadData();
-  }, []);
+    setModalPage(1);
+  }, [debouncedBookSearch, setModalPage]);
 
-  // Reset page when search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedBookSearch]);
-
-  useAutoRefresh(loadData, 30000);
-
-  if (loading || !data) return <div className="p-8 text-center text-gray-500">Loading Dashboard...</div>;
+  if (isLoading && !data) {
+    return <div className="p-8 text-center text-gray-500">Loading Dashboard...</div>;
+  }
+  if (!data) {
+    return <div className="p-8 text-center text-gray-500">Loading Dashboard...</div>;
+  }
 
   const weeklyVisitors = (data.trend_data ?? []).reduce((sum, d) => sum + d.visits, 0);
+  const siteVisitorsValue = data.all_time_visits ?? data.total_visits;
+  const thisWeekVisitorsValue = data.this_week_visits ?? weeklyVisitors;
+  const visitData = data.weekly_trend_data ?? (data.trend_data ?? []).slice().reverse();
 
   const MOCK_METRICS = [
     { label: 'Total Books', value: data.total_books, icon: <BookOpen size={22} />, variant: 'navy' as const },
-    { label: 'Site Visitors', value: data.total_visits, icon: <Users size={22} />, variant: 'gold' as const },
-    { label: 'Website Visitors (This Week)', value: weeklyVisitors, icon: <Eye size={22} />, variant: 'blue' as const },
+    { label: 'Site Visitors', value: siteVisitorsValue, icon: <Users size={22} />, variant: 'gold' as const },
+    { label: 'Website Visitors (This Week)', value: thisWeekVisitorsValue, icon: <Eye size={22} />, variant: 'blue' as const },
     { label: 'Total Emails', value: data.total_emails, icon: <Image size={22} />, variant: 'green' as const },
     { label: 'Reservations', value: data.total_reservations, icon: <FolderTree size={22} />, variant: 'purple' as const },
   ];
@@ -82,20 +116,18 @@ export function Dashboard() {
       {/* Metric Cards */}
       <div className="admin-metrics">
         {MOCK_METRICS.map((m) => (
-          <MetricCard 
-            key={m.label} 
-            label={m.label} 
-            value={m.value} 
-            icon={m.icon} 
-            variant={m.variant} 
+          <MetricCard
+            key={m.label}
+            label={m.label}
+            value={m.value}
+            icon={m.icon}
+            variant={m.variant}
           />
         ))}
       </div>
 
-
       {/* Quick Charts — uses .admin-dashboard-charts CSS class (not inline style) */}
       <div className="admin-dashboard-charts">
-        
         {/* Newly Acquired Books Trend */}
         <div className="admin-table-wrapper" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -106,7 +138,7 @@ export function Dashboard() {
             {(() => {
               const chartData = (() => {
                 const counts: Record<string, number> = {};
-                (data.recent_books || []).forEach(b => {
+                (data.recent_books || []).forEach((b) => {
                   counts[b.dateAdded] = (counts[b.dateAdded] || 0) + 1;
                 });
                 return Object.entries(counts)
@@ -117,17 +149,17 @@ export function Dashboard() {
               return (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-200)' />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-gray-200)" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--color-gray-500)', fontSize: 12 }} dy={10} />
                     <YAxis type="number" domain={yAxis.domain} ticks={yAxis.ticks} axisLine={false} tickLine={false} tick={{ fill: 'var(--color-gray-500)', fontSize: 12 }} allowDecimals={false} />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px var(--color-black-alpha-10)' }}
                       cursor={{ fill: 'var(--color-gray-100)' }}
                     />
-                    <Bar 
-                      dataKey="books" 
-                      fill='var(--color-navy)' 
-                      radius={[4, 4, 0, 0]} 
+                    <Bar
+                      dataKey="books"
+                      fill="var(--color-navy)"
+                      radius={[4, 4, 0, 0]}
                       barSize={40}
                     />
                   </BarChart>
@@ -144,7 +176,6 @@ export function Dashboard() {
             <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-gray-900)' }}>Website Visitors (This Week)</span>
           </div>
           {(() => {
-            const visitData = (data.trend_data ?? []).slice().reverse();
             const yAxis = dynamicAxis(extractValues(visitData, 'visits'));
             return (
               <div style={{ height: 260 }}>
@@ -156,7 +187,7 @@ export function Dashboard() {
                         <stop offset="95%" stopColor="var(--color-gold)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--color-gray-200)' />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-gray-200)" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--color-gray-500)', fontSize: 12 }} dy={10} />
                     <YAxis type="number" domain={yAxis.domain} ticks={yAxis.ticks} axisLine={false} tickLine={false} tick={{ fill: 'var(--color-gray-500)', fontSize: 12 }} />
                     <Tooltip
@@ -192,31 +223,24 @@ export function Dashboard() {
           </button>
         </div>
         <div className="admin-table-scroll">
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Author</th>
-              <th>Category</th>
-              <th>Date Added</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!(data.recent_books && data.recent_books.length > 0) ? (
+          <table className="admin-table">
+            <thead>
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: 'var(--color-gray-500)' }}>
-                  No recent books added.
-                </td>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Category</th>
+                <th>Date Added</th>
               </tr>
-            ) : (
-              (() => {
-                // Ensure sorting is newest first (descending)
-                const sortedBooks = (data.recent_books || []).slice().sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
-                const itemsPerPage = 10;
-                // We use currentPage for both main table and modal to keep it simple, or introduce a separate state.
-                // Let's just paginate based on a local state if needed, or re-use currentPage since modal is overlay.
-                const paginatedBooks = sortedBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-                return paginatedBooks.map((book) => (
+            </thead>
+            <tbody>
+              {recentBooksPagination.totalItems === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: 'var(--color-gray-500)' }}>
+                    No recent books added.
+                  </td>
+                </tr>
+              ) : (
+                recentBooksPagination.paginatedItems.map((book) => (
                   <tr key={book.id}>
                     <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>{book.title}</td>
                     <td>{book.author}</td>
@@ -225,22 +249,23 @@ export function Dashboard() {
                     </td>
                     <td style={{ color: 'var(--color-gray-500)' }}>{book.dateAdded}</td>
                   </tr>
-                ));
-              })()
-            )}
-          </tbody>
-        </table>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-        
+
         {/* Main Table Pagination */}
-        {(data.recent_books || []).length > 10 && (
+        {recentBooksPagination.totalItems > 0 && (
           <div style={{ padding: '0 20px 20px 20px' }}>
-            <Pagination 
-              currentPage={currentPage}
-              totalPages={Math.ceil((data.recent_books || []).length / 10)}
-              onPageChange={setCurrentPage}
-              totalItems={(data.recent_books || []).length}
-              itemsPerPage={10}
+            <Pagination
+              currentPage={recentBooksPagination.currentPage}
+              totalPages={recentBooksPagination.totalPages}
+              onPageChange={recentBooksPagination.setPage}
+              totalItems={recentBooksPagination.totalItems}
+              itemsPerPage={recentBooksPagination.pageSize}
+              onPageSizeChange={recentBooksPagination.setPageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
             />
           </div>
         )}
@@ -248,7 +273,7 @@ export function Dashboard() {
 
       {/* All Books Modal */}
       {showAllBooksModal && createPortal(
-        <div className="fixed backdrop-blur-sm inset-0 ] flex items-center justify-center bg-black/60 p-4 z-[9999] animate-modal-overlay" onClick={() => setShowAllBooksModal(false)}>
+        <div className="fixed backdrop-blur-sm inset-0 flex items-center justify-center bg-black/60 p-4 z-[9999] animate-modal-overlay" onClick={() => setShowAllBooksModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
               <div>
@@ -283,79 +308,45 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => {
-                    const filteredBooks = (data.recent_books || [])
-                      .slice()
-                      .sort((a, b) => a.dateAdded.localeCompare(b.dateAdded))
-                      .filter(b =>
-                        !debouncedBookSearch ||
-                        b.title.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
-                        b.author.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
-                        b.category.toLowerCase().includes(debouncedBookSearch.toLowerCase())
-                      );
-                    
-                    const itemsPerPage = 10;
-                    const totalPages = Math.ceil(filteredBooks.length / itemsPerPage);
-                    const paginatedBooks = filteredBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-                    if (filteredBooks.length === 0) {
-                      return (
-                        <tr><td colSpan={5} className="text-center py-12 text-gray-400">No books found.</td></tr>
-                      );
-                    }
-
-                    return (
-                      <>
-                        {paginatedBooks.map((book, idx) => (
-                          <tr key={book.id} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="px-4 py-3 text-gray-400 text-xs">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                            <td className="px-4 py-3 font-medium text-gray-900">{book.title}</td>
-                            <td className="px-4 py-3 text-gray-600">{book.author}</td>
-                            <td className="px-4 py-3"><span className="admin-badge admin-badge--info">{book.category}</span></td>
-                            <td className="px-4 py-3 text-gray-500">{book.dateAdded}</td>
-                          </tr>
-                        ))}
-                      </>
-                    );
-                  })()}
+                  {modalBooksPagination.totalItems === 0 ? (
+                    <tr><td colSpan={5} className="text-center py-12 text-gray-400">No books found.</td></tr>
+                  ) : (
+                    modalBooksPagination.paginatedItems.map((book, idx) => (
+                      <tr key={book.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-400 text-xs">
+                          {(modalBooksPagination.currentPage - 1) * modalBooksPagination.pageSize + idx + 1}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{book.title}</td>
+                        <td className="px-4 py-3 text-gray-600">{book.author}</td>
+                        <td className="px-4 py-3"><span className="admin-badge admin-badge--info">{book.category}</span></td>
+                        <td className="px-4 py-3 text-gray-500">{book.dateAdded}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-            
+
             {/* Pagination Controls */}
-            {(() => {
-              const filteredBooks = data.recent_books.filter(b =>
-                !debouncedBookSearch ||
-                b.title.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
-                b.author.toLowerCase().includes(debouncedBookSearch.toLowerCase()) ||
-                b.category.toLowerCase().includes(debouncedBookSearch.toLowerCase())
-              );
-              const itemsPerPage = 10;
-              const totalPages = Math.ceil(filteredBooks.length / itemsPerPage);
-              
-              if (totalPages > 1) {
-                return (
-                  <Pagination 
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                    totalItems={filteredBooks.length}
-                    itemsPerPage={itemsPerPage}
-                  />
-                );
-              }
-              return null;
-            })()}
+            {modalBooksPagination.totalItems > 0 && (
+              <Pagination
+                currentPage={modalBooksPagination.currentPage}
+                totalPages={modalBooksPagination.totalPages}
+                onPageChange={modalBooksPagination.setPage}
+                totalItems={modalBooksPagination.totalItems}
+                itemsPerPage={modalBooksPagination.pageSize}
+                onPageSizeChange={modalBooksPagination.setPageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+              />
+            )}
 
             <div className="px-6 py-3 border-t border-gray-100 text-right">
               <button onClick={() => setShowAllBooksModal(false)} className="admin-btn admin-btn--primary cursor-pointer">Close</button>
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
     </>
   );
 }
-
-

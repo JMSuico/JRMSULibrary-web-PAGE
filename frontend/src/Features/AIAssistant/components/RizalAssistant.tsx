@@ -7,9 +7,11 @@ import {
   settingsApi,
   RESERVATION_ROOMS,
   normalizeRoomAvailability,
+  type SiteSettings,
 } from '@/src/Endpoints/settingsApi';
 import { ensureCsrfToken } from '@/src/Libs/apiClient';
 import { useDraggableBubble } from '@/src/Hooks/useDraggableBubble';
+import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
 
 type ChatFlowState = 'suggestions' | 'email-form' | 'reservation-form' | 'rate-form' | 'credential-request-form';
 
@@ -345,7 +347,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     }
   }, [chatFlowState, isExpanded, isTyping]);
 
-  // Abort in-flight requests when chat modal is closed, or refresh AI status when opened
+  // Abort in-flight requests when chat modal is closed, or pre-warm CSRF & refresh AI status when opened
   useEffect(() => {
     if (!isExpanded) {
       if (abortControllerRef.current) {
@@ -355,6 +357,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       return;
     }
 
+    void aiApi.prewarmCsrf();
     let isCancelled = false;
     void aiApi.getStatus().then((status) => {
       if (!isCancelled) {
@@ -395,25 +398,38 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
   const [formFiles, setFormFiles] = useState<File[]>([]);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: cachedSettings, refetch: refetchSettings } = useCachedQuery<SiteSettings>({
+    key: 'public:settings',
+    fetcher: () => settingsApi.getSettings(),
+    staleTimeMs: 60000,
+    persistStorage: true,
+    listenCmsUpdate: true,
+  });
+
   const [roomAvailability, setRoomAvailability] = useState<Record<string, boolean>>(() =>
-    normalizeRoomAvailability()
+    normalizeRoomAvailability(cachedSettings?.room_availability)
   );
   const [isRoomDropdownOpen, setIsRoomDropdownOpen] = useState(false);
 
+  useEffect(() => {
+    if (!cachedSettings) return;
+    const normalized = normalizeRoomAvailability(cachedSettings.room_availability);
+    setRoomAvailability(normalized);
+    setFormRoom((prev) => (prev && normalized[prev] === false ? '' : prev));
+  }, [cachedSettings]);
+
   const refreshRoomAvailability = useCallback(async () => {
     try {
-      const settings = await settingsApi.getSettings();
-      const normalized = normalizeRoomAvailability(settings.room_availability);
-      setRoomAvailability(normalized);
-      setFormRoom((prev) => (prev && normalized[prev] === false ? '' : prev));
+      const settings = await refetchSettings(true);
+      if (settings) {
+        const normalized = normalizeRoomAvailability(settings.room_availability);
+        setRoomAvailability(normalized);
+        setFormRoom((prev) => (prev && normalized[prev] === false ? '' : prev));
+      }
     } catch {
       // Retain existing availability state if settings fetch fails
     }
-  }, []);
-
-  useEffect(() => {
-    void refreshRoomAvailability();
-  }, [refreshRoomAvailability]);
+  }, [refetchSettings]);
 
   useEffect(() => {
     if (chatFlowState === 'reservation-form') {

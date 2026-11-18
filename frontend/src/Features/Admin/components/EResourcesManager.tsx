@@ -1,56 +1,57 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoints/eresourceApi';
-import { Save, Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
-import { processInChunks } from '@/src/Libs/chunkUtils';
 
 export function EResourcesManager() {
-  const [departments, setDepartments] = useState<EResourceDepartment[]>([]);
-  const [loading, setLoading] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
-  
+
   const [selectedDeptIds, setSelectedDeptIds] = useState<Set<number>>(new Set());
   const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(new Set());
 
   // Modals
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<EResourceDepartment | null>(null);
-  
+
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  
+
   const [isSavingDept, setIsSavingDept] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
-  
+
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const { showToast, removeToast } = useToast();
   const [isRemoving, setIsRemoving] = useState(false);
 
+  const {
+    data: cachedDepartments,
+    isLoading,
+    error,
+    refetch: loadData,
+    mutate: mutateDepartments,
+  } = useCachedQuery<EResourceDepartment[]>({
+    key: 'admin:eresources',
+    fetcher: () => eresourceApi.getAllDepartments(),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const departments = cachedDepartments ?? [];
+  const departmentsRef = useRef<EResourceDepartment[]>(departments);
+  departmentsRef.current = departments;
+
   useEffect(() => {
-    loadData();
-  }, []);
-
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const data = await eresourceApi.getAllDepartments();
-      setDepartments(data);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load departments', 'error');
-    } finally {
-      setLoading(false);
+    if (error) {
+      showToast(error.message || 'Failed to load departments', 'error');
     }
-  };
-
-  useAutoRefresh(loadData, 60000);
+  }, [error, showToast]);
 
   const toggleFolder = (id: number) => {
     const newSet = new Set(expandedFolders);
@@ -69,7 +70,7 @@ export function EResourcesManager() {
     const parentIdStr = fd.get('parent') as string;
     const payload = {
       name: fd.get('name') as string,
-      parent: parentIdStr ? parseInt(parentIdStr, 10) : null
+      parent: parentIdStr ? parseInt(parentIdStr, 10) : null,
     };
 
     try {
@@ -78,18 +79,30 @@ export function EResourcesManager() {
       } else {
         await eresourceApi.createDepartment(payload);
       }
+      invalidateCacheByPrefix('admin:eresources');
       showToast(`Department ${editingDept ? 'updated' : 'created'} successfully`, 'success');
       setIsDeptModalOpen(false);
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to save department', 'error');
+      await loadData();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save department';
+      showToast(message, 'error');
     } finally {
       setIsSavingDept(false);
     }
   };
 
+  const findDeptById = (depts: EResourceDepartment[], id: number): EResourceDepartment | null => {
+    for (const d of depts) {
+      if (d.id === id) return d;
+      if (d.children) {
+        const found = findDeptById(d.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const handleDeleteDept = (id: number) => {
-    // Find department in tree recursively to get name
     let deptToDelete: EResourceDepartment | null = null;
     const findDept = (depts: EResourceDepartment[]) => {
       for (const d of depts) {
@@ -100,61 +113,65 @@ export function EResourcesManager() {
         if (d.children) findDept(d.children);
       }
     };
-    findDept(departments);
+    findDept(departmentsRef.current);
 
     if (!deptToDelete) return;
 
     triggerDelete(
-      deptToDelete.name,
+      (deptToDelete as EResourceDepartment).name,
       async () => {
         try {
           await eresourceApi.deleteDepartment(id);
-        } catch (err: any) {
-          loadData(); // Revert optimistic delete by reloading
-          showToast(err.message || 'Failed to delete department', 'error');
+          invalidateCacheByPrefix('admin:eresources');
+        } catch (err: unknown) {
+          await loadData();
+          const message = err instanceof Error ? err.message : 'Failed to delete department';
+          showToast(message, 'error');
         }
       },
       () => {
-        loadData(); // Reload to revert optimistic delete
+        loadData();
         showToast('Department restoration undone', 'success');
-      }
+      },
     );
 
-    // Check if the selected dept is the one being deleted, or a descendant of it
     const isDescendant = (parentId: number, childId: number): boolean => {
-      const parent = findDeptById(departments, parentId);
+      const parent = findDeptById(departmentsRef.current, parentId);
       if (!parent) return false;
       return !!findDeptById([parent], childId);
     };
 
-    // Optimistic delete
     if (selectedDeptId && isDescendant(id, selectedDeptId)) {
       setSelectedDeptId(null);
     }
-    
+
     const filterDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
-      return depts.filter(d => d.id !== id).map(d => ({
-        ...d,
-        children: d.children ? filterDept(d.children) : []
-      }));
+      return depts
+        .filter((d) => d.id !== id)
+        .map((d) => ({
+          ...d,
+          children: d.children ? filterDept(d.children) : [],
+        }));
     };
-    setDepartments(prev => filterDept(prev));
+    mutateDepartments(filterDept(departmentsRef.current));
   };
 
   const handleBulkDeleteDepts = () => {
     if (selectedDeptIds.size === 0) return;
-    const count = selectedDeptIds.size;
-    const ids = Array.from(selectedDeptIds);
-    const backup = [...departments];
+    const ids = Array.from<number>(selectedDeptIds);
+    const count = ids.length;
+    const backup = [...departmentsRef.current];
 
     const filterDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
-      return depts.filter(d => !selectedDeptIds.has(d.id)).map(d => ({
-        ...d,
-        children: d.children ? filterDept(d.children) : []
-      }));
+      return depts
+        .filter((d) => !selectedDeptIds.has(d.id))
+        .map((d) => ({
+          ...d,
+          children: d.children ? filterDept(d.children) : [],
+        }));
     };
-    
-    setDepartments(prev => filterDept(prev));
+
+    mutateDepartments(filterDept(departmentsRef.current));
     setSelectedDeptIds(new Set());
 
     triggerDelete(
@@ -163,10 +180,11 @@ export function EResourcesManager() {
         setIsRemoving(true);
         const toastId = showToast(`${count} items processing in background...`, 'loading');
         try {
-          await bulkApi.delete('ERESOURCE_DEPT', ids as number[]);
+          await bulkApi.delete('ERESOURCE_DEPT', ids);
+          invalidateCacheByPrefix('admin:eresources');
           showToast(`${count} folders successfully queued for deletion`, 'success');
-        } catch (err: any) {
-          loadData();
+        } catch {
+          await loadData();
           showToast('Failed to queue deletion', 'error');
         } finally {
           setIsRemoving(false);
@@ -174,9 +192,9 @@ export function EResourcesManager() {
         }
       },
       () => {
-        setDepartments(backup);
+        mutateDepartments(backup);
         showToast('Bulk folder restoration undone', 'success');
-      }
+      },
     );
   };
 
@@ -197,74 +215,76 @@ export function EResourcesManager() {
 
     try {
       await eresourceApi.createFile(fd);
+      invalidateCacheByPrefix('admin:eresources');
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       setSelectedFile(null);
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to upload file', 'error');
+      await loadData();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to upload file';
+      showToast(message, 'error');
     } finally {
       setIsUploadingFile(false);
     }
   };
 
   const handleDeleteFile = (id: number) => {
-    // Need to find the file from the selected department
     let fileToDelete: EResourceFile | null = null;
     const findFile = (depts: EResourceDepartment[]) => {
       for (const d of depts) {
         if (d.files) {
-          const f = d.files.find(file => file.id === id);
+          const f = d.files.find((file) => file.id === id);
           if (f) fileToDelete = f;
         }
         if (d.children) findFile(d.children);
       }
     };
-    findFile(departments);
+    findFile(departmentsRef.current);
     if (!fileToDelete) return;
 
     triggerDelete(
-      fileToDelete.name,
+      (fileToDelete as EResourceFile).name,
       async () => {
         try {
           await eresourceApi.deleteFile(id);
-        } catch (err: any) {
-          loadData(); // Revert optimistic delete by reloading
-          showToast(err.message || 'Failed to delete file', 'error');
+          invalidateCacheByPrefix('admin:eresources');
+        } catch (err: unknown) {
+          await loadData();
+          const message = err instanceof Error ? err.message : 'Failed to delete file';
+          showToast(message, 'error');
         }
       },
       () => {
-        loadData(); // Reload to revert optimistic delete
+        loadData();
         showToast('File restoration undone', 'success');
-      }
+      },
     );
 
-    // Optimistic delete
     const removeFileFromDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
-      return depts.map(d => ({
+      return depts.map((d) => ({
         ...d,
-        files: d.files?.filter(f => f.id !== id),
-        children: d.children ? removeFileFromDept(d.children) : []
+        files: d.files?.filter((f) => f.id !== id),
+        children: d.children ? removeFileFromDept(d.children) : [],
       }));
     };
-    setDepartments(prev => removeFileFromDept(prev));
+    mutateDepartments(removeFileFromDept(departmentsRef.current));
   };
 
   const handleBulkDeleteFiles = () => {
     if (selectedFileIds.size === 0) return;
-    const count = selectedFileIds.size;
-    const ids = Array.from(selectedFileIds);
-    const backup = [...departments];
+    const ids = Array.from<number>(selectedFileIds);
+    const count = ids.length;
+    const backup = [...departmentsRef.current];
 
     const removeFileFromDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
-      return depts.map(d => ({
+      return depts.map((d) => ({
         ...d,
-        files: d.files?.filter(f => !selectedFileIds.has(f.id)),
-        children: d.children ? removeFileFromDept(d.children) : []
+        files: d.files?.filter((f) => !selectedFileIds.has(f.id)),
+        children: d.children ? removeFileFromDept(d.children) : [],
       }));
     };
 
-    setDepartments(prev => removeFileFromDept(prev));
+    mutateDepartments(removeFileFromDept(departmentsRef.current));
     setSelectedFileIds(new Set());
 
     triggerDelete(
@@ -273,10 +293,11 @@ export function EResourcesManager() {
         setIsRemoving(true);
         const toastId = showToast(`${count} items processing in background...`, 'loading');
         try {
-          await bulkApi.delete('ERESOURCE_FILE', ids as number[]);
+          await bulkApi.delete('ERESOURCE_FILE', ids);
+          invalidateCacheByPrefix('admin:eresources');
           showToast(`${count} files successfully queued for deletion`, 'success');
-        } catch (err: any) {
-          loadData();
+        } catch {
+          await loadData();
           showToast('Failed to queue deletion', 'error');
         } finally {
           setIsRemoving(false);
@@ -284,14 +305,14 @@ export function EResourcesManager() {
         }
       },
       () => {
-        setDepartments(backup);
+        mutateDepartments(backup);
         showToast('Bulk file restoration undone', 'success');
-      }
+      },
     );
   };
 
   const renderTree = (depts: EResourceDepartment[], level = 0) => {
-    return depts.map(dept => {
+    return depts.map((dept) => {
       const isExpanded = expandedFolders.has(dept.id);
       const isSelected = selectedDeptId === dept.id;
       const hasChildren = dept.children && dept.children.length > 0;
@@ -304,14 +325,13 @@ export function EResourcesManager() {
             }`}
             onClick={() => {
               setSelectedDeptId(dept.id);
-              // Auto-expand when selecting a folder that has children
               if (hasChildren && !expandedFolders.has(dept.id)) {
                 toggleFolder(dept.id);
               }
             }}
           >
             <div className="flex items-center gap-1 flex-1 overflow-hidden min-w-0 pl-1">
-              <input 
+              <input
                 type="checkbox"
                 className="mr-1 disabled:opacity-50"
                 checked={selectedDeptIds.has(dept.id)}
@@ -324,15 +344,15 @@ export function EResourcesManager() {
                   setSelectedDeptIds(newSelected);
                 }}
               />
-              {/* Chevron toggles expand/collapse ONLY — stops propagation so row click still fires */}
               <span
                 className="w-5 h-5 flex items-center justify-center shrink-0 rounded hover:bg-gray-200 transition-colors"
-                onClick={(e) => { e.stopPropagation(); toggleFolder(dept.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFolder(dept.id);
+                }}
               >
                 {hasChildren ? (
-                  isExpanded
-                    ? <ChevronDown size={14} className="text-gray-500" />
-                    : <ChevronRight size={14} className="text-gray-500" />
+                  isExpanded ? <ChevronDown size={14} className="text-gray-500" /> : <ChevronRight size={14} className="text-gray-500" />
                 ) : null}
               </span>
               <FolderOpen size={16} className={`shrink-0 ${isSelected ? 'text-yellow-500' : 'text-yellow-400'}`} />
@@ -345,14 +365,21 @@ export function EResourcesManager() {
             </div>
             <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                onClick={(e) => { e.stopPropagation(); setEditingDept(dept); setIsDeptModalOpen(true); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingDept(dept);
+                  setIsDeptModalOpen(true);
+                }}
                 className="p-1 text-blue-600 hover:bg-blue-100 rounded cursor-pointer border-none bg-transparent"
                 title="Edit folder"
               >
                 <Edit2 size={12} />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteDept(dept.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteDept(dept.id);
+                }}
                 className="p-1 text-red-600 hover:bg-red-100 rounded cursor-pointer border-none bg-transparent"
                 title="Delete folder"
               >
@@ -370,19 +397,8 @@ export function EResourcesManager() {
     });
   };
 
-
-  const findDeptById = (depts: EResourceDepartment[], id: number): EResourceDepartment | null => {
-    for (const d of depts) {
-      if (d.id === id) return d;
-      if (d.children) {
-        const found = findDeptById(d.children, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-
   const selectedDept = selectedDeptId ? findDeptById(departments, selectedDeptId) : null;
+  const loading = isLoading && departments.length === 0;
 
   return (
     <>
@@ -404,7 +420,10 @@ export function EResourcesManager() {
                   } else {
                     const allIds = new Set<number>();
                     const extractIds = (depts: EResourceDepartment[]) => {
-                      depts.forEach(d => { allIds.add(d.id); if (d.children) extractIds(d.children); });
+                      depts.forEach((d) => {
+                        allIds.add(d.id);
+                        if (d.children) extractIds(d.children);
+                      });
                     };
                     extractIds(departments);
                     setSelectedDeptIds(allIds);
@@ -413,10 +432,10 @@ export function EResourcesManager() {
                 disabled={isRemoving}
                 className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded text-gray-700 hover:bg-gray-50"
               >
-                {selectedDeptIds.size > 0 ? "Unselect All" : "Select All"}
+                {selectedDeptIds.size > 0 ? 'Unselect All' : 'Select All'}
               </button>
               {selectedDeptIds.size > 0 && (
-                <button 
+                <button
                   onClick={handleBulkDeleteDepts}
                   disabled={isRemoving}
                   className="text-sm flex items-center gap-1 bg-red-50 border border-red-200 px-2 py-1 rounded text-red-700 hover:bg-red-100 disabled:opacity-50"
@@ -424,8 +443,11 @@ export function EResourcesManager() {
                   <Trash2 size={14} /> Remove ({selectedDeptIds.size})
                 </button>
               )}
-              <button 
-                onClick={() => { setEditingDept(null); setIsDeptModalOpen(true); }}
+              <button
+                onClick={() => {
+                  setEditingDept(null);
+                  setIsDeptModalOpen(true);
+                }}
                 className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded text-gray-700 hover:bg-gray-50"
               >
                 <Plus size={14} /> Add Folder
@@ -433,10 +455,11 @@ export function EResourcesManager() {
             </div>
           </div>
           <div className="p-4 overflow-y-auto flex-1">
-            {departments.length === 0 ? (
+            {loading ? (
+              <p className="text-gray-500 text-sm text-center mt-8">Loading departments...</p>
+            ) : departments.length === 0 ? (
               <p className="text-gray-500 text-sm text-center mt-8">No departments found.</p>
             ) : (
-              /* API now returns only root-level departments with nested children */
               renderTree(departments)
             )}
           </div>
@@ -460,17 +483,17 @@ export function EResourcesManager() {
                       if (selectedFileIds.size > 0) {
                         setSelectedFileIds(new Set());
                       } else {
-                        const allIds = new Set<number>(selectedDept.files?.map(f => f.id) || []);
+                        const allIds = new Set<number>(selectedDept.files?.map((f) => f.id) || []);
                         setSelectedFileIds(allIds);
                       }
                     }}
                     disabled={isRemoving}
                     className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-700 hover:bg-gray-50 font-medium"
                   >
-                    {selectedFileIds.size > 0 ? "Unselect All" : "Select All"}
+                    {selectedFileIds.size > 0 ? 'Unselect All' : 'Select All'}
                   </button>
                   {selectedFileIds.size > 0 && (
-                    <button 
+                    <button
                       onClick={handleBulkDeleteFiles}
                       disabled={isRemoving}
                       className="admin-btn flex items-center gap-2 disabled:opacity-50"
@@ -479,7 +502,7 @@ export function EResourcesManager() {
                       <Trash2 size={16} /> Remove Selected ({selectedFileIds.size})
                     </button>
                   )}
-                  <button 
+                  <button
                     onClick={() => setIsFileModalOpen(true)}
                     className="admin-btn admin-btn--primary flex items-center gap-2"
                   >
@@ -496,7 +519,7 @@ export function EResourcesManager() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {selectedDept.files.map(file => {
+                    {selectedDept.files.map((file) => {
                       const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
                       const isPdf = ext === 'pdf';
                       const isDoc = ['doc', 'docx'].includes(ext);
@@ -505,11 +528,15 @@ export function EResourcesManager() {
                         ? new Date(file.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
                         : 'Migrated file';
                       return (
-                        <div key={file.id} className={`border rounded-xl p-3 flex items-start gap-3 group transition-all hover:shadow-md relative ${
-                          file.is_active ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'
-                        }`} style={{ border: selectedFileIds.has(file.id) ? '2px solid var(--color-navy)' : undefined }}>
+                        <div
+                          key={file.id}
+                          className={`border rounded-xl p-3 flex items-start gap-3 group transition-all hover:shadow-md relative ${
+                            file.is_active ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'
+                          }`}
+                          style={{ border: selectedFileIds.has(file.id) ? '2px solid var(--color-navy)' : undefined }}
+                        >
                           <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-                            <input 
+                            <input
                               type="checkbox"
                               checked={selectedFileIds.has(file.id)}
                               disabled={isRemoving}
@@ -527,9 +554,13 @@ export function EResourcesManager() {
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-gray-900 text-sm leading-snug" style={{ wordBreak: 'break-word' }}>{file.name}</h4>
                             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                              <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                                isPdf ? 'bg-red-50 text-red-600' : isDoc ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'
-                              }`}>{ext || 'file'}</span>
+                              <span
+                                className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                  isPdf ? 'bg-red-50 text-red-600' : isDoc ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                {ext || 'file'}
+                              </span>
                               {!file.is_active && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-700">Hidden</span>
                               )}
@@ -542,12 +573,16 @@ export function EResourcesManager() {
                                 rel="noreferrer"
                                 className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100"
                                 onClick={(e) => e.stopPropagation()}
-                              >Open</a>
+                              >
+                                Open
+                              </a>
                               <button
                                 onClick={() => handleDeleteFile(file.id)}
                                 disabled={isRemoving}
                                 className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border-none disabled:opacity-50"
-                              >Remove</button>
+                              >
+                                Remove
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -570,7 +605,7 @@ export function EResourcesManager() {
       {/* Dept Modal */}
       {isDeptModalOpen && createPortal(
         <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 animate-modal-overlay" onClick={() => setIsDeptModalOpen(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-modal-card max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-modal-card max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">{editingDept ? 'Edit Folder' : 'Add Folder'}</h2>
               <button onClick={() => setIsDeptModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">×</button>
@@ -584,8 +619,7 @@ export function EResourcesManager() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Parent Folder (Optional)</label>
                 <select name="parent" defaultValue={editingDept?.parent || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg">
                   <option value="">-- None (Root Folder) --</option>
-                  {/* Flatten all departments for the dropdown (simple version) */}
-                  {departments.map(d => (
+                  {departments.map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
@@ -601,13 +635,13 @@ export function EResourcesManager() {
             </form>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {/* File Modal */}
       {isFileModalOpen && createPortal(
         <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 animate-modal-overlay" onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">Upload File to {selectedDept?.name}</h2>
               <button onClick={() => { setIsFileModalOpen(false); setSelectedFile(null); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">×</button>
@@ -647,14 +681,13 @@ export function EResourcesManager() {
             </form>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </>
   );
 }
-

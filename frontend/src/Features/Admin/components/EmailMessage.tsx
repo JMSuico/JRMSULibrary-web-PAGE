@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Mail,
@@ -7,10 +7,8 @@ import {
   Clock,
   Reply,
   Inbox,
-  Filter,
   ChevronDown,
   ChevronUp,
-  RefreshCw,
   Loader2,
   X,
 } from 'lucide-react';
@@ -20,14 +18,15 @@ import { contactApi, ContactMessage } from '@/src/Endpoints/contactApi';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useToast } from '@/src/Hooks/useToast';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { processInChunks } from '@/src/Libs/chunkUtils';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { aiApi } from '@/src/Endpoints/aiApi';
 import {
   settingsApi,
+  SiteSettings,
   RESERVATION_ROOMS,
   ReservationRoomName,
   normalizeRoomAvailability,
@@ -74,7 +73,7 @@ const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({ file, onComplet
 
     const handleOffline = () => setStatus('paused');
     const handleOnline = () => {
-      setStatus(prev => {
+      setStatus((prev) => {
         if (prev === 'paused' || prev === 'error') {
           startUpload();
           return 'uploading';
@@ -107,48 +106,63 @@ const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({ file, onComplet
 };
 
 export function EmailMessage() {
-  const [messages, setMessages] = useState<ContactMessage[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'EMAIL' | 'RESERVATION' | 'CREDENTIAL_REQUEST'>('ALL');
   const [showArchived, setShowArchived] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
   const [emailSortDir, setEmailSortDir] = useState<'desc' | 'asc'>('desc');
-  const itemsPerPage = 10;
 
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const { showToast, removeToast } = useToast();
   const [isRemoving, setIsRemoving] = useState(false);
-  const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File, id?: string }[] } | null>(null);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [replyModal, setReplyModal] = useState<{ message: ContactMessage; body: string; attachments: { file: File; id?: string }[] } | null>(null);
   const [bulkReplyModal, setBulkReplyModal] = useState<{ body: string } | null>(null);
   const [viewMessageModal, setViewMessageModal] = useState<ContactMessage | null>(null);
-  const [actionLoading, setActionLoading] = useState<{ id: number, action: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState<{ id: number; action: string } | null>(null);
   const [isDraftingAI, setIsDraftingAI] = useState(false);
   const [roomAvailability, setRoomAvailability] = useState<Record<string, boolean>>(() =>
-    normalizeRoomAvailability()
+    normalizeRoomAvailability(),
   );
   const [selectedRoom, setSelectedRoom] = useState<ReservationRoomName>(RESERVATION_ROOMS[0]);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
 
+  const {
+    data: cachedMessages,
+    isLoading,
+    error,
+    refetch,
+    mutate,
+  } = useCachedQuery<ContactMessage[]>({
+    key: 'admin:email',
+    fetcher: () => contactApi.getAllMessages(),
+    staleTimeMs: 15_000,
+    listenCmsUpdate: true,
+  });
+
+  const messages = cachedMessages ?? [];
+  const messagesRef = useRef<ContactMessage[]>(messages);
+  messagesRef.current = messages;
+
   useEffect(() => {
-    let mounted = true;
-    const loadRoomAvailability = async () => {
-      try {
-        const settings = await settingsApi.getSettings();
-        if (mounted) {
-          setRoomAvailability(normalizeRoomAvailability(settings.room_availability));
-        }
-      } catch {
-        // Keep normalized defaults when settings fail to load
-      }
-    };
-    loadRoomAvailability();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    if (error) {
+      showToast(error.message || 'Failed to load messages', 'error');
+    }
+  }, [error, showToast]);
+
+  const { data: cachedSettings } = useCachedQuery<SiteSettings>({
+    key: 'admin:settings',
+    fetcher: () => settingsApi.getSettings(),
+    staleTimeMs: 60_000,
+    listenCmsUpdate: true,
+  });
+
+  useEffect(() => {
+    if (cachedSettings) {
+      setRoomAvailability(normalizeRoomAvailability(cachedSettings.room_availability));
+    }
+  }, [cachedSettings]);
 
   const handleToggleRoomAvailability = async () => {
     if (isUpdatingRoom) return;
@@ -165,9 +179,10 @@ export function EmailMessage() {
     try {
       const saved = await settingsApi.updateSettings({ room_availability: updatedMap });
       setRoomAvailability(normalizeRoomAvailability(saved.room_availability ?? updatedMap));
+      invalidateCacheByPrefix('admin:settings');
       showToast(
         `${selectedRoom} is now ${nextAvailable ? 'Available' : 'Unavailable'}`,
-        nextAvailable ? 'success' : 'info'
+        nextAvailable ? 'success' : 'info',
       );
     } catch (err: unknown) {
       setRoomAvailability(previousMap);
@@ -187,31 +202,31 @@ export function EmailMessage() {
         sender_email: replyModal.message.email,
         subject: replyModal.message.subject,
         message_text: replyModal.message.message,
-        inquiry_type: replyModal.message.message_type
+        inquiry_type: replyModal.message.message_type,
       });
       if (res && res.draft) {
-        setReplyModal(prev => prev ? { ...prev, body: res.draft } : null);
+        setReplyModal((prev) => (prev ? { ...prev, body: res.draft } : null));
         showToast('AI reply draft generated!', 'success');
       }
-    } catch (err) {
+    } catch {
       const fallback = `Dear ${replyModal.message.name || 'Patron'},\n\nThank you for reaching out to the JRMSU Katipunan Campus Library regarding "${replyModal.message.subject || 'your inquiry'}".\n\nWe have received your message and are available to assist you. The library is open Monday through Friday, 8:00 AM to 5:00 PM.\n\nWarm regards,\nJRMSU-Katipunan Campus Library Staff`;
-      setReplyModal(prev => prev ? { ...prev, body: fallback } : null);
+      setReplyModal((prev) => (prev ? { ...prev, body: fallback } : null));
       showToast('Generated standard response draft', 'info');
     } finally {
       setIsDraftingAI(false);
     }
   };
-  const [isSendingReply, setIsSendingReply] = useState(false);
+
+  const [isSendingReply] = useState(false);
 
   // Background Sends UI State
-  const [backgroundSends, setBackgroundSends] = useState<{ id: string, email: string, isError?: boolean, errorMessage?: string }[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number; message: string } | null>(null);
+  const [backgroundSends, setBackgroundSends] = useState<{ id: string; email: string; isError?: boolean; errorMessage?: string }[]>([]);
+  const [syncResult] = useState<{ synced: number; message: string } | null>(null);
 
   // Advanced Queue State for Bulk Sending
   const [queueState, setQueueState] = useState<{
     isActive: boolean;
-    isPaused: boolean; // True when offline
+    isPaused: boolean;
     pendingIds: number[];
     successIds: number[];
     failedIds: number[];
@@ -222,11 +237,11 @@ export function EmailMessage() {
   // Listen for online/offline events to pause/resume queue
   useEffect(() => {
     const handleOffline = () => {
-      setQueueState(prev => prev.isActive ? { ...prev, isPaused: true } : prev);
+      setQueueState((prev) => (prev.isActive ? { ...prev, isPaused: true } : prev));
       showToast('Internet connection lost. Sending paused.', 'error');
     };
     const handleOnline = () => {
-      setQueueState(prev => prev.isActive ? { ...prev, isPaused: false } : prev);
+      setQueueState((prev) => (prev.isActive ? { ...prev, isPaused: false } : prev));
       showToast('Internet restored. Resuming sending...', 'success');
     };
     window.addEventListener('offline', handleOffline);
@@ -239,47 +254,47 @@ export function EmailMessage() {
 
   // Process the queue
   useEffect(() => {
-    let mounted = true;
     const processQueue = async () => {
       if (!queueState.isActive || queueState.isPaused || queueState.currentIds.length > 0 || queueState.pendingIds.length === 0) return;
 
-      // Take up to 5 emails for sequential backend processing per HTTP request
       const batchSize = 5;
       const nextIds = queueState.pendingIds.slice(0, batchSize);
-      
-      setQueueState(prev => ({ ...prev, currentIds: nextIds }));
+
+      setQueueState((prev) => ({ ...prev, currentIds: nextIds }));
 
       try {
         const res = await contactApi.bulkReply(nextIds, queueState.body || '');
-        
+
         const newSuccessIds = res.results.filter((r: any) => r.success).map((r: any) => r.id);
         const newFailedIds = res.results.filter((r: any) => !r.success).map((r: any) => r.id);
-        
-        // Show success toasts for each individual email sent
-        res.results.filter((r: any) => r.success).forEach((r: any) => {
-          const msg = messages.find(m => m.id === r.id);
-          if (msg) showToast(`Reply successfully sent to ${msg.email}`, 'success');
-        });
 
-        // Show error toasts for each failure
-        res.results.filter((r: any) => !r.success).forEach((r: any) => {
-          const msg = messages.find(m => m.id === r.id);
-          if (msg) showToast(`Failed to send to ${msg.email}: ${r.detail}`, 'error');
-        });
-        
-        setQueueState(prev => ({
+        res.results
+          .filter((r: any) => r.success)
+          .forEach((r: any) => {
+            const msg = messagesRef.current.find((m) => m.id === r.id);
+            if (msg) showToast(`Reply successfully sent to ${msg.email}`, 'success');
+          });
+
+        res.results
+          .filter((r: any) => !r.success)
+          .forEach((r: any) => {
+            const msg = messagesRef.current.find((m) => m.id === r.id);
+            if (msg) showToast(`Failed to send to ${msg.email}: ${r.detail}`, 'error');
+          });
+
+        setQueueState((prev) => ({
           ...prev,
           currentIds: [],
           pendingIds: prev.pendingIds.slice(nextIds.length),
           successIds: [...prev.successIds, ...newSuccessIds],
-          failedIds: [...prev.failedIds, ...newFailedIds]
+          failedIds: [...prev.failedIds, ...newFailedIds],
         }));
-      } catch (e) {
-        setQueueState(prev => ({
+      } catch {
+        setQueueState((prev) => ({
           ...prev,
           currentIds: [],
           pendingIds: prev.pendingIds.slice(nextIds.length),
-          failedIds: [...prev.failedIds, ...nextIds]
+          failedIds: [...prev.failedIds, ...nextIds],
         }));
       }
     };
@@ -287,50 +302,31 @@ export function EmailMessage() {
     if (queueState.isActive && !queueState.isPaused && queueState.pendingIds.length > 0 && queueState.currentIds.length === 0) {
       processQueue();
     } else if (queueState.isActive && queueState.pendingIds.length === 0 && queueState.currentIds.length === 0) {
-      // Queue finished
       showToast(`Bulk reply completed. ${queueState.successIds.length} sent, ${queueState.failedIds.length} failed.`, 'success');
-      setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentIds: [] });
+      setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentIds: [], body: '' });
       setBulkReplyModal(null);
       setSelectedIds(new Set());
-      fetchMessages();
+      invalidateCacheByPrefix('admin:email');
+      invalidateCacheByPrefix('admin:dashboard');
+      refetch();
     }
-
-    return () => { mounted = false; };
   }, [queueState, bulkReplyModal]);
 
-  const fetchMessages = async () => {
-    try {
-      const data = await contactApi.getAllMessages();
-      setMessages(data);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load messages', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMessages();
-  }, []);
-
-  // Auto-refresh messages every 15 seconds
-  useAutoRefresh(fetchMessages, 15000);
-
-  // Auto-expand groups that have unread messages or just expand all initially
+  // Auto-expand groups initially
   useEffect(() => {
     if (messages.length > 0 && expandedGroups.size === 0) {
-      setExpandedGroups(new Set(messages.map(m => m.email)));
+      setExpandedGroups(new Set(messages.map((m) => m.email)));
     }
-  }, [messages]);
-
-
+  }, [messages, expandedGroups.size]);
 
   const updateStatus = async (id: number, newStatus: ContactMessage['status']) => {
     setActionLoading({ id, action: newStatus });
     try {
       await contactApi.updateMessageStatus(id, newStatus);
+      invalidateCacheByPrefix('admin:email');
+      invalidateCacheByPrefix('admin:dashboard');
       showToast(`Message marked as ${newStatus}`, 'success');
-      fetchMessages();
+      await refetch();
       if (selectedIds.has(id)) {
         const newSet = new Set(selectedIds);
         newSet.delete(id);
@@ -344,7 +340,7 @@ export function EmailMessage() {
   };
 
   const deleteMessage = (id: number) => {
-    const msgToDelete = messages.find(m => m.id === id);
+    const msgToDelete = messagesRef.current.find((m) => m.id === id);
     if (!msgToDelete) return;
 
     triggerDelete(
@@ -352,31 +348,34 @@ export function EmailMessage() {
       async () => {
         try {
           await contactApi.deleteMessage(id);
+          invalidateCacheByPrefix('admin:email');
+          invalidateCacheByPrefix('admin:dashboard');
           if (selectedIds.has(id)) {
             const newSet = new Set(selectedIds);
             newSet.delete(id);
             setSelectedIds(newSet);
           }
         } catch (err: any) {
-          setMessages(prev => [...prev, msgToDelete]);
+          mutate([...messagesRef.current, msgToDelete]);
           showToast(err.message || 'Failed to delete message', 'error');
         }
       },
       () => {
-        setMessages(prev => [...prev, msgToDelete]);
+        mutate([...messagesRef.current, msgToDelete]);
         showToast('Message restoration undone', 'success');
-      }
+      },
     );
 
     // Optimistic delete
-    setMessages(prev => prev.filter(m => m.id !== id));
+    mutate(messagesRef.current.filter((m) => m.id !== id));
   };
 
   const handleBulkAction = async (action: ContactMessage['status'] | 'DELETE') => {
     if (selectedIds.size === 0) return;
 
     if (action === 'DELETE') {
-      const msgsToDelete = messages.filter(m => selectedIds.has(m.id));
+      const idsToDelete = Array.from<number>(selectedIds);
+      const msgsToDelete = messagesRef.current.filter((m) => selectedIds.has(m.id));
       if (msgsToDelete.length === 0) return;
 
       triggerDelete(
@@ -385,11 +384,13 @@ export function EmailMessage() {
           setIsRemoving(true);
           const toastId = showToast(`${msgsToDelete.length} items processing in background...`, 'loading');
           try {
-            await bulkApi.delete('CONTACT', Array.from(selectedIds));
+            await bulkApi.delete('CONTACT', idsToDelete);
             setSelectedIds(new Set());
+            invalidateCacheByPrefix('admin:email');
+            invalidateCacheByPrefix('admin:dashboard');
             showToast(`${msgsToDelete.length} messages successfully queued for deletion`, 'success');
-          } catch (err: any) {
-            setMessages(prev => [...prev, ...msgsToDelete]);
+          } catch {
+            mutate([...messagesRef.current, ...msgsToDelete]);
             showToast('Failed to queue deletion', 'error');
           } finally {
             setIsRemoving(false);
@@ -397,25 +398,26 @@ export function EmailMessage() {
           }
         },
         () => {
-          setMessages(prev => [...prev, ...msgsToDelete]);
+          mutate([...messagesRef.current, ...msgsToDelete]);
           showToast('Bulk removal undone', 'success');
-        }
+        },
       );
 
       // Optimistic bulk delete
-      setMessages(prev => prev.filter(m => !selectedIds.has(m.id)));
+      mutate(messagesRef.current.filter((m) => !selectedIds.has(m.id)));
     } else {
       try {
-        setLoading(true);
-        await Promise.all(
-          Array.from<number>(selectedIds).map(id => contactApi.updateMessageStatus(id, action))
-        );
+        setIsBulkUpdating(true);
+        await Promise.all(Array.from<number>(selectedIds).map((id) => contactApi.updateMessageStatus(id, action)));
+        invalidateCacheByPrefix('admin:email');
+        invalidateCacheByPrefix('admin:dashboard');
         showToast(`Bulk action completed for ${selectedIds.size} messages`, 'success');
         setSelectedIds(new Set());
-        fetchMessages();
+        await refetch();
       } catch (err: any) {
         showToast(err.message || 'Failed to perform bulk action', 'error');
-        setLoading(false);
+      } finally {
+        setIsBulkUpdating(false);
       }
     }
   };
@@ -427,11 +429,28 @@ export function EmailMessage() {
     setSelectedIds(newSet);
   };
 
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
+  const filtered = useMemo(() => {
+    const query = debouncedSearch.toLowerCase();
+    return messages.filter((m) => {
+      const matchesSearch =
+        m.name.toLowerCase().includes(query) ||
+        m.email.toLowerCase().includes(query) ||
+        (m.subject && m.subject.toLowerCase().includes(query));
+
+      const matchesType = filterType === 'ALL' || m.message_type === filterType;
+      const matchesArchive = showArchived ? m.status === 'ARCHIVED' : m.status !== 'ARCHIVED';
+
+      return matchesSearch && matchesType && matchesArchive;
+    });
+  }, [messages, debouncedSearch, filterType, showArchived]);
+
   const toggleSelectAll = () => {
     if (selectedIds.size === filtered.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filtered.map(m => m.id)));
+      setSelectedIds(new Set(filtered.map((m) => m.id)));
     }
   };
 
@@ -442,77 +461,77 @@ export function EmailMessage() {
     setExpandedGroups(newSet);
   };
 
-  const debouncedSearch = useDebounce(searchQuery, 400);
-
-  const filtered = messages.filter((m) => {
-    const matchesSearch =
-      m.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      m.email.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      (m.subject && m.subject.toLowerCase().includes(debouncedSearch.toLowerCase()));
-
-    const matchesType = filterType === 'ALL' || m.message_type === filterType;
-    const matchesArchive = showArchived ? m.status === 'ARCHIVED' : m.status !== 'ARCHIVED';
-
-    return matchesSearch && matchesType && matchesArchive;
-  });
-
-  const unreadCount = messages.filter(m => m.status === 'UNREAD').length;
-  const reservationCount = messages.filter(m => m.message_type === 'RESERVATION').length;
-
-  const groupedMessages = filtered.reduce((acc, msg) => {
-    const key = msg.email;
-    if (!acc[key]) acc[key] = { name: msg.name, email: msg.email, messages: [], unreadCount: 0, totalCount: 0 };
-    acc[key].messages.push(msg);
-    acc[key].totalCount += 1;
-    if (msg.status === 'UNREAD') acc[key].unreadCount += 1;
-    return acc;
-  }, {} as Record<string, { name: string, email: string, messages: ContactMessage[], unreadCount: number, totalCount: number }>);
+  const unreadCount = messages.filter((m) => m.status === 'UNREAD').length;
+  const reservationCount = messages.filter((m) => m.message_type === 'RESERVATION').length;
 
   type MsgGroup = { name: string; email: string; messages: ContactMessage[]; unreadCount: number; totalCount: number };
 
-  // Sort each group's messages by created_at per selected direction
-  (Object.values(groupedMessages) as MsgGroup[]).forEach(group => {
-    group.messages.sort((a, b) =>
-      emailSortDir === 'desc'
-        ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        : new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  const groupedArray = useMemo(() => {
+    const groupedMessages: Record<string, MsgGroup> = (filtered as ContactMessage[]).reduce(
+      (acc: Record<string, MsgGroup>, msg: ContactMessage) => {
+        const key = msg.email;
+        if (!acc[key]) acc[key] = { name: msg.name, email: msg.email, messages: [], unreadCount: 0, totalCount: 0 };
+        acc[key].messages.push(msg);
+        acc[key].totalCount += 1;
+        if (msg.status === 'UNREAD') acc[key].unreadCount += 1;
+        return acc;
+      },
+      {} as Record<string, MsgGroup>,
     );
-  });
 
-  // Sort groups by the latest message in the group per selected direction
-  const groupedArray = (Object.values(groupedMessages) as MsgGroup[])
-    .sort((a, b) => {
-      const latestA = Math.max(...a.messages.map(m => new Date(m.created_at).getTime()));
-      const latestB = Math.max(...b.messages.map(m => new Date(m.created_at).getTime()));
-      return emailSortDir === 'desc' ? latestB - latestA : latestA - latestB;
+    Object.values(groupedMessages).forEach((group) => {
+      group.messages.sort((a, b) =>
+        emailSortDir === 'desc'
+          ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          : new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
     });
 
-  const totalPages = Math.ceil(groupedArray.length / itemsPerPage);
-  const paginatedGroups = groupedArray.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    return Object.values(groupedMessages).sort((a, b) => {
+      const latestA = Math.max(...a.messages.map((m) => new Date(m.created_at).getTime()));
+      const latestB = Math.max(...b.messages.map((m) => new Date(m.created_at).getTime()));
+      return emailSortDir === 'desc' ? latestB - latestA : latestA - latestB;
+    });
+  }, [filtered, emailSortDir]);
+
+  const {
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    paginatedItems: paginatedGroups,
+    setPage,
+    setPageSize,
+  } = usePagination<MsgGroup>({
+    items: groupedArray,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_email_page_size',
+  });
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, filterType, showArchived, emailSortDir]);
+    setPage(1);
+  }, [debouncedSearch, filterType, showArchived, emailSortDir, setPage]);
+
+  const loading = (isLoading && messages.length === 0) || isBulkUpdating;
 
   return (
     <div className="w-full flex flex-col relative">
       {/* Background Sends Banner */}
       {backgroundSends.length > 0 && (
         <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-          {backgroundSends.map(send => (
+          {backgroundSends.map((send) => (
             <div key={send.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${send.isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-700'}`}>
               {send.isError ? (
                 <div className="flex-1 flex items-center gap-3">
                   <div className="w-5 h-5 shrink-0 bg-red-100 text-red-600 rounded-full flex items-center justify-center">!</div>
                   <div className="text-sm font-medium">Failed to send to {send.email}: {send.errorMessage}</div>
-                  <button onClick={() => setBackgroundSends(prev => prev.filter(s => s.id !== send.id))} className="text-gray-400 hover:text-red-500 ml-2">×</button>
+                  <button onClick={() => setBackgroundSends((prev) => prev.filter((s) => s.id !== send.id))} className="text-gray-400 hover:text-red-500 ml-2">×</button>
                 </div>
               ) : (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin text-blue-600 shrink-0" />
-                  {queueState.currentIds.includes(send.id) && (
                   <div className="text-sm font-medium">Sending reply to {send.email}...</div>
-                )}</>
+                </>
               )}
             </div>
           ))}
@@ -538,7 +557,7 @@ export function EmailMessage() {
           label="Unread Messages"
           value={unreadCount}
           icon={<Inbox size={22} />}
-          variant={unreadCount > 0 ? "orange" : "blue"}
+          variant={unreadCount > 0 ? 'orange' : 'blue'}
         />
         <MetricCard
           label="Total Reservations"
@@ -575,7 +594,7 @@ export function EmailMessage() {
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Sort:</label>
               <select
                 value={emailSortDir}
-                onChange={e => { setEmailSortDir(e.target.value as 'desc' | 'asc'); setCurrentPage(1); }}
+                onChange={(e) => { setEmailSortDir(e.target.value as 'desc' | 'asc'); setPage(1); }}
                 className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
               >
                 <option value="desc">Latest to Oldest</option>
@@ -588,7 +607,7 @@ export function EmailMessage() {
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Type:</label>
               <select
                 value={filterType}
-                onChange={e => setFilterType(e.target.value as any)}
+                onChange={(e) => setFilterType(e.target.value as 'ALL' | 'EMAIL' | 'RESERVATION' | 'CREDENTIAL_REQUEST')}
                 className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
               >
                 <option value="ALL">All Types</option>
@@ -761,7 +780,7 @@ export function EmailMessage() {
                             </h3>
                           </div>
                           <p className="text-xs text-gray-500 mb-2">{new Date(msg.created_at).toLocaleString()}</p>
-                          <div 
+                          <div
                             onClick={() => {
                               setViewMessageModal(msg);
                               if (msg.status === 'UNREAD') {
@@ -772,14 +791,14 @@ export function EmailMessage() {
                           >
                             <p className="text-sm text-gray-700 whitespace-pre-wrap break-words group-hover:text-gray-900 transition-colors line-clamp-4 md:line-clamp-none">{msg.message}</p>
                             <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2 pointer-events-none md:hidden">
-                               <span className="text-xs font-medium text-blue-600 bg-white px-3 py-1 rounded-full shadow-sm">View full message</span>
+                              <span className="text-xs font-medium text-blue-600 bg-white px-3 py-1 rounded-full shadow-sm">View full message</span>
                             </div>
                           </div>
                           {msg.attachments && msg.attachments.length > 0 && (
                             <div className="mt-3">
                               <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Attachments</p>
                               <div className="flex flex-wrap gap-2">
-                                {msg.attachments.map(att => (
+                                {msg.attachments.map((att) => (
                                   <a
                                     key={att.id}
                                     href={att.file}
@@ -875,14 +894,16 @@ export function EmailMessage() {
               </div>
             ))}
 
-            {groupedArray.length > itemsPerPage && (
+            {totalItems > 0 && (
               <div className="mt-4 shrink-0">
                 <Pagination
                   currentPage={currentPage}
                   totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                  totalItems={groupedArray.length}
-                  itemsPerPage={itemsPerPage}
+                  onPageChange={setPage}
+                  totalItems={totalItems}
+                  itemsPerPage={pageSize}
+                  onPageSizeChange={setPageSize}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                 />
               </div>
             )}
@@ -966,8 +987,6 @@ export function EmailMessage() {
                 />
               </div>
 
-
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2 mt-3">Attachments (Max 10MB each)</label>
                 <DragDropFileUpload
@@ -975,7 +994,7 @@ export function EmailMessage() {
                   multiple={true}
                   maxSizeMB={10}
                   onFilesSelected={(files) => {
-                    const newFiles = files.map(f => ({ file: f }));
+                    const newFiles = files.map((f) => ({ file: f }));
                     setReplyModal({ ...replyModal, attachments: [...replyModal.attachments, ...newFiles] });
                   }}
                   label="Click to attach files or drag and drop"
@@ -987,7 +1006,7 @@ export function EmailMessage() {
                       key={`${att.file.name}-${idx}`}
                       file={att.file}
                       onComplete={(id) => {
-                        setReplyModal(prev => {
+                        setReplyModal((prev) => {
                           if (!prev) return prev;
                           const updated = [...prev.attachments];
                           updated[idx] = { ...updated[idx], id };
@@ -998,7 +1017,7 @@ export function EmailMessage() {
                         console.error(`Upload failed for ${att.file.name}: ${err}`);
                       }}
                       onRemove={() => {
-                        setReplyModal(prev => {
+                        setReplyModal((prev) => {
                           if (!prev) return prev;
                           const updated = [...prev.attachments];
                           updated.splice(idx, 1);
@@ -1018,27 +1037,27 @@ export function EmailMessage() {
                 Cancel
               </button>
               <button
-                disabled={!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)}
-                className={`admin-btn admin-btn--primary flex items-center gap-2 ${(!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)) ? 'opacity-50 cursor-not-allowed bg-gray-400 border-gray-400' : ''}`}
+                disabled={!replyModal.body.trim() || replyModal.attachments.some((a) => !a.id)}
+                className={`admin-btn admin-btn--primary flex items-center gap-2 ${(!replyModal.body.trim() || replyModal.attachments.some((a) => !a.id)) ? 'opacity-50 cursor-not-allowed bg-gray-400 border-gray-400' : ''}`}
                 onClick={async () => {
-                  if (!replyModal.body.trim() || replyModal.attachments.some(a => !a.id)) return;
+                  if (!replyModal.body.trim() || replyModal.attachments.some((a) => !a.id)) return;
 
                   const emailPayload = {
                     id: replyModal.message.id,
                     email: replyModal.message.email,
                     body: replyModal.body,
-                    attachments: [...replyModal.attachments]
+                    attachments: [...replyModal.attachments],
                   };
 
                   setReplyModal(null);
 
                   const sendId = Math.random().toString(36).substring(7);
-                  setBackgroundSends(prev => [...prev, { id: sendId, email: emailPayload.email }]);
+                  setBackgroundSends((prev) => [...prev, { id: sendId, email: emailPayload.email }]);
 
                   try {
                     let result;
                     if (emailPayload.attachments.length > 0) {
-                      const fileEntries = emailPayload.attachments.map(a => ({ id: a.id!, name: a.file.name }));
+                      const fileEntries = emailPayload.attachments.map((a) => ({ id: a.id!, name: a.file.name }));
                       result = await contactApi.replyWithFiles(emailPayload.id, emailPayload.body, fileEntries, false);
                     } else {
                       result = await contactApi.replyToMessage(emailPayload.id, emailPayload.body, false);
@@ -1046,13 +1065,15 @@ export function EmailMessage() {
 
                     if (result.success) {
                       showToast(`Reply sent to ${emailPayload.email}`, 'success');
-                      setBackgroundSends(prev => prev.filter(s => s.id !== sendId));
-                      fetchMessages();
+                      setBackgroundSends((prev) => prev.filter((s) => s.id !== sendId));
+                      invalidateCacheByPrefix('admin:email');
+                      invalidateCacheByPrefix('admin:dashboard');
+                      await refetch();
                     } else {
-                      setBackgroundSends(prev => prev.map(s => s.id === sendId ? { ...s, isError: true, errorMessage: result.detail || 'Failed to send' } : s));
+                      setBackgroundSends((prev) => prev.map((s) => (s.id === sendId ? { ...s, isError: true, errorMessage: result.detail || 'Failed to send' } : s)));
                     }
                   } catch (err: any) {
-                    setBackgroundSends(prev => prev.map(s => s.id === sendId ? { ...s, isError: true, errorMessage: err.message || 'Network/SMTP Error' } : s));
+                    setBackgroundSends((prev) => prev.map((s) => (s.id === sendId ? { ...s, isError: true, errorMessage: err.message || 'Network/SMTP Error' } : s)));
                   }
                 }}
               >
@@ -1061,7 +1082,7 @@ export function EmailMessage() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {bulkReplyModal && createPortal(
@@ -1132,7 +1153,7 @@ export function EmailMessage() {
                     successIds: [],
                     failedIds: [],
                     currentIds: [],
-                    body: bulkReplyModal.body
+                    body: bulkReplyModal.body,
                   });
                 }}
               >
@@ -1145,8 +1166,9 @@ export function EmailMessage() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
+
       {/* View Message Modal */}
       {viewMessageModal && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-modal-overlay" onClick={() => setViewMessageModal(null)}>
@@ -1164,12 +1186,12 @@ export function EmailMessage() {
               <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
                 <p className="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed font-inter">{viewMessageModal.message}</p>
               </div>
-              
+
               {viewMessageModal.attachments && viewMessageModal.attachments.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Attachments</h3>
                   <div className="flex flex-wrap gap-3">
-                    {viewMessageModal.attachments.map(att => (
+                    {viewMessageModal.attachments.map((att) => (
                       <a
                         key={att.id}
                         href={att.file}
@@ -1204,8 +1226,9 @@ export function EmailMessage() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
+
       {/* Background Bulk Send Toast */}
       {queueState.isActive && !bulkReplyModal && createPortal(
         <div className="fixed bottom-6 right-6 z-[99999] bg-white rounded-lg shadow-xl border border-blue-100 p-4 w-80 flex flex-col gap-3 animate-modal-overlay" style={{ zIndex: 999999 }}>
@@ -1227,23 +1250,21 @@ export function EmailMessage() {
             </button>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1 overflow-hidden">
-            <div 
-              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" 
+            <div
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
               style={{ width: `${((queueState.successIds.length + queueState.failedIds.length) / (queueState.currentIds.length + queueState.pendingIds.length + queueState.successIds.length + queueState.failedIds.length)) * 100}%` }}
             ></div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {/* Undo Delete Toast */}
-      <UndoDeleteToast 
-        undoState={undoState as any} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </div>
   );
 }
-
-

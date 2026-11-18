@@ -7,7 +7,11 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
   totalItems: number;
   itemsPerPage: number;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: readonly number[];
 }
+
+const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100] as const;
 
 export function Pagination({
   currentPage,
@@ -15,15 +19,17 @@ export function Pagination({
   onPageChange,
   totalItems,
   itemsPerPage,
+  onPageSizeChange,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
 }: PaginationProps) {
-  if (totalItems === 0) return null;
+  if (totalItems === 0 || (totalPages <= 1 && !onPageSizeChange)) return null;
 
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
   // Generate page numbers to show (simple windowing logic)
   const getPageNumbers = () => {
-    const pages = [];
+    const pages: number[] = [];
     const maxVisiblePages = 5;
     
     if (totalPages <= maxVisiblePages) {
@@ -47,10 +53,29 @@ export function Pagination({
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between mt-6 px-4 py-3 bg-white border-t border-gray-100 rounded-b-xl gap-4">
-      <div className="text-sm text-gray-500 font-inter">
-        Showing <span className="font-semibold text-gray-700">{startItem}</span> to{' '}
-        <span className="font-semibold text-gray-700">{endItem}</span> of{' '}
-        <span className="font-semibold text-gray-700">{totalItems}</span> results
+      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 font-inter">
+        <div>
+          Showing <span className="font-semibold text-gray-700">{startItem}</span> to{' '}
+          <span className="font-semibold text-gray-700">{endItem}</span> of{' '}
+          <span className="font-semibold text-gray-700">{totalItems}</span> results
+        </div>
+        {onPageSizeChange && (
+          <label className="inline-flex items-center gap-2 text-sm text-gray-500 font-inter">
+            <span>Rows per page:</span>
+            <select
+              aria-label="Rows per page"
+              value={itemsPerPage}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-sm font-medium text-gray-700 shadow-sm focus:border-navy focus:outline-none cursor-pointer transition-colors"
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       
       <nav className="inline-flex rounded-lg shadow-sm -space-x-px" aria-label="Pagination">

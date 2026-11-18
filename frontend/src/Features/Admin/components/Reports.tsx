@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Printer, Calendar as CalendarIcon, Download, Search, Eye, History, X, ChevronLeft, ChevronRight, Loader2, Archive, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { FileText, Printer, Download, Search, Eye, History, X, Loader2, Archive, Trash2 } from 'lucide-react';
 import { reportApi, ReportSummary, HistoricalReport } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { usePdfExport } from '@/src/Hooks/usePdfExport';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
@@ -29,70 +31,118 @@ export function sanitizeCsvCell(value: unknown): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+interface ReportsHistoryResponse {
+  total: number;
+  results: HistoricalReport[];
+}
+
 export function Reports() {
   const [reportType, setReportType] = useState('summary');
   const [dateRange, setDateRange] = useState('this-month');
   const [isGenerating, setIsGenerating] = useState(false);
   const { isPdfGenerating, exportPdf } = usePdfExport();
   const [reportData, setReportData] = useState<ReportSummary | null>(null);
-  const [activeReportInfo, setActiveReportInfo] = useState<{title: string, period: string, type: string} | null>(null);
-  
+  const [activeReportInfo, setActiveReportInfo] = useState<{ title: string; period: string; type: string } | null>(null);
+
   // History Table State
-  const [history, setHistory] = useState<HistoricalReport[]>([]);
-  const [totalHistory, setTotalHistory] = useState(0);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState<number>(10);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [selectedReportIds, setSelectedReportIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
-  const limit = 5;
 
   const debouncedSearch = useDebounce(searchQuery, 400);
   const { showToast, removeToast } = useToast();
 
+  const {
+    data: historyData,
+    isLoading: isLoadingHistory,
+    error: historyError,
+    refetch: fetchHistory,
+    mutate: mutateHistory,
+  } = useCachedQuery<ReportsHistoryResponse>({
+    key: `admin:reports:history:p${page}:l${limit}:s${debouncedSearch}`,
+    fetcher: () => reportApi.getHistory(debouncedSearch, limit, (page - 1) * limit),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const history = historyData?.results ?? [];
+  const totalHistory = historyData?.total ?? 0;
+
+  const historyDataRef = useRef<ReportsHistoryResponse>({ total: 0, results: [] });
+  historyDataRef.current = historyData ?? { total: 0, results: [] };
+
+  useEffect(() => {
+    if (historyError) {
+      showToast('Failed to load report history', 'error');
+    }
+  }, [historyError, showToast]);
+
   const handleArchive = async (id: number) => {
     try {
       await reportApi.archiveReport(id);
-      setHistory(prev => prev.filter(h => h.id !== id));
+      mutateHistory({
+        total: Math.max(0, historyDataRef.current.total - 1),
+        results: historyDataRef.current.results.filter((h) => h.id !== id),
+      });
+      invalidateCacheByPrefix('admin:reports');
       showToast('Report archived successfully', 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to archive report', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to archive report';
+      showToast(message, 'error');
     }
   };
 
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   const handleDelete = (id: number) => {
-    const reportToDelete = history.find(h => h.id === id);
+    const reportToDelete = historyDataRef.current.results.find((h) => h.id === id);
     if (!reportToDelete) return;
-    
+
     triggerDelete(
       `Report "${reportToDelete.title}"`,
       async () => {
         try {
           await reportApi.deleteReport(id);
-        } catch (err: any) {
-          setHistory(prev => [...prev, reportToDelete]);
+          invalidateCacheByPrefix('admin:reports');
+        } catch {
+          mutateHistory({
+            total: historyDataRef.current.total + 1,
+            results: [...historyDataRef.current.results, reportToDelete],
+          });
           showToast('Failed to permanently delete report', 'error');
         }
       },
       () => {
-        setHistory(prev => [...prev, reportToDelete].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+        mutateHistory({
+          total: historyDataRef.current.total + 1,
+          results: [...historyDataRef.current.results, reportToDelete].sort(
+            (a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime(),
+          ),
+        });
         showToast('Report restoration undone', 'success');
-      }
+      },
     );
 
     // Optimistically hide it from UI
-    setHistory(prev => prev.filter(h => h.id !== id));
+    mutateHistory({
+      total: Math.max(0, historyDataRef.current.total - 1),
+      results: historyDataRef.current.results.filter((h) => h.id !== id),
+    });
   };
 
   const handleBulkDeleteReports = () => {
     if (selectedReportIds.size === 0) return;
-    const count = selectedReportIds.size;
-    const reportsToDelete = history.filter(h => selectedReportIds.has(h.id));
+    const idsToDelete = Array.from(selectedReportIds);
+    const count = idsToDelete.length;
+    const reportsToDelete = historyDataRef.current.results.filter((h) => selectedReportIds.has(h.id));
 
     // Optimistically hide
-    setHistory(prev => prev.filter(h => !selectedReportIds.has(h.id)));
+    mutateHistory({
+      total: Math.max(0, historyDataRef.current.total - count),
+      results: historyDataRef.current.results.filter((h) => !selectedReportIds.has(h.id)),
+    });
     setSelectedReportIds(new Set());
 
     triggerDelete(
@@ -101,10 +151,11 @@ export function Reports() {
         setIsRemoving(true);
         const toastId = showToast(`${count} removing processing.`, 'loading');
         try {
-          await processInChunks(Array.from(selectedReportIds), 10, (id: number) => reportApi.deleteReport(id), (_, __, c) => {});
+          await processInChunks(idsToDelete, 10, (id: number) => reportApi.deleteReport(id), () => {});
+          invalidateCacheByPrefix('admin:reports');
           showToast(`Removed ${count} reports successfully`, 'success');
-        } catch (err: any) {
-          fetchHistory();
+        } catch {
+          await fetchHistory();
           showToast('Failed to permanently remove some reports', 'error');
         } finally {
           setIsRemoving(false);
@@ -112,29 +163,16 @@ export function Reports() {
         }
       },
       () => {
-        setHistory(prev => [...prev, ...reportsToDelete].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+        mutateHistory({
+          total: historyDataRef.current.total + reportsToDelete.length,
+          results: [...historyDataRef.current.results, ...reportsToDelete].sort(
+            (a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime(),
+          ),
+        });
         showToast('Bulk report restoration undone', 'success');
-      }
+      },
     );
   };
-
-  const fetchHistory = async () => {
-    setIsLoadingHistory(true);
-    try {
-      const offset = (page - 1) * limit;
-      const res = await reportApi.getHistory(debouncedSearch, limit, offset);
-      setHistory(res.results);
-      setTotalHistory(res.total);
-    } catch (err: any) {
-      showToast('Failed to load report history', 'error');
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHistory();
-  }, [page, debouncedSearch]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -143,13 +181,15 @@ export function Reports() {
       setReportData(res.data);
       setActiveReportInfo({ title: `Report - ${dateRange.replace('-', ' ').toUpperCase()}`, period: dateRange, type: reportType });
       showToast('Report generated successfully', 'success');
+      invalidateCacheByPrefix('admin:reports');
       setPage(1);
-      fetchHistory();
+      await fetchHistory();
       setTimeout(() => {
         document.getElementById('report-preview-area')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to generate report', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to generate report';
+      showToast(message, 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -163,7 +203,7 @@ export function Reports() {
       setTimeout(() => {
         document.getElementById('report-preview-area')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
-    } catch (err: any) {
+    } catch {
       showToast('Failed to load report details', 'error');
     }
   };
@@ -192,7 +232,7 @@ export function Reports() {
     if (reportData.recent_books.length > 0) {
       rows.push(['Book Acquisitions in Period']);
       rows.push(['Title', 'Author', 'Category', 'Date Added']);
-      reportData.recent_books.forEach(b => {
+      reportData.recent_books.forEach((b) => {
         rows.push([b.title, b.author, b.category, b.dateAdded]);
       });
       rows.push([]);
@@ -201,12 +241,12 @@ export function Reports() {
     if (reportData.recent_activity.length > 0) {
       rows.push(['User Interactions in Period']);
       rows.push(['Type', 'Name', 'Date']);
-      reportData.recent_activity.forEach(a => {
+      reportData.recent_activity.forEach((a) => {
         rows.push([a.type, a.name, new Date(a.date).toLocaleDateString()]);
       });
     }
 
-    const csvContent = rows.map(r => r.map(sanitizeCsvCell).join(',')).join('\n');
+    const csvContent = rows.map((r) => r.map(sanitizeCsvCell).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -218,18 +258,22 @@ export function Reports() {
     showToast('CSV exported successfully', 'success');
   };
 
-  const ratingData = reportData ? [
-    { name: '1 Star', count: reportData.ratings_summary.distribution[1] || 0 },
-    { name: '2 Stars', count: reportData.ratings_summary.distribution[2] || 0 },
-    { name: '3 Stars', count: reportData.ratings_summary.distribution[3] || 0 },
-    { name: '4 Stars', count: reportData.ratings_summary.distribution[4] || 0 },
-    { name: '5 Stars', count: reportData.ratings_summary.distribution[5] || 0 },
-  ] : [];
+  const ratingData = reportData
+    ? [
+        { name: '1 Star', count: reportData.ratings_summary.distribution[1] || 0 },
+        { name: '2 Stars', count: reportData.ratings_summary.distribution[2] || 0 },
+        { name: '3 Stars', count: reportData.ratings_summary.distribution[3] || 0 },
+        { name: '4 Stars', count: reportData.ratings_summary.distribution[4] || 0 },
+        { name: '5 Stars', count: reportData.ratings_summary.distribution[5] || 0 },
+      ]
+    : [];
 
-  const interactionData = reportData ? [
-    { name: 'Emails', value: reportData.total_emails },
-    { name: 'Reservations', value: reportData.total_reservations }
-  ] : [];
+  const interactionData = reportData
+    ? [
+        { name: 'Emails', value: reportData.total_emails },
+        { name: 'Reservations', value: reportData.total_reservations },
+      ]
+    : [];
   const COLORS = ['#2563eb', '#0d9488'];
 
   return (
@@ -246,9 +290,9 @@ export function Reports() {
         <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-end">
           <div className="flex-1">
             <label className="block text-sm font-semibold text-gray-700 mb-1">Report Type</label>
-            <select 
-              value={reportType} 
-              onChange={e => setReportType(e.target.value)}
+            <select
+              value={reportType}
+              onChange={(e) => setReportType(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-navy"
             >
               <option value="summary">Comprehensive Summary</option>
@@ -259,9 +303,9 @@ export function Reports() {
           </div>
           <div className="flex-1">
             <label className="block text-sm font-semibold text-gray-700 mb-1">Date Range</label>
-            <select 
-              value={dateRange} 
-              onChange={e => setDateRange(e.target.value)}
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-navy"
             >
               <option value="this-week">This Week</option>
@@ -271,7 +315,7 @@ export function Reports() {
               <option value="all-time">All Time</option>
             </select>
           </div>
-          <button 
+          <button
             onClick={handleGenerate}
             disabled={isGenerating}
             className="admin-btn admin-btn--primary w-full md:w-auto justify-center whitespace-nowrap disabled:opacity-70"
@@ -287,7 +331,7 @@ export function Reports() {
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><History size={20} /> Generated Reports History</h2>
           <div className="flex items-center gap-2">
             {selectedReportIds.size > 0 && (
-              <button 
+              <button
                 onClick={handleBulkDeleteReports}
                 disabled={isRemoving}
                 className="admin-btn disabled:opacity-50"
@@ -303,7 +347,10 @@ export function Reports() {
                 placeholder="Search reports..."
                 className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-navy w-64"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
               />
             </div>
           </div>
@@ -314,15 +361,15 @@ export function Reports() {
             <thead>
               <tr>
                 <th style={{ width: '40px', textAlign: 'center' }}>
-                  <input 
+                  <input
                     type="checkbox"
-                    checked={history.length > 0 && history.every(h => selectedReportIds.has(h.id))}
+                    checked={history.length > 0 && history.every((h) => selectedReportIds.has(h.id))}
                     disabled={isRemoving}
                     className="disabled:opacity-50"
                     onChange={(e) => {
                       const newSet = new Set(selectedReportIds);
-                      if (e.target.checked) history.forEach(h => newSet.add(h.id));
-                      else history.forEach(h => newSet.delete(h.id));
+                      if (e.target.checked) history.forEach((h) => newSet.add(h.id));
+                      else history.forEach((h) => newSet.delete(h.id));
                       setSelectedReportIds(newSet);
                     }}
                   />
@@ -336,16 +383,16 @@ export function Reports() {
               </tr>
             </thead>
             <tbody>
-              {isLoadingHistory ? (
+              {isLoadingHistory && !historyData ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8">
+                  <td colSpan={7} className="text-center py-8">
                     <Loader2 className="animate-spin text-navy mx-auto mb-2" size={24} />
                     <p className="text-gray-500 text-sm">Loading history...</p>
                   </td>
                 </tr>
               ) : history.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-gray-500">
+                  <td colSpan={7} className="text-center py-8 text-gray-500">
                     No reports found. Generate a new report above!
                   </td>
                 </tr>
@@ -353,7 +400,7 @@ export function Reports() {
                 history.map((h) => (
                   <tr key={h.id} style={{ backgroundColor: selectedReportIds.has(h.id) ? 'var(--color-blue-50)' : undefined }}>
                     <td style={{ textAlign: 'center' }}>
-                      <input 
+                      <input
                         type="checkbox"
                         checked={selectedReportIds.has(h.id)}
                         disabled={isRemoving}
@@ -404,22 +451,26 @@ export function Reports() {
           </table>
         </div>
 
-        {totalHistory > limit && (
+        {totalHistory > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-100">
             <Pagination
               currentPage={page}
-              totalPages={Math.ceil(totalHistory / limit)}
+              totalPages={Math.max(1, Math.ceil(totalHistory / limit))}
               onPageChange={setPage}
               totalItems={totalHistory}
               itemsPerPage={limit}
+              onPageSizeChange={(newLimit: number) => {
+                setLimit(newLimit);
+                setPage(1);
+              }}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
             />
           </div>
         )}
       </div>
-      
+
       {reportData && (
         <div className="bg-white border border-gray-200 shadow-sm p-8 rounded-none md:rounded-2xl print:border-none print:shadow-none print:p-0 mb-8 animate-in slide-in-from-top-4 fade-in duration-300">
-          
           <div className="flex justify-between items-start mb-8 print:hidden">
             <h3 className="text-xl font-bold text-gray-800">Report Preview</h3>
             <div className="flex gap-2">
@@ -488,50 +539,50 @@ export function Reports() {
                   <>
                     {(currentType === 'summary' || currentType === 'visitors') && (
                       <div className="border border-gray-300 p-4">
-                          <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Feedback Ratings Breakdown</h4>
-                          <div className="h-64">
-                            {(() => {
-                              const ya = dynamicAxis(extractValues(ratingData, 'count'));
-                              return (
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="name" fontSize={12} />
-                                    <YAxis domain={ya.domain} ticks={ya.ticks} allowDecimals={false} fontSize={12} />
-                                    <RechartsTooltip />
-                                    <Bar dataKey="count" fill='#C9A84C' />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                              );
-                            })()}
-                          </div>
+                        <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Feedback Ratings Breakdown</h4>
+                        <div className="h-64">
+                          {(() => {
+                            const ya = dynamicAxis(extractValues(ratingData, 'count'));
+                            return (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={ratingData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis dataKey="name" fontSize={12} />
+                                  <YAxis domain={ya.domain} ticks={ya.ticks} allowDecimals={false} fontSize={12} />
+                                  <RechartsTooltip />
+                                  <Bar dataKey="count" fill="#C9A84C" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            );
+                          })()}
+                        </div>
                       </div>
                     )}
                     {(currentType === 'summary' || currentType === 'interactions') && (
                       <div className="border border-gray-300 p-4">
-                          <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Interactions Overview</h4>
-                          <div className="h-64">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={interactionData}
-                                  cx="50%"
-                                  cy="50%"
-                                  labelLine={false}
-                                  outerRadius={80}
-                                  fill="#4f46e5"
-                                  dataKey="value"
-                                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                >
-                                  {interactionData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                  ))}
-                                </Pie>
-                                <RechartsTooltip />
-                                <Legend />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
+                        <h4 className="text-sm font-bold uppercase tracking-wider font-sans mb-4 text-center">Interactions Overview</h4>
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={interactionData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                outerRadius={80}
+                                fill="#4f46e5"
+                                dataKey="value"
+                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              >
+                                {interactionData.map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
                     )}
                   </>
@@ -600,13 +651,11 @@ export function Reports() {
           </div>
         </div>
       )}
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </>
   );
 }
-
-

@@ -74,21 +74,49 @@ class ReportViewSet(viewsets.ViewSet):
         recent_books = self.book_service.get_recent(limit=100)
         recent_emails = self.contact_service.get_recent(limit=10)
 
-        # 6-month trends using optimized per-month COUNT aggregations
-        trend_data = []
+        # Accurate visitor summaries matching analytics_controller.count()
+        week_start = today - datetime.timedelta(days=6)
+        all_time_visits = self.visit_service.get_count()
+        this_week_visits = self.visit_service.get_count_by_date_range(start_date=week_start)
+        this_month_visits = self.visit_service.get_count_by_date_range(start_date=today.replace(day=1))
+
+        # Last 7 days visitor trend via repository/service TruncDate aggregation
+        visits_by_day = self.visit_service.get_daily_counts(week_start, today)
+        weekly_trend_data = [
+            {
+                "name": (today - datetime.timedelta(days=offset)).strftime("%a %d"),
+                "visits": visits_by_day.get(today - datetime.timedelta(days=offset), 0),
+            }
+            for offset in range(6, -1, -1)
+        ]
+
+        # 6-month trends via repository/service TruncMonth aggregations (2 queries instead of 12)
+        months = []
         for i in range(5, -1, -1):
             m = (today.month - i - 1) % 12 + 1
             y = today.year + ((today.month - i - 1) // 12)
-            month_name = datetime.date(y, m, 1).strftime('%b')
+            months.append((y, m))
 
-            trend_data.append({
-                "name": month_name,
-                "visits": self.visit_service.get_count_by_month_year(m, y),
-                "books": self.book_service.get_count_by_month_year(m, y),
-            })
+        first_month_date = datetime.date(months[0][0], months[0][1], 1)
+
+        visits_by_month = self.visit_service.get_monthly_counts(first_month_date)
+        books_by_month = self.book_service.get_monthly_counts(first_month_date)
+
+        trend_data = [
+            {
+                "name": datetime.date(y, m, 1).strftime('%b'),
+                "visits": visits_by_month.get((y, m), 0),
+                "books": books_by_month.get((y, m), 0),
+            }
+            for y, m in months
+        ]
 
         return {
             'total_visits': total_visits,
+            'all_time_visits': all_time_visits,
+            'this_week_visits': this_week_visits,
+            'this_month_visits': this_month_visits,
+            'weekly_trend_data': weekly_trend_data,
             'total_books': total_books,
             'total_emails': total_emails,
             'total_reservations': total_reservations,

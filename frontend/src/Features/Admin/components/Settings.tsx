@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getImageUrl } from '@/src/Libs/apiClient';
-import { Settings as SettingsIcon, Lock, Library, Save, CheckCircle, Layers, Archive, RotateCcw, RefreshCw, UserCircle, Camera, Eye, EyeOff } from 'lucide-react';
+import { Settings as SettingsIcon, Lock, Library, Save, CheckCircle, Layers, Archive, RefreshCw, UserCircle, Camera, Eye, EyeOff } from 'lucide-react';
 import { useOutletContext } from 'react-router';
 import type { AdminOutletContext } from '@/src/Pages/Admin/AdminLayout';
 import { settingsApi, SiteSettings } from '@/src/Endpoints/settingsApi';
 import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { ArchivesManager } from './ArchivesManager';
 
 export function Settings() {
   const { user, setUser } = useOutletContext<AdminOutletContext>();
   const [activeTab, setActiveTab] = useState<'profile' | 'general' | 'carousel' | 'security' | 'archives'>('profile');
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedStatus, setSavedStatus] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -25,11 +25,6 @@ export function Settings() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar_url || null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showOldPw, setShowOldPw] = useState(false);
-  const [showNewPw, setShowNewPw] = useState(false);
 
   // Sync state if context changes
   useEffect(() => {
@@ -40,7 +35,7 @@ export function Settings() {
       setUsername(user.username);
       if (!avatarFile) setAvatarPreview(user.avatar_url || null);
     }
-  }, [user]);
+  }, [user, avatarFile]);
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,6 +68,7 @@ export function Settings() {
       }
 
       setUser(updatedUser);
+      invalidateCacheByPrefix('admin:users');
       setSavedStatus(true);
       setIsEditing(false);
       showToast('Profile updated successfully', 'success');
@@ -83,7 +79,7 @@ export function Settings() {
       setSaving(false);
     }
   };
-  
+
   const [formData, setFormData] = useState<SiteSettings>({
     library_name: '',
     address: '',
@@ -94,8 +90,8 @@ export function Settings() {
     opening_hours_sat: '',
     opening_hours_sun: '',
     carousel_style: 'default',
-    background_image: ''
-  } as any); // using as any since background_image might not be in the initial type yet
+    background_image: '',
+  });
 
   const [bgImageFile, setBgImageFile] = useState<File | null>(null);
   const [bgImagePreview, setBgImagePreview] = useState<string | null>(null);
@@ -103,35 +99,43 @@ export function Settings() {
   const [passwords, setPasswords] = useState({
     current: '',
     newPass: '',
-    confirm: ''
+    confirm: '',
   });
 
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const {
+    data: cachedSettings,
+    isLoading,
+    error: settingsError,
+    mutate: mutateSettings,
+  } = useCachedQuery<SiteSettings>({
+    key: 'admin:settings',
+    fetcher: () => settingsApi.getSettings(),
+    staleTimeMs: 60_000,
+    listenCmsUpdate: true,
+  });
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const data = await settingsApi.getSettings();
-        setFormData(data as any);
-        if ((data as any).background_image) {
-          setBgImagePreview((data as any).background_image);
-        }
-      } catch (err: any) {
-        showToast(err.message || 'Failed to load settings', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSettings();
-  }, []);
+    if (settingsError) {
+      showToast(settingsError.message || 'Failed to load settings', 'error');
+    }
+  }, [settingsError, showToast]);
 
+  useEffect(() => {
+    if (cachedSettings && !isEditing) {
+      setFormData(cachedSettings);
+      if (cachedSettings.background_image) {
+        setBgImagePreview(cachedSettings.background_image);
+      }
+    }
+  }, [cachedSettings, isEditing]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleBgImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,7 +147,7 @@ export function Settings() {
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setPasswords(prev => ({ ...prev, [name]: value }));
+    setPasswords((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -152,15 +156,14 @@ export function Settings() {
     setSaving(true);
     setSavedStatus(false);
     showToast('Saving settings...', 'info');
-    
+
     if (activeTab === 'general' || activeTab === 'carousel') {
       try {
         let payload: any = formData;
-        
-        // If there's a background image file, we must use FormData
+
         if (bgImageFile) {
           const formDataObj = new FormData();
-          Object.keys(formData).forEach(key => {
+          Object.keys(formData).forEach((key) => {
             if (key !== 'background_image' && (formData as any)[key] !== undefined && (formData as any)[key] !== null) {
               formDataObj.append(key, (formData as any)[key]);
             }
@@ -176,12 +179,13 @@ export function Settings() {
 
         const updated = await settingsApi.updateSettings(payload);
         setFormData(updated as any);
+        mutateSettings(updated);
+        invalidateCacheByPrefix('admin:settings');
         setBgImageFile(null);
         if ((updated as any).background_image) {
           setBgImagePreview((updated as any).background_image);
         }
-        
-        // Instantly update the cache so the landing page reflects it immediately
+
         if (updated.carousel_style) {
           localStorage.setItem('jrmsu_carousel_style_cache', updated.carousel_style);
         }
@@ -202,7 +206,7 @@ export function Settings() {
       try {
         await userApi.changePassword({
           old_password: passwords.current,
-          new_password: passwords.newPass
+          new_password: passwords.newPass,
         });
         setPasswords({ current: '', newPass: '', confirm: '' });
         setSavedStatus(true);
@@ -213,13 +217,13 @@ export function Settings() {
         showToast(err.message || 'Failed to update password', 'error');
       }
     }
-    
+
     setSaving(false);
   };
 
-
-  const inputClass = "w-full border border-gray-300 rounded-lg px-4 py-2.5 mt-1 focus:ring-2 focus:ring-navy focus:border-transparent outline-none transition-all";
-  const labelClass = "block text-sm font-semibold text-gray-700";
+  const loading = isLoading && !cachedSettings;
+  const inputClass = 'w-full border border-gray-300 rounded-lg px-4 py-2.5 mt-1 focus:ring-2 focus:ring-navy focus:border-transparent outline-none transition-all';
+  const labelClass = 'block text-sm font-semibold text-gray-700';
 
   return (
     <>
@@ -321,23 +325,21 @@ export function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className={labelClass}>First Name</label>
-                    <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className={inputClass} disabled={!isEditing} required />
+                    <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Last Name</label>
-                    <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className={inputClass} disabled={!isEditing} required />
+                    <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Email Address</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} disabled={!isEditing} required />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                   <div>
                     <label className={labelClass}>Username</label>
-                    <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} disabled={!isEditing} required />
+                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className={inputClass} disabled={!isEditing} required />
                   </div>
                 </div>
-
-                {/* Password change removed - now in Security tab */}
               </div>
               <div className="px-6 md:px-8 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
                 {!isEditing ? (
@@ -375,7 +377,7 @@ export function Settings() {
                 <h2 className="text-xl font-bold text-gray-800 mb-6">
                   {activeTab === 'general' ? 'Library Configuration' : activeTab === 'carousel' ? 'Carousel Customize' : 'Security Settings'}
                 </h2>
-                
+
                 {activeTab === 'general' && (
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -400,10 +402,10 @@ export function Settings() {
                         <input type="text" name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className={inputClass} disabled={!isEditing} />
                       </div>
                     </div>
-                    
+
                     <hr className="border-gray-100 my-6" />
                     <h3 className="text-lg font-bold text-gray-800 mb-4">Opening Hours</h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
                         <label className={labelClass}>Monday - Friday</label>
@@ -433,10 +435,7 @@ export function Settings() {
                       <div className="w-48 h-28 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden">
                         {bgImagePreview ? (
                           <img
-                            src={
-                              !bgImagePreview ? '' :
-                              getImageUrl(bgImagePreview)
-                            }
+                            src={!bgImagePreview ? '' : getImageUrl(bgImagePreview)}
                             alt="Background Preview"
                             className="w-full h-full object-cover"
                           />
@@ -468,7 +467,7 @@ export function Settings() {
                       {/* Default 3D Option */}
                       <button
                         type="button"
-                        onClick={() => isEditing && setFormData(p => ({ ...p, carousel_style: 'default' }))}
+                        onClick={() => isEditing && setFormData((p) => ({ ...p, carousel_style: 'default' }))}
                         className={`rounded-xl border-2 p-4 text-left transition-all ${
                           formData.carousel_style === 'default'
                             ? 'border-navy bg-blue-50 shadow-md'
@@ -481,7 +480,7 @@ export function Settings() {
                           }`}>
                             {formData.carousel_style === 'default' && <div className="w-2.5 h-2.5 rounded-full bg-navy" />}
                           </div>
-                          <span className={`font-bold ${ formData.carousel_style === 'default' ? 'text-navy' : 'text-gray-700'}`}>Default (3D)</span>
+                          <span className={`font-bold ${formData.carousel_style === 'default' ? 'text-navy' : 'text-gray-700'}`}>Default (3D)</span>
                         </div>
                         <div className="flex items-center justify-center gap-1 py-3 bg-white rounded-lg border border-gray-200">
                           <div className="w-8 h-10 bg-gray-200 rounded opacity-60 -rotate-6"></div>
@@ -494,7 +493,7 @@ export function Settings() {
                       {/* Classic Option */}
                       <button
                         type="button"
-                        onClick={() => isEditing && setFormData(p => ({ ...p, carousel_style: 'classic' }))}
+                        onClick={() => isEditing && setFormData((p) => ({ ...p, carousel_style: 'classic' }))}
                         className={`rounded-xl border-2 p-4 text-left transition-all ${
                           formData.carousel_style === 'classic'
                             ? 'border-navy bg-blue-50 shadow-md'
@@ -507,7 +506,7 @@ export function Settings() {
                           }`}>
                             {formData.carousel_style === 'classic' && <div className="w-2.5 h-2.5 rounded-full bg-navy" />}
                           </div>
-                          <span className={`font-bold ${ formData.carousel_style === 'classic' ? 'text-navy' : 'text-gray-700'}`}>Classic (Horizontal)</span>
+                          <span className={`font-bold ${formData.carousel_style === 'classic' ? 'text-navy' : 'text-gray-700'}`}>Classic (Horizontal)</span>
                         </div>
                         <div className="flex items-center justify-center gap-1 py-3 bg-white rounded-lg border border-gray-200">
                           <span className="text-gray-400 text-lg">&#8592;</span>
@@ -541,7 +540,7 @@ export function Settings() {
                     <div>
                       <label className={labelClass}>Current Password <span className="text-xs text-gray-400 font-normal ml-2">(Required to set new password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showCurrentPassword ? "text" : "password"} name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} placeholder="Current Password" disabled={!isEditing} />
+                        <input type={showCurrentPassword ? 'text' : 'password'} name="current" value={passwords.current} onChange={handlePasswordChange} className={inputClass} placeholder="Current Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showCurrentPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -550,7 +549,7 @@ export function Settings() {
                     <div>
                       <label className={labelClass}>New Password <span className="text-xs text-gray-400 font-normal ml-2">(New password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showNewPassword ? "text" : "password"} name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} placeholder="New Password" disabled={!isEditing} />
+                        <input type={showNewPassword ? 'text' : 'password'} name="newPass" value={passwords.newPass} onChange={handlePasswordChange} className={inputClass} placeholder="New Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showNewPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -559,7 +558,7 @@ export function Settings() {
                     <div>
                       <label className={labelClass}>Confirm New Password <span className="text-xs text-gray-400 font-normal ml-2">(Repeat new password)</span></label>
                       <div className="relative flex items-center">
-                        <input type={showConfirmPassword ? "text" : "password"} name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} placeholder="Confirm New Password" disabled={!isEditing} />
+                        <input type={showConfirmPassword ? 'text' : 'password'} name="confirm" value={passwords.confirm} onChange={handlePasswordChange} className={inputClass} placeholder="Confirm New Password" disabled={!isEditing} />
                         <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Toggle visibility">
                           {showConfirmPassword ? <EyeOff size={22} /> : <Eye size={22} />}
                         </button>
@@ -568,7 +567,7 @@ export function Settings() {
                   </div>
                 )}
               </div>
-              
+
               <div className="px-6 md:px-8 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
                 {!isEditing ? (
                   <button
@@ -605,5 +604,3 @@ export function Settings() {
     </>
   );
 }
-
-

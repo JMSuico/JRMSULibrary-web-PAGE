@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { referenceApi, PaginatedReferences } from '@/src/Endpoints/referenceApi';
 import { Search, Link as LinkIcon, FileText } from 'lucide-react';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
@@ -13,15 +14,15 @@ export function ResearchReferencesTable() {
   const [data, setData] = useState<PaginatedReferences | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState<number>(50);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 500);
   const [category, setCategory] = useState('All');
-  const [selectedFileRef, setSelectedFileRef] = useState<{ id: number, name: string } | null>(null);
-  
-  const scrollRef = useDraggableScroll<HTMLDivElement>();
-  const limit = 50;
+  const [selectedFileRef, setSelectedFileRef] = useState<{ id: number; name: string } | null>(null);
 
-  const loadData = async () => {
+  const scrollRef = useDraggableScroll<HTMLDivElement>();
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const result = await referenceApi.getAllReferences(page, limit, debouncedSearch, category);
@@ -31,11 +32,11 @@ export function ResearchReferencesTable() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, debouncedSearch, category]);
 
   useEffect(() => {
     loadData();
-  }, [page, debouncedSearch, category]);
+  }, [loadData]);
 
   useAutoRefresh(loadData, 30000);
 
@@ -43,16 +44,20 @@ export function ResearchReferencesTable() {
     setSearch(e.target.value);
     setPage(1);
   };
-  
+
   const handleCategoryChange = (categoryValue: string) => {
     setCategory(categoryValue);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (newLimit: number) => {
+    setLimit(newLimit);
     setPage(1);
   };
 
   return (
     <div className={`max-w-max-width mx-auto pb-12 px-4 md:px-0 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
       <div className="bg-white/85 backdrop-blur-md rounded-2xl shadow-xl border border-white/50 p-6 md:p-8 mb-8 overflow-hidden">
-        
         <div className="text-center mb-8">
           <h2 className="font-headline-md font-bold text-3xl mb-3" style={{ color: 'var(--color-primary)' }}>
             Research & Thesis References
@@ -69,8 +74,8 @@ export function ResearchReferencesTable() {
                 key={cat}
                 onClick={() => handleCategoryChange(cat)}
                 className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm border ${
-                  category === cat 
-                    ? 'bg-primary text-white border-primary scale-[1.02]' 
+                  category === cat
+                    ? 'bg-primary text-white border-primary scale-[1.02]'
                     : 'bg-white/80 text-primary border-primary/20 hover:bg-gold-light hover:text-primary hover:border-gold-light'
                 }`}
                 style={category === cat ? { backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)' } : {}}
@@ -82,9 +87,9 @@ export function ResearchReferencesTable() {
 
           <div className="relative w-full md:w-96">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-primary)', opacity: 0.5 }} size={18} />
-            <input 
-              type="text" 
-              placeholder="Search by title, author, or call no..." 
+            <input
+              type="text"
+              placeholder="Search by title, author, or call no..."
               value={search}
               onChange={handleSearch}
               className="w-full pl-11 pr-4 py-3 bg-white/90 border border-primary/20 rounded-full focus:outline-none focus:ring-2 focus:ring-gold-light focus:border-gold-light transition-all text-sm font-medium"
@@ -124,11 +129,13 @@ export function ResearchReferencesTable() {
                       <div className="font-bold mb-1.5 leading-tight text-base" style={{ color: 'var(--color-primary)' }}>{ref.title}</div>
                       <div className="text-xs flex flex-wrap gap-2 items-center font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>
                         <span className="bg-primary/5 px-2 py-1 rounded-md border border-primary/10">Acc No: {ref.acc_no || '-'}</span>
-                        <span className={`px-2.5 py-1 rounded-md border ${
-                          ref.category === 'Thesis and Dissertation' 
-                            ? 'bg-purple-50 text-purple-700 border-purple-200' 
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        }`}>
+                        <span
+                          className={`px-2.5 py-1 rounded-md border ${
+                            ref.category === 'Thesis and Dissertation'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}
+                        >
                           {ref.category === 'Thesis and Dissertation' ? 'Thesis' : 'Research'}
                         </span>
                       </div>
@@ -147,9 +154,9 @@ export function ResearchReferencesTable() {
                         </span>
                       )}
                       {ref.access_type === 'link' && ref.access_link && (
-                        <a 
-                          href={ref.access_link} 
-                          target="_blank" 
+                        <a
+                          href={ref.access_link}
+                          target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200"
                         >
@@ -158,10 +165,12 @@ export function ResearchReferencesTable() {
                       )}
                       {ref.access_type === 'file' && ref.access_file && (
                         <button
-                          onClick={() => setSelectedFileRef({ 
-                            id: ref.id, 
-                            name: ref.access_file?.split('/').pop() || `${ref.title} Document`
-                          })}
+                          onClick={() =>
+                            setSelectedFileRef({
+                              id: ref.id,
+                              name: ref.access_file?.split('/').pop() || `${ref.title} Document`,
+                            })
+                          }
                           className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 cursor-pointer"
                         >
                           <FileText size={12} /> View File
@@ -174,20 +183,22 @@ export function ResearchReferencesTable() {
             </tbody>
           </table>
         </div>
-        
-        {data && data.total_pages > 0 && (
-          <div className="pt-8 mt-4 flex justify-center">
-            <Pagination 
-              currentPage={data.current_page} 
-              totalPages={data.total_pages} 
+
+        {data && data.count > 0 && (
+          <div className="pt-8 mt-4">
+            <Pagination
+              currentPage={data.current_page}
+              totalPages={data.total_pages}
               totalItems={data.count}
               itemsPerPage={limit}
-              onPageChange={setPage} 
+              onPageChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
             />
           </div>
         )}
       </div>
-      
+
       {/* File Viewer Modal */}
       {selectedFileRef && (
         <ReferenceFileViewerModal

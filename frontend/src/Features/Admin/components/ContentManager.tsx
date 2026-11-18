@@ -1,25 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
-import { personnelApi } from '@/src/Endpoints/personnelApi';
-import { Save, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, RefreshCw, GripVertical, Check, X, Search } from 'lucide-react';
+import { Save, Plus, Trash2, Edit2, RefreshCw, X, Search, LayoutGrid, List } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
-import { LayoutGrid, List } from 'lucide-react';
 import { ResearchReferencesManager } from './ResearchReferencesManager';
 import { PersonnelManager } from './PersonnelManager';
-
 import { getImageUrl } from '@/src/Libs/apiClient';
+
+interface ContentBundle {
+  contents: PageContent[];
+  links: ManagedLink[];
+  files: ManagedFile[];
+}
 
 export function ContentManager() {
   const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence' | 'research_references'>('content');
-  const [loading, setLoading] = useState(false);
   const { showToast, removeToast } = useToast();
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -49,72 +52,73 @@ export function ContentManager() {
 
   const onMouseMoveTabs = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDraggingTabs || !tabsContainerRef.current) return;
-    e.preventDefault(); // prevent text selection while dragging
+    e.preventDefault();
     const x = e.pageX - tabsContainerRef.current.offsetLeft;
     const walk = (x - startXTabs) * 1.5;
     tabsContainerRef.current.scrollLeft = scrollLeftTabs - walk;
   };
 
   // Content State
-  const [contents, setContents] = useState<PageContent[]>([]);
   const [editedContents, setEditedContents] = useState<Record<string, string>>({});
   const [editingContentId, setEditingContentId] = useState<string | null>(null);
   const [isSavingContent, setIsSavingContent] = useState(false);
-  
+
   // Link State
-  const [links, setLinks] = useState<ManagedLink[]>([]);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<ManagedLink | null>(null);
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [draggedLinkId, setDraggedLinkId] = useState<number | null>(null);
-  const [linksPage, setLinksPage] = useState(1);
   const [linksViewMode, setLinksViewMode] = useState<'table' | 'card'>('table');
   const [selectedLinkIds, setSelectedLinkIds] = useState<Set<number>>(new Set());
-  const linksPerPage = 10;
 
   // File State
-  const [files, setFiles] = useState<ManagedFile[]>([]);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileUploadCategory, setFileUploadCategory] = useState<'Manual' | 'OrgStructure' | 'Excellence'>('Manual');
   const [isUploadingFile, setIsUploadingFile] = useState(false);
-
-  const [personnelList, setPersonnelList] = useState<any[]>([]);
-  const [isPersonnelModalOpen, setIsPersonnelModalOpen] = useState(false);
-  const [personnelPhoto, setPersonnelPhoto] = useState<File | null>(null);
-  const [personnelPhotoPreview, setPersonnelPhotoPreview] = useState<string | null>(null);
-  const [editingPersonnelId, setEditingPersonnelId] = useState<number | null>(null);
-  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [viewingManualFile, setViewingManualFile] = useState<ManagedFile | null>(null);
-  
+
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [c, l, f, p] = await Promise.all([
+  const {
+    data: cachedBundle,
+    isLoading,
+    error,
+    refetch,
+    mutate,
+  } = useCachedQuery<ContentBundle>({
+    key: 'admin:content',
+    fetcher: async () => {
+      const [contents, links, files] = await Promise.all([
         cmsApi.getAllContent(),
         cmsApi.getAllLinks(),
         cmsApi.getAllFiles(),
-        personnelApi.getPersonnel()
       ]);
-      setContents(c);
-      setLinks(l);
-      setFiles(f);
-      setPersonnelList(p);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load data', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { contents, links, files };
+    },
+    staleTimeMs: 60_000,
+    listenCmsUpdate: true,
+  });
 
-  useAutoRefresh(loadData, 60000);
+  useEffect(() => {
+    if (error) {
+      showToast(error.message || 'Failed to load data', 'error');
+    }
+  }, [error, showToast]);
+
+  const bundle: ContentBundle = cachedBundle ?? { contents: [], links: [], files: [] };
+  const bundleRef = useRef<ContentBundle>(bundle);
+  bundleRef.current = bundle;
+
+  const { contents, links, files } = bundle;
+
+  const sortedLinks = useMemo(() => [...links].sort((a, b) => a.order - b.order), [links]);
+
+  const linksPagination = usePagination<ManagedLink>({
+    items: sortedLinks,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_content_links_page_size',
+  });
 
   // --- Content Handlers ---
   const handleSaveContent = async (slug: string, content: string) => {
@@ -123,10 +127,12 @@ export function ContentManager() {
     showToast('Saving content...', 'info');
     try {
       await cmsApi.updateContent(slug, { content });
+      invalidateCacheByPrefix('admin:content');
       showToast('Content saved successfully', 'success');
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to save content', 'error');
+      await refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save content';
+      showToast(message, 'error');
     } finally {
       setIsSavingContent(false);
     }
@@ -141,7 +147,7 @@ export function ContentManager() {
       url: fd.get('url') as string,
       category: fd.get('category') as string,
       order: parseInt(fd.get('order') as string, 10),
-      is_active: fd.get('is_active') === 'on'
+      is_active: fd.get('is_active') === 'on',
     };
 
     if (isSavingLink) return;
@@ -153,18 +159,20 @@ export function ContentManager() {
       } else {
         await cmsApi.createLink(payload);
       }
+      invalidateCacheByPrefix('admin:content');
       showToast(`Link ${editingLink ? 'updated' : 'created'} successfully`, 'success');
       setIsLinkModalOpen(false);
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to save link', 'error');
+      await refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save link';
+      showToast(message, 'error');
     } finally {
       setIsSavingLink(false);
     }
   };
 
   const handleDeleteLink = (id: number) => {
-    const linkToDelete = links.find(l => l.id === id);
+    const linkToDelete = bundleRef.current.links.find((l) => l.id === id);
     if (!linkToDelete) return;
 
     triggerDelete(
@@ -172,25 +180,28 @@ export function ContentManager() {
       async () => {
         try {
           await cmsApi.deleteLink(id);
-        } catch (err: any) {
-          setLinks(prev => [...prev, linkToDelete]);
-          showToast(err.message || 'Failed to delete link', 'error');
+          invalidateCacheByPrefix('admin:content');
+        } catch (err: unknown) {
+          mutate({ ...bundleRef.current, links: [...bundleRef.current.links, linkToDelete] });
+          const message = err instanceof Error ? err.message : 'Failed to delete link';
+          showToast(message, 'error');
         }
       },
       () => {
-        setLinks(prev => [...prev, linkToDelete]);
+        mutate({ ...bundleRef.current, links: [...bundleRef.current.links, linkToDelete] });
         showToast('Link restoration undone', 'success');
-      }
+      },
     );
-    setLinks(prev => prev.filter(l => l.id !== id));
+    mutate({ ...bundleRef.current, links: bundleRef.current.links.filter((l) => l.id !== id) });
   };
 
   const handleBulkDeleteLinks = () => {
     if (selectedLinkIds.size === 0) return;
-    const count = selectedLinkIds.size;
-    const linksToDelete = links.filter(l => selectedLinkIds.has(l.id));
+    const idsToDelete = Array.from<number>(selectedLinkIds);
+    const count = idsToDelete.length;
+    const linksToDelete = bundleRef.current.links.filter((l) => selectedLinkIds.has(l.id));
 
-    setLinks(prev => prev.filter(l => !selectedLinkIds.has(l.id)));
+    mutate({ ...bundleRef.current, links: bundleRef.current.links.filter((l) => !selectedLinkIds.has(l.id)) });
     setSelectedLinkIds(new Set());
 
     triggerDelete(
@@ -200,14 +211,15 @@ export function ContentManager() {
         const toastId = showToast(`${count} removing processing.`, 'loading');
         try {
           await processInChunks(
-            Array.from(selectedLinkIds),
+            idsToDelete,
             10,
             (id: number) => cmsApi.deleteLink(id),
-            (_, __, c) => {}
+            () => {},
           );
+          invalidateCacheByPrefix('admin:content');
           showToast(`Removed ${count} links successfully`, 'success');
-        } catch (err: any) {
-          setLinks(prev => [...prev, ...linksToDelete]);
+        } catch {
+          mutate({ ...bundleRef.current, links: [...bundleRef.current.links, ...linksToDelete] });
           showToast('Failed to remove some links', 'error');
         } finally {
           setIsRemoving(false);
@@ -215,9 +227,9 @@ export function ContentManager() {
         }
       },
       () => {
-        setLinks(prev => [...prev, ...linksToDelete]);
+        mutate({ ...bundleRef.current, links: [...bundleRef.current.links, ...linksToDelete] });
         showToast('Bulk link restoration undone', 'success');
-      }
+      },
     );
   };
 
@@ -225,9 +237,13 @@ export function ContentManager() {
     try {
       const res = await cmsApi.importDefaultLinks();
       showToast(res.message, res.imported > 0 ? 'success' : 'info');
-      if (res.imported > 0) loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to import default links', 'error');
+      if (res.imported > 0) {
+        invalidateCacheByPrefix('admin:content');
+        await refetch();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to import default links';
+      showToast(message, 'error');
     }
   };
 
@@ -235,9 +251,13 @@ export function ContentManager() {
     try {
       const res = await cmsApi.importDefaultTexts();
       showToast(res.message, res.imported > 0 ? 'success' : 'info');
-      if (res.imported > 0) loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to import default texts', 'error');
+      if (res.imported > 0) {
+        invalidateCacheByPrefix('admin:content');
+        await refetch();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to import default texts';
+      showToast(message, 'error');
     }
   };
 
@@ -255,28 +275,27 @@ export function ContentManager() {
     e.preventDefault();
     if (draggedLinkId === null || draggedLinkId === targetId) return;
 
-    const sortedLinks = [...links].sort((a, b) => a.order - b.order);
-    const draggedIdx = sortedLinks.findIndex(l => l.id === draggedLinkId);
-    const targetIdx = sortedLinks.findIndex(l => l.id === targetId);
-    
+    const currentSorted = [...bundleRef.current.links].sort((a, b) => a.order - b.order);
+    const draggedIdx = currentSorted.findIndex((l) => l.id === draggedLinkId);
+    const targetIdx = currentSorted.findIndex((l) => l.id === targetId);
+
     if (draggedIdx === -1 || targetIdx === -1) return;
 
-    const newLinks = [...sortedLinks];
+    const newLinks = [...currentSorted];
     const [draggedItem] = newLinks.splice(draggedIdx, 1);
     newLinks.splice(targetIdx, 0, draggedItem);
 
     // Update orders sequentially
     const updatedLinks = newLinks.map((l, idx) => ({ ...l, order: idx + 1 }));
-    setLinks(updatedLinks);
+    mutate({ ...bundleRef.current, links: updatedLinks });
 
     try {
-      await Promise.all(
-        updatedLinks.map(l => cmsApi.updateLink(l.id, { order: l.order }))
-      );
+      await Promise.all(updatedLinks.map((l) => cmsApi.updateLink(l.id, { order: l.order })));
+      invalidateCacheByPrefix('admin:content');
       showToast('Sequence updated successfully', 'success');
-    } catch (err) {
+    } catch {
       showToast('Failed to update sequence', 'error');
-      loadData(); // Revert on failure
+      await refetch();
     }
     setDraggedLinkId(null);
   };
@@ -291,25 +310,26 @@ export function ContentManager() {
     if (isUploadingFile) return;
     setIsUploadingFile(true);
     showToast('Uploading file...', 'info');
-    
+
     const fd = new FormData(e.currentTarget);
-    
     fd.append('file', selectedFile);
     try {
       await cmsApi.createFile(fd);
+      invalidateCacheByPrefix('admin:content');
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       setSelectedFile(null);
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to upload file', 'error');
+      await refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to upload file';
+      showToast(message, 'error');
     } finally {
       setIsUploadingFile(false);
     }
   };
 
   const handleDeleteFile = (id: number) => {
-    const fileToDelete = files.find(f => f.id === id);
+    const fileToDelete = bundleRef.current.files.find((f) => f.id === id);
     if (!fileToDelete) return;
 
     triggerDelete(
@@ -317,20 +337,22 @@ export function ContentManager() {
       async () => {
         try {
           await cmsApi.deleteFile(id);
-        } catch (err: any) {
-          setFiles(prev => [...prev, fileToDelete]);
-          showToast(err.message || 'Failed to delete file', 'error');
+          invalidateCacheByPrefix('admin:content');
+        } catch (err: unknown) {
+          mutate({ ...bundleRef.current, files: [...bundleRef.current.files, fileToDelete] });
+          const message = err instanceof Error ? err.message : 'Failed to delete file';
+          showToast(message, 'error');
         }
       },
       () => {
-        setFiles(prev => [...prev, fileToDelete]);
+        mutate({ ...bundleRef.current, files: [...bundleRef.current.files, fileToDelete] });
         showToast('File restoration undone', 'success');
-      }
+      },
     );
-    setFiles(prev => prev.filter(f => f.id !== id));
+    mutate({ ...bundleRef.current, files: bundleRef.current.files.filter((f) => f.id !== id) });
   };
 
-  if (loading && contents.length === 0) {
+  if (isLoading && !cachedBundle) {
     return <div className="p-8 text-center text-gray-500">Loading CMS...</div>;
   }
 
@@ -343,59 +365,59 @@ export function ContentManager() {
 
       <div className="admin-table-wrapper" style={{ padding: 0 }}>
         {/* Tabs */}
-        <div 
+        <div
           ref={tabsContainerRef}
           onMouseDown={onMouseDownTabs}
           onMouseLeave={onMouseLeaveTabs}
           onMouseUp={onMouseUpTabs}
           onMouseMove={onMouseMoveTabs}
-          style={{ 
-            display: 'flex', 
+          style={{
+            display: 'flex',
             borderBottom: '1px solid var(--color-surface-container-highest)',
             overflowX: 'auto',
             whiteSpace: 'nowrap',
             WebkitOverflowScrolling: 'touch',
-            cursor: 'grab'
+            cursor: 'grab',
           }}
           className="custom-scrollbar"
         >
-          <button 
+          <button
             onClick={() => setActiveTab('content')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'content' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'content' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Page Text Content
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('links')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'links' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'links' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             External Links
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('files')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'files' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'files' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Manual Files
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('org_structure')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'org_structure' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'org_structure' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Org Structure
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('personnel')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'personnel' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'personnel' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Library Personnel
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('excellence')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'excellence' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'excellence' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
             Excellence in Information
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('research_references')}
             style={{ padding: '16px 24px', fontWeight: 600, borderBottom: activeTab === 'research_references' ? '2px solid var(--color-navy)' : 'none', color: activeTab === 'research_references' ? 'var(--color-navy)' : 'var(--color-gray-500)' }}
           >
@@ -408,7 +430,7 @@ export function ContentManager() {
           {activeTab === 'content' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div className="flex justify-end">
-                <button 
+                <button
                   className="admin-btn admin-btn--primary flex items-center gap-2"
                   style={{ background: 'var(--color-navy-mid)' }}
                   onClick={handleSeedDefaultTexts}
@@ -421,10 +443,10 @@ export function ContentManager() {
                   <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>{item.title}</h3>
                   <div className="mb-3">
                     {editingContentId === item.slug ? (
-                      <BlockTextEditor 
+                      <BlockTextEditor
                         key={item.slug}
-                        value={editedContents[item.slug] ?? item.content} 
-                        onChange={(v) => setEditedContents(prev => ({ ...prev, [item.slug]: v }))}
+                        value={editedContents[item.slug] ?? item.content}
+                        onChange={(v) => setEditedContents((prev) => ({ ...prev, [item.slug]: v }))}
                         id={`content-${item.slug}`}
                       />
                     ) : (
@@ -434,11 +456,11 @@ export function ContentManager() {
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     {editingContentId === item.slug ? (
                       <div className="flex gap-2">
-                        <button 
+                        <button
                           className="admin-btn admin-btn--outline flex items-center gap-2"
                           onClick={() => {
                             setEditingContentId(null);
-                            setEditedContents(prev => {
+                            setEditedContents((prev) => {
                               const newC = { ...prev };
                               delete newC[item.slug];
                               return newC;
@@ -447,20 +469,20 @@ export function ContentManager() {
                         >
                           Cancel
                         </button>
-                        <button 
+                        <button
                           className="admin-btn admin-btn--primary flex items-center gap-2"
                           disabled={isSavingContent}
                           onClick={async () => {
-                             let val = editedContents[item.slug] ?? item.content;
-                             await handleSaveContent(item.slug, val);
-                             setEditingContentId(null);
+                            const val = editedContents[item.slug] ?? item.content;
+                            await handleSaveContent(item.slug, val);
+                            setEditingContentId(null);
                           }}
                         >
                           {isSavingContent ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <Save size={16} />} Save Changes
                         </button>
                       </div>
                     ) : (
-                      <button 
+                      <button
                         className="admin-btn admin-btn--primary flex items-center gap-2"
                         onClick={() => {
                           setEditingContentId(item.slug);
@@ -476,311 +498,367 @@ export function ContentManager() {
           )}
 
           {activeTab === 'links' && (() => {
-            const sortedLinks = [...links].sort((a,b) => a.order - b.order);
-            const totalPages = Math.ceil(sortedLinks.length / linksPerPage) || 1;
-            const currentLinksPage = Math.min(linksPage, totalPages);
-            const currentLinks = sortedLinks.slice((currentLinksPage - 1) * linksPerPage, currentLinksPage * linksPerPage);
+            const currentLinks = linksPagination.paginatedItems;
 
             return (
-            <div>
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
-                  <button 
-                    onClick={() => setLinksViewMode('table')}
-                    className={`p-1.5 rounded flex items-center justify-center transition-colors ${linksViewMode === 'table' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                    title="Table View"
-                  >
-                    <List size={18} />
-                  </button>
-                  <button 
-                    onClick={() => setLinksViewMode('card')}
-                    className={`p-1.5 rounded flex items-center justify-center transition-colors ${linksViewMode === 'card' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                    title="Card View"
-                  >
-                    <LayoutGrid size={18} />
-                  </button>
-                </div>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <button
-                    className="admin-btn admin-btn--secondary text-sm w-full sm:w-auto"
-                    onClick={() => {
-                      if (selectedLinkIds.size > 0) {
-                        setSelectedLinkIds(new Set());
-                      } else {
-                        setSelectedLinkIds(new Set(currentLinks.map(l => l.id)));
-                      }
-                    }}
-                    disabled={isRemoving}
-                  >
-                    {selectedLinkIds.size > 0 ? "Unselect All" : "Select All"}
-                  </button>
-                  {selectedLinkIds.size > 0 && (
-                    <button 
-                      className="admin-btn w-full sm:w-auto" 
-                      style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
-                      onClick={handleBulkDeleteLinks}
+              <div>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                  <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+                    <button
+                      onClick={() => setLinksViewMode('table')}
+                      className={`p-1.5 rounded flex items-center justify-center transition-colors ${linksViewMode === 'table' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                      title="Table View"
+                    >
+                      <List size={18} />
+                    </button>
+                    <button
+                      onClick={() => setLinksViewMode('card')}
+                      className={`p-1.5 rounded flex items-center justify-center transition-colors ${linksViewMode === 'card' ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                      title="Card View"
+                    >
+                      <LayoutGrid size={18} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <button
+                      className="admin-btn admin-btn--secondary text-sm w-full sm:w-auto"
+                      onClick={() => {
+                        if (selectedLinkIds.size > 0) {
+                          setSelectedLinkIds(new Set());
+                        } else {
+                          setSelectedLinkIds(new Set(currentLinks.map((l) => l.id)));
+                        }
+                      }}
                       disabled={isRemoving}
                     >
-                      <Trash2 size={16} /> Remove Selected ({selectedLinkIds.size})
+                      {selectedLinkIds.size > 0 ? 'Unselect All' : 'Select All'}
                     </button>
-                  )}
-                  <button 
-                    className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
-                    style={{ background: 'var(--color-navy-mid)' }}
-                    onClick={handleSeedDefaultLinks}
-                  >
-                    <RefreshCw size={16} /> Import Defaults
-                  </button>
-                  <button 
-                    className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
-                    onClick={() => { setEditingLink(null); setIsLinkModalOpen(true); }}
-                  >
-                    <Plus size={16} /> Add Link
-                  </button>
+                    {selectedLinkIds.size > 0 && (
+                      <button
+                        className="admin-btn w-full sm:w-auto"
+                        style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
+                        onClick={handleBulkDeleteLinks}
+                        disabled={isRemoving}
+                      >
+                        <Trash2 size={16} /> Remove Selected ({selectedLinkIds.size})
+                      </button>
+                    )}
+                    <button
+                      className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
+                      style={{ background: 'var(--color-navy-mid)' }}
+                      onClick={handleSeedDefaultLinks}
+                    >
+                      <RefreshCw size={16} /> Import Defaults
+                    </button>
+                    <button
+                      className="admin-btn admin-btn--primary flex items-center gap-2 w-full sm:w-auto justify-center"
+                      onClick={() => { setEditingLink(null); setIsLinkModalOpen(true); }}
+                    >
+                      <Plus size={16} /> Add Link
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {linksViewMode === 'table' ? (
-                <div className="admin-table-scroll">
-                  <table className="admin-table min-w-full">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '40px', textAlign: 'center' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={currentLinks.length > 0 && currentLinks.every(l => selectedLinkIds.has(l.id))}
-                            disabled={isRemoving}
+                {linksViewMode === 'table' ? (
+                  <div className="admin-table-scroll">
+                    <table className="admin-table min-w-full">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '40px', textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={currentLinks.length > 0 && currentLinks.every((l) => selectedLinkIds.has(l.id))}
+                              disabled={isRemoving}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedLinkIds);
+                                if (e.target.checked) currentLinks.forEach((l) => newSelected.add(l.id));
+                                else currentLinks.forEach((l) => newSelected.delete(l.id));
+                                setSelectedLinkIds(newSelected);
+                              }}
+                            />
+                          </th>
+                          <th>Name</th>
+                          <th>URL</th>
+                          <th>Category</th>
+                          <th>Order</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentLinks.map((link) => (
+                          <tr
+                            key={link.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, link.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, link.id)}
+                            style={{ cursor: 'move', backgroundColor: selectedLinkIds.has(link.id) ? 'var(--color-blue-50)' : (draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined) }}
+                            className={draggedLinkId === link.id ? 'opacity-50' : ''}
+                          >
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedLinkIds.has(link.id)}
+                                disabled={isRemoving}
+                                onChange={(e) => {
+                                  const newSelected = new Set(selectedLinkIds);
+                                  if (e.target.checked) newSelected.add(link.id);
+                                  else newSelected.delete(link.id);
+                                  setSelectedLinkIds(newSelected);
+                                }}
+                              />
+                            </td>
+                            <td style={{ fontWeight: 500 }}>
+                              <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-gray-400" style={{ cursor: 'grab' }}>drag_indicator</span>
+                                {link.name}
+                              </div>
+                            </td>
+                            <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }} className="break-all line-clamp-1">{link.url}</a></td>
+                            <td><span className="admin-badge admin-badge--info">{link.category}</span></td>
+                            <td>{link.order}</td>
+                            <td>
+                              <span className={`admin-badge ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                                {link.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} style={{ padding: '6px', backgroundColor: 'color-mix(in srgb, var(--color-blue) 10%, transparent)', color: 'var(--color-blue)', borderRadius: '4px' }}><Edit2 size={16} /></button>
+                              <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16} /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {currentLinks.map((link) => (
+                      <div
+                        key={link.id}
+                        className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all hover:shadow-md hover:border-blue-100 group"
+                        style={{ border: selectedLinkIds.has(link.id) ? '2px solid var(--color-navy)' : undefined }}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, link.id)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, link.id)}
+                      >
+                        <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
+                          <input
+                            type="checkbox"
+                            style={{ width: 16, height: 16, cursor: 'pointer' }}
+                            checked={selectedLinkIds.has(link.id)}
                             onChange={(e) => {
                               const newSelected = new Set(selectedLinkIds);
-                              if (e.target.checked) currentLinks.forEach(l => newSelected.add(l.id));
-                              else currentLinks.forEach(l => newSelected.delete(l.id));
+                              if (e.target.checked) newSelected.add(link.id);
+                              else newSelected.delete(link.id);
                               setSelectedLinkIds(newSelected);
                             }}
                           />
-                        </th>
+                        </div>
+                        <div className="flex justify-between items-start pl-8">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-gray-300 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity absolute -left-2 bg-white rounded-full shadow-sm" title="Drag to reorder">drag_indicator</span>
+                            <h3 className="font-bold text-gray-900 text-lg line-clamp-1 pl-2">{link.name}</h3>
+                          </div>
+                          <span className={`admin-badge text-[10px] px-2 py-0.5 ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                            {link.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+
+                        <div className="text-sm text-gray-500 flex items-center gap-1">
+                          <span className="font-medium text-gray-700 w-16">Category:</span>
+                          <span className="truncate">{link.category}</span>
+                        </div>
+                        <div className="text-sm text-gray-500 flex items-center gap-1">
+                          <span className="font-medium text-gray-700 w-16">Order:</span>
+                          <span>{link.order}</span>
+                        </div>
+                        <div className="text-sm text-gray-500 flex flex-col gap-1 mt-1">
+                          <span className="font-medium text-gray-700">URL:</span>
+                          <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all bg-gray-50 p-2 rounded text-xs">{link.url}</a>
+                        </div>
+
+                        <div className="flex gap-2 mt-auto pt-4 border-t border-gray-100">
+                          <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} className="flex-1 flex items-center justify-center gap-2 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors text-sm font-medium">
+                            <Edit2 size={14} /> Edit
+                          </button>
+                          <button onClick={() => handleDeleteLink(link.id)} className="flex-1 flex items-center justify-center gap-2 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors text-sm font-medium">
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {linksPagination.totalItems > 0 && (
+                  <div className="mt-6 border-t border-gray-100 pt-4">
+                    <Pagination
+                      currentPage={linksPagination.currentPage}
+                      totalPages={linksPagination.totalPages}
+                      onPageChange={linksPagination.setPage}
+                      totalItems={linksPagination.totalItems}
+                      itemsPerPage={linksPagination.pageSize}
+                      onPageSizeChange={linksPagination.setPageSize}
+                      pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {activeTab === 'files' && (() => {
+            const manualFiles = files.filter((f) => f.category === 'Manual');
+            return (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                  <button
+                    className={`admin-btn flex items-center gap-2 ${manualFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
+                    onClick={() => {
+                      if (manualFiles.length < 1) {
+                        setFileUploadCategory('Manual');
+                        setIsFileModalOpen(true);
+                      }
+                    }}
+                    disabled={manualFiles.length >= 1}
+                    title={manualFiles.length >= 1 ? 'Only 1 manual file allowed. Please delete the existing one first to upload a new one.' : ''}
+                  >
+                    {manualFiles.length >= 1 ? 'Maximum 1 file reached' : <><Plus size={16} /> Upload File</>}
+                  </button>
+                </div>
+                <div className="admin-table-scroll">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
                         <th>Name</th>
-                        <th>URL</th>
-                        <th>Category</th>
-                        <th>Order</th>
+                        <th>File URL</th>
                         <th>Status</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {currentLinks.map((link) => (
-                        <tr 
-                          key={link.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, link.id)}
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => handleDrop(e, link.id)}
-                          style={{ cursor: 'move', backgroundColor: selectedLinkIds.has(link.id) ? 'var(--color-blue-50)' : (draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined) }}
-                          className={draggedLinkId === link.id ? 'opacity-50' : ''}
-                        >
-                          <td style={{ textAlign: 'center' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={selectedLinkIds.has(link.id)}
-                              disabled={isRemoving}
-                              onChange={(e) => {
-                                const newSelected = new Set(selectedLinkIds);
-                                if (e.target.checked) newSelected.add(link.id);
-                                else newSelected.delete(link.id);
-                                setSelectedLinkIds(newSelected);
-                              }}
-                            />
-                          </td>
-                          <td style={{ fontWeight: 500 }}>
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-gray-400" style={{ cursor: 'grab' }}>drag_indicator</span>
-                              {link.name}
-                            </div>
-                          </td>
-                          <td><a href={link.url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }} className="break-all line-clamp-1">{link.url}</a></td>
-                          <td><span className="admin-badge admin-badge--info">{link.category}</span></td>
-                          <td>{link.order}</td>
+                      {manualFiles.map((file) => (
+                        <tr key={file.id}>
+                          <td style={{ fontWeight: 500 }}>{file.name}</td>
+                          <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>Download</a></td>
                           <td>
-                            <span className={`admin-badge ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                              {link.is_active ? 'Active' : 'Inactive'}
+                            <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                              {file.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </td>
-                          <td style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} style={{ padding: '6px', backgroundColor: 'color-mix(in srgb, var(--color-blue) 10%, transparent)', color: 'var(--color-blue)', borderRadius: '4px' }}><Edit2 size={16}/></button>
-                            <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16}/></button>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16} /></button>
+                              <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16} /></button>
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {currentLinks.map((link) => (
-                    <div 
-                      key={link.id} 
-                      className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all hover:shadow-md hover:border-blue-100 group"
-                      style={{ border: selectedLinkIds.has(link.id) ? '2px solid var(--color-navy)' : undefined }}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, link.id)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, link.id)}
-                    >
-                      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
-                        <input 
-                          type="checkbox" 
-                          style={{ width: 16, height: 16, cursor: 'pointer' }}
-                          checked={selectedLinkIds.has(link.id)}
-                          onChange={(e) => {
-                            const newSelected = new Set(selectedLinkIds);
-                            if (e.target.checked) newSelected.add(link.id);
-                            else newSelected.delete(link.id);
-                            setSelectedLinkIds(newSelected);
-                          }}
-                        />
-                      </div>
-                      <div className="flex justify-between items-start pl-8">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-gray-300 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity absolute -left-2 bg-white rounded-full shadow-sm" title="Drag to reorder">drag_indicator</span>
-                          <h3 className="font-bold text-gray-900 text-lg line-clamp-1 pl-2">{link.name}</h3>
-                        </div>
-                        <span className={`admin-badge text-[10px] px-2 py-0.5 ${link.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                          {link.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      
-                      <div className="text-sm text-gray-500 flex items-center gap-1">
-                        <span className="font-medium text-gray-700 w-16">Category:</span>
-                        <span className="truncate">{link.category}</span>
-                      </div>
-                      <div className="text-sm text-gray-500 flex items-center gap-1">
-                        <span className="font-medium text-gray-700 w-16">Order:</span>
-                        <span>{link.order}</span>
-                      </div>
-                      <div className="text-sm text-gray-500 flex flex-col gap-1 mt-1">
-                        <span className="font-medium text-gray-700">URL:</span>
-                        <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all bg-gray-50 p-2 rounded text-xs">{link.url}</a>
-                      </div>
-                      
-                      <div className="flex gap-2 mt-auto pt-4 border-t border-gray-100">
-                        <button onClick={() => { setEditingLink(link); setIsLinkModalOpen(true); }} className="flex-1 flex items-center justify-center gap-2 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors text-sm font-medium">
-                          <Edit2 size={14}/> Edit
-                        </button>
-                        <button onClick={() => handleDeleteLink(link.id)} className="flex-1 flex items-center justify-center gap-2 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors text-sm font-medium">
-                          <Trash2 size={14}/> Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {totalPages > 1 && (
-                <div className="mt-6 flex justify-center sm:justify-end border-t border-gray-100 pt-4">
-                  <Pagination 
-                    currentPage={currentLinksPage} 
-                    totalPages={totalPages} 
-                    onPageChange={setLinksPage}
-                    totalItems={sortedLinks.length}
-                    itemsPerPage={linksPerPage}
-                  />
-                </div>
-              )}
-            </div>
-            );
-          })()}
-
-          {activeTab === 'files' && (() => {
-            const manualFiles = files.filter(f => f.category === 'Manual');
-            return (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-                <button 
-                  className={`admin-btn flex items-center gap-2 ${manualFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
-                  onClick={() => {
-                    if (manualFiles.length < 1) {
-                      setFileUploadCategory('Manual');
-                      setIsFileModalOpen(true);
-                    }
-                  }}
-                  disabled={manualFiles.length >= 1}
-                  title={manualFiles.length >= 1 ? "Only 1 manual file allowed. Please delete the existing one first to upload a new one." : ""}
-                >
-                  {manualFiles.length >= 1 ? 'Maximum 1 file reached' : <><Plus size={16} /> Upload File</>}
-                </button>
               </div>
-              <div className="admin-table-scroll">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>File URL</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {manualFiles.map((file) => (
-                      <tr key={file.id}>
-                        <td style={{ fontWeight: 500 }}>{file.name}</td>
-                        <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>Download</a></td>
-                        <td>
-                          <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                            {file.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
-                            <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
             );
           })()}
 
           {activeTab === 'org_structure' && (() => {
-            const orgFiles = files.filter(f => f.category === 'OrgStructure');
+            const orgFiles = files.filter((f) => f.category === 'OrgStructure');
             return (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-                <button 
-                  className={`admin-btn flex items-center gap-2 ${orgFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
-                  onClick={() => {
-                    if (orgFiles.length < 1) {
-                      setFileUploadCategory('OrgStructure');
-                      setIsFileModalOpen(true);
-                    }
-                  }}
-                  disabled={orgFiles.length >= 1}
-                  title={orgFiles.length >= 1 ? "Maximum 1 image reached. Please delete the current image to upload a new one." : "Upload Image"}
-                >
-                  <Plus size={16} /> Add Image (Max 1)
-                </button>
-              </div>
-              <div className="admin-table-scroll">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Preview</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orgFiles.length === 0 ? (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                  <button
+                    className={`admin-btn flex items-center gap-2 ${orgFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
+                    onClick={() => {
+                      if (orgFiles.length < 1) {
+                        setFileUploadCategory('OrgStructure');
+                        setIsFileModalOpen(true);
+                      }
+                    }}
+                    disabled={orgFiles.length >= 1}
+                    title={orgFiles.length >= 1 ? 'Maximum 1 image reached. Please delete the current image to upload a new one.' : 'Upload Image'}
+                  >
+                    <Plus size={16} /> Add Image (Max 1)
+                  </button>
+                </div>
+                <div className="admin-table-scroll">
+                  <table className="admin-table">
+                    <thead>
                       <tr>
-                        <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-gray-500)' }}>
-                          No organizational structure file uploaded yet. Click "Add Image" above to upload.
-                        </td>
+                        <th>Name</th>
+                        <th>Preview</th>
+                        <th>Status</th>
+                        <th>Actions</th>
                       </tr>
-                    ) : (
-                      orgFiles.map((file) => (
+                    </thead>
+                    <tbody>
+                      {orgFiles.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-gray-500)' }}>
+                            No organizational structure file uploaded yet. Click "Add Image" above to upload.
+                          </td>
+                        </tr>
+                      ) : (
+                        orgFiles.map((file) => (
+                          <tr key={file.id}>
+                            <td style={{ fontWeight: 500 }}>{file.name}</td>
+                            <td>
+                              <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                            </td>
+                            <td>
+                              <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
+                                {file.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16} /></button>
+                                <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16} /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {activeTab === 'excellence' && (() => {
+            const excellenceFiles = files.filter((f) => f.category === 'Excellence');
+            return (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                  <button
+                    className={`admin-btn flex items-center gap-2 ${excellenceFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
+                    onClick={() => {
+                      if (excellenceFiles.length < 1) {
+                        setFileUploadCategory('Excellence');
+                        setIsFileModalOpen(true);
+                      }
+                    }}
+                    disabled={excellenceFiles.length >= 1}
+                    title={excellenceFiles.length >= 1 ? 'Maximum 1 image reached. Please delete the existing one first to upload a new one.' : 'Upload Image'}
+                  >
+                    {excellenceFiles.length >= 1 ? 'Maximum 1 image reached' : <><Plus size={16} /> Upload Image</>}
+                  </button>
+                </div>
+                <div className="admin-table-scroll">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Preview</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {excellenceFiles.map((file) => (
                         <tr key={file.id}>
                           <td style={{ fontWeight: 500 }}>{file.name}</td>
                           <td>
@@ -793,73 +871,16 @@ export function ContentManager() {
                           </td>
                           <td>
                             <div style={{ display: 'flex', gap: '8px' }}>
-                              <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
-                              <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
+                              <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16} /></button>
+                              <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-            );
-          })()}
-
-          {activeTab === 'excellence' && (() => {
-            const excellenceFiles = files.filter(f => f.category === 'Excellence');
-            return (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-                <button 
-                  className={`admin-btn flex items-center gap-2 ${excellenceFiles.length >= 1 ? 'bg-blue-300 text-white cursor-not-allowed border-none opacity-70' : 'admin-btn--primary'}`}
-                  onClick={() => {
-                    if (excellenceFiles.length < 1) {
-                      setFileUploadCategory('Excellence');
-                      setIsFileModalOpen(true);
-                    }
-                  }}
-                  disabled={excellenceFiles.length >= 1}
-                  title={excellenceFiles.length >= 1 ? "Maximum 1 image reached. Please delete the existing one first to upload a new one." : "Upload Image"}
-                >
-                  {excellenceFiles.length >= 1 ? 'Maximum 1 image reached' : <><Plus size={16} /> Upload Image</>}
-                </button>
-              </div>
-              <div className="admin-table-scroll">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Preview</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {excellenceFiles.map((file) => (
-                      <tr key={file.id}>
-                        <td style={{ fontWeight: 500 }}>{file.name}</td>
-                        <td>
-                          <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                        </td>
-                        <td>
-                          <span className={`admin-badge ${file.is_active ? 'admin-badge--success' : 'admin-badge--error'}`}>
-                            {file.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => setViewingManualFile(file)} style={{ padding: '6px', backgroundColor: 'var(--color-blue-50)', color: 'var(--color-blue-700)', borderRadius: '4px' }} title="Preview File"><Search size={16}/></button>
-                            <button onClick={() => handleDeleteFile(file.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }} title="Delete File"><Trash2 size={16}/></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
             );
           })()}
 
@@ -914,12 +935,12 @@ export function ContentManager() {
             </form>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {viewingManualFile && createPortal(
         <div className="fixed backdrop-blur-sm inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999] animate-modal-overlay" onClick={() => setViewingManualFile(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col animate-modal-card" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
               <h2 className="text-lg font-bold text-gray-900 truncate">Preview: {viewingManualFile.name}</h2>
               <button onClick={() => setViewingManualFile(null)} className="text-gray-400 hover:text-gray-600 bg-white p-1.5 rounded shadow-sm border border-gray-200 cursor-pointer transition-colors hover:bg-gray-100">
@@ -949,7 +970,7 @@ export function ContentManager() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {/* File Modal */}
@@ -978,7 +999,7 @@ export function ContentManager() {
                   }
                   multiple={false}
                   maxSizeMB={fileUploadCategory === 'Manual' ? 20 : 10}
-                  onFilesSelected={(files) => setSelectedFile(files[0])}
+                  onFilesSelected={(filesList) => setSelectedFile(filesList[0])}
                   label="Click to upload file or drag and drop"
                   subLabel={`Maximum file size: ${fileUploadCategory === 'Manual' ? '20MB' : '10MB'}`}
                 />
@@ -987,7 +1008,7 @@ export function ContentManager() {
                     {selectedFile.type.startsWith('image/') ? (
                       <img src={URL.createObjectURL(selectedFile)} alt="Preview" className="h-32 w-auto object-contain rounded border border-gray-200 shadow-sm animate-modal-card" />
                     ) : (
-                       <p className="text-sm font-medium text-green-600">Selected: {selectedFile.name}</p>
+                      <p className="text-sm font-medium text-green-600">Selected: {selectedFile.name}</p>
                     )}
                   </div>
                 )}
@@ -1006,18 +1027,14 @@ export function ContentManager() {
             </form>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </>
   );
 }
-
-
-
-

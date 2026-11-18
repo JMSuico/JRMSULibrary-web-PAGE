@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { getImageUrl } from '@/src/Libs/apiClient';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { getImageUrl, getThumbnailUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 
 import {
@@ -19,22 +19,30 @@ import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { useToast } from '@/src/Hooks/useToast';
 
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
 
+function handleThumbnailFallback(e: React.SyntheticEvent<HTMLImageElement>, rawImagePath: string) {
+  const img = e.currentTarget;
+  const fallbackUrl = getImageUrl(rawImagePath);
+  if (img.dataset.fallbackApplied !== '1' && fallbackUrl) {
+    img.dataset.fallbackApplied = '1';
+    img.src = fallbackUrl;
+  } else {
+    img.style.display = 'none';
+  }
+}
+
 export function SectionsManager() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
-  const [images, setImages] = useState<GalleryImage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   // Modal state
@@ -48,26 +56,31 @@ export function SectionsManager() {
   const [isRemoving, setIsRemoving] = useState(false);
   const { showToast, removeToast } = useToast();
 
-  const fetchImages = async () => {
-    try {
-      setLoading(true);
-      const data = await galleryApi.getAllImages();
-      setImages(data);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to fetch images', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: cachedImages,
+    isLoading,
+    error,
+    refetch,
+    mutate,
+  } = useCachedQuery<GalleryImage[]>({
+    key: 'admin:sections',
+    fetcher: () => galleryApi.getAllImages(),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const images = cachedImages ?? [];
+  const imagesRef = useRef<GalleryImage[]>(images);
+  imagesRef.current = images;
 
   useEffect(() => {
-    fetchImages();
-  }, []);
-
-  useAutoRefresh(fetchImages, 60000);
+    if (error) {
+      showToast(error.message || 'Failed to fetch images', 'error');
+    }
+  }, [error, showToast]);
 
   const handleDelete = (id: number) => {
-    const imgToDelete = images.find(img => img.id === id);
+    const imgToDelete = imagesRef.current.find((img) => img.id === id);
     if (!imgToDelete) return;
 
     triggerDelete(
@@ -75,31 +88,32 @@ export function SectionsManager() {
       async () => {
         try {
           await galleryApi.deleteImage(id);
+          invalidateCacheByPrefix('admin:sections');
           showToast('Image permanently deleted', 'success');
-        } catch (err: any) {
-          // Revert optimistic delete
-          setImages(prev => [...prev, imgToDelete]);
-          showToast(err.message || 'Failed to delete image', 'error');
+        } catch (err: unknown) {
+          mutate([...imagesRef.current, imgToDelete]);
+          const message = err instanceof Error ? err.message : 'Failed to delete image';
+          showToast(message, 'error');
         }
       },
       () => {
-        // Undo logic
-        setImages(prev => [...prev, imgToDelete]);
+        mutate([...imagesRef.current, imgToDelete]);
         showToast('Deletion undone', 'success');
-      }
+      },
     );
 
     // Optimistic delete
-    setImages(prev => prev.filter(img => img.id !== id));
+    mutate(imagesRef.current.filter((img) => img.id !== id));
   };
 
   const handleBulkDeleteSections = () => {
     if (selectedSectionIds.size === 0) return;
-    const count = selectedSectionIds.size;
-    const imagesToDelete = images.filter(img => selectedSectionIds.has(img.id));
+    const idsToDelete = Array.from<number>(selectedSectionIds);
+    const count = idsToDelete.length;
+    const imagesToDelete = imagesRef.current.filter((img) => selectedSectionIds.has(img.id));
 
     // Optimistic remove
-    setImages(prev => prev.filter(img => !selectedSectionIds.has(img.id)));
+    mutate(imagesRef.current.filter((img) => !selectedSectionIds.has(img.id)));
     setSelectedSectionIds(new Set());
 
     triggerDelete(
@@ -109,14 +123,15 @@ export function SectionsManager() {
         const toastId = showToast(`${count} removing processing.`, 'loading');
         try {
           await processInChunks(
-            Array.from(selectedSectionIds),
+            idsToDelete,
             10,
             (id: number) => galleryApi.deleteImage(id),
-            (_, __, c) => {}
+            () => {},
           );
+          invalidateCacheByPrefix('admin:sections');
           showToast(`Permanently removed ${count} images`, 'success');
-        } catch (err: any) {
-          setImages(prev => [...prev, ...imagesToDelete]);
+        } catch {
+          mutate([...imagesRef.current, ...imagesToDelete]);
           showToast('Failed to remove some images', 'error');
         } finally {
           setIsRemoving(false);
@@ -124,9 +139,9 @@ export function SectionsManager() {
         }
       },
       () => {
-        setImages(prev => [...prev, ...imagesToDelete]);
+        mutate([...imagesRef.current, ...imagesToDelete]);
         showToast('Bulk deletion undone', 'success');
-      }
+      },
     );
   };
 
@@ -151,11 +166,13 @@ export function SectionsManager() {
       } else {
         await galleryApi.createImage(fd);
       }
+      invalidateCacheByPrefix('admin:sections');
       showToast(`Image ${editingImage ? 'updated' : 'uploaded'} successfully`, 'success');
       setIsModalOpen(false);
-      fetchImages();
-    } catch (err: any) {
-      showToast(err.message || 'An error occurred while saving image', 'error');
+      await refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An error occurred while saving image';
+      showToast(message, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -182,22 +199,38 @@ export function SectionsManager() {
       setPreviewUrl(URL.createObjectURL(file));
     }
   };
+
   const debouncedSearch = useDebounce(searchQuery, 400);
 
-  const filtered = images.filter(
-    (img) =>
-      img.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      img.section_label.toLowerCase().includes(debouncedSearch.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const query = debouncedSearch.toLowerCase();
+    return images.filter(
+      (img) =>
+        img.title.toLowerCase().includes(query) ||
+        img.section_label.toLowerCase().includes(query),
+    );
+  }, [images, debouncedSearch]);
 
-  const totalPages = Math.ceil(filtered.length / itemsPerPage);
-  const paginatedSections = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const {
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    paginatedItems: paginatedSections,
+    setPage,
+    setPageSize,
+  } = usePagination<GalleryImage>({
+    items: filtered,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_sections_page_size',
+  });
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch]);
+    setPage(1);
+  }, [debouncedSearch, setPage]);
 
   const activeCount = images.filter((i) => i.is_active).length;
+  const loading = isLoading && images.length === 0;
 
   return (
     <>
@@ -240,16 +273,16 @@ export function SectionsManager() {
                 if (selectedSectionIds.size > 0) {
                   setSelectedSectionIds(new Set());
                 } else {
-                  setSelectedSectionIds(new Set(filtered.map(img => img.id)));
+                  setSelectedSectionIds(new Set(filtered.map((img) => img.id)));
                 }
               }}
               disabled={isRemoving}
             >
-              {selectedSectionIds.size > 0 ? "Unselect All" : "Select All"}
+              {selectedSectionIds.size > 0 ? 'Unselect All' : 'Select All'}
             </button>
             {selectedSectionIds.size > 0 && (
-              <button 
-                className="admin-btn" 
+              <button
+                className="admin-btn"
                 style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
                 onClick={handleBulkDeleteSections}
                 disabled={isRemoving}
@@ -292,16 +325,16 @@ export function SectionsManager() {
                   <thead>
                     <tr>
                       <th style={{ width: '40px', textAlign: 'center' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={paginatedSections.length > 0 && paginatedSections.every(s => selectedSectionIds.has(s.id))}
+                        <input
+                          type="checkbox"
+                          checked={paginatedSections.length > 0 && paginatedSections.every((s) => selectedSectionIds.has(s.id))}
                           disabled={isRemoving}
                           onChange={(e) => {
                             const newSelected = new Set(selectedSectionIds);
                             if (e.target.checked) {
-                              paginatedSections.forEach(s => newSelected.add(s.id));
+                              paginatedSections.forEach((s) => newSelected.add(s.id));
                             } else {
-                              paginatedSections.forEach(s => newSelected.delete(s.id));
+                              paginatedSections.forEach((s) => newSelected.delete(s.id));
                             }
                             setSelectedSectionIds(newSelected);
                           }}
@@ -318,8 +351,8 @@ export function SectionsManager() {
                     {paginatedSections.map((img) => (
                       <tr key={img.id} style={{ backgroundColor: selectedSectionIds.has(img.id) ? 'var(--color-blue-50)' : 'transparent' }}>
                         <td style={{ textAlign: 'center' }}>
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={selectedSectionIds.has(img.id)}
                             disabled={isRemoving}
                             onChange={(e) => {
@@ -332,11 +365,13 @@ export function SectionsManager() {
                         </td>
                         <td>
                           <img
-                            src={getImageUrl(img.image)}
+                            src={getThumbnailUrl(img.image)}
                             alt={img.title}
+                            loading="lazy"
+                            decoding="async"
                             className="rounded-md object-cover"
                             style={{ width: 64, height: 48 }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            onError={(e) => handleThumbnailFallback(e, img.image)}
                           />
                         </td>
                         <td style={{ fontWeight: 500, color: 'var(--color-gray-900)' }}>{img.title || '—'}</td>
@@ -376,8 +411,8 @@ export function SectionsManager() {
                 {paginatedSections.map((img) => (
                   <div className="admin-grid-card relative" key={img.id} style={{ border: selectedSectionIds.has(img.id) ? '2px solid var(--color-navy)' : '1px solid var(--color-gray-200)' }}>
                     <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         style={{ width: 18, height: 18, cursor: 'pointer' }}
                         checked={selectedSectionIds.has(img.id)}
                         onChange={(e) => {
@@ -390,10 +425,12 @@ export function SectionsManager() {
                     </div>
                     <div style={{ height: 160, overflow: 'hidden', position: 'relative', background: 'var(--color-gray-100)', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
                       <img
-                        src={getImageUrl(img.image)}
+                        src={getThumbnailUrl(img.image)}
                         alt={img.title}
+                        loading="lazy"
+                        decoding="async"
                         style={{ width: '100%', height: '100%', objectFit: 'cover', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        onError={(e) => handleThumbnailFallback(e, img.image)}
                       />
                       {!img.is_active && (
                         <div style={{
@@ -435,13 +472,15 @@ export function SectionsManager() {
               </div>
             )}
 
-            {filtered.length > itemsPerPage && (
-              <Pagination 
+            {totalItems > 0 && (
+              <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                totalItems={filtered.length}
-                itemsPerPage={itemsPerPage}
+                onPageChange={setPage}
+                totalItems={totalItems}
+                itemsPerPage={pageSize}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
               />
             )}
           </>
@@ -450,7 +489,7 @@ export function SectionsManager() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && createPortal(
-        <div className="fixed inset-0 bg-black/60 ] flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="font-bold text-gray-900">
@@ -475,7 +514,7 @@ export function SectionsManager() {
                     onFilesSelected={(files) => {
                       const file = files[0];
                       const event = {
-                        target: { files: [file] }
+                        target: { files: [file] },
                       } as unknown as React.ChangeEvent<HTMLInputElement>;
                       handleFileChange(event);
                     }}
@@ -551,13 +590,13 @@ export function SectionsManager() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {/* View Full Details Modal */}
       {viewingImage && createPortal(
-<div className="fixed inset-0 bg-black/60 ] flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]" onClick={() => setViewingImage(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-modal-card" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]" onClick={() => setViewingImage(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <ImageIcon size={22} className="text-navy" /> Section Details
@@ -566,17 +605,17 @@ export function SectionsManager() {
                 <X size={22} />
               </button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto">
               <div className="bg-gray-100 rounded-xl overflow-hidden mb-6 flex items-center justify-center" style={{ minHeight: '300px' }}>
-                <img 
-                  src={getImageUrl(viewingImage.image)} 
-                  alt={viewingImage.title} 
+                <img
+                  src={getImageUrl(viewingImage.image)}
+                  alt={viewingImage.title}
                   className="max-w-full max-h-[50vh] object-contain"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Title</p>
@@ -598,9 +637,9 @@ export function SectionsManager() {
                 </div>
               </div>
             </div>
-            
+
             <div className="p-5 border-t border-gray-100 bg-gray-50 flex justify-end">
-              <button 
+              <button
                 onClick={() => setViewingImage(null)}
                 className="px-6 py-2.5 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition-colors cursor-pointer"
               >
@@ -609,16 +648,14 @@ export function SectionsManager() {
             </div>
           </div>
         </div>,
-document.body
-)}
+        document.body,
+      )}
 
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </>
   );
 }
-
-

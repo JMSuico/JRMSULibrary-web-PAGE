@@ -32,6 +32,40 @@ export const getImageUrl = (imagePath: string | null | undefined): string => {
 
 export const getFileUrl = getImageUrl;
 
+/**
+ * Converts a media path into its fast `_thumb.webp` thumbnail URL when applicable.
+ * Preserves query/hash suffixes and falls back cleanly for non-media, SVG, e-resource,
+ * data:, blob:, or already-thumbnailed paths.
+ */
+export const getThumbnailUrl = (imagePath: string | null | undefined): string => {
+  if (!imagePath) return '';
+  const base = getImageUrl(imagePath);
+  if (!base) return '';
+  if (base.startsWith('data:') || base.startsWith('blob:')) return base;
+
+  const queryOrHashIdx = base.search(/[?#]/);
+  const pathname = queryOrHashIdx >= 0 ? base.slice(0, queryOrHashIdx) : base;
+  const suffix = queryOrHashIdx >= 0 ? base.slice(queryOrHashIdx) : '';
+  const lowerPath = pathname.toLowerCase();
+
+  if (
+    !lowerPath.startsWith('/media/') ||
+    lowerPath.startsWith('/media/e_resources/') ||
+    lowerPath.endsWith('.svg') ||
+    lowerPath.endsWith('_thumb.webp')
+  ) {
+    return base;
+  }
+
+  const lastSlash = pathname.lastIndexOf('/');
+  const lastDot = pathname.lastIndexOf('.');
+  if (lastDot <= lastSlash) {
+    return base;
+  }
+
+  return `${pathname.slice(0, lastDot)}_thumb.webp${suffix}`;
+};
+
 export function getCookie(name: string) {
   let cookieValue = null;
   if (document.cookie && document.cookie !== '') {

@@ -9,6 +9,7 @@ import { ensureCsrfToken } from '@/src/Libs/apiClient';
 import { Loader2 } from 'lucide-react';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
+import { invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 
 /** Map route paths to human-readable page titles */
 const PAGE_TITLES: Record<string, string> = {
@@ -125,6 +126,7 @@ export default function AdminLayout() {
     if (isLoggingOutRef.current) return;
     isLoggingOutRef.current = true;
     localStorage.removeItem('admin_last_activity');
+    invalidateCacheByPrefix('admin:');
     try {
       await ensureCsrfToken();
       await userApi.logout();
