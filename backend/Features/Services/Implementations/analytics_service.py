@@ -22,5 +22,11 @@ class SiteVisitService(ISiteVisitService):
     def get_count_by_month_year(self, month: int, year: int) -> int:
         return self._repo.get_count_by_month_year(month, year)
 
+    def get_daily_counts(self, start_date, end_date) -> dict:
+        return self._repo.get_daily_counts(start_date, end_date)
+
+    def get_monthly_counts(self, start_date) -> dict:
+        return self._repo.get_monthly_counts(start_date)
+
     def track_visit(self, page: str, ip_hash: str) -> bool:
         return self._repo.track_visit(page, ip_hash)

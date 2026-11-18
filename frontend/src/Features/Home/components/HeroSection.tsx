@@ -1,95 +1,215 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { getImageUrl } from '@/src/Libs/apiClient';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { publicApi, cmsApi } from '@/src/Endpoints/cmsApi';
-import { settingsApi } from '@/src/Endpoints/settingsApi';
+import { settingsApi, type SiteSettings } from '@/src/Endpoints/settingsApi';
 import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
+
+interface OpenHoursState {
+  openH: number;
+  openM: number;
+  closeH: number;
+  closeM: number;
+  satOpen: boolean;
+  sunOpen: boolean;
+}
+
+interface CachedHeroSettings {
+  opening_hours_mon_fri: string;
+  opening_hours_sat: string;
+  opening_hours_sun: string;
+  ts: number;
+}
+
+const HERO_CACHE_TTL_MS = 5 * 60 * 1000;
+const HERO_EXCELLENCE_KEY = 'cached_hero_excellence';
+const HERO_EXCELLENCE_TS_KEY = 'cached_hero_excellence_ts';
+const HERO_SETTINGS_KEY = 'cached_hero_settings';
+
+const parseOpeningHours = (
+  monFri: string,
+  sat: string,
+  sun: string
+): OpenHoursState | null => {
+  const match = monFri.match(/(\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return null;
+  let openH = parseInt(match[1], 10);
+  const openM = parseInt(match[2], 10);
+  const openAmpm = match[3].toUpperCase();
+  let closeH = parseInt(match[4], 10);
+  const closeM = parseInt(match[5], 10);
+  const closeAmpm = match[6].toUpperCase();
+  if (openAmpm === 'PM' && openH !== 12) openH += 12;
+  if (openAmpm === 'AM' && openH === 12) openH = 0;
+  if (closeAmpm === 'PM' && closeH !== 12) closeH += 12;
+  if (closeAmpm === 'AM' && closeH === 12) closeH = 0;
+  return {
+    openH,
+    openM,
+    closeH,
+    closeM,
+    satOpen: sat === 'Open',
+    sunOpen: sun === 'Open',
+  };
+};
+
+const readCachedHeroSettings = (): CachedHeroSettings | null => {
+  try {
+    const raw = localStorage.getItem(HERO_SETTINGS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedHeroSettings>;
+    if (
+      typeof parsed.opening_hours_mon_fri === 'string' &&
+      typeof parsed.ts === 'number'
+    ) {
+      return {
+        opening_hours_mon_fri: parsed.opening_hours_mon_fri,
+        opening_hours_sat: parsed.opening_hours_sat ?? '',
+        opening_hours_sun: parsed.opening_hours_sun ?? '',
+        ts: parsed.ts,
+      };
+    }
+  } catch {
+    // ignore corrupted cache
+  }
+  return null;
+};
 
 export const HeroSection: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver();
   const [visitorCount, setVisitorCount] = useState<number | null>(null);
-  const [timeState, setTimeState] = useState(() => {
-    return {
-      hh: '--',
-      mm: '--',
-      ss: '--',
-      ampm: '--',
-      dateStr: 'Loading...',
-      isOpen: false,
-    };
-  });
+  const [timeState, setTimeState] = useState(() => ({
+    hh: '--',
+    mm: '--',
+    ss: '--',
+    ampm: '--',
+    dateStr: 'Loading...',
+    isOpen: false,
+  }));
 
-  // Opening hours state from backend Settings API
-  const [openHours, setOpenHours] = useState<{ openH: number; openM: number; closeH: number; closeM: number; satOpen: boolean; sunOpen: boolean } | null>(null);
-  const [rawOpenHours, setRawOpenHours] = useState<string>('Working days MONDAY TO FRIDAY | 7AM TO 7PM');
+  const initialSettings = readCachedHeroSettings();
+  const [openHours, setOpenHours] = useState<OpenHoursState | null>(() =>
+    initialSettings
+      ? parseOpeningHours(
+          initialSettings.opening_hours_mon_fri,
+          initialSettings.opening_hours_sat,
+          initialSettings.opening_hours_sun
+        )
+      : null
+  );
+  const [rawOpenHours, setRawOpenHours] = useState<string>(() =>
+    initialSettings?.opening_hours_mon_fri
+      ? `Working days MONDAY TO FRIDAY | ${initialSettings.opening_hours_mon_fri}`
+      : 'Working days MONDAY TO FRIDAY | 7AM TO 7PM'
+  );
 
   const [excellenceImage, setExcellenceImage] = useState<string | null>(() => {
-    return localStorage.getItem('cached_hero_excellence') || null;
+    try {
+      return localStorage.getItem(HERO_EXCELLENCE_KEY) || null;
+    } catch {
+      return null;
+    }
   });
   const [isImageLoaded, setIsImageLoaded] = useState<boolean>(false);
+  const heroImgRef = useRef<HTMLImageElement | null>(null);
 
-  const loadData = () => {
+  const loadData = useCallback((forceRefresh = false) => {
     publicApi.getVisitorCount()
-      .then(data => setVisitorCount(data.total_visits))
+      .then((data) => setVisitorCount(data.total_visits))
       .catch(() => setVisitorCount(null));
-    
-    settingsApi.getSettings()
-      .then((s: any) => {
-        const raw: string = s?.opening_hours_mon_fri || '7:00 AM - 7:00 PM';
-        setRawOpenHours(`Working days MONDAY TO FRIDAY | ${raw}`);
-        const match = raw.match(/(\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)/i);
-        if (match) {
-          let openH = parseInt(match[1]);
-          const openM = parseInt(match[2]);
-          const openAmpm = match[3].toUpperCase();
-          let closeH = parseInt(match[4]);
-          const closeM = parseInt(match[5]);
-          const closeAmpm = match[6].toUpperCase();
-          if (openAmpm === 'PM' && openH !== 12) openH += 12;
-          if (openAmpm === 'AM' && openH === 12) openH = 0;
-          if (closeAmpm === 'PM' && closeH !== 12) closeH += 12;
-          if (closeAmpm === 'AM' && closeH === 12) closeH = 0;
-          setOpenHours({ 
-            openH, 
-            openM, 
-            closeH, 
-            closeM,
-            satOpen: s?.opening_hours_sat === 'Open',
-            sunOpen: s?.opening_hours_sun === 'Open'
-          });
-        }
-      })
-      .catch(() => null);
 
-    cmsApi.getAllFiles()
-      .then(files => {
-        const excellenceFile = files.find(f => f.category === 'Excellence' && f.is_active);
-        if (excellenceFile && excellenceFile.file) {
-          const resolved = getImageUrl(excellenceFile.file);
-          localStorage.setItem('cached_hero_excellence', excellenceFile.file);
-          setExcellenceImage(excellenceFile.file);
-          const tester = new window.Image();
-          tester.onload = () => setIsImageLoaded(true);
-          tester.src = resolved;
-        } else {
-          localStorage.removeItem('cached_hero_excellence');
-          setExcellenceImage(null);
-          setIsImageLoaded(false);
-        }
-      })
-      .catch(() => null);
-  };
+    const now = Date.now();
+    const cachedSettings = readCachedHeroSettings();
+    const hasFreshSettings =
+      !forceRefresh && cachedSettings !== null && now - cachedSettings.ts < HERO_CACHE_TTL_MS;
 
-  useEffect(() => {
-    loadData();
-    if (excellenceImage) {
-      const tester = new window.Image();
-      tester.onload = () => setIsImageLoaded(true);
-      tester.src = getImageUrl(excellenceImage);
+    if (!hasFreshSettings) {
+      settingsApi.getSettings()
+        .then((s: SiteSettings) => {
+          const monFri = s?.opening_hours_mon_fri || '7:00 AM - 7:00 PM';
+          const sat = s?.opening_hours_sat || '';
+          const sun = s?.opening_hours_sun || '';
+          setRawOpenHours(`Working days MONDAY TO FRIDAY | ${monFri}`);
+          const parsed = parseOpeningHours(monFri, sat, sun);
+          if (parsed) {
+            setOpenHours(parsed);
+          }
+          try {
+            const payload: CachedHeroSettings = {
+              opening_hours_mon_fri: monFri,
+              opening_hours_sat: sat,
+              opening_hours_sun: sun,
+              ts: Date.now(),
+            };
+            localStorage.setItem(HERO_SETTINGS_KEY, JSON.stringify(payload));
+          } catch {
+            // ignore storage quota errors
+          }
+        })
+        .catch(() => null);
+    }
+
+    let hasFreshExcellence = false;
+    if (!forceRefresh) {
+      try {
+        const cachedFile = localStorage.getItem(HERO_EXCELLENCE_KEY);
+        const cachedTs = Number(localStorage.getItem(HERO_EXCELLENCE_TS_KEY) || '0');
+        if (cachedFile && cachedTs > 0 && now - cachedTs < HERO_CACHE_TTL_MS) {
+          hasFreshExcellence = true;
+        }
+      } catch {
+        hasFreshExcellence = false;
+      }
+    }
+
+    if (!hasFreshExcellence) {
+      cmsApi.getAllFiles()
+        .then((files) => {
+          const excellenceFile = files.find((f) => f.category === 'Excellence' && f.is_active);
+          if (excellenceFile && excellenceFile.file) {
+            try {
+              localStorage.setItem(HERO_EXCELLENCE_KEY, excellenceFile.file);
+              localStorage.setItem(HERO_EXCELLENCE_TS_KEY, String(Date.now()));
+            } catch {
+              // ignore storage quota errors
+            }
+            setExcellenceImage((prev) => {
+              if (prev !== excellenceFile.file) {
+                setIsImageLoaded(false);
+              }
+              return excellenceFile.file;
+            });
+          } else {
+            try {
+              localStorage.removeItem(HERO_EXCELLENCE_KEY);
+              localStorage.removeItem(HERO_EXCELLENCE_TS_KEY);
+            } catch {
+              // ignore
+            }
+            setExcellenceImage(null);
+            setIsImageLoaded(false);
+          }
+        })
+        .catch(() => null);
     }
   }, []);
 
-  useCmsUpdated(loadData);
+  useEffect(() => {
+    loadData(false);
+  }, [loadData]);
+
+  useEffect(() => {
+    const img = heroImgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setIsImageLoaded(true);
+    }
+  }, [excellenceImage]);
+
+  const handleCmsUpdate = useCallback(() => {
+    loadData(true);
+  }, [loadData]);
+
+  useCmsUpdated(handleCmsUpdate);
 
   useEffect(() => {
     const updateClock = () => {
@@ -134,7 +254,7 @@ export const HeroSection: React.FC = () => {
   return (
     <section
       id="home"
-      ref={ref as any}
+      ref={(el) => { ref.current = el; }}
       className="relative min-h-screen flex flex-col justify-center overflow-hidden py-24"
     >
       <div className="absolute inset-0 grid-overlay"></div>
@@ -186,12 +306,15 @@ export const HeroSection: React.FC = () => {
               {/* Layer 2: Real Database Image (Smooth cross-fade) */}
               {excellenceImage && (
                 <img
+                  ref={heroImgRef}
                   src={getImageUrl(excellenceImage)}
                   alt="JRMSU Library Excellence"
                   className={`w-full h-full object-cover block absolute inset-0 transition-opacity duration-500 ease-out ${
                     isImageLoaded ? 'opacity-100' : 'opacity-0'
                   }`}
                   loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
                   onLoad={() => setIsImageLoaded(true)}
                   onError={() => {
                     setIsImageLoaded(false);

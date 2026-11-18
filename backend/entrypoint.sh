@@ -36,5 +36,13 @@ echo "[2/3] Running database migrations..."
 python manage.py migrate --noinput
 echo "  Migrations complete!"
 
-echo "[3/3] Starting Daphne ASGI server..."
-exec daphne -b 0.0.0.0 -p 8000 core.asgi:application
+echo "[3/3] Starting Daphne ASGI (WebSockets :8001) and Gunicorn WSGI (HTTP :8000)..."
+daphne -b 0.0.0.0 -p 8001 core.asgi:application &
+exec gunicorn core.wsgi:application \
+    --bind 0.0.0.0:8000 \
+    --workers 3 \
+    --threads 4 \
+    --worker-class gthread \
+    --timeout 180 \
+    --graceful-timeout 30 \
+    --keep-alive 5

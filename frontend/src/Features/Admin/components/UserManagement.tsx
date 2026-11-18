@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import {
@@ -17,55 +17,62 @@ import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 
+interface UsersBundle {
+  users: User[];
+  me: User | null;
+}
+
 export function UserManagement() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  
+
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
   const { showToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
+
+  const {
+    data: cachedBundle,
+    isLoading,
+    error,
+    refetch,
+    mutate,
+  } = useCachedQuery<UsersBundle>({
+    key: 'admin:users',
+    fetcher: async () => {
+      const [users, me] = await Promise.all([userApi.getAllUsers(), userApi.me()]);
+      return { users, me };
+    },
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const bundle: UsersBundle = cachedBundle ?? { users: [], me: null };
+  const bundleRef = useRef<UsersBundle>(bundle);
+  bundleRef.current = bundle;
+
+  const { users, me: currentUser } = bundle;
+
+  useEffect(() => {
+    if (error) {
+      showToast(error.message || 'Failed to load users', 'error');
+    }
+  }, [error, showToast]);
 
   // Reset showPassword when modal closes or opens
   useEffect(() => {
     if (!isModalOpen) setShowPassword(false);
   }, [isModalOpen]);
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const [data, me] = await Promise.all([
-        userApi.getAllUsers(),
-        userApi.me()
-      ]);
-      setUsers(data);
-      setCurrentUser(me);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load users', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  useAutoRefresh(fetchUsers, 30000);
 
   const handleDelete = (userToDelete: User) => {
     triggerDelete(
@@ -73,19 +80,27 @@ export function UserManagement() {
       async () => {
         try {
           await userApi.deleteUser(userToDelete.id);
+          invalidateCacheByPrefix('admin:users');
           showToast('User deleted successfully', 'success');
-        } catch (err: any) {
-          showToast(err.message || 'Failed to delete user', 'error');
-          fetchUsers(); // Revert on failure
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Failed to delete user';
+          showToast(message, 'error');
+          await refetch();
         }
       },
       () => {
-        setUsers(prev => [...prev, userToDelete].sort((a, b) => a.id - b.id));
+        mutate({
+          ...bundleRef.current,
+          users: [...bundleRef.current.users, userToDelete].sort((a, b) => a.id - b.id),
+        });
         showToast('User deletion undone', 'success');
-      }
+      },
     );
     // Optimistic removal
-    setUsers(prev => prev.filter(u => u.id !== userToDelete.id));
+    mutate({
+      ...bundleRef.current,
+      users: bundleRef.current.users.filter((u) => u.id !== userToDelete.id),
+    });
   };
 
   const handleSaveUser = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -121,11 +136,13 @@ export function UserManagement() {
         await userApi.uploadAvatar(savedUser.id, formData);
       }
 
+      invalidateCacheByPrefix('admin:users');
       showToast(`User ${editingUser ? 'updated' : 'created'} successfully`, 'success');
       setIsModalOpen(false);
-      fetchUsers();
-    } catch (err: any) {
-      showToast(err.message || 'An error occurred while saving user', 'error');
+      await refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An error occurred while saving user';
+      showToast(message, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -133,22 +150,38 @@ export function UserManagement() {
 
   const debouncedSearch = useDebounce(searchQuery, 400);
 
-  const filtered = users.filter((u) => {
-    if (!debouncedSearch) return true;
+  const filtered = useMemo(() => {
+    if (!debouncedSearch) return users;
     const q = debouncedSearch.toLowerCase();
-    return u.first_name.toLowerCase().includes(q) || 
-           u.last_name.toLowerCase().includes(q) || 
-           u.email.toLowerCase().includes(q) || 
-           u.username.toLowerCase().includes(q);
-  });
+    return users.filter(
+      (u) =>
+        u.first_name.toLowerCase().includes(q) ||
+        u.last_name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.username.toLowerCase().includes(q),
+    );
+  }, [users, debouncedSearch]);
 
-  const totalPages = Math.ceil(filtered.length / itemsPerPage);
-  const paginatedUsers = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const {
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    paginatedItems: paginatedUsers,
+    setPage,
+    setPageSize,
+  } = usePagination<User>({
+    items: filtered,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_users_page_size',
+  });
 
   // Reset to page 1 when search query changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch]);
+    setPage(1);
+  }, [debouncedSearch, setPage]);
+
+  const loading = isLoading && !cachedBundle;
 
   return (
     <>
@@ -166,7 +199,7 @@ export function UserManagement() {
         />
         <MetricCard
           label="Active Accounts"
-          value={users.filter(u => u.is_active).length}
+          value={users.filter((u) => u.is_active).length}
           icon={<CheckCircle size={22} />}
           variant="green"
         />
@@ -238,10 +271,10 @@ export function UserManagement() {
                     </td>
                     <td>
                       <div className="admin-table__actions">
-                        <button 
-                          className="admin-btn admin-btn--icon" 
-                          aria-label={user.is_active ? "Suspend User" : "Activate User"}
-                          title={user.id === currentUser?.id ? "Cannot suspend own account" : (user.is_terminal_created ? "Cannot suspend Terminal-Created Admin" : (user.is_active ? "Suspend User" : "Activate User"))}
+                        <button
+                          className="admin-btn admin-btn--icon"
+                          aria-label={user.is_active ? 'Suspend User' : 'Activate User'}
+                          title={user.id === currentUser?.id ? 'Cannot suspend own account' : (user.is_terminal_created ? 'Cannot suspend Terminal-Created Admin' : (user.is_active ? 'Suspend User' : 'Activate User'))}
                           disabled={user.id === currentUser?.id || user.is_terminal_created}
                           style={{ opacity: (user.id === currentUser?.id || user.is_terminal_created) ? 0.3 : 1, cursor: (user.id === currentUser?.id || user.is_terminal_created) ? 'not-allowed' : 'pointer' }}
                           onClick={() => {
@@ -253,19 +286,21 @@ export function UserManagement() {
                               onConfirm: async () => {
                                 try {
                                   await userApi.updateUser(user.id, { is_active: !user.is_active });
+                                  invalidateCacheByPrefix('admin:users');
                                   showToast(`User ${user.is_active ? 'suspended' : 'activated'} successfully`, 'success');
-                                  fetchUsers();
-                                } catch (e: any) {
-                                  showToast(e.message || 'Error updating user status', 'error');
+                                  await refetch();
+                                } catch (e: unknown) {
+                                  const message = e instanceof Error ? e.message : 'Error updating user status';
+                                  showToast(message, 'error');
                                 }
-                              }
+                              },
                             });
                           }}
                         >
                           <ShieldAlert size={15} className={user.is_active ? 'text-orange-500' : 'text-green-500'} />
                         </button>
-                        <button 
-                          className="admin-btn admin-btn--icon" 
+                        <button
+                          className="admin-btn admin-btn--icon"
                           aria-label="Force Logout"
                           title="Force Logout User"
                           onClick={() => {
@@ -276,28 +311,31 @@ export function UserManagement() {
                               onConfirm: async () => {
                                 try {
                                   await userApi.forceLogout(user.id);
+                                  invalidateCacheByPrefix('admin:users');
                                   showToast('User has been forced logged out', 'success');
-                                } catch (e: any) {
-                                  showToast(e.message || 'Failed to force logout', 'error');
+                                  await refetch();
+                                } catch (e: unknown) {
+                                  const message = e instanceof Error ? e.message : 'Failed to force logout';
+                                  showToast(message, 'error');
                                 }
-                              }
+                              },
                             });
                           }}
                         >
                           <LogOut size={15} className="text-gray-600 hover:text-red-600" />
                         </button>
-                        <button 
-                          className="admin-btn admin-btn--icon" 
+                        <button
+                          className="admin-btn admin-btn--icon"
                           aria-label="Edit"
                           title="Edit User"
                           onClick={() => { setEditingUser(user); setIsModalOpen(true); }}
                         >
                           <Pencil size={15} />
                         </button>
-                        <button 
-                          className="admin-btn admin-btn--icon" 
-                          aria-label="Delete" 
-                          title={user.id === currentUser?.id ? "Cannot delete own account" : (user.is_terminal_created ? "Cannot delete Terminal-Created Admin" : "Delete User")}
+                        <button
+                          className="admin-btn admin-btn--icon"
+                          aria-label="Delete"
+                          title={user.id === currentUser?.id ? 'Cannot delete own account' : (user.is_terminal_created ? 'Cannot delete Terminal-Created Admin' : 'Delete User')}
                           disabled={user.id === currentUser?.id || user.is_terminal_created}
                           style={{ color: 'var(--color-red-600)', opacity: (user.id === currentUser?.id || user.is_terminal_created) ? 0.3 : 1, cursor: (user.id === currentUser?.id || user.is_terminal_created) ? 'not-allowed' : 'pointer' }}
                           onClick={() => handleDelete(user)}
@@ -310,14 +348,16 @@ export function UserManagement() {
                 ))}
               </tbody>
             </table>
-            
-            {filtered.length > itemsPerPage && (
-              <Pagination 
+
+            {totalItems > 0 && (
+              <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                totalItems={filtered.length}
-                itemsPerPage={itemsPerPage}
+                onPageChange={setPage}
+                totalItems={totalItems}
+                itemsPerPage={pageSize}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
               />
             )}
           </div>
@@ -325,22 +365,21 @@ export function UserManagement() {
       </div>
 
       {isModalOpen && createPortal(
-        <div className="fixed inset-0 bg-black/60 ] flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-modal-overlay z-[9999]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-modal-card">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="font-bold text-gray-900">
                 {editingUser ? 'Edit Admin User' : 'Create New Admin'}
               </h2>
-              <button 
+              <button
                 onClick={() => setIsModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600 transition"
               >
-                ✕
+                ×
               </button>
             </div>
             <div className="p-6 overflow-y-auto">
               <form id="user-form" onSubmit={handleSaveUser} className="space-y-4">
-                
                 <div className="flex flex-col items-center mb-4">
                   <div className="relative group w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden hover:border-navy transition-colors">
                     <Users size={24} className="text-gray-400" />
@@ -348,8 +387,12 @@ export function UserManagement() {
                       <img src={getImageUrl(editingUser.avatar_url)} alt="Avatar" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     )}
                     <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                      <span className="text-[10px] text-white font-bold text-center px-1">Upload<br/>Picture</span>
-                      <input type="file" name="avatar" accept="image/*" className="hidden" 
+                      <span className="text-[10px] text-white font-bold text-center px-1">Upload<br />Picture</span>
+                      <input
+                        type="file"
+                        name="avatar"
+                        accept="image/*"
+                        className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
@@ -359,7 +402,7 @@ export function UserManagement() {
                             else if (img) {
                               const newImg = document.createElement('img');
                               newImg.src = url;
-                              newImg.className = "w-full h-full object-cover";
+                              newImg.className = 'w-full h-full object-cover';
                               img.replaceWith(newImg);
                             }
                           }
@@ -396,11 +439,11 @@ export function UserManagement() {
                     Password {editingUser && '(Leave blank to keep current)'}
                   </label>
                   <div className="relative">
-                    <input 
-                      required={!editingUser} 
-                      name="password" 
-                      type={showPassword ? "text" : "password"}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy pr-10" 
+                    <input
+                      required={!editingUser}
+                      name="password"
+                      type={showPassword ? 'text' : 'password'}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy pr-10"
                       placeholder={editingUser ? '••••••••' : ''}
                     />
                     <button
@@ -425,9 +468,9 @@ export function UserManagement() {
 
                 <div className="pt-2">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      name="is_active_checkbox" 
+                    <input
+                      type="checkbox"
+                      name="is_active_checkbox"
                       defaultChecked={editingUser ? editingUser.is_active : true}
                       className="w-4 h-4 text-navy rounded focus:ring-navy"
                     />
@@ -437,15 +480,15 @@ export function UserManagement() {
               </form>
             </div>
             <div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50/50 mt-auto">
-              <button 
+              <button
                 onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition"
                 disabled={isSaving}
               >
                 Cancel
               </button>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 form="user-form"
                 disabled={isSaving}
                 className="px-4 py-2 text-sm font-medium text-white bg-navy hover:bg-navy-dark rounded-lg shadow-sm transition flex items-center gap-2"
@@ -456,24 +499,22 @@ export function UserManagement() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
 
-      <ConfirmModal 
-        isOpen={!!confirmModal} 
-        title={confirmModal?.title || ''} 
-        message={confirmModal?.message || ''} 
-        onConfirm={() => confirmModal?.onConfirm()} 
-        onCancel={() => setConfirmModal(null)} 
+      <ConfirmModal
+        isOpen={!!confirmModal}
+        title={confirmModal?.title || ''}
+        message={confirmModal?.message || ''}
+        onConfirm={() => confirmModal?.onConfirm()}
+        onCancel={() => setConfirmModal(null)}
       />
     </>
   );
 }
-
-

@@ -122,6 +122,11 @@ function addSeenAnswer(answer: string) {
 
 export const aiApi = {
   /**
+   * Pre-warm the CSRF cookie before the user submits an AI prompt
+   */
+  prewarmCsrf: (): Promise<void> => ensureCsrfToken(),
+
+  /**
    * Fetch current AI provider routing and health status
    */
   getStatus: async (): Promise<AIProviderStatus> => {

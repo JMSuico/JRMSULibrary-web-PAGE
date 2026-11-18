@@ -1,7 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { getImageUrl } from '@/src/Libs/apiClient';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { getImageUrl, getThumbnailUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
 
 interface CarouselItem {
   title: string;
@@ -16,10 +15,101 @@ interface BookCarouselProps {
   autoSlideInterval?: number;
 }
 
-export const BookCarousel: React.FC<BookCarouselProps> = ({ 
-  items, 
-  autoSlide = true, 
-  autoSlideInterval = 5000 
+type ImageStage = 'thumb' | 'full' | 'fallback' | 'hidden';
+
+interface BookImageProps {
+  src: string;
+  alt: string;
+  preferThumbnail: boolean;
+  isHighPriority?: boolean;
+  loading?: 'eager' | 'lazy';
+  className: string;
+  shimmerClass?: string;
+  draggable?: boolean;
+}
+
+const BOOK_PLACEHOLDER = '/assets/book-cover-placeholder.png';
+
+const BookProgressiveImage: React.FC<BookImageProps> = ({
+  src,
+  alt,
+  preferThumbnail,
+  isHighPriority = false,
+  loading = 'lazy',
+  className,
+  shimmerClass = 'skeleton-shimmer-navy',
+  draggable = false,
+}) => {
+  const thumbUrl = getThumbnailUrl(src);
+  const fullUrl = getImageUrl(src);
+  const hasDistinctThumb = Boolean(preferThumbnail && thumbUrl && thumbUrl !== fullUrl);
+
+  const [stage, setStage] = useState<ImageStage>(() => (hasDistinctThumb ? 'thumb' : 'full'));
+  const [loaded, setLoaded] = useState<boolean>(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setStage(hasDistinctThumb ? 'thumb' : 'full');
+    setLoaded(false);
+  }, [src, hasDistinctThumb]);
+
+  const resolvedSrc =
+    stage === 'thumb'
+      ? thumbUrl
+      : stage === 'full'
+        ? fullUrl
+        : stage === 'fallback'
+          ? BOOK_PLACEHOLDER
+          : '';
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setLoaded(true);
+    }
+  }, [resolvedSrc]);
+
+  if (stage === 'hidden' || !resolvedSrc) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-navy-mid">
+        <span className="material-symbols-outlined text-6xl text-gold-light opacity-50">book</span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {!loaded && <div className={`absolute inset-0 ${shimmerClass}`} aria-hidden="true" />}
+      <img
+        ref={imgRef}
+        src={resolvedSrc}
+        alt={alt}
+        className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        loading={loading}
+        decoding="async"
+        fetchPriority={isHighPriority ? 'high' : 'auto'}
+        draggable={draggable}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          setLoaded(false);
+          if (stage === 'thumb') {
+            setStage('full');
+          } else if (stage === 'full') {
+            setStage('fallback');
+          } else {
+            setStage('hidden');
+            setLoaded(true);
+          }
+        }}
+      />
+    </>
+  );
+};
+
+export const BookCarousel: React.FC<BookCarouselProps> = ({
+  items,
+  autoSlide = true,
+  autoSlideInterval = 5000,
 }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const [expandedItem, setExpandedItem] = useState<CarouselItem | null>(null);
@@ -61,7 +151,7 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
     if (touchStart === null) return;
     const clientX = 'changedTouches' in e ? e.changedTouches[0].clientX : (e as React.MouseEvent).clientX;
     const diff = touchStart - clientX;
-    
+
     if (Math.abs(diff) > 40) {
       if (diff > 0) next();
       else prev();
@@ -78,16 +168,16 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
       <div className="relative w-full max-w-5xl mx-auto flex items-center justify-center">
         {/* Nav Left */}
         {items.length > 1 && (
-          <button 
-            className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-50" 
-            onClick={prev} 
+          <button
+            className="carousel-nav-btn absolute left-0 md:left-2 top-1/2 -translate-y-1/2 z-50"
+            onClick={prev}
             aria-label="Previous book"
           >
             <span className="material-symbols-outlined">chevron_left</span>
           </button>
         )}
 
-        <div 
+        <div
           className="carousel-3d-stage relative min-h-[500px] md:min-h-[600px] w-full"
           onTouchStart={handleDragStart}
           onTouchEnd={handleDragEnd}
@@ -98,38 +188,35 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
         >
           {items.map((item, idx) => {
             const pos = getPosition(idx);
+            const isActive = pos === 'active';
             return (
               <div
                 key={idx}
                 className={`carousel-3d-card ${pos}`}
                 style={{
-                  width: pos === 'active' ? '100%' : pos === 'right' || pos === 'left' ? '85%' : '70%',
-                  maxWidth: pos === 'active' ? '500px' : pos === 'right' || pos === 'left' ? '400px' : '300px',
+                  width: isActive ? '100%' : pos === 'right' || pos === 'left' ? '85%' : '70%',
+                  maxWidth: isActive ? '500px' : pos === 'right' || pos === 'left' ? '400px' : '300px',
                   // Book covers are typically taller than they are wide
                   aspectRatio: '3 / 4',
                 }}
                 onClick={() => {
-                  if (pos !== 'active') {
+                  if (!isActive) {
                     goTo(idx);
                   } else {
                     setExpandedItem(item);
                   }
                 }}
               >
-                <div className={`w-full h-full rounded-xl overflow-hidden shadow-2xl border border-gold-light/20 bg-primary relative ${pos === 'active' ? 'cursor-zoom-in' : ''}`}>
+                <div className={`w-full h-full rounded-xl overflow-hidden shadow-2xl border border-gold-light/20 bg-primary relative ${isActive ? 'cursor-zoom-in' : ''}`}>
                   {item.image ? (
-                    <img
-                      src={getImageUrl(item.image)}
+                    <BookProgressiveImage
+                      src={item.image}
                       alt={item.title}
+                      preferThumbnail={true}
+                      isHighPriority={isActive}
+                      loading={isActive ? 'eager' : 'lazy'}
                       className="w-full h-full object-cover block"
-                      loading="lazy"
                       draggable={false}
-                      onError={(e) => {
-                        const fallback = window.location.origin + '/assets/book-cover-placeholder.png';
-                        if (e.currentTarget.src !== fallback) {
-                          e.currentTarget.src = fallback;
-                        }
-                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-navy-mid">
@@ -138,8 +225,8 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
                       </span>
                     </div>
                   )}
-                  {pos === 'active' && (
-                    <div 
+                  {isActive && (
+                    <div
                       className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-6 opacity-0 hover:opacity-100 transition-opacity cursor-zoom-in"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -160,9 +247,9 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
 
         {/* Nav Right */}
         {items.length > 1 && (
-          <button 
-            className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-50" 
-            onClick={next} 
+          <button
+            className="carousel-nav-btn absolute right-0 md:right-2 top-1/2 -translate-y-1/2 z-50"
+            onClick={next}
             aria-label="Next book"
           >
             <span className="material-symbols-outlined">chevron_right</span>
@@ -195,11 +282,11 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
 
       {/* Floating Modal for Picture Expansion */}
       {expandedItem && createPortal(
-        <div 
-          className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 z-[9999] animate-modal-overlay" 
+        <div
+          className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 z-[9999] animate-modal-overlay"
           onClick={() => setExpandedItem(null)}
         >
-          <button 
+          <button
             className="absolute top-6 right-6 text-white hover:text-gold-light transition-colors z-[210] cursor-pointer"
             onClick={() => setExpandedItem(null)}
             aria-label="Close enlarged view"
@@ -208,17 +295,16 @@ export const BookCarousel: React.FC<BookCarouselProps> = ({
           </button>
           <div className="flex flex-col items-center animate-modal-card" onClick={(e) => e.stopPropagation()}>
             {expandedItem.image ? (
-              <img 
-                src={getImageUrl(expandedItem.image)} 
-                alt={expandedItem.title} 
-                className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" 
-                onError={(e) => {
-                  const fallback = window.location.origin + '/assets/book-cover-placeholder.png';
-                  if (e.currentTarget.src !== fallback) {
-                    e.currentTarget.src = fallback;
-                  }
-                }}
-              />
+              <div className="relative min-w-[200px] min-h-[260px] flex items-center justify-center rounded-lg overflow-hidden">
+                <BookProgressiveImage
+                  src={expandedItem.image}
+                  alt={expandedItem.title}
+                  preferThumbnail={false}
+                  isHighPriority={true}
+                  loading="eager"
+                  className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+                />
+              </div>
             ) : expandedItem.icon ? (
               <span className="material-symbols-outlined text-[120px] text-white/50 mb-6 block w-full text-center">{expandedItem.icon}</span>
             ) : null}

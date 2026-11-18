@@ -120,6 +120,25 @@ class AIViewSet(viewsets.ViewSet):
 
         idempotency_key = self._derive_chat_idempotency_key(request, user_message, validated_history)
 
+        django_request = getattr(request, '_request', request)
+        is_asgi_request = hasattr(django_request, 'scope') or django_request.__class__.__name__ == 'ASGIRequest'
+
+        def sync_event_stream():
+            try:
+                close_old_connections()
+                for chunk in self.service.generate_chat_stream(
+                    user_message,
+                    validated_history,
+                    seen_answers,
+                    idempotency_key=idempotency_key,
+                ):
+                    if chunk:
+                        yield chunk.encode('utf-8') if isinstance(chunk, str) else chunk
+            except Exception as e:
+                yield f"\n[AI Error: {str(e)}]".encode('utf-8')
+            finally:
+                connection.close()
+
         # Daphne ASGI True Async Generator to prevent response buffering
         async def async_event_stream():
             try:
@@ -159,7 +178,8 @@ class AIViewSet(viewsets.ViewSet):
             except (asyncio.CancelledError, GeneratorExit):
                 pass
 
-        response = StreamingHttpResponse(async_event_stream(), content_type='text/plain; charset=utf-8')
+        stream_body = async_event_stream() if is_asgi_request else sync_event_stream()
+        response = StreamingHttpResponse(stream_body, content_type='text/plain; charset=utf-8')
         response['X-Accel-Buffering'] = 'no'
         response['Cache-Control'] = 'no-cache, no-transform'
         return response

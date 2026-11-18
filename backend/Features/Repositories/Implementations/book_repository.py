@@ -1,6 +1,7 @@
 # [Layer: Repositories/Implementations] — book_repository.py
 from typing import List, Optional, Any
-from django.db.models import Q
+from django.db.models import Q, Count
+from django.db.models.functions import TruncMonth
 from Features.Data.Models import NewlyAcquiredBook, AcquisitionBatch
 from Features.Repositories.Interfaces import INewlyAcquiredBookRepository
 
@@ -21,6 +22,21 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
 
     def get_count_by_month_year(self, month: int, year: int) -> int:
         return NewlyAcquiredBook.objects.filter(date_encoded__year=year, date_encoded__month=month).count()
+
+    def get_monthly_counts(self, start_date) -> dict:
+        qs = NewlyAcquiredBook.objects.all()
+        if start_date is not None:
+            qs = qs.filter(date_encoded__date__gte=start_date)
+        rows = (
+            qs.annotate(month=TruncMonth('date_encoded'))
+            .values('month')
+            .annotate(count=Count('id'))
+        )
+        return {
+            (row['month'].year, row['month'].month): row['count']
+            for row in rows
+            if row['month'] is not None
+        }
 
     def get_recent(self, limit: int = 10):
         return list(NewlyAcquiredBook.objects.all().order_by('-date_encoded')[:limit])

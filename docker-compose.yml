@@ -145,10 +145,16 @@ services:
       - ./frontend/src/Assets/assets:/app/frontend_assets:ro
       - ./frontend/public/assets:/app/frontend_public_assets:ro
       - "./frontend/src/Assets/FAQ cache:/frontend/src/Assets/FAQ cache"
+    expose:
+      - "8000"
+      - "8001"
     # Auto-run migrations on every startup — ensures fresh clones work immediately
+    # Split HTTP (multi-worker Gunicorn :8000) from WebSockets (single Daphne :8001)
+    # to eliminate request serialization while preserving in-memory CHANNEL_LAYERS.
     command: >
       sh -c "python manage.py migrate --noinput &&
-             daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+             { daphne -b 0.0.0.0 -p 8001 core.asgi:application &
+               exec gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4 --worker-class gthread --timeout 180 --graceful-timeout 30 --keep-alive 5; }"
 
   celery-worker:
     build:
@@ -209,6 +215,7 @@ services:
       - ./frontend/public/google2d437595507846a0.html:/usr/share/nginx/html/google2d437595507846a0.html:ro
       - ./frontend/public/sitemap.xml:/usr/share/nginx/html/sitemap.xml:ro
       - ./frontend/public/robots.txt:/usr/share/nginx/html/robots.txt:ro
+      - ./backend/media:/usr/share/nginx/media:ro
 
   # ─── Layer 2: Frontend Admin Page ──────────────────────────────────────
   frontend-admin:
@@ -222,6 +229,8 @@ services:
       - backend
     ports:
       - "3001:80"
+    volumes:
+      - ./backend/media:/usr/share/nginx/media:ro
 
   # ─── Layer 5: Model AI ─────────────────────────────────────────────────
   ollama:

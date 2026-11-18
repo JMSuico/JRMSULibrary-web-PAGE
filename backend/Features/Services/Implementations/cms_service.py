@@ -9,6 +9,7 @@ from Features.Repositories.Interfaces import (
 from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
 from Features.Api.Serializers.cms_serializers import ManagedLinkSerializer, ManagedFileSerializer
 from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
 from rest_framework.exceptions import ValidationError
 
 class PageContentService(IPageContentService):
@@ -123,6 +124,8 @@ class ManagedFileService(IManagedFileService):
             if ext not in allowed_extensions:
                 raise ValidationError({'error': f'Invalid file type for category {category}. Allowed: {", ".join(allowed_extensions)}'})
             MalwareScannerHelper.verify_file_safety(uploaded_file)
+            if category in ['OrgStructure', 'Excellence']:
+                uploaded_file = ImageOptimizerHelper.optimize_uploaded_image(uploaded_file)
             data['file'] = uploaded_file
             
         if 'is_active' in data:
@@ -132,7 +135,10 @@ class ManagedFileService(IManagedFileService):
         else:
             data['is_active'] = False
             
-        return self._repo.create(data)
+        item = self._repo.create(data)
+        if category in ['OrgStructure', 'Excellence'] and item and getattr(item, 'file', None):
+            ImageOptimizerHelper.ensure_thumbnail_for_field(item.file)
+        return item
 
     def delete(self, id: int, user_id: int = None) -> bool:
         item = self._repo.get_by_id(id)

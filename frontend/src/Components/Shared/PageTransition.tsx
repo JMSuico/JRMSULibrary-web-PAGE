@@ -1,28 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useLocation } from 'react-router';
 
 /**
- * Wraps page content and applies a fade-in / slide-up animation on every route change.
- * Uses the React Router "useLocation" key to force a re-render/re-animation when the path changes.
+ * Wraps page content and applies a fade-in / slide-up animation on top-level route changes
+ * with zero artificial delay or opacity-0 blackout.
  */
 export const PageTransition: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
-  const [displayLocation, setDisplayLocation] = useState(location);
-  const [transitionClass, setTransitionClass] = useState('animate-page-in');
-
-  useEffect(() => {
-    if (location.pathname !== displayLocation.pathname) {
-      setTransitionClass('opacity-0');
-      const timeout = setTimeout(() => {
-        setDisplayLocation(location);
-        setTransitionClass('animate-page-in');
-      }, 20);
-      return () => clearTimeout(timeout);
-    }
-  }, [location, displayLocation]);
+  const topSegment = location.pathname.split('/')[1] || 'home';
 
   return (
-    <div className={`page-transition-wrapper w-full flex-1 flex flex-col ${transitionClass}`} style={{ animationFillMode: 'both' }}>
+    <div
+      key={topSegment}
+      className="page-transition-wrapper w-full flex-1 flex flex-col animate-page-in"
+      style={{ animationFillMode: 'both' }}
+    >
       {children}
     </div>
   );

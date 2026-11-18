@@ -35,41 +35,58 @@ class BatchService(IBatchService):
         
         return new_batch
 
+    @staticmethod
+    def _prepare_cover_files(files: dict) -> dict:
+        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
+        from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
+
+        files_copy = {k: files[k] for k in files} if files else {}
+        if 'cover_image' in files_copy and files_copy['cover_image']:
+            MalwareScannerHelper.verify_image_safety(files_copy['cover_image'])
+            files_copy['cover_image'] = ImageOptimizerHelper.optimize_uploaded_image(
+                files_copy['cover_image']
+            )
+        return files_copy
+
     @transaction.atomic
     def add_book_to_batch(self, batch_id: int, data: dict, files: dict, user_id: int) -> Any:
+        from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
+
         batch = self.batch_repo.get_batch_by_id(batch_id)
         if not batch:
             raise ValueError("Batch not found")
         if batch.status != BatchStatus.OPEN:
             raise ValueError("Cannot add books to a closed or archived batch")
-            
-        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
-        if 'cover_image' in files:
-            MalwareScannerHelper.verify_image_safety(files['cover_image'])
-            
+
+        files_copy = self._prepare_cover_files(files)
+
         data_copy = dict(data)
         data_copy['batch_id'] = batch_id
-        book = self.book_repo.create(data_copy, files)
+        book = self.book_repo.create(data_copy, files_copy)
+        if book and getattr(book, 'cover_image', None):
+            ImageOptimizerHelper.ensure_thumbnail_for_field(book.cover_image)
         self.batch_repo.record_history(batch_id, "Book Added", f"Added book: {book.title}", user_id)
         return book
 
     @transaction.atomic
     def update_book_in_batch(self, batch_id: int, book_id: int, data: dict, files: dict, user_id: int) -> Optional[Any]:
+        from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
+
         batch = self.batch_repo.get_batch_by_id(batch_id)
         if not batch:
             raise ValueError("Batch not found")
         # Allow editing books in any batch status — admins must be able to
         # correct data errors in imported/migrated books even in closed batches.
-            
+
         book = self.book_repo.get_by_id(book_id)
         if not book or str(book.batch_id) != str(batch_id):
             return None
-            
-        from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
-        if 'cover_image' in files:
-            MalwareScannerHelper.verify_image_safety(files['cover_image'])
-            
-        updated_book = self.book_repo.update(book_id, data, files)
+
+        files_copy = self._prepare_cover_files(files)
+
+        updated_book = self.book_repo.update(book_id, data, files_copy)
+        if updated_book and getattr(updated_book, 'cover_image', None) and 'cover_image' in files_copy:
+            ImageOptimizerHelper.ensure_thumbnail_for_field(updated_book.cover_image)
         self.batch_repo.record_history(batch_id, "Book Updated", f"Updated book: {updated_book.title}", user_id)
         return updated_book
 

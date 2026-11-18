@@ -1,76 +1,87 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Archive, Search, History, X, ClipboardList, FileArchive } from 'lucide-react';
 import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 export function BatchHistory() {
-  const [batches, setBatches] = useState<AcquisitionBatch[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState('All');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
   const [auditBatch, setAuditBatch] = useState<AcquisitionBatch | null>(null);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<number>>(new Set());
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void} | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const { showToast, removeToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
-  const loadBatches = async () => {
-    try {
-      setLoading(true);
-      const data = await batchApi.getAllBatches();
-      setBatches(data);
-    } catch (error: any) {
-      showToast(error.message || 'Failed to load batch history', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: cachedBatches,
+    isLoading,
+    error,
+    refetch,
+    mutate,
+  } = useCachedQuery<AcquisitionBatch[]>({
+    key: 'admin:batches',
+    fetcher: () => batchApi.getAllBatches(),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const batches = cachedBatches ?? [];
+  const batchesRef = useRef<AcquisitionBatch[]>(batches);
+  batchesRef.current = batches;
 
   useEffect(() => {
-    loadBatches();
-  }, []);
-
-  useAutoRefresh(loadBatches, 30000);
+    if (error) {
+      showToast(error.message || 'Failed to load batch history', 'error');
+    }
+  }, [error, showToast]);
 
   const handleArchive = (batch: AcquisitionBatch) => {
+    const previous = batchesRef.current;
     triggerDelete(
       batch.name,
       async () => {
         try {
           await batchApi.archiveBatch(batch.id);
+          invalidateCacheByPrefix('admin:batch');
+          invalidateCacheByPrefix('admin:dashboard');
           showToast('Batch archived successfully', 'success');
-        } catch (err: any) {
-          showToast(err.message || 'Failed to archive batch', 'error');
-          loadBatches(); // Revert on failure
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Failed to archive batch';
+          showToast(message, 'error');
+          refetch();
         }
       },
       () => {
-        setBatches(prev => [...prev, batch].sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime()));
+        mutate(
+          [...batchesRef.current, batch].sort(
+            (a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime(),
+          ),
+        );
         showToast('Batch archive undone', 'success');
-      }
+      },
     );
     // Optimistic removal
-    setBatches(prev => prev.filter(b => b.id !== batch.id));
+    mutate(previous.filter((b) => b.id !== batch.id));
   };
 
   const handleBulkArchive = () => {
     if (selectedBatchIds.size === 0) return;
-    const count = selectedBatchIds.size;
-    const batchesToArchive = batches.filter(b => selectedBatchIds.has(b.id));
+    const idsToArchive = Array.from<number>(selectedBatchIds);
+    const count = idsToArchive.length;
+    const batchesToArchive = batchesRef.current.filter((b) => selectedBatchIds.has(b.id));
 
     // Optimistic removal
-    setBatches(prev => prev.filter(b => !selectedBatchIds.has(b.id)));
+    mutate(batchesRef.current.filter((b) => !selectedBatchIds.has(b.id)));
     setSelectedBatchIds(new Set());
 
     triggerDelete(
@@ -80,45 +91,70 @@ export function BatchHistory() {
         const toastId = showToast(`${count} removing processing.`, 'loading');
         try {
           await processInChunks(
-            Array.from(selectedBatchIds),
+            idsToArchive,
             10,
             (id: number) => batchApi.archiveBatch(id),
-            (_, __, c) => {}
+            () => {},
           );
+          invalidateCacheByPrefix('admin:batch');
+          invalidateCacheByPrefix('admin:dashboard');
           showToast(`Archived ${count} batches successfully`, 'success');
-        } catch (err: any) {
+        } catch {
           showToast('Failed to archive some batches', 'error');
-          loadBatches();
+          refetch();
         } finally {
           setIsRemoving(false);
           removeToast(toastId);
         }
       },
       () => {
-        setBatches(prev => [...prev, ...batchesToArchive].sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime()));
+        mutate(
+          [...batchesRef.current, ...batchesToArchive].sort(
+            (a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime(),
+          ),
+        );
         showToast('Bulk archive undone', 'success');
-      }
+      },
     );
   };
 
-  const years = ['All', ...new Set(batches.map(b => new Date(b.opened_at).getFullYear().toString()))];
+  const years = useMemo(
+    () => ['All', ...new Set(batches.map((b) => new Date(b.opened_at).getFullYear().toString()))],
+    [batches],
+  );
 
   const debouncedSearch = useDebounce(searchQuery, 400);
 
-  const filteredBatches = batches.filter((batch) => {
-    const matchesSearch = batch.name.toLowerCase().includes(debouncedSearch.toLowerCase());
-    const year = new Date(batch.opened_at).getFullYear().toString();
-    const matchesYear = selectedYear === 'All' || year === selectedYear;
-    return matchesSearch && matchesYear;
-  });
+  const filteredBatches = useMemo(() => {
+    const query = debouncedSearch.toLowerCase();
+    return batches.filter((batch) => {
+      const matchesSearch = batch.name.toLowerCase().includes(query);
+      const year = new Date(batch.opened_at).getFullYear().toString();
+      const matchesYear = selectedYear === 'All' || year === selectedYear;
+      return matchesSearch && matchesYear;
+    });
+  }, [batches, debouncedSearch, selectedYear]);
 
-  const totalPages = Math.ceil(filteredBatches.length / itemsPerPage);
-  const paginatedBatches = filteredBatches.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const {
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    paginatedItems: paginatedBatches,
+    setPage,
+    setPageSize,
+  } = usePagination<AcquisitionBatch>({
+    items: filteredBatches,
+    pageSize: 20,
+    storageKey: 'jrmsu_admin_batch_history_page_size',
+  });
 
   // Reset to page 1 if filter changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, selectedYear]);
+    setPage(1);
+  }, [debouncedSearch, selectedYear, setPage]);
+
+  const loading = isLoading && batches.length === 0;
 
   return (
     <>
@@ -145,16 +181,16 @@ export function BatchHistory() {
                 if (selectedBatchIds.size > 0) {
                   setSelectedBatchIds(new Set());
                 } else {
-                  setSelectedBatchIds(new Set(filteredBatches.map(b => b.id)));
+                  setSelectedBatchIds(new Set(filteredBatches.map((b) => b.id)));
                 }
               }}
               disabled={isRemoving}
             >
-              {selectedBatchIds.size > 0 ? "Unselect All" : "Select All"}
+              {selectedBatchIds.size > 0 ? 'Unselect All' : 'Select All'}
             </button>
             {selectedBatchIds.size > 0 && (
-              <button 
-                className="admin-btn" 
+              <button
+                className="admin-btn"
                 style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
                 onClick={handleBulkArchive}
                 disabled={isRemoving}
@@ -167,7 +203,11 @@ export function BatchHistory() {
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
             >
-              {years.map(y => <option key={y} value={y}>{y === 'All' ? 'All Years' : y}</option>)}
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y === 'All' ? 'All Years' : y}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -177,16 +217,16 @@ export function BatchHistory() {
             <thead>
               <tr>
                 <th style={{ width: '40px', textAlign: 'center' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={paginatedBatches.length > 0 && paginatedBatches.every(b => selectedBatchIds.has(b.id))}
+                  <input
+                    type="checkbox"
+                    checked={paginatedBatches.length > 0 && paginatedBatches.every((b) => selectedBatchIds.has(b.id))}
                     disabled={isRemoving}
                     onChange={(e) => {
                       const newSelected = new Set(selectedBatchIds);
                       if (e.target.checked) {
-                        paginatedBatches.forEach(b => newSelected.add(b.id));
+                        paginatedBatches.forEach((b) => newSelected.add(b.id));
                       } else {
-                        paginatedBatches.forEach(b => newSelected.delete(b.id));
+                        paginatedBatches.forEach((b) => newSelected.delete(b.id));
                       }
                       setSelectedBatchIds(newSelected);
                     }}
@@ -202,13 +242,13 @@ export function BatchHistory() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
               ) : paginatedBatches.length > 0 ? (
                 paginatedBatches.map((batch) => (
                   <tr key={batch.id} style={{ backgroundColor: selectedBatchIds.has(batch.id) ? 'var(--color-blue-50)' : 'transparent' }}>
                     <td style={{ textAlign: 'center' }}>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         checked={selectedBatchIds.has(batch.id)}
                         disabled={isRemoving}
                         onChange={(e) => {
@@ -221,7 +261,7 @@ export function BatchHistory() {
                     </td>
                     <td style={{ fontWeight: 500 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Archive size={16} color='var(--color-gray-500)' /> {batch.name}
+                        <Archive size={16} color="var(--color-gray-500)" /> {batch.name}
                       </div>
                     </td>
                     <td>
@@ -268,12 +308,15 @@ export function BatchHistory() {
                                 onConfirm: async () => {
                                   try {
                                     await batchApi.reopenBatch(batch.id);
+                                    invalidateCacheByPrefix('admin:batch');
+                                    invalidateCacheByPrefix('admin:dashboard');
                                     showToast('Batch restored successfully', 'success');
-                                    loadBatches();
-                                  } catch (err: any) {
-                                    showToast(err.message || 'Failed to restore batch', 'error');
+                                    refetch();
+                                  } catch (err: unknown) {
+                                    const message = err instanceof Error ? err.message : 'Failed to restore batch';
+                                    showToast(message, 'error');
                                   }
-                                }
+                                },
                               });
                             }}
                           >
@@ -285,26 +328,30 @@ export function BatchHistory() {
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No historical batches found.</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No historical batches found.</td></tr>
               )}
             </tbody>
           </table>
-          <div className="p-4 border-t border-gray-100 flex justify-center bg-gray-50">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={filteredBatches.length}
-              itemsPerPage={itemsPerPage}
-            />
-          </div>
+          {totalItems > 0 && (
+            <div className="p-4 border-t border-gray-100 bg-gray-50">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                totalItems={totalItems}
+                itemsPerPage={pageSize}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+              />
+            </div>
+          )}
         </div>
       </div>
 
       {/* Audit Detail Modal */}
       {auditBatch && createPortal(
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center ] p-4 z-[9999] animate-modal-overlay"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-modal-overlay"
           onClick={() => setAuditBatch(null)}
         >
           <div
@@ -414,7 +461,7 @@ export function BatchHistory() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       <ConfirmModal
@@ -425,13 +472,11 @@ export function BatchHistory() {
         onCancel={() => setConfirmModal(null)}
       />
 
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </>
   );
 }
-
-

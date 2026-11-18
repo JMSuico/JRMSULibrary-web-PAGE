@@ -89,10 +89,14 @@ AI_IDEMPOTENCY_LOCK_TTL = 90
 AI_IDEMPOTENCY_RESULT_TTL = 120
 AI_IDEMPOTENCY_POLL_MAX_SECONDS = 8.0
 AI_IDEMPOTENCY_POLL_STEP_SECONDS = 0.25
-AI_OPENING_BUFFER_MAX_CHARS = 180
+AI_OPENING_BUFFER_MAX_CHARS = 64
+AI_CLAUSE_FLUSH_MIN_CHARS = 32
 AI_LATE_SHADOW_CACHE_PREFIX = "rizal:ai:late_shadow_cache:"
 AI_LATE_SHADOW_CACHE_TTL = 600  # 10 minutes temporary cache for late model responses
+AI_TIER3_RESPONSE_CACHE_PREFIX = "rizal:ai:tier3_resp_cache:"
+AI_TIER3_RESPONSE_CACHE_TTL = 600  # 10 minutes temporary cache for non-personal Tier 3 responses
 AI_PRIMARY_GREEN_PRIORITY_WINDOW_SECONDS = 1.5
+AI_HEDGED_SECONDARY_DELAY_SECONDS = 1.2
 
 APPROVED_LIBRARY_DOMAINS = (
     'jrmsukc-library.online',
@@ -127,6 +131,7 @@ class AIService(IAIService):
         self.model_name = 'qwen2.5:0.5b'
         self.request_timeout = self._resolve_request_timeout()
         self.primary_green_priority_window_seconds = AI_PRIMARY_GREEN_PRIORITY_WINDOW_SECONDS
+        self.hedged_secondary_delay_seconds = AI_HEDGED_SECONDARY_DELAY_SECONDS
 
         # All Permitted Public/Student-Facing Repositories Wired
         self.personnel_repo = personnel_repo or PersonnelRepository()
@@ -2544,14 +2549,140 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
 
     @staticmethod
     def _find_sentence_flush_index(text: str) -> int:
-        """Returns index immediately after first newline or sentence terminator + whitespace, or -1."""
+        """
+        Returns index immediately after first newline, sentence terminator + whitespace,
+        or (once buffered >= AI_CLAUSE_FLUSH_MIN_CHARS) clause punctuation + whitespace
+        followed by the next token, or word-boundary cap at AI_OPENING_BUFFER_MAX_CHARS.
+        """
         newline_idx = text.find('\n')
         sent_match = re.search(r'[.!?]\s', text)
         if newline_idx != -1 and (not sent_match or newline_idx < sent_match.end()):
             return newline_idx + 1
         if sent_match:
             return sent_match.end()
+        if len(text) >= AI_CLAUSE_FLUSH_MIN_CHARS:
+            clause_match = re.search(r'[,;:]\s+\S', text)
+            if clause_match:
+                return clause_match.end() - 1
+            if len(text) >= AI_OPENING_BUFFER_MAX_CHARS:
+                trimmed = text.rstrip()
+                last_space = trimmed.rfind(' ')
+                if last_space >= 24 and last_space < len(text) - 1:
+                    return last_space + 1
+                if len(text) >= (AI_OPENING_BUFFER_MAX_CHARS * 2):
+                    return len(text)
         return -1
+
+    @staticmethod
+    def _find_opening_flush_index(stripped_opening: str) -> int:
+        """
+        Finds the opening buffer flush split point once >= AI_CLAUSE_FLUSH_MIN_CHARS
+        (32 chars) on sentence/newline/clause boundaries, capped at AI_OPENING_BUFFER_MAX_CHARS (64).
+        """
+        if len(stripped_opening) < AI_CLAUSE_FLUSH_MIN_CHARS:
+            return -1
+
+        last_end = -1
+        for match in re.finditer(r'(?:\n|[.!?]\s|[,;:]\s+\S)', stripped_opening):
+            if match.group(0)[0] in (',', ';', ':'):
+                last_end = match.end() - 1
+            else:
+                last_end = match.end()
+
+        if last_end != -1:
+            return last_end
+
+        if len(stripped_opening) >= AI_OPENING_BUFFER_MAX_CHARS:
+            last_space = stripped_opening.rfind(' ')
+            return (last_space + 1) if last_space >= 24 else len(stripped_opening)
+
+        return -1
+
+    def _try_extract_opening_chunk(
+        self,
+        opening_buffer: str,
+        user_message: str,
+        reject_dodge: bool = True,
+    ) -> Tuple[str, str, str, str]:
+        """
+        Validates and extracts the opening stream chunk once enough context is buffered.
+        Returns (status, out_chunk, remainder, updated_opening_buffer) where status is
+        one of 'need_more', 'dodge', or 'ready'.
+        """
+        stripped_opening = opening_buffer.lstrip()
+        if not stripped_opening:
+            return ("need_more", "", "", opening_buffer)
+
+        flush_idx = self._find_opening_flush_index(stripped_opening)
+        if flush_idx == -1:
+            return ("need_more", "", "", opening_buffer)
+
+        if reject_dodge and self._is_incapability_dodge(stripped_opening):
+            return ("dodge", "", "", "")
+
+        lead_len = len(opening_buffer) - len(stripped_opening)
+        split_at = lead_len + flush_idx
+        opening_segment = opening_buffer[:split_at]
+        remainder = opening_buffer[split_at:]
+
+        if reject_dodge and self._is_incapability_dodge(opening_segment):
+            return ("dodge", "", "", "")
+
+        trailing_ws = opening_segment[len(opening_segment.rstrip()):]
+        sanitized_opening = self._sanitize_llm_output(
+            opening_segment,
+            user_message=user_message,
+            strip_unapproved_urls=True,
+            trim_incomplete=False,
+        )
+        if reject_dodge and (not sanitized_opening or self._is_incapability_dodge(sanitized_opening)):
+            return ("dodge", "", "", "")
+
+        if not sanitized_opening:
+            return ("need_more", "", "", remainder)
+
+        return ("ready", sanitized_opening + trailing_ws, remainder, "")
+
+    def _drain_stream_buffer(self, stream_buffer: str, user_message: str) -> Tuple[List[str], str]:
+        """Flushes all complete sentence/clause segments from stream_buffer."""
+        chunks: List[str] = []
+        while stream_buffer:
+            flush_idx = self._find_sentence_flush_index(stream_buffer)
+            if flush_idx == -1:
+                break
+            segment = stream_buffer[:flush_idx]
+            stream_buffer = stream_buffer[flush_idx:]
+            trailing_ws = segment[len(segment.rstrip()):]
+            sanitized = self._sanitize_llm_output(
+                segment,
+                user_message=user_message,
+                strip_unapproved_urls=True,
+                trim_incomplete=False,
+            )
+            if sanitized:
+                chunks.append(sanitized + trailing_ws)
+        return chunks, stream_buffer
+
+    def _finalize_tail_buffer(
+        self,
+        tail_text: str,
+        committed_parts: List[str],
+        user_message: str,
+    ) -> str:
+        """Sanitizes and sentence-finalizes any remaining buffered tail on EOF or error."""
+        if not tail_text:
+            return ""
+        sanitized = self._sanitize_llm_output(
+            tail_text,
+            user_message=user_message,
+            strip_unapproved_urls=True,
+            trim_incomplete=False,
+        )
+        prior_complete = self._ends_with_sentence_terminator("".join(committed_parts))
+        return self._finalize_complete_sentence(
+            sanitized,
+            has_prior_complete_sentence=prior_complete,
+        )
 
     def _build_llm_generation_config(self, options: Optional[Dict[str, Any]] = None) -> LLMGenerationConfig:
         """Converts adaptive tier option dicts into immutable LLMGenerationConfig."""
@@ -2688,6 +2819,89 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
         except Exception as exc:
             logger.warning(f"Late shadow cache read warning: {exc}")
         return None
+
+    def _is_tier3_cache_eligible(
+        self,
+        user_message: str,
+        chat_history: Optional[list] = None,
+    ) -> bool:
+        """
+        Determines whether a Tier 3 query is eligible for the 10-minute Redis response cache.
+        Excludes long multi-turn histories, follow-ups, personal inquiries, and live room/visitor queries.
+        """
+        norm_q = self._normalize_question(user_message or "")
+        if not norm_q:
+            return False
+
+        history = list(chat_history or [])
+        if len(history) > 2:
+            return False
+
+        if re.search(
+            r'\b(room|rooms|discussion|tutorium|multimedia|workstation|comlab|availab\w*|occupied|reserve|reservation|slot|slots|visitor|visitors|visits?|online\s+now|live|today|right\s+now|currently|my|mine|i\s+am|i\s+have|i\s+borrowed)\b',
+            norm_q,
+        ):
+            return False
+
+        if history and (
+            len(norm_q.split()) <= 5
+            or re.search(r'\b(it|that|this|those|these|them|he|she|they|more|elaborate)\b', norm_q)
+        ):
+            return False
+
+        return True
+
+    def _tier3_response_cache_key(self, user_message: str) -> str:
+        norm = self._normalize_question(user_message)
+        digest = hashlib.sha256(norm.encode("utf-8")).hexdigest()
+        return f"{AI_TIER3_RESPONSE_CACHE_PREFIX}{digest}"
+
+    def _get_tier3_response_cache(
+        self,
+        user_message: str,
+        chat_history: Optional[list] = None,
+    ) -> Optional[str]:
+        if not self._is_tier3_cache_eligible(user_message, chat_history=chat_history):
+            return None
+        try:
+            val = cache.get(self._tier3_response_cache_key(user_message))
+            if isinstance(val, str):
+                cleaned = val.strip()
+                if (
+                    cleaned
+                    and not self._is_negative_or_unindexed_response(cleaned)
+                    and not self._is_incapability_dodge(cleaned)
+                ):
+                    return cleaned
+        except Exception as exc:
+            logger.warning(f"Tier 3 response cache read warning: {exc}")
+        return None
+
+    def _store_tier3_response_cache(
+        self,
+        user_message: str,
+        text: str,
+        chat_history: Optional[list] = None,
+    ) -> None:
+        if not text or not str(text).strip():
+            return
+        if not self._is_tier3_cache_eligible(user_message, chat_history=chat_history):
+            return
+        cleaned = str(text).strip()
+        if (
+            self._is_negative_or_unindexed_response(cleaned)
+            or self._is_incapability_dodge(cleaned)
+            or is_external_hallucination_output(cleaned)
+        ):
+            return
+        try:
+            cache.set(
+                self._tier3_response_cache_key(user_message),
+                cleaned,
+                timeout=AI_TIER3_RESPONSE_CACHE_TTL,
+            )
+        except Exception as exc:
+            logger.warning(f"Tier 3 response cache write warning: {exc}")
 
     def get_ai_provider_status(self) -> Dict[str, Any]:
         summary_fn = getattr(self.provider_registry, "get_provider_status_summary", None)
@@ -2892,6 +3106,18 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                 yield from self._yield_word_chunks(cached_answer)
                 return
 
+            # Tier 2.5: Short-TTL (10 min) Tier 3 Response Cache for repeated non-personal queries (<10ms)
+            tier3_cached = self._get_tier3_response_cache(user_message, chat_history=chat_history)
+            if tier3_cached:
+                suppress_duplicate_tier3 = (
+                    self._is_duplicate_seen_answer(tier3_cached, seen_answers)
+                    and not self._is_verbatim_repeated_question(user_message, chat_history)
+                )
+                if not suppress_duplicate_tier3:
+                    self._commit_idempotency_result(idempotency_key, tier3_cached)
+                    yield from self._yield_word_chunks(tier3_cached)
+                    return
+
             # Tier 3: Twin LLM Registry with Single-Winner Pre-Flush Gate & Output Guardrail
             tier, options, tier_inst = self._classify_query_complexity(user_message)
             messages = self._build_tier3_messages(
@@ -2918,6 +3144,7 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                         "chunk_queue": queue.Queue(),
                         "opening_chunk": None,
                         "failed": False,
+                        "midstream_error": False,
                         "collected_parts": [],
                         "shadow_cached": False,
                     }
@@ -2937,79 +3164,38 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
 
                             if not has_opening:
                                 opening_buffer += token
-                                stripped_opening = opening_buffer.lstrip()
-                                if not stripped_opening:
-                                    continue
-
-                                flush_idx = self._find_sentence_flush_index(stripped_opening)
-                                if flush_idx == -1:
-                                    if len(stripped_opening) < AI_OPENING_BUFFER_MAX_CHARS:
-                                        continue
-                                    last_space = stripped_opening.rfind(' ')
-                                    flush_idx = (last_space + 1) if last_space > 40 else len(stripped_opening)
-
-                                lead_len = len(opening_buffer) - len(stripped_opening)
-                                split_at = lead_len + flush_idx
-                                opening_segment = opening_buffer[:split_at]
-                                remainder = opening_buffer[split_at:]
-
-                                if self._is_incapability_dodge(opening_segment):
+                                status, out_chunk, remainder, opening_buffer = self._try_extract_opening_chunk(
+                                    opening_buffer,
+                                    user_message=user_message,
+                                    reject_dodge=True,
+                                )
+                                if status == "dodge":
                                     logger.info(
                                         "Hedged worker discarded dodge opening from %s.",
                                         strat.provider_id,
                                     )
                                     state["failed"] = True
                                     return
-
-                                trailing_ws = opening_segment[len(opening_segment.rstrip()):]
-                                sanitized_opening = self._sanitize_llm_output(
-                                    opening_segment,
-                                    user_message=user_message,
-                                    strip_unapproved_urls=True,
-                                    trim_incomplete=False,
-                                )
-                                if self._is_incapability_dodge(sanitized_opening):
-                                    logger.info(
-                                        "Hedged worker discarded dodge sanitized opening from %s.",
-                                        strat.provider_id,
-                                    )
-                                    state["failed"] = True
-                                    return
-
-                                if not sanitized_opening:
-                                    opening_buffer = remainder
+                                if status == "need_more":
                                     continue
 
                                 has_opening = True
-                                opening_buffer = ""
-                                out_chunk = sanitized_opening + trailing_ws
                                 state["opening_chunk"] = out_chunk
                                 state["collected_parts"].append(out_chunk)
                                 state["opening_ready_event"].set()
-
                                 if remainder:
                                     stream_buffer += remainder
                             else:
                                 stream_buffer += token
 
                             if has_opening:
-                                while stream_buffer:
-                                    flush_idx = self._find_sentence_flush_index(stream_buffer)
-                                    if flush_idx == -1:
-                                        break
-                                    segment = stream_buffer[:flush_idx]
-                                    stream_buffer = stream_buffer[flush_idx:]
-                                    trailing_ws = segment[len(segment.rstrip()):]
-                                    sanitized = self._sanitize_llm_output(
-                                        segment,
-                                        user_message=user_message,
-                                        strip_unapproved_urls=True,
-                                        trim_incomplete=False,
-                                    )
-                                    if sanitized:
-                                        seg_chunk = sanitized + trailing_ws
-                                        state["collected_parts"].append(seg_chunk)
-                                        state["chunk_queue"].put(seg_chunk)
+                                flushed_chunks, stream_buffer = self._drain_stream_buffer(
+                                    stream_buffer,
+                                    user_message=user_message,
+                                )
+                                for seg_chunk in flushed_chunks:
+                                    state["collected_parts"].append(seg_chunk)
+                                    state["chunk_queue"].put(seg_chunk)
 
                         if not has_opening:
                             if opening_buffer.strip():
@@ -3017,19 +3203,14 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                                     state["failed"] = True
                                     return
                                 trailing_ws = opening_buffer[len(opening_buffer.rstrip()):]
-                                sanitized_opening = self._sanitize_llm_output(
+                                finalized_opening = self._finalize_tail_buffer(
                                     opening_buffer,
+                                    committed_parts=[],
                                     user_message=user_message,
-                                    strip_unapproved_urls=True,
-                                    trim_incomplete=False,
                                 )
-                                sanitized_opening = self._finalize_complete_sentence(
-                                    sanitized_opening,
-                                    has_prior_complete_sentence=False,
-                                )
-                                if sanitized_opening and not self._is_incapability_dodge(sanitized_opening):
+                                if finalized_opening and not self._is_incapability_dodge(finalized_opening):
                                     has_opening = True
-                                    out_chunk = sanitized_opening + trailing_ws
+                                    out_chunk = finalized_opening + trailing_ws
                                     state["opening_chunk"] = out_chunk
                                     state["collected_parts"].append(out_chunk)
                                     state["opening_ready_event"].set()
@@ -3037,16 +3218,10 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                                 state["failed"] = True
                                 return
                         elif stream_buffer:
-                            sanitized = self._sanitize_llm_output(
+                            finalized = self._finalize_tail_buffer(
                                 stream_buffer,
+                                committed_parts=state["collected_parts"],
                                 user_message=user_message,
-                                strip_unapproved_urls=True,
-                                trim_incomplete=False,
-                            )
-                            prior_complete = self._ends_with_sentence_terminator("".join(state["collected_parts"]))
-                            finalized = self._finalize_complete_sentence(
-                                sanitized,
-                                has_prior_complete_sentence=prior_complete,
                             )
                             stream_buffer = ""
                             if finalized:
@@ -3071,22 +3246,18 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                         )
                         if not has_opening:
                             state["failed"] = True
-                        elif stream_buffer:
-                            sanitized = self._sanitize_llm_output(
-                                stream_buffer,
-                                user_message=user_message,
-                                strip_unapproved_urls=True,
-                                trim_incomplete=False,
-                            )
-                            prior_complete = self._ends_with_sentence_terminator("".join(state["collected_parts"]))
-                            finalized = self._finalize_complete_sentence(
-                                sanitized,
-                                has_prior_complete_sentence=prior_complete,
-                            )
-                            stream_buffer = ""
-                            if finalized:
-                                state["collected_parts"].append(finalized)
-                                state["chunk_queue"].put(finalized)
+                        else:
+                            state["midstream_error"] = True
+                            if stream_buffer:
+                                finalized = self._finalize_tail_buffer(
+                                    stream_buffer,
+                                    committed_parts=state["collected_parts"],
+                                    user_message=user_message,
+                                )
+                                stream_buffer = ""
+                                if finalized:
+                                    state["collected_parts"].append(finalized)
+                                    state["chunk_queue"].put(finalized)
                     except Exception as exc:
                         logger.error(
                             "Hedged provider %s error (has_opening=%s): %s",
@@ -3101,6 +3272,8 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                                 reason=str(exc),
                             )
                             state["failed"] = True
+                        else:
+                            state["midstream_error"] = True
                     finally:
                         state["chunk_queue"].put(None)
                         state["done_event"].set()
@@ -3120,12 +3293,6 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                         if full_late_text:
                             self._store_late_shadow_cache(user_message, strat.provider_id, full_late_text)
 
-                t_primary = threading.Thread(target=_run_hedged_worker, args=(p_state,), daemon=True)
-                t_secondary = threading.Thread(target=_run_hedged_worker, args=(s_state,), daemon=True)
-                race_start = time.monotonic()
-                t_primary.start()
-                t_secondary.start()
-
                 is_tripped_fn = getattr(self.provider_registry, "is_tripped", None)
                 primary_tripped = (
                     bool(is_tripped_fn(primary_strategy.provider_id))
@@ -3140,30 +3307,57 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                         AI_PRIMARY_GREEN_PRIORITY_WINDOW_SECONDS,
                     )
                 )
+                configured_secondary_delay = float(
+                    getattr(
+                        self,
+                        "hedged_secondary_delay_seconds",
+                        AI_HEDGED_SECONDARY_DELAY_SECONDS,
+                    )
+                )
+                effective_secondary_delay = (
+                    min(max(0.0, configured_secondary_delay), max(0.0, priority_window))
+                    if primary_green
+                    else 0.0
+                )
+
+                t_primary = threading.Thread(target=_run_hedged_worker, args=(p_state,), daemon=True)
+                t_secondary = threading.Thread(target=_run_hedged_worker, args=(s_state,), daemon=True)
+                race_start = time.monotonic()
+                t_primary.start()
+                secondary_started = False
+                if effective_secondary_delay <= 0.0:
+                    secondary_started = True
+                    t_secondary.start()
 
                 winner_state: Optional[Dict[str, Any]] = None
                 loser_state: Optional[Dict[str, Any]] = None
 
                 while winner_state is None:
                     p_ready = p_state["opening_chunk"] is not None
-                    s_ready = s_state["opening_chunk"] is not None
                     p_dead = p_state["failed"] or (p_state["done_event"].is_set() and not p_ready)
-                    s_dead = s_state["failed"] or (s_state["done_event"].is_set() and not s_ready)
 
                     if p_ready:
                         winner_state = p_state
-                        loser_state = s_state
+                        loser_state = s_state if secondary_started else None
                         break
 
-                    if s_ready:
-                        elapsed = time.monotonic() - race_start
-                        if p_dead or not primary_green or elapsed >= priority_window:
-                            winner_state = s_state
-                            loser_state = p_state
+                    elapsed = time.monotonic() - race_start
+                    if not secondary_started and (p_dead or elapsed >= effective_secondary_delay):
+                        secondary_started = True
+                        t_secondary.start()
+
+                    if secondary_started:
+                        s_ready = s_state["opening_chunk"] is not None
+                        s_dead = s_state["failed"] or (s_state["done_event"].is_set() and not s_ready)
+
+                        if s_ready:
+                            if p_dead or not primary_green or elapsed >= priority_window:
+                                winner_state = s_state
+                                loser_state = p_state
+                                break
+
+                        if p_dead and s_dead:
                             break
-
-                    if p_dead and s_dead:
-                        break
 
                     time.sleep(0.015)
 
@@ -3197,6 +3391,12 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                     final_text = "".join(committed_parts).strip()
                     if final_text:
                         self._commit_idempotency_result(idempotency_key, final_text)
+                        if not winner_state.get("midstream_error"):
+                            self._store_tier3_response_cache(
+                                user_message,
+                                final_text,
+                                chat_history=chat_history,
+                            )
                     return
 
                 strategies = strategies[2:]
@@ -3215,53 +3415,23 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
 
                         if not has_flushed:
                             opening_buffer += token
-                            stripped_opening = opening_buffer.lstrip()
-                            if not stripped_opening:
-                                continue
-
-                            flush_idx = self._find_sentence_flush_index(stripped_opening)
-                            if flush_idx == -1:
-                                if len(stripped_opening) < AI_OPENING_BUFFER_MAX_CHARS:
-                                    continue
-                                last_space = stripped_opening.rfind(' ')
-                                flush_idx = (last_space + 1) if last_space > 40 else len(stripped_opening)
-
-                            lead_len = len(opening_buffer) - len(stripped_opening)
-                            split_at = lead_len + flush_idx
-                            opening_segment = opening_buffer[:split_at]
-                            remainder = opening_buffer[split_at:]
-
-                            if has_backup and self._is_incapability_dodge(opening_segment):
+                            status, out_chunk, remainder, opening_buffer = self._try_extract_opening_chunk(
+                                opening_buffer,
+                                user_message=user_message,
+                                reject_dodge=has_backup,
+                            )
+                            if status == "dodge":
                                 logger.info(
                                     "Single-Winner gate discarded dodge opening from %s; escalating to backup.",
                                     strategy.provider_id,
                                 )
                                 opening_buffer = ""
                                 break
-
-                            trailing_ws = opening_segment[len(opening_segment.rstrip()):]
-                            sanitized_opening = self._sanitize_llm_output(
-                                opening_segment,
-                                user_message=user_message,
-                                strip_unapproved_urls=True,
-                                trim_incomplete=False,
-                            )
-                            if has_backup and (not sanitized_opening or self._is_incapability_dodge(sanitized_opening)):
-                                logger.info(
-                                    "Single-Winner gate discarded empty/dodge sanitized opening from %s; escalating.",
-                                    strategy.provider_id,
-                                )
-                                opening_buffer = ""
-                                break
-
-                            if not sanitized_opening:
-                                opening_buffer = remainder
+                            if status == "need_more":
                                 continue
 
                             # Opening check passed: lock this strategy as Single Winner for the rest of the turn
                             has_flushed = True
-                            opening_buffer = ""
-                            out_chunk = sanitized_opening + trailing_ws
                             committed_parts.append(out_chunk)
                             yield out_chunk
 
@@ -3271,23 +3441,13 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                             stream_buffer += token
 
                         if has_flushed:
-                            while stream_buffer:
-                                flush_idx = self._find_sentence_flush_index(stream_buffer)
-                                if flush_idx == -1:
-                                    break
-                                segment = stream_buffer[:flush_idx]
-                                stream_buffer = stream_buffer[flush_idx:]
-                                trailing_ws = segment[len(segment.rstrip()):]
-                                sanitized = self._sanitize_llm_output(
-                                    segment,
-                                    user_message=user_message,
-                                    strip_unapproved_urls=True,
-                                    trim_incomplete=False,
-                                )
-                                if sanitized:
-                                    out_chunk = sanitized + trailing_ws
-                                    committed_parts.append(out_chunk)
-                                    yield out_chunk
+                            flushed_chunks, stream_buffer = self._drain_stream_buffer(
+                                stream_buffer,
+                                user_message=user_message,
+                            )
+                            for out_chunk in flushed_chunks:
+                                committed_parts.append(out_chunk)
+                                yield out_chunk
 
                     if not has_flushed:
                         if opening_buffer.strip():
@@ -3298,34 +3458,23 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                                 )
                                 continue
                             trailing_ws = opening_buffer[len(opening_buffer.rstrip()):]
-                            sanitized_opening = self._sanitize_llm_output(
+                            finalized_opening = self._finalize_tail_buffer(
                                 opening_buffer,
+                                committed_parts=[],
                                 user_message=user_message,
-                                strip_unapproved_urls=True,
-                                trim_incomplete=False,
                             )
-                            sanitized_opening = self._finalize_complete_sentence(
-                                sanitized_opening,
-                                has_prior_complete_sentence=False,
-                            )
-                            if sanitized_opening and not (has_backup and self._is_incapability_dodge(sanitized_opening)):
+                            if finalized_opening and not (has_backup and self._is_incapability_dodge(finalized_opening)):
                                 has_flushed = True
-                                out_chunk = sanitized_opening + trailing_ws
+                                out_chunk = finalized_opening + trailing_ws
                                 committed_parts.append(out_chunk)
                                 yield out_chunk
                         if not has_flushed:
                             continue
                     elif stream_buffer:
-                        sanitized = self._sanitize_llm_output(
+                        finalized = self._finalize_tail_buffer(
                             stream_buffer,
+                            committed_parts=committed_parts,
                             user_message=user_message,
-                            strip_unapproved_urls=True,
-                            trim_incomplete=False,
-                        )
-                        prior_complete = self._ends_with_sentence_terminator("".join(committed_parts))
-                        finalized = self._finalize_complete_sentence(
-                            sanitized,
-                            has_prior_complete_sentence=prior_complete,
                         )
                         stream_buffer = ""
                         if finalized:
@@ -3337,6 +3486,11 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                         final_text = "".join(committed_parts).strip()
                         if final_text:
                             self._commit_idempotency_result(idempotency_key, final_text)
+                            self._store_tier3_response_cache(
+                                user_message,
+                                final_text,
+                                chat_history=chat_history,
+                            )
                         return
 
                 except ProviderUnavailableError as err:
@@ -3354,16 +3508,10 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
                     )
                     if has_flushed:
                         if stream_buffer:
-                            sanitized = self._sanitize_llm_output(
+                            finalized = self._finalize_tail_buffer(
                                 stream_buffer,
+                                committed_parts=committed_parts,
                                 user_message=user_message,
-                                strip_unapproved_urls=True,
-                                trim_incomplete=False,
-                            )
-                            prior_complete = self._ends_with_sentence_terminator("".join(committed_parts))
-                            finalized = self._finalize_complete_sentence(
-                                sanitized,
-                                has_prior_complete_sentence=prior_complete,
                             )
                             if finalized:
                                 committed_parts.append(finalized)

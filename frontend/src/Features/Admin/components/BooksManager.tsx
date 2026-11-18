@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getImageUrl } from '@/src/Libs/apiClient';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { getImageUrl, getThumbnailUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
-import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Eye, Pencil, Trash2, X, ChevronRight, ListOrdered, MoreVertical } from 'lucide-react';
+import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Pencil, Trash2, X, ListOrdered, MoreVertical } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { batchApi, AcquisitionBatch, BatchBook } from '@/src/Endpoints/batchApi';
 import { BatchCard } from '@/src/Features/Admin/components/BatchCard';
@@ -10,20 +10,18 @@ import { EditBatchModal } from '@/src/Features/Admin/components/EditBatchModal';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
 import { useToast } from '@/src/Hooks/useToast';
-import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
 
 export function BooksManager() {
-  const [batches, setBatches] = useState<AcquisitionBatch[]>([]);
-  const [currentBatch, setCurrentBatch] = useState<AcquisitionBatch | null>(null);
-  const currentBatchIdRef = useRef<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Modals
   const [isCreateBatchOpen, setIsCreateBatchOpen] = useState(false);
@@ -42,11 +40,50 @@ export function BooksManager() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
   const { showToast, removeToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
+
+  const {
+    data: cachedBatches,
+    isLoading: batchesLoading,
+    refetch: refetchBatches,
+    mutate: mutateBatches,
+  } = useCachedQuery<AcquisitionBatch[]>({
+    key: 'admin:batches',
+    fetcher: () => batchApi.getAllBatches(),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const batches = cachedBatches ?? [];
+  const batchesRef = useRef<AcquisitionBatch[]>(batches);
+  batchesRef.current = batches;
+
+  const effectiveBatchId = useMemo(() => {
+    if (selectedBatchId !== null && batches.some((b) => b.id === selectedBatchId)) {
+      return selectedBatchId;
+    }
+    const displayBatch = batches.find((b) => b.is_display_batch);
+    const openBatch = batches.find((b) => b.status === 'open');
+    return openBatch?.id ?? displayBatch?.id ?? (batches.length > 0 ? batches[0].id : null);
+  }, [batches, selectedBatchId]);
+
+  const {
+    data: currentBatchData,
+    refetch: refetchCurrentBatch,
+    mutate: mutateCurrentBatch,
+  } = useCachedQuery<AcquisitionBatch | null>({
+    key: effectiveBatchId !== null ? `admin:batch:${effectiveBatchId}` : 'admin:batch:none',
+    fetcher: () => (effectiveBatchId !== null ? batchApi.getBatchById(effectiveBatchId) : Promise.resolve(null)),
+    enabled: effectiveBatchId !== null,
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
+
+  const currentBatch = effectiveBatchId !== null ? (currentBatchData ?? null) : null;
+  const currentBatchRef = useRef<AcquisitionBatch | null>(currentBatch);
+  currentBatchRef.current = currentBatch;
 
   // Mouse Drag to Scroll for Recent Batches
   const recentBatchesRef = useRef<HTMLDivElement>(null);
@@ -77,60 +114,18 @@ export function BooksManager() {
     recentBatchesRef.current.scrollLeft = scrollLeftBatches - walk;
   };
 
-  useEffect(() => {
-    if (currentBatch) {
-      currentBatchIdRef.current = currentBatch.id;
-    }
-  }, [currentBatch]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const allBatches = await batchApi.getAllBatches();
-      setBatches(allBatches);
-
-      let targetBatchId = currentBatchIdRef.current;
-
-      if (!targetBatchId || !allBatches.some(b => b.id === targetBatchId)) {
-        const displayBatch = allBatches.find(b => b.is_display_batch);
-        const openBatch = allBatches.find(b => b.status === 'open');
-        targetBatchId = openBatch?.id || displayBatch?.id || (allBatches.length > 0 ? allBatches[0].id : null);
-      }
-
-      if (targetBatchId) {
-        const fullBatch = await batchApi.getBatchById(targetBatchId);
-        setCurrentBatch(fullBatch);
-      } else {
-        setCurrentBatch(null);
-      }
-    } catch (error) {
-      console.error('Failed to load batches', error);
-    } finally {
-      setLoading(false);
-    }
+  const refreshAll = async () => {
+    invalidateCacheByPrefix('admin:batch');
+    invalidateCacheByPrefix('admin:dashboard');
+    await Promise.all([refetchBatches(), effectiveBatchId !== null ? refetchCurrentBatch() : Promise.resolve()]);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useCmsUpdated(loadData);
-
-  // Mutation guard — prevents auto-refresh from overwriting optimistic UI
-  const isMutating = useRef(false);
-
-  // We omit dependency array for useAutoRefresh callback so it captures the latest loadData 
-  // (which in turn uses the ref for targetBatchId, so we are safe)
-  useAutoRefresh(useCallback(async () => {
-    if (isMutating.current) return; // Skip if a CRUD op is in flight
-    await loadData();
-  }, [loadData]), 30000);
   const handleCreateBatch = async (data: Partial<AcquisitionBatch>) => {
     try {
       await batchApi.createBatch(data);
       setIsCreateBatchOpen(false);
       showToast('Batch created successfully', 'success');
-      loadData();
+      await refreshAll();
     } catch (error: any) {
       showToast(error.message || 'Failed to create batch', 'error');
     }
@@ -139,13 +134,21 @@ export function BooksManager() {
   const handleBatchAction = async (action: 'close' | 'archive' | 'activate' | 'reopen', id: number) => {
     try {
       switch (action) {
-        case 'close': await batchApi.closeBatch(id); break;
-        case 'archive': await batchApi.archiveBatch(id); break;
-        case 'activate': await batchApi.activateBatch(id); break;
-        case 'reopen': await batchApi.reopenBatch(id); break;
+        case 'close':
+          await batchApi.closeBatch(id);
+          break;
+        case 'archive':
+          await batchApi.archiveBatch(id);
+          break;
+        case 'activate':
+          await batchApi.activateBatch(id);
+          break;
+        case 'reopen':
+          await batchApi.reopenBatch(id);
+          break;
       }
       showToast(`Batch ${action}d successfully`, 'success');
-      loadData();
+      await refreshAll();
     } catch (error: any) {
       showToast(error.message || `Failed to ${action} batch`, 'error');
     }
@@ -154,8 +157,12 @@ export function BooksManager() {
   const handleEditBatch = async (id: number, data: Partial<AcquisitionBatch>) => {
     try {
       const updated = await batchApi.updateBatch(id, data);
-      setBatches(prev => prev.map(b => b.id === id ? { ...b, ...updated } : b));
-      if (currentBatch?.id === id) setCurrentBatch(prev => prev ? { ...prev, ...updated } : prev);
+      mutateBatches(batchesRef.current.map((b) => (b.id === id ? { ...b, ...updated } : b)));
+      if (currentBatchRef.current?.id === id) {
+        mutateCurrentBatch({ ...currentBatchRef.current, ...updated });
+      }
+      invalidateCacheByPrefix('admin:batch');
+      invalidateCacheByPrefix('admin:dashboard');
       showToast('Batch updated successfully', 'success');
     } catch (error: any) {
       showToast(error.message || 'Failed to update batch', 'error');
@@ -168,36 +175,38 @@ export function BooksManager() {
       async () => {
         try {
           await batchApi.deleteBatch(batch.id);
-          if (currentBatch?.id === batch.id) setCurrentBatch(null);
+          if (selectedBatchId === batch.id) setSelectedBatchId(null);
+          invalidateCacheByPrefix('admin:batch');
+          invalidateCacheByPrefix('admin:dashboard');
         } catch (error: any) {
-          setBatches(prev => [...prev, batch]);
+          mutateBatches([...batchesRef.current, batch]);
           showToast(error.message || 'Failed to delete batch', 'error');
         }
       },
       () => {
-        setBatches(prev => [...prev, batch]);
+        mutateBatches([...batchesRef.current, batch]);
         showToast('Batch restoration undone', 'success');
-      }
+      },
     );
 
     // Optimistic delete
-    setBatches(prev => prev.filter(b => b.id !== batch.id));
+    mutateBatches(batchesRef.current.filter((b) => b.id !== batch.id));
   };
 
   const handleViewAudit = async (id: number) => {
-    setLoading(true);
+    setActionLoading(true);
     try {
       await batchApi.touchBatch(id);
       const history = await batchApi.getBatchHistory(id);
-      const batch = batches.find(b => b.id === id);
+      const batch = batchesRef.current.find((b) => b.id === id);
       if (batch) {
         setAuditBatch({ ...batch, history });
       }
-      loadData();
+      await refreshAll();
     } catch (err: any) {
       showToast(err.message || 'Failed to load audit trail', 'error');
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -205,11 +214,11 @@ export function BooksManager() {
     if (selectedBatchIds.size === 0) return;
     try {
       const status = (action === 'CLOSE' ? 'closed' : 'open') as 'open' | 'closed';
-      await Promise.all(Array.from<number>(selectedBatchIds).map(id => batchApi.updateBatch(id, { status })));
+      await Promise.all(Array.from<number>(selectedBatchIds).map((id) => batchApi.updateBatch(id, { status })));
       showToast(`Successfully updated ${selectedBatchIds.size} batches`, 'success');
       setSelectedBatchIds(new Set());
-      loadData();
-    } catch (err: any) {
+      await refreshAll();
+    } catch {
       showToast('Failed to update batches', 'error');
     }
   };
@@ -218,116 +227,121 @@ export function BooksManager() {
     try {
       await batchApi.updateBatch(id, { status });
       showToast(`Batch ${status === 'open' ? 'reopened' : 'closed'} successfully`, 'success');
-      loadData();
-    } catch (err: any) {
+      await refreshAll();
+    } catch {
       showToast('Failed to update batch status', 'error');
     }
   };
 
   const handleViewBatchBooks = async (id: number) => {
-    setLoading(true);
+    setActionLoading(true);
     try {
       await batchApi.touchBatch(id);
-      // Immediately set ref to prevent auto-refresh race conditions
-      currentBatchIdRef.current = id;
+      setSelectedBatchId(id);
       // Reset book-level filters so stale search/category doesn't carry over to a different batch
       setSearchQuery('');
       setSelectedCategory('All');
-      setCurrentPage(1);
-      const fullBatch = await batchApi.getBatchById(id);
-      setCurrentBatch(fullBatch);
-      loadData();
+      booksPagination.setPage(1);
+      invalidateCacheByPrefix('admin:batch');
+      await refetchBatches();
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const handleAddOrUpdateBook = async (data: FormData) => {
-    if (!currentBatch) return;
-    isMutating.current = true;
+    const activeBatch = currentBatchRef.current;
+    if (!activeBatch) return;
     try {
       if (editingBook) {
-        const updatedBook = await batchApi.updateBook(currentBatch.id, editingBook.id, data);
-        // Optimistic update: replace the edited book in local state
-        setCurrentBatch(prev => prev ? {
-          ...prev,
-          books: (prev.books || []).map(b => b.id === editingBook.id ? updatedBook : b)
-        } : prev);
+        const updatedBook = await batchApi.updateBook(activeBatch.id, editingBook.id, data);
+        // Optimistic update: replace the edited book in cached state
+        mutateCurrentBatch({
+          ...activeBatch,
+          books: (activeBatch.books || []).map((b) => (b.id === editingBook.id ? updatedBook : b)),
+        });
         showToast('Book updated successfully', 'success');
       } else {
-        const newBook = await batchApi.addBookToBatch(currentBatch.id, data);
-        // Optimistic update: append new book to local state
-        setCurrentBatch(prev => prev ? {
-          ...prev,
-          books: [...(prev.books || []), newBook],
-          book_count: (prev.book_count || 0) + 1
-        } : prev);
+        const newBook = await batchApi.addBookToBatch(activeBatch.id, data);
+        // Optimistic update: append new book to cached state
+        mutateCurrentBatch({
+          ...activeBatch,
+          books: [...(activeBatch.books || []), newBook],
+          book_count: (activeBatch.book_count || 0) + 1,
+        });
         showToast('Book added successfully', 'success');
       }
+      invalidateCacheByPrefix('admin:batches');
+      invalidateCacheByPrefix('admin:dashboard');
       setIsBookFormOpen(false);
       setEditingBook(undefined);
     } catch (error: any) {
       showToast(error.message || 'Failed to save book', 'error');
-      // On error, do a full refresh to ensure consistent state
-      await handleViewBatchBooks(currentBatch.id);
-    } finally {
-      isMutating.current = false;
+      await refetchCurrentBatch();
     }
   };
 
   const handleDeleteBook = (bookId: number) => {
-    if (!currentBatch) return;
-    const bookToDelete = currentBatch.books?.find(b => b.id === bookId);
+    const activeBatch = currentBatchRef.current;
+    if (!activeBatch) return;
+    const bookToDelete = activeBatch.books?.find((b) => b.id === bookId);
     if (!bookToDelete) return;
 
     // Optimistically remove immediately — keeps UI live
-    setCurrentBatch(prev => prev ? {
-      ...prev,
-      books: (prev.books || []).filter(b => b.id !== bookId),
-      book_count: Math.max(0, (prev.book_count || 0) - 1)
-    } : prev);
+    mutateCurrentBatch({
+      ...activeBatch,
+      books: (activeBatch.books || []).filter((b) => b.id !== bookId),
+      book_count: Math.max(0, (activeBatch.book_count || 0) - 1),
+    });
 
     triggerDelete(
       bookToDelete.title,
       async () => {
-        // Actual API delete after 3s
         try {
-          await batchApi.deleteBook(currentBatch.id, bookId);
+          await batchApi.deleteBook(activeBatch.id, bookId);
+          invalidateCacheByPrefix('admin:batch');
+          invalidateCacheByPrefix('admin:dashboard');
         } catch (error: any) {
-          // Revert if API fails
-          setCurrentBatch(prev => prev ? {
-            ...prev,
-            books: [...(prev.books || []), bookToDelete],
-            book_count: (prev.book_count || 0) + 1
-          } : prev);
+          const latest = currentBatchRef.current;
+          if (latest) {
+            mutateCurrentBatch({
+              ...latest,
+              books: [...(latest.books || []), bookToDelete],
+              book_count: (latest.book_count || 0) + 1,
+            });
+          }
           showToast(error.message || 'Failed to delete book', 'error');
         }
       },
       () => {
-        // Undo: restore book to local state
-        setCurrentBatch(prev => prev ? {
-          ...prev,
-          books: [...(prev.books || []), bookToDelete],
-          book_count: (prev.book_count || 0) + 1
-        } : prev);
+        const latest = currentBatchRef.current;
+        if (latest) {
+          mutateCurrentBatch({
+            ...latest,
+            books: [...(latest.books || []), bookToDelete],
+            book_count: (latest.book_count || 0) + 1,
+          });
+        }
         showToast('Deletion undone', 'success');
-      }
+      },
     );
   };
 
   const handleBulkDeleteBooks = () => {
-    if (!currentBatch || selectedBookIds.size === 0) return;
-    const count = selectedBookIds.size;
-    const booksToDelete = currentBatch.books?.filter(b => selectedBookIds.has(b.id)) || [];
+    const activeBatch = currentBatchRef.current;
+    if (!activeBatch || selectedBookIds.size === 0) return;
+    const idsToDelete = Array.from<number>(selectedBookIds);
+    const count = idsToDelete.length;
+    const booksToDelete = activeBatch.books?.filter((b) => selectedBookIds.has(b.id)) || [];
 
     // Optimistically remove immediately
-    setCurrentBatch(prev => prev ? {
-      ...prev,
-      books: (prev.books || []).filter(b => !selectedBookIds.has(b.id)),
-      book_count: Math.max(0, (prev.book_count || 0) - count)
-    } : prev);
+    mutateCurrentBatch({
+      ...activeBatch,
+      books: (activeBatch.books || []).filter((b) => !selectedBookIds.has(b.id)),
+      book_count: Math.max(0, (activeBatch.book_count || 0) - count),
+    });
     setSelectedBookIds(new Set());
 
     triggerDelete(
@@ -337,19 +351,23 @@ export function BooksManager() {
         const toastId = showToast(`${count} removing processing.`, 'loading');
         try {
           await processInChunks(
-            Array.from(selectedBookIds),
+            idsToDelete,
             10,
-            (id: number) => batchApi.deleteBook(currentBatch.id, id),
-            (_, __, c) => {}
+            (id: number) => batchApi.deleteBook(activeBatch.id, id),
+            () => {},
           );
+          invalidateCacheByPrefix('admin:batch');
+          invalidateCacheByPrefix('admin:dashboard');
           showToast(`Successfully removed ${count} books`, 'success');
-        } catch (error: any) {
-          // Revert if any API fails
-          setCurrentBatch(prev => prev ? {
-            ...prev,
-            books: [...(prev.books || []), ...booksToDelete],
-            book_count: (prev.book_count || 0) + count
-          } : prev);
+        } catch {
+          const latest = currentBatchRef.current;
+          if (latest) {
+            mutateCurrentBatch({
+              ...latest,
+              books: [...(latest.books || []), ...booksToDelete],
+              book_count: (latest.book_count || 0) + count,
+            });
+          }
           showToast('Failed to remove some books', 'error');
         } finally {
           setIsRemoving(false);
@@ -357,41 +375,67 @@ export function BooksManager() {
         }
       },
       () => {
-        // Undo: restore books to local state
-        setCurrentBatch(prev => prev ? {
-          ...prev,
-          books: [...(prev.books || []), ...booksToDelete],
-          book_count: (prev.book_count || 0) + count
-        } : prev);
+        const latest = currentBatchRef.current;
+        if (latest) {
+          mutateCurrentBatch({
+            ...latest,
+            books: [...(latest.books || []), ...booksToDelete],
+            book_count: (latest.book_count || 0) + count,
+          });
+        }
         showToast('Bulk removal undone', 'success');
-      }
+      },
     );
   };
 
   // Derived state for filtering
   const debouncedSearch = useDebounce(searchQuery, 400);
   const displayBooks = currentBatch?.books || [];
-  const filteredBooks = displayBooks.filter((book) => {
-    const matchesSearch =
-      book.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      book.author.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      (book.accession_number && book.accession_number.toLowerCase().includes(debouncedSearch.toLowerCase()));
-    const matchesCategory = selectedCategory === 'All' || book.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+  const filteredBooks = useMemo(() => {
+    const query = debouncedSearch.toLowerCase();
+    return displayBooks.filter((book) => {
+      const matchesSearch =
+        book.title.toLowerCase().includes(query) ||
+        book.author.toLowerCase().includes(query) ||
+        (book.accession_number && book.accession_number.toLowerCase().includes(query));
+      const matchesCategory = selectedCategory === 'All' || book.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [displayBooks, debouncedSearch, selectedCategory]);
+
+  const uniqueCategories = useMemo(
+    () => ['All', ...new Set(displayBooks.map((b) => b.category))].filter(Boolean),
+    [displayBooks],
+  );
+
+  const booksPagination = usePagination<BatchBook>({
+    items: filteredBooks,
+    pageSize: 10,
+    storageKey: 'jrmsu_admin_books_page_size',
   });
+  const paginatedBooks = booksPagination.paginatedItems;
 
-  const uniqueCategories = ['All', ...new Set(displayBooks.map((b) => b.category))].filter(Boolean);
-
-  const totalPages = Math.ceil(filteredBooks.length / itemsPerPage);
-  const paginatedBooks = filteredBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
+  const { setPage: setBooksPage } = booksPagination;
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, selectedCategory, currentBatch?.id]);
+    setBooksPage(1);
+  }, [debouncedSearch, selectedCategory, currentBatch?.id, setBooksPage]);
 
   // Batches sorted ascending for View All modal
-  const batchesAscending = [...batches].sort((a, b) => new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime());
-  const sortedRecentBatches = [...batches].sort((a, b) => new Date(b.last_interacted_at || b.opened_at).getTime() - new Date(a.last_interacted_at || a.opened_at).getTime());
+  const batchesAscending = useMemo(
+    () => [...batches].sort((a, b) => new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime()),
+    [batches],
+  );
+  const sortedRecentBatches = useMemo(
+    () =>
+      [...batches].sort(
+        (a, b) =>
+          new Date(b.last_interacted_at || b.opened_at).getTime() -
+          new Date(a.last_interacted_at || a.opened_at).getTime(),
+      ),
+    [batches],
+  );
+
+  const loading = (batchesLoading && batches.length === 0) || actionLoading;
 
   if (loading && batches.length === 0) {
     return <div style={{ padding: 40, textAlign: 'center' }}><RefreshCw className="animate-spin" /> Loading...</div>;
@@ -423,7 +467,7 @@ export function BooksManager() {
         />
         <MetricCard
           label="Active Display Books"
-          value={batches.find(b => b.is_display_batch)?.book_count || 0}
+          value={batches.find((b) => b.is_display_batch)?.book_count || 0}
           icon={<Tag size={22} />}
           variant="gold"
         />
@@ -454,7 +498,7 @@ export function BooksManager() {
             paddingBottom: 8,
             scrollSnapType: 'x mandatory',
             WebkitOverflowScrolling: 'touch',
-            cursor: 'grab'
+            cursor: 'grab',
           }}
           className="custom-scrollbar"
         >
@@ -497,17 +541,17 @@ export function BooksManager() {
                   if (selectedBookIds.size > 0) {
                     setSelectedBookIds(new Set());
                   } else {
-                    setSelectedBookIds(new Set(filteredBooks.map(b => b.id)));
+                    setSelectedBookIds(new Set(filteredBooks.map((b) => b.id)));
                   }
                 }}
                 disabled={isRemoving}
               >
-                {selectedBookIds.size > 0 ? "Unselect All" : "Select All"}
+                {selectedBookIds.size > 0 ? 'Unselect All' : 'Select All'}
               </button>
               {selectedBookIds.size > 0 && (
-                <button 
-                  className="admin-btn" 
-                  style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }} 
+                <button
+                  className="admin-btn"
+                  style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none' }}
                   onClick={handleBulkDeleteBooks}
                   disabled={isRemoving}
                 >
@@ -537,10 +581,10 @@ export function BooksManager() {
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
-              <button className={`admin-btn admin-btn--icon`} onClick={() => setViewMode('grid')} style={viewMode === 'grid' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}>
+              <button className="admin-btn admin-btn--icon" onClick={() => setViewMode('grid')} style={viewMode === 'grid' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}>
                 <LayoutGrid size={16} />
               </button>
-              <button className={`admin-btn admin-btn--icon`} onClick={() => setViewMode('table')} style={viewMode === 'table' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}>
+              <button className="admin-btn admin-btn--icon" onClick={() => setViewMode('table')} style={viewMode === 'table' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}>
                 <List size={16} />
               </button>
             </div>
@@ -552,16 +596,16 @@ export function BooksManager() {
                 <thead>
                   <tr>
                     <th style={{ width: '40px', textAlign: 'center' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={paginatedBooks.length > 0 && paginatedBooks.every(b => selectedBookIds.has(b.id))}
+                      <input
+                        type="checkbox"
+                        checked={paginatedBooks.length > 0 && paginatedBooks.every((b) => selectedBookIds.has(b.id))}
                         disabled={isRemoving}
                         onChange={(e) => {
                           const newSelected = new Set(selectedBookIds);
                           if (e.target.checked) {
-                            paginatedBooks.forEach(b => newSelected.add(b.id));
+                            paginatedBooks.forEach((b) => newSelected.add(b.id));
                           } else {
-                            paginatedBooks.forEach(b => newSelected.delete(b.id));
+                            paginatedBooks.forEach((b) => newSelected.delete(b.id));
                           }
                           setSelectedBookIds(newSelected);
                         }}
@@ -579,8 +623,8 @@ export function BooksManager() {
                   {paginatedBooks.map((book) => (
                     <tr key={book.id} style={{ backgroundColor: selectedBookIds.has(book.id) ? 'var(--color-blue-50)' : 'transparent' }}>
                       <td style={{ textAlign: 'center' }}>
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={selectedBookIds.has(book.id)}
                           disabled={isRemoving}
                           onChange={(e) => {
@@ -605,17 +649,19 @@ export function BooksManager() {
                     </tr>
                   ))}
                   {filteredBooks.length === 0 && (
-                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No books in this batch match the filter.</td></tr>
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No books in this batch match the filter.</td></tr>
                   )}
                 </tbody>
               </table>
-              {filteredBooks.length > itemsPerPage && (
+              {booksPagination.totalItems > 0 && (
                 <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                  totalItems={filteredBooks.length}
-                  itemsPerPage={itemsPerPage}
+                  currentPage={booksPagination.currentPage}
+                  totalPages={booksPagination.totalPages}
+                  onPageChange={booksPagination.setPage}
+                  totalItems={booksPagination.totalItems}
+                  itemsPerPage={booksPagination.pageSize}
+                  onPageSizeChange={booksPagination.setPageSize}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                 />
               )}
             </div>
@@ -639,7 +685,7 @@ export function BooksManager() {
                       {activeBookDropdown === book.id && (
                         <>
                           <div className="fixed inset-0 z-[9999] animate-modal-overlay" onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(null); }}></div>
-                          <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1 animate-modal-card" onClick={e => e.stopPropagation()}>
+                          <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1 animate-modal-card" onClick={(e) => e.stopPropagation()}>
                             <button
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
                               onClick={() => { setEditingBook(book); setIsBookFormOpen(true); setActiveBookDropdown(null); }}
@@ -659,9 +705,25 @@ export function BooksManager() {
                   </div>
 
                   <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12, position: 'relative' }}>
-                    <BookOpen size={40} color='var(--color-gray-400)' />
+                    <BookOpen size={40} color="var(--color-gray-400)" />
                     {book.cover_image && (
-                      <img src={getImageUrl(book.cover_image)} alt={book.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                      <img
+                        src={getThumbnailUrl(book.cover_image)}
+                        alt={book.title}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          const fallbackUrl = getImageUrl(book.cover_image);
+                          if (img.dataset.fallbackApplied !== '1' && fallbackUrl) {
+                            img.dataset.fallbackApplied = '1';
+                            img.src = fallbackUrl;
+                          } else {
+                            img.style.display = 'none';
+                          }
+                        }}
+                      />
                     )}
                   </div>
                   <div className="admin-grid-card__body">
@@ -671,14 +733,16 @@ export function BooksManager() {
                   </div>
                 </div>
               ))}
-              {filteredBooks.length > itemsPerPage && (
+              {booksPagination.totalItems > 0 && (
                 <div className="col-span-full">
                   <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                    totalItems={filteredBooks.length}
-                    itemsPerPage={itemsPerPage}
+                    currentPage={booksPagination.currentPage}
+                    totalPages={booksPagination.totalPages}
+                    onPageChange={booksPagination.setPage}
+                    totalItems={booksPagination.totalItems}
+                    itemsPerPage={booksPagination.pageSize}
+                    onPageSizeChange={booksPagination.setPageSize}
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
                   />
                 </div>
               )}
@@ -711,7 +775,7 @@ export function BooksManager() {
       {/* View All Batches Modal */}
       {viewAllOpen && createPortal(
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]" onClick={() => setViewAllOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden animate-modal-card" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><BookOpen size={20} className="text-navy" /> All Batches ({batches.length})</h2>
               <div className="flex items-center gap-4">
@@ -754,7 +818,7 @@ export function BooksManager() {
                       <input
                         type="checkbox"
                         onChange={(e) => {
-                          if (e.target.checked) setSelectedBatchIds(new Set(batchesAscending.map(b => b.id)));
+                          if (e.target.checked) setSelectedBatchIds(new Set(batchesAscending.map((b) => b.id)));
                           else setSelectedBatchIds(new Set());
                         }}
                         checked={selectedBatchIds.size > 0 && selectedBatchIds.size === batchesAscending.length}
@@ -802,7 +866,7 @@ export function BooksManager() {
                           {activeDropdown === b.id && (
                             <>
                               <div className="fixed inset-0 z-[9999] bg-transparent" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
-                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1" onClick={e => e.stopPropagation()}>
+                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                   onClick={() => { setViewAllOpen(false); handleViewBatchBooks(b.id); setActiveDropdown(null); }}
@@ -846,12 +910,12 @@ export function BooksManager() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {/* Audit Modal */}
       {auditBatch && createPortal(
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center ] p-4 animate-modal-overlay z-[9999]" onClick={() => setAuditBatch(null)}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]" onClick={() => setAuditBatch(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-5 flex justify-between items-start">
               <div>
@@ -923,7 +987,7 @@ export function BooksManager() {
             </div>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       <UndoDeleteToast

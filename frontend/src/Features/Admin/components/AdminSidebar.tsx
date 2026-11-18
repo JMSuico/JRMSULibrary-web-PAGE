@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
 import {
@@ -10,12 +10,13 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  Library,
   Users,
   Mail,
   Trash2,
 } from 'lucide-react';
 import { userApi } from '@/src/Endpoints/userApi';
+import { invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { prefetchRoute, startAdminIdlePrefetch } from '@/src/Libs/routePrefetch';
 import jrmsuLogo from '@/src/Assets/assets/JRMSU-removebg-preview.png';
 
 interface AdminSidebarProps {
@@ -58,6 +59,8 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
   const navigate = useNavigate();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
+  useEffect(() => startAdminIdlePrefetch(), []);
+
   const sidebarClasses = [
     'admin-sidebar',
     collapsed ? 'collapsed' : '',
@@ -67,6 +70,7 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
     .join(' ');
 
   const handleLogout = async () => {
+    invalidateCacheByPrefix('admin:');
     try {
       await userApi.logout();
     } catch {
@@ -115,6 +119,8 @@ export function AdminSidebar({ collapsed, mobileOpen, onCloseMobile }: AdminSide
                   className={({ isActive }) =>
                     `admin-sidebar__link ${isActive ? 'active' : ''}`
                   }
+                  onMouseEnter={() => prefetchRoute(item.to)}
+                  onFocus={() => prefetchRoute(item.to)}
                   onClick={onCloseMobile}
                   aria-label={item.text}
                 >

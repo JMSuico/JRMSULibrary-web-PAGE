@@ -1055,6 +1055,8 @@ class TestSpeculativeParallelHedgingAndShadowCache(unittest.TestCase):
             delay_seconds=0.18,
         )
         service = _make_empty_ai_service(providers=[claude, ollama])
+        # Explicitly enable simultaneous hedging (0s stagger) to test shadow-cache harvesting
+        service.hedged_secondary_delay_seconds = 0.0
 
         query = "can you explain how to structure a study schedule in the library?"
         response = "".join(service.generate_chat_stream(query)).strip()
@@ -1250,6 +1252,145 @@ class TestSpeculativeParallelHedgingAndShadowCache(unittest.TestCase):
         service._commit_idempotency_result("idem-neg-test", negative_text)
         cached_idem, _, _ = service._acquire_idempotency_result if hasattr(service, "_acquire_idempotency_result") else service._acquire_idempotency_lease("idem-neg-test")
         self.assertIsNone(cached_idem)
+
+        service._store_tier3_response_cache(query, negative_text)
+        self.assertIsNone(service._get_tier3_response_cache(query))
+        service._store_tier3_response_cache(query, "I don't know.")
+        self.assertIsNone(service._get_tier3_response_cache(query))
+
+    def test_claude_green_fast_skips_local_ollama_to_avoid_cpu_burn(self):
+        claude = _TimedFakeLLMProvider(
+            ["Claude answered quickly within the priority window."],
+            provider_id="claude",
+            delay_seconds=0.03,
+        )
+        ollama = _TimedFakeLLMProvider(
+            ["Local Ollama should never be invoked when Claude is fast."],
+            provider_id="ollama",
+            delay_seconds=0.01,
+        )
+        service = _make_empty_ai_service(providers=[claude, ollama])
+        self.assertGreaterEqual(service.hedged_secondary_delay_seconds, 1.0)
+
+        query = "what study habits help college students prepare for finals?"
+        response = "".join(service.generate_chat_stream(query)).strip()
+
+        self.assertIn("Claude answered quickly", response)
+        self.assertEqual(len(claude.calls), 1)
+        self.assertEqual(
+            ollama.calls,
+            [],
+            "Local Ollama must NOT be spawned when green Claude responds within the stagger window",
+        )
+
+    def test_claude_green_error_launches_local_ollama_immediately_without_waiting(self):
+        from Features.Services.Interfaces.i_llm_provider import ProviderUnavailableError
+
+        class _FailingClaudeProvider(ILLMProviderStrategy):
+            @property
+            def provider_id(self) -> str:
+                return "claude"
+
+            def is_configured(self) -> bool:
+                return True
+
+            def stream_chat(self, messages, config: LLMGenerationConfig, session):
+                raise ProviderUnavailableError("claude", "Claude timeout")
+
+            def complete_chat(self, messages, config: LLMGenerationConfig, session) -> str:
+                raise ProviderUnavailableError("claude", "Claude timeout")
+
+        ollama = _TimedFakeLLMProvider(
+            ["Local Ollama recovered immediately after Claude failed."],
+            provider_id="ollama",
+            delay_seconds=0.02,
+        )
+        service = _make_empty_ai_service(providers=[_FailingClaudeProvider(), ollama])
+
+        t0 = time.monotonic()
+        response = "".join(
+            service.generate_chat_stream("how do I organize an annotated bibliography?")
+        ).strip()
+        elapsed = time.monotonic() - t0
+
+        self.assertIn("Local Ollama recovered immediately", response)
+        self.assertLess(elapsed, 0.50)
+
+    def test_sub_2s_opening_buffer_flushes_at_clause_punctuation_over_32_chars(self):
+        class _ChunkedClauseProvider(ILLMProviderStrategy):
+            def __init__(self):
+                self.second_chunk_requested = False
+
+            @property
+            def provider_id(self) -> str:
+                return "ollama"
+
+            def is_configured(self) -> bool:
+                return True
+
+            def stream_chat(self, messages, config: LLMGenerationConfig, session):
+                yield "Use Cornell notes for better retention, and "
+                self.second_chunk_requested = True
+                yield "review them weekly."
+
+            def complete_chat(self, messages, config: LLMGenerationConfig, session) -> str:
+                return "Use Cornell notes for better retention, and review them weekly."
+
+        provider = _ChunkedClauseProvider()
+        service = _make_empty_ai_service(providers=[provider])
+
+        stream = service.generate_chat_stream("what is a good note taking strategy for research?")
+        first_out = next(stream)
+        self.assertIn("Use Cornell notes for better retention,", first_out)
+        self.assertFalse(
+            provider.second_chunk_requested,
+            "Opening buffer must flush on >=32-char clause boundary without waiting for remaining chunks or 180 chars",
+        )
+        rest_out = "".join(stream)
+        self.assertIn("review them weekly.", first_out + rest_out)
+
+    def test_tier3_short_ttl_response_cache_hits_and_skips_live_or_long_history_queries(self):
+        claude = _TimedFakeLLMProvider(
+            ["Synthesizing multiple sources builds stronger literature reviews."],
+            provider_id="claude",
+            delay_seconds=0.01,
+        )
+        service = _make_empty_ai_service(providers=[claude])
+
+        query = "how do I synthesize sources in a literature review?"
+        first_resp = "".join(service.generate_chat_stream(query)).strip()
+        self.assertIn("Synthesizing multiple sources", first_resp)
+        self.assertEqual(len(claude.calls), 1)
+
+        # Second identical query should hit the 10-minute Tier 3 Redis cache without calling LLM
+        second_resp = "".join(service.generate_chat_stream(query)).strip()
+        self.assertEqual(second_resp, first_resp)
+        self.assertEqual(len(claude.calls), 1)
+
+        # Long chat history (> 2 turns) must bypass Tier 3 response cache
+        long_history = [
+            {"sender": "user", "text": "Hi"},
+            {"sender": "rizal", "text": "Hello!"},
+            {"sender": "user", "text": "Can you help with my thesis?"},
+        ]
+        _ = "".join(service.generate_chat_stream(query, chat_history=long_history)).strip()
+        self.assertEqual(len(claude.calls), 2)
+
+        # Room-availability / live-visitor queries must never be cached in Tier 3 response cache
+        service._store_tier3_response_cache(
+            "is Discussion Room 1 available right now?",
+            "Discussion Room 1 is available.",
+        )
+        self.assertIsNone(
+            service._get_tier3_response_cache("is Discussion Room 1 available right now?")
+        )
+        service._store_tier3_response_cache(
+            "how many website visitors do we have today?",
+            "We have 100 visitors.",
+        )
+        self.assertIsNone(
+            service._get_tier3_response_cache("how many website visitors do we have today?")
+        )
 
 
 if __name__ == "__main__":

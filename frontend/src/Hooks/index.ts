@@ -22,3 +22,9 @@ export { useDevToolsProtection } from './useDevToolsProtection';
 export { useAboutContent } from './useAboutContent';
 export { useCmsUpdated } from './useCmsUpdated';
 export { useCarouselStyle } from './useCarouselStyle';
+export {
+  useCachedQuery,
+  invalidateCacheByPrefix,
+  type UseCachedQueryOptions,
+  type UseCachedQueryResult,
+} from './useCachedQuery';

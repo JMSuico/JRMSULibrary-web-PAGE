@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   referenceApi,
@@ -8,15 +8,16 @@ import {
   ResearchDepartment,
 } from '@/src/Endpoints/referenceApi';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
-import { Search, Plus, Edit2, Trash2, X, Save, Upload } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, X, Save, Upload, Link, Loader2, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { ExcelUploadModal } from '@/src/Features/Admin/components/ExcelUploadModal';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
-import { Link, Loader2, CheckCircle2 } from 'lucide-react';
 import { useDraggableScroll } from '@/src/Hooks/useDraggableScroll';
 import { useChunkedSync } from '@/src/Hooks/useChunkedSync';
 
@@ -28,9 +29,8 @@ const DEPT_SHORT: Record<string, string> = {
 };
 
 export function ResearchReferencesManager() {
-  const [data, setData] = useState<PaginatedReferences | null>(null);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState<number>(20);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 500);
   const [filterCategory, setFilterCategory] = useState('All');
@@ -41,17 +41,9 @@ export function ResearchReferencesManager() {
   const [editingRef, setEditingRef] = useState<ResearchReference | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const { state: syncState, startSync, cancelSync, resetSync } = useChunkedSync(() => {
-    loadData();
-    setTimeout(() => {
-      resetSync();
-      setIsUploadModalOpen(false);
-    }, 3000); // clear toast after 3 seconds
-  });
-
   // Controlled category inside the Add/Edit form (to drive department enable/disable)
   const [formCategory, setFormCategory] = useState<string>('Research for College Student in JRMSU');
-  
+
   // Access type fields
   const [accessType, setAccessType] = useState<'none' | 'link' | 'file'>('none');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -63,25 +55,41 @@ export function ResearchReferencesManager() {
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
   const scrollRef = useDraggableScroll<HTMLDivElement>();
 
-  const limit = 20;
+  const cacheKey = `admin:references:p${page}:l${limit}:s${debouncedSearch}:c${filterCategory}:d${filterDepartment}`;
+  const {
+    data,
+    isLoading: loading,
+    error,
+    refetch,
+    mutate,
+  } = useCachedQuery<PaginatedReferences>({
+    key: cacheKey,
+    fetcher: () => referenceApi.getAllReferences(page, limit, debouncedSearch, filterCategory, filterDepartment),
+    staleTimeMs: 30_000,
+    listenCmsUpdate: true,
+  });
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const result = await referenceApi.getAllReferences(page, limit, debouncedSearch, filterCategory, filterDepartment);
-      setData(result);
-      // Clear selections when page changes
-      setSelectedIds(new Set());
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load references', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const dataRef = useRef<PaginatedReferences | null>(data ?? null);
+  dataRef.current = data ?? null;
 
   useEffect(() => {
-    loadData();
-  }, [page, debouncedSearch, filterCategory, filterDepartment]);
+    if (error) {
+      showToast(error.message || 'Failed to load references', 'error');
+    }
+  }, [error, showToast]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, limit, debouncedSearch, filterCategory, filterDepartment]);
+
+  const { state: syncState, startSync, cancelSync, resetSync } = useChunkedSync(() => {
+    invalidateCacheByPrefix('admin:references');
+    refetch();
+    setTimeout(() => {
+      resetSync();
+      setIsUploadModalOpen(false);
+    }, 3000);
+  });
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
@@ -99,39 +107,44 @@ export function ResearchReferencesManager() {
     setPage(1);
   };
 
+  const handlePageSizeChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setPage(1);
+  };
+
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSaving) return;
     setIsSaving(true);
     showToast('Saving reference...', 'info');
-    
+
     const fd = new FormData(e.currentTarget);
     const catValue = fd.get('category') as string;
     const deptValue = fd.get('department') as string;
 
     const payload: Partial<ResearchReference> = {
-      category: catValue as any,
-      department: (catValue === 'Research for College Student in JRMSU' && deptValue)
-        ? deptValue as ResearchDepartment
-        : null,
-      no: fd.get('no') ? parseInt(fd.get('no') as string) : null,
-      acc_no: fd.get('acc_no') as string || null,
-      call_number: fd.get('call_number') as string || null,
+      category: catValue as ResearchReference['category'],
+      department:
+        catValue === 'Research for College Student in JRMSU' && deptValue
+          ? (deptValue as ResearchDepartment)
+          : null,
+      no: fd.get('no') ? parseInt(fd.get('no') as string, 10) : null,
+      acc_no: (fd.get('acc_no') as string) || null,
+      call_number: (fd.get('call_number') as string) || null,
       title: fd.get('title') as string,
-      author: fd.get('author') as string || null,
-      copyright: fd.get('copyright') as string || null,
-      remarks: fd.get('remarks') as string || null,
-      resource_status: fd.get('resource_status') as string || null,
-      inventory_year: fd.get('inventory_year') as string || null,
+      author: (fd.get('author') as string) || null,
+      copyright: (fd.get('copyright') as string) || null,
+      remarks: (fd.get('remarks') as string) || null,
+      resource_status: (fd.get('resource_status') as string) || null,
+      inventory_year: (fd.get('inventory_year') as string) || null,
       access_type: accessType,
-      access_link: accessType === 'link' ? fd.get('access_link') as string : null,
+      access_link: accessType === 'link' ? (fd.get('access_link') as string) : null,
     };
 
     try {
       let savedRef: ResearchReference;
-      
+
       if (editingRef) {
-        // If changing access type from file to something else, remove file explicitly
         if (editingRef.access_type === 'file' && accessType !== 'file') {
           await referenceApi.removeReferenceFile(editingRef.id);
         }
@@ -142,7 +155,6 @@ export function ResearchReferencesManager() {
         showToast('Reference created successfully', 'success');
       }
 
-      // Handle file upload if type is file and a new file was selected
       if (accessType === 'file' && selectedFile) {
         const fileData = new FormData();
         fileData.append('access_file', selectedFile);
@@ -150,20 +162,21 @@ export function ResearchReferencesManager() {
       }
 
       setIsModalOpen(false);
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to save reference', 'error');
+      invalidateCacheByPrefix('admin:references');
+      await refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save reference';
+      showToast(message, 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = (ref: ResearchReference) => {
-    // Optimistic delete
-    if (data) {
-      setData({
-        ...data,
-        results: data.results.filter(r => r.id !== ref.id)
+    if (dataRef.current) {
+      mutate({
+        ...dataRef.current,
+        results: dataRef.current.results.filter((r) => r.id !== ref.id),
       });
     }
 
@@ -172,22 +185,24 @@ export function ResearchReferencesManager() {
       async () => {
         try {
           await referenceApi.deleteReference(ref.id);
-          loadData();
-        } catch (err: any) {
-          showToast(err.message || 'Failed to delete reference', 'error');
-          loadData();
+          invalidateCacheByPrefix('admin:references');
+          await refetch();
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Failed to delete reference';
+          showToast(message, 'error');
+          await refetch();
         }
       },
       () => {
         showToast('Deletion undone', 'success');
-        loadData();
-      }
+        refetch();
+      },
     );
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked && data) {
-      setSelectedIds(new Set(data.results.map(r => r.id)));
+      setSelectedIds(new Set(data.results.map((r) => r.id)));
     } else {
       setSelectedIds(new Set());
     }
@@ -202,36 +217,39 @@ export function ResearchReferencesManager() {
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
-    
-    // Optimistic delete
-    if (data) {
-      setData({
-        ...data,
-        results: data.results.filter(r => !selectedIds.has(r.id))
+    const idsToDelete = Array.from<number>(selectedIds);
+    const count = idsToDelete.length;
+
+    if (dataRef.current) {
+      mutate({
+        ...dataRef.current,
+        results: dataRef.current.results.filter((r) => !selectedIds.has(r.id)),
       });
     }
 
     triggerDelete(
-      `${selectedIds.size} references`,
-        async () => {
-          setIsDeletingBulk(true);
-          const toastId = showToast(`${selectedIds.size} items processing in background...`, 'loading');
-          try {
-            await bulkApi.delete('RESEARCH_REF', Array.from(selectedIds));
-            setSelectedIds(new Set());
-            showToast(`${selectedIds.size} references successfully queued for deletion`, 'success');
-          } catch (err: any) {
-            loadData();
-            showToast('Failed to queue deletion', 'error');
-          } finally {
-            setIsDeletingBulk(false);
-            removeToast(toastId);
-          }
-        },
+      `${count} references`,
+      async () => {
+        setIsDeletingBulk(true);
+        const toastId = showToast(`${count} items processing in background...`, 'loading');
+        try {
+          await bulkApi.delete('RESEARCH_REF', idsToDelete);
+          setSelectedIds(new Set());
+          invalidateCacheByPrefix('admin:references');
+          showToast(`${count} references successfully queued for deletion`, 'success');
+          await refetch();
+        } catch {
+          await refetch();
+          showToast('Failed to queue deletion', 'error');
+        } finally {
+          setIsDeletingBulk(false);
+          removeToast(toastId);
+        }
+      },
       () => {
         showToast('Bulk deletion undone', 'success');
-        loadData();
-      }
+        refetch();
+      },
     );
   };
 
@@ -282,7 +300,7 @@ export function ResearchReferencesManager() {
             }`}
           >
             <option value="All">All Departments</option>
-            {RESEARCH_DEPARTMENTS.map(d => (
+            {RESEARCH_DEPARTMENTS.map((d) => (
               <option key={d} value={d}>{DEPT_SHORT[d] ?? d}</option>
             ))}
           </select>
@@ -297,12 +315,12 @@ export function ResearchReferencesManager() {
                 if (selectedIds.size > 0) {
                   setSelectedIds(new Set());
                 } else {
-                  if (data) setSelectedIds(new Set(data.results.map(r => r.id)));
+                  if (data) setSelectedIds(new Set(data.results.map((r) => r.id)));
                 }
               }}
               disabled={isDeletingBulk}
             >
-              {selectedIds.size > 0 ? "Unselect All" : "Select All"}
+              {selectedIds.size > 0 ? 'Unselect All' : 'Select All'}
             </button>
             {selectedIds.size > 0 && (
               <button
@@ -368,9 +386,9 @@ export function ResearchReferencesManager() {
           </thead>
           <tbody>
             {loading && !data ? (
-              <tr><td colSpan={10} className="text-center py-8 text-gray-500">Loading references...</td></tr>
+              <tr><td colSpan={12} className="text-center py-8 text-gray-500">Loading references...</td></tr>
             ) : data?.results.length === 0 ? (
-              <tr><td colSpan={10} className="text-center py-8 text-gray-500">No references found.</td></tr>
+              <tr><td colSpan={12} className="text-center py-8 text-gray-500">No references found.</td></tr>
             ) : (
               data?.results.map((ref) => (
                 <tr key={ref.id} className="hover:bg-gray-50">
@@ -444,14 +462,16 @@ export function ResearchReferencesManager() {
         </table>
       </div>
 
-      {data && data.total_pages > 0 && (
-        <div className="mt-6 flex justify-end">
+      {data && data.count > 0 && (
+        <div className="mt-6">
           <Pagination
             currentPage={data.current_page}
             totalPages={data.total_pages}
             totalItems={data.count}
             itemsPerPage={limit}
             onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
           />
         </div>
       )}
@@ -459,7 +479,7 @@ export function ResearchReferencesManager() {
       {/* Add/Edit Modal */}
       {isModalOpen && createPortal(
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-modal-overlay z-[9999]" onClick={() => setIsModalOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-modal-card" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-gray-100 z-10 p-6 flex justify-between items-center shrink-0">
               <h2 className="text-xl font-bold text-gray-900">{editingRef ? 'Edit Reference' : 'Add New Reference'}</h2>
               <button type="button" onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors cursor-pointer">
@@ -469,14 +489,13 @@ export function ResearchReferencesManager() {
 
             <form onSubmit={handleSave} className="p-6 overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
                 {/* Category */}
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
                   <select
                     name="category"
                     value={formCategory}
-                    onChange={e => setFormCategory(e.target.value)}
+                    onChange={(e) => setFormCategory(e.target.value)}
                     required
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm"
                   >
@@ -502,7 +521,7 @@ export function ResearchReferencesManager() {
                     }`}
                   >
                     <option value="">Select department...</option>
-                    {RESEARCH_DEPARTMENTS.map(d => (
+                    {RESEARCH_DEPARTMENTS.map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
@@ -627,7 +646,7 @@ export function ResearchReferencesManager() {
             </form>
           </div>
         </div>,
-        document.body
+        document.body,
       )}
 
       {/* Excel/CSV Upload Modal */}
@@ -670,10 +689,10 @@ export function ResearchReferencesManager() {
         </div>
       )}
 
-      <UndoDeleteToast 
-        undoState={undoState} 
-        onUndo={cancelDelete} 
-        onExecuteNow={executeNow} 
+      <UndoDeleteToast
+        undoState={undoState}
+        onUndo={cancelDelete}
+        onExecuteNow={executeNow}
       />
     </div>
   );
