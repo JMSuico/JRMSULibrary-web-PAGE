@@ -171,10 +171,8 @@ class UserViewSet(viewsets.ViewSet):
             username = request.user.username
             cache.delete(f"login_attempts_{username}")
             cache.delete(f"login_lockout_ts_{username}")
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            # Atomically update DB so all replicas immediately see last_active = None
-            User.objects.filter(pk=user_id).update(last_active=None)
+            # Atomically update DB via Service -> Repository so all replicas immediately see last_active = None
+            self.service.clear_last_active(user_id)
             request.user.last_active = None
             # Clear user sessions in database
             self.service.clear_user_sessions(user_id)
@@ -223,7 +221,7 @@ class UserViewSet(viewsets.ViewSet):
             )
 
         now = timezone.now()
-        updated = Account.objects.filter(id=request.user.id, last_active__isnull=False).update(last_active=now)
+        updated = self.service.touch_heartbeat_if_active(request.user.id, now)
         if updated == 0:
             return Response(
                 {'status': 'inactive', 'authenticated': False},

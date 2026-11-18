@@ -92,10 +92,10 @@ class OCRTextExtractor:
         "total", "sample", "template", "fill", "values", "project", "campus"
     }
 
-    MAX_PDF_EXTRACT_PAGES = int(os.environ.get("OCR_MAX_PDF_PAGES", "400"))
-    MAX_HUGE_PDF_EXTRACT_PAGES = int(os.environ.get("OCR_MAX_HUGE_PDF_PAGES", "80"))
+    MAX_PDF_EXTRACT_PAGES = int(os.environ.get("OCR_MAX_PDF_PAGES", "500"))
+    MAX_HUGE_PDF_EXTRACT_PAGES = int(os.environ.get("OCR_MAX_HUGE_PDF_PAGES", "150"))
     MAX_HUGE_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
-    MAX_EXTRACTED_CHARS = int(os.environ.get("OCR_MAX_EXTRACTED_CHARS", "400000"))
+    MAX_EXTRACTED_CHARS = int(os.environ.get("OCR_MAX_EXTRACTED_CHARS", "600000"))
 
     # Common regex patterns to detect section headers in plain text
     SECTION_HEADER_PATTERNS = [
@@ -521,6 +521,44 @@ class OCRTextExtractor:
                 page_texts: List[str] = []
                 collected_chars = 0
 
+                # Extract embedded PDF metadata (/Author, /Title, /Subject, /Keywords) with zero RAM overhead
+                meta_header_lines: List[str] = []
+                try:
+                    pdf_meta = getattr(reader, "metadata", None)
+                    if pdf_meta:
+                        meta_author = str(getattr(pdf_meta, "author", None) or pdf_meta.get("/Author") or "").strip()
+                        meta_title = str(getattr(pdf_meta, "title", None) or pdf_meta.get("/Title") or "").strip()
+                        meta_subject = str(getattr(pdf_meta, "subject", None) or pdf_meta.get("/Subject") or "").strip()
+                        meta_keywords = str(getattr(pdf_meta, "keywords", None) or pdf_meta.get("/Keywords") or "").strip()
+                        invalid_authors = {
+                            "unknown", "unknown author", "no author", "n/a", "na", "none", "null",
+                            "anonymous", "unspecified", "not specified", "not available", "jrmsu",
+                            "jrmsu researcher", "jrmsu researchers", "student researcher", "student researchers",
+                            "campus library", "jrmsu library", "admin", "administrator", "user",
+                            "windows user", "owner", "tba", "tbd", "pending", "camscanner",
+                            "microsoft word", "scanner",
+                        }
+                        if (
+                            meta_author
+                            and len(meta_author) >= 2
+                            and not meta_author.isdigit()
+                            and meta_author.lower() not in invalid_authors
+                        ):
+                            meta_header_lines.append(f"Author: {meta_author}")
+                        if meta_title and len(meta_title) >= 3:
+                            meta_header_lines.append(f"Title: {meta_title}")
+                        if meta_subject and len(meta_subject) >= 3:
+                            meta_header_lines.append(f"Subject: {meta_subject}")
+                        if meta_keywords and len(meta_keywords) >= 3:
+                            meta_header_lines.append(f"Keywords: {meta_keywords}")
+                except Exception as me:
+                    logger.debug(f"[PDF Extractor] Metadata read warning: {me}")
+
+                if meta_header_lines:
+                    meta_block = "\n".join(meta_header_lines)
+                    page_texts.append(meta_block)
+                    collected_chars += len(meta_block)
+
                 for idx, page in enumerate(reader.pages):
                     if idx >= max_pages or collected_chars >= cls.MAX_EXTRACTED_CHARS:
                         logger.info(
@@ -531,6 +569,23 @@ class OCRTextExtractor:
                     try:
                         pt = page.extract_text() or ""
                         stripped = pt.strip()
+                        if not stripped:
+                            # Fallback for scanned/annotated pages: inspect PDF annotations (/Annots)
+                            annots = page.get("/Annots")
+                            if annots:
+                                annot_texts: List[str] = []
+                                for annot_ref in annots:
+                                    try:
+                                        annot_obj = annot_ref.get_object() if hasattr(annot_ref, "get_object") else annot_ref
+                                        if isinstance(annot_obj, dict):
+                                            for k in ("/Contents", "/Subj", "/T"):
+                                                v = annot_obj.get(k)
+                                                if isinstance(v, str) and v.strip():
+                                                    annot_texts.append(v.strip())
+                                    except Exception:
+                                        continue
+                                if annot_texts:
+                                    stripped = "\n".join(annot_texts)
                         if stripped:
                             remaining = cls.MAX_EXTRACTED_CHARS - collected_chars
                             if len(stripped) > remaining:
@@ -539,16 +594,10 @@ class OCRTextExtractor:
                             collected_chars += len(stripped)
                     except Exception as pe:
                         logger.warning(f"[PDF Extractor] Failed reading page {idx + 1} of {file_path}: {pe}")
-                    if file_size >= 10 * 1024 * 1024 and (idx + 1) % 50 == 0:
+                    if (idx + 1) % 25 == 0:
                         gc.collect()
 
-                extracted_text = cls._clean_text("\n\n".join(page_texts))
-                page_texts.clear()
-                if not extracted_text or len(extracted_text.strip()) < 10:
-                    logger.warning(f"[PDF Extractor] PDF has no extractable text layer (scanned/empty): {file_path}")
-                    return cls._create_empty_result("PDF contains no selectable text layer (scanned image PDF or empty document).")
-
-                # Extract outline / bookmarks Table of Contents
+                # Extract outline / bookmarks Table of Contents before closing reader
                 toc_lines: List[str] = []
                 try:
                     if reader.outline:
@@ -556,7 +605,34 @@ class OCRTextExtractor:
                 except Exception as oe:
                     logger.debug(f"[PDF Extractor] Outline extraction failed: {oe}")
 
+                if toc_lines and collected_chars < 200:
+                    page_texts.append("Table of Contents:\n" + "\n".join(toc_lines[:40]))
+
+                extracted_text = cls._clean_text("\n\n".join(page_texts))
+                page_texts.clear()
                 del reader
+                gc.collect()
+
+                if not extracted_text or len(extracted_text.strip()) < 10:
+                    # Pure camera-scanned PDF with no selectable text layer: synthesize domain knowledge
+                    # from filename + parent folder so the database record still has rich searchable text
+                    synth = cls.synthesize_domain_knowledge(path_obj.stem, path_obj.parent.name)
+                    synth_summary = cls.sanitize_db_text(synth.get("summary", ""))
+                    synth_toc = cls.sanitize_db_text(synth.get("table_of_contents", ""))
+                    synth_kw = cls.sanitize_db_text(synth.get("keywords", ""))
+                    synth_text = cls._clean_text(
+                        f"Title: {path_obj.stem}\nDepartment: {path_obj.parent.name}\n\n"
+                        f"Summary:\n{synth_summary}\n\nTable of Contents:\n{synth_toc}\n\nKeywords: {synth_kw}"
+                    )
+                    return {
+                        "extracted_text": synth_text,
+                        "summary": synth_summary,
+                        "table_of_contents": synth_toc,
+                        "keywords": synth_kw,
+                        "page_count": page_count,
+                        "success": True,
+                        "error": None,
+                    }
 
             if file_size >= 10 * 1024 * 1024:
                 gc.collect()

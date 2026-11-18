@@ -71,6 +71,7 @@ def secure_media_serve(request, path, document_root=None, show_indexes=False):
     import mimetypes
     import os
     import re
+    from urllib.parse import unquote
 
     def _safe_join_under(base_dir: str, rel_part: str):
         if not base_dir or not rel_part:
@@ -84,7 +85,7 @@ def secure_media_serve(request, path, document_root=None, show_indexes=False):
             return None
         return None
 
-    clean_rel = (path or "").replace("\\", "/").lstrip("/")
+    clean_rel = unquote(path or "").replace("\\", "/").lstrip("/")
     if "\x00" in clean_rel or ".." in clean_rel.split("/"):
         raise Http404("Invalid media path.")
 
@@ -153,6 +154,7 @@ def secure_media_serve(request, path, document_root=None, show_indexes=False):
 
     def _apply_security_headers(resp):
         resp["Accept-Ranges"] = "bytes"
+        resp["X-Accel-Buffering"] = "no"
         resp["X-Content-Type-Options"] = "nosniff"
         resp["Content-Disposition"] = "inline"
         resp["Cache-Control"] = "public, no-transform, max-age=86400"
@@ -220,7 +222,7 @@ def secure_media_serve(request, path, document_root=None, show_indexes=False):
 
         length = end - start + 1
 
-        def _file_chunk_iterator(file_path, offset, remaining, chunk_size=262144):
+        def _file_chunk_iterator(file_path, offset, remaining, chunk_size=524288):
             with open(file_path, "rb") as f:
                 f.seek(offset)
                 while remaining > 0:

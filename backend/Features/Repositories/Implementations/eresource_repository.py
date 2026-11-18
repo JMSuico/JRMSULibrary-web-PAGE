@@ -63,29 +63,49 @@ class EResourceFileRepository(IEResourceFileRepository):
     def get_all(self):
         return list(EResourceFile.objects.defer(*_DEFERRED_FILE_LIST_FIELDS))
 
-    def search_active_files(self, tokens: List[str], limit: int = 5) -> List[Any]:
+    def search_active_files(self, tokens: List[str], limit: int = 15) -> List[Any]:
         clean_tokens = [tok.strip() for tok in (tokens or []) if tok and tok.strip()]
         if not clean_tokens:
             return []
-        query = Q()
+
+        # Phase 1: Prioritize title/name, department, and keyword matches (prevents common words in
+        # extracted_text + alphabetical order_by('name') from cutting off books starting with C-Z)
+        meta_query = Q()
         for tok in clean_tokens:
-            query |= (
+            meta_query |= (
                 Q(name__icontains=tok) |
                 Q(department__name__icontains=tok) |
                 Q(keywords__icontains=tok) |
-                Q(summary__icontains=tok) |
-                Q(table_of_contents__icontains=tok) |
-                Q(extracted_text__icontains=tok)
+                Q(table_of_contents__icontains=tok)
             )
-        return list(
+        meta_matches = list(
             EResourceFile.objects.filter(is_active=True)
+            .defer(*_DEFERRED_FILE_AI_FIELDS)
             .select_related('department', 'department__parent')
-            .filter(query)
-            .order_by('name')[:limit]
+            .filter(meta_query)[: max(limit * 3, 40)]
         )
-        
+        if len(meta_matches) >= limit:
+            return meta_matches
+
+        # Phase 2: Supplement with summary / extracted_text matches if needed
+        seen_ids = {getattr(f, 'id', None) for f in meta_matches}
+        body_query = Q()
+        for tok in clean_tokens:
+            body_query |= Q(summary__icontains=tok) | Q(extracted_text__icontains=tok)
+        extra_matches = list(
+            EResourceFile.objects.filter(is_active=True)
+            .defer(*_DEFERRED_FILE_AI_FIELDS)
+            .select_related('department', 'department__parent')
+            .exclude(id__in=[i for i in seen_ids if i is not None])
+            .filter(body_query)[:limit]
+        )
+        return meta_matches + extra_matches
+
     def get_by_id(self, id: int):
-        return EResourceFile.objects.filter(id=id).first()
+        return EResourceFile.objects.select_related('department', 'department__parent').filter(id=id).first()
+
+    def get_by_id_with_full_text(self, id: int):
+        return EResourceFile.objects.select_related('department', 'department__parent').filter(id=id).first()
 
     def create(self, data: dict):
         return EResourceFile.objects.create(**data)

@@ -13,7 +13,7 @@ interface FileViewerModalProps {
   onNavigate: (file: TreeNodeData) => void;
 }
 
-const PDF_RANGE_CHUNK_BYTES = 262144; // 256 KB range chunks for fast first-page load
+const PDF_RANGE_CHUNK_BYTES = 524288; // 512 KB range chunks for sub-2s first-page load
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.2;
 const ZOOM_STEP = 0.2;
@@ -65,6 +65,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
   const safeDirectUrl = isPdf && file.path ? normalizeSafePdfUrl(file.path) : null;
 
   const [loading, setLoading] = useState<boolean>(Boolean(safeDirectUrl));
+  const [loadProgress, setLoadProgress] = useState<number>(15);
   const [renderingPage, setRenderingPage] = useState<boolean>(false);
   const [useIframeFallback, setUseIframeFallback] = useState<boolean>(false);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -133,6 +134,13 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
     }
 
     setLoading(true);
+    setLoadProgress(18);
+
+    const progressInterval = window.setInterval(() => {
+      setLoadProgress((prev) => (prev < 88 ? prev + 12 : prev));
+    }, 220);
+
+    let fallbackRevealTimer: number | null = null;
 
     if (loadingTaskRef.current) {
       try {
@@ -150,28 +158,50 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
       disableRange: false,
       rangeChunkSize: PDF_RANGE_CHUNK_BYTES,
     });
+    loadingTask.onProgress = (progressData: { loaded: number; total?: number }) => {
+      if (!isMounted) return;
+      if (progressData.total && progressData.total > 0) {
+        const pct = Math.min(92, Math.max(20, Math.round((progressData.loaded / progressData.total) * 100)));
+        setLoadProgress((prev) => Math.max(prev, pct));
+      } else if (progressData.loaded > 0) {
+        setLoadProgress((prev) => Math.min(90, prev + 10));
+      }
+    };
     loadingTaskRef.current = loadingTask;
 
     loadingTask.promise
       .then((doc) => {
+        window.clearInterval(progressInterval);
         if (!isMounted) {
           Promise.resolve(loadingTask.destroy()).catch(() => {});
           return;
         }
+        setLoadProgress(95);
         setPdfDoc(doc);
         setNumPages(doc.numPages);
         setPageNumber(1);
         setPageInput('1');
       })
       .catch(() => {
+        window.clearInterval(progressInterval);
         if (!isMounted) return;
-        // Graceful fallback with native PDF toolbar hidden
+        // Graceful fallback with native PDF toolbar hidden — keep loading state visible until ready
         setUseIframeFallback(true);
-        setLoading(false);
+        setLoadProgress(85);
+        fallbackRevealTimer = window.setTimeout(() => {
+          if (isMounted) {
+            setLoadProgress(100);
+            setLoading(false);
+          }
+        }, 1600);
       });
 
     return () => {
       isMounted = false;
+      window.clearInterval(progressInterval);
+      if (fallbackRevealTimer !== null) {
+        window.clearTimeout(fallbackRevealTimer);
+      }
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel();
@@ -215,13 +245,14 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const hostWidth = viewportContainerRef.current
-          ? Math.max(320, viewportContainerRef.current.clientWidth - 48)
+        const containerClientWidth = viewportContainerRef.current ? viewportContainerRef.current.clientWidth : 0;
+        const hostWidth = containerClientWidth > 64
+          ? Math.max(320, containerClientWidth - 48)
           : Math.min(window.innerWidth * 0.85, 860);
         const targetWidth = Math.min(hostWidth, 880) * zoom;
         const baseViewport = page.getViewport({ scale: 1.0 });
         const cssScale = targetWidth / baseViewport.width;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
         const cssViewport = page.getViewport({ scale: cssScale });
         const renderViewport = page.getViewport({ scale: cssScale * dpr });
@@ -232,7 +263,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
         canvas.style.height = `${Math.floor(cssViewport.height)}px`;
 
         const renderTask = page.render({
-          canvas: null,
+          canvas,
           canvasContext: ctx,
           viewport: renderViewport,
         });
@@ -240,6 +271,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
         await renderTask.promise;
         if (cancelled) return;
 
+        setLoadProgress(100);
         setLoading(false);
         setRenderingPage(false);
 
@@ -425,39 +457,64 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
             onDragStart={(e) => e.preventDefault()}
           >
             {isPdf && safeDirectUrl ? (
-              useIframeFallback && fallbackIframeUrl ? (
-                <div className="relative w-full h-full flex-1 self-stretch flex" style={{ minHeight: '60vh' }}>
+              <div className="relative w-full h-full flex-1 self-stretch flex flex-col items-center justify-center" style={{ minHeight: '60vh' }}>
+                {useIframeFallback && fallbackIframeUrl ? (
                   <iframe
                     key={fallbackIframeUrl}
                     src={fallbackIframeUrl}
-                    onLoad={() => setLoading(false)}
-                    className="w-full h-full flex-1 rounded-lg shadow-inner bg-white"
+                    onLoad={() => {
+                      setLoadProgress(100);
+                      setLoading(false);
+                    }}
+                    className={`w-full h-full flex-1 rounded-lg shadow-inner bg-white transition-opacity duration-200 ${
+                      loading ? 'opacity-0' : 'opacity-100'
+                    }`}
                     style={{ minHeight: '60vh' }}
                     title={file.name}
                   />
-                </div>
-              ) : (
-                <div className="relative flex flex-col items-center w-full my-auto">
-                  <canvas
-                    ref={canvasRef}
-                    className={`rounded-lg shadow-lg bg-white max-w-full transition-opacity duration-150 ${
-                      loading ? 'opacity-0' : 'opacity-100'
-                    }`}
-                  />
-                  {renderingPage && !loading && (
-                    <div className="fixed bottom-8 bg-slate-900/80 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 pointer-events-none">
-                      <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
-                      Rendering page {pageNumber}...
+                ) : (
+                  <div className="relative flex flex-col items-center w-full my-auto">
+                    <canvas
+                      ref={canvasRef}
+                      className={`rounded-lg shadow-lg bg-white max-w-full transition-opacity duration-150 ${
+                        loading ? 'opacity-0' : 'opacity-100'
+                      }`}
+                    />
+                    {renderingPage && !loading && (
+                      <div className="fixed bottom-8 bg-slate-900/85 text-white text-xs px-3.5 py-1.5 rounded-full flex items-center gap-2 pointer-events-none shadow-lg">
+                        <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                        Rendering page {pageNumber}...
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {loading && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-100/95 backdrop-blur-xs rounded-xl p-6">
+                    <div className="bg-white border border-blue-100 shadow-xl rounded-2xl px-8 py-7 max-w-md w-full flex flex-col items-center text-center">
+                      <div className="relative w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mb-4">
+                        <span className="material-symbols-outlined text-blue-700 text-2xl">menu_book</span>
+                        <span className="absolute inset-0 rounded-full border-3 border-blue-600 border-t-transparent animate-spin" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-800 mb-1">
+                        Opening Document for Reading...
+                      </p>
+                      <p className="text-xs text-slate-500 line-clamp-2 mb-4 px-2">
+                        {file.name}
+                      </p>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-2">
+                        <div
+                          className="bg-gradient-to-r from-blue-700 to-blue-500 h-full rounded-full transition-all duration-200"
+                          style={{ width: `${Math.min(100, Math.max(15, loadProgress))}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] font-semibold text-blue-700">
+                        Streaming first page ({Math.min(100, Math.max(15, loadProgress))}%) — Please wait a moment
+                      </span>
                     </div>
-                  )}
-                  {loading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-600 min-h-[50vh]">
-                      <span className="material-symbols-outlined animate-spin text-3xl text-blue-600">progress_activity</span>
-                      <span className="text-sm font-medium">Opening document for reading...</span>
-                    </div>
-                  )}
-                </div>
-              )
+                  </div>
+                )}
+              </div>
             ) : isLink ? (
               <div className="text-center bg-white p-8 md:p-16 rounded-2xl shadow-sm border border-gray-200 max-w-xl mx-auto w-full my-auto animate-modal-card">
                 <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">

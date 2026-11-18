@@ -201,13 +201,35 @@ class AIService(IAIService):
             and (isinstance(getattr(obj, 'name', None), str) or isinstance(getattr(obj, 'title', None), str))
         )
 
+    def _hydrate_doc_full_text(self, doc: Any, is_ref: bool = False) -> Any:
+        """Reloads a single matched document with `extracted_text` hydrated if it was deferred."""
+        if doc is None or not hasattr(doc, 'pk') or getattr(doc, 'pk', None) is None:
+            return doc
+        # Avoid overwriting mock/SimpleNamespace objects in unit tests unless repo returns a real model record
+        doc_dict = getattr(doc, '__dict__', {})
+        if isinstance(doc_dict.get('extracted_text'), str) and doc_dict.get('extracted_text'):
+            return doc
+        repo = self.reference_repo if is_ref else self.eresource_file_repo
+        for method_name in ('get_by_id_with_full_text', 'get_by_id'):
+            getter = getattr(repo, method_name, None)
+            if callable(getter):
+                try:
+                    reloaded = getter(doc.pk)
+                    if self._is_valid_model_record(reloaded):
+                        return reloaded
+                except Exception:
+                    pass
+        return doc
+
     def _prepare_targeted_doc_for_response(self, doc: Any, is_ref: bool = False) -> Any:
         """
-        Ensures a targeted document has usable knowledge without blocking the HTTP thread
-        on giant (>3 MB) PDFs. Small on-disk files extract synchronously; giant files wake
-        AutonomousKnowledgeDaemon; missing-on-disk files synthesize cleanly in-memory.
+        Ensures a targeted document has usable knowledge using CPU-friendly extraction
+        (up to 50 MB with periodic GC) while hydrating full text for only the single
+        matched document so RAM usage stays flat.
         """
-        MAX_SYNC_EXTRACT_BYTES = 3 * 1024 * 1024  # 3 MB
+        MAX_SYNC_EXTRACT_BYTES = 50 * 1024 * 1024  # 50 MB CPU extraction limit
+
+        doc = self._hydrate_doc_full_text(doc, is_ref=is_ref)
 
         if is_ref:
             needs_extract = (
@@ -219,7 +241,11 @@ class AIService(IAIService):
             repo = self.reference_repo
             doc_label = "ResearchReference"
         else:
-            needs_extract = not getattr(doc, 'summary', None) or not getattr(doc, 'table_of_contents', None)
+            needs_extract = (
+                not getattr(doc, 'summary', None)
+                or not getattr(doc, 'table_of_contents', None)
+                or not getattr(doc, 'extracted_text', None)
+            )
             file_field = getattr(doc, 'file', None)
             repo = self.eresource_file_repo
             doc_label = "EResourceFile"
@@ -265,10 +291,12 @@ class AIService(IAIService):
             else:
                 process_single_eresource_file(doc)
 
-            if hasattr(repo, 'get_by_id') and hasattr(doc, 'pk'):
-                reloaded = repo.get_by_id(doc.pk)
-                if self._is_valid_model_record(reloaded):
-                    return reloaded
+            for method_name in ('get_by_id_with_full_text', 'get_by_id'):
+                getter = getattr(repo, method_name, None)
+                if callable(getter) and hasattr(doc, 'pk'):
+                    reloaded = getter(doc.pk)
+                    if self._is_valid_model_record(reloaded):
+                        return reloaded
         except Exception as pe:
             logger.warning(f"On-the-fly extraction error for {doc_label} #{getattr(doc, 'pk', '?')}: {pe}")
 
@@ -439,7 +467,8 @@ class AIService(IAIService):
         else:
             softcopy = "Physical Copy Only (Room Use inside Library)"
         cat = "Thesis" if "Thesis" in (getattr(ref, 'category', '') or '') else "Student Research"
-        return f"'{ref.title}' by {ref.author or 'Unknown'} (Category: {cat}, Call No: {ref.call_number or 'N/A'}, Softcopy: {softcopy})"
+        author_val = AIReadViewHelper.extract_document_author(ref) or getattr(ref, 'author', None) or 'Unknown'
+        return f"'{ref.title}' by {author_val} (Category: {cat}, Call No: {ref.call_number or 'N/A'}, Softcopy: {softcopy})"
 
     def _get_book_inventory_summary(self) -> dict:
         """Retrieves or calculates summary of catalog books (picture inventory vs named books)."""
@@ -1215,6 +1244,8 @@ class AIService(IAIService):
             'overview of the file', 'overview of this book', 'book overview', 'document overview',
             'file overview', 'thesis overview', 'handbook overview',
             'who wrote', 'who is the author', 'who are the authors', 'author of', 'authors of',
+            'who is the researcher', 'who are the researchers', 'researcher of', 'researchers of',
+            'submitted by', 'prepared by', 'compiled by',
             'written by', 'references and author', 'author and references', 'reference and author',
             'author and reference', 'references of', 'reference of', 'references in',
             'bibliography of', 'cited in'
@@ -1223,11 +1254,11 @@ class AIService(IAIService):
             ext in norm for ext in [
                 'pdf', 'docx', 'handbook', 'manual', 'syllabus', 'thesis', 'theses',
                 'dissertation', 'book', 'file', 'document', 'paper', 'study',
-                'author', 'chapter', 'chapters'
+                'author', 'researcher', 'researchers', 'chapter', 'chapters'
             ]
         )
         has_specific_book_or_file_cue = bool({
-            'book', 'handbook', 'manual', 'syllabus', 'file', 'document', 'pdf', 'docx'
+            'book', 'handbook', 'manual', 'syllabus', 'file', 'document', 'pdf', 'docx', 'thesis', 'study'
         } & tokens)
         non_doc_institutional_topics = (
             'library services', 'our services', 'online database', 'online databases',
@@ -1248,21 +1279,147 @@ class AIService(IAIService):
             'summarize', 'summarise', 'covered', 'inside', 'topics', 'say',
             'saying', 'finding', 'findings', 'conclusion', 'conclusions',
             'methodology', 'abstract', 'results', 'overview', 'explain',
-            'describe', 'read', 'who wrote', 'wrote', 'written'
+            'describe', 'read', 'who wrote', 'wrote', 'written',
+            'submitted', 'prepared', 'researcher', 'researchers'
         ])
         has_doc_author_or_ref_cue = (
-            (has_doc_cue and bool({'author', 'authors', 'wrote', 'written'} & tokens) and not ('books' in tokens and 'by' in tokens))
-            or ('references' in tokens and (has_specific_book_or_file_cue or has_explicit_file_pattern or bool({'author', 'authors'} & tokens)))
-            or ('reference' in tokens and (has_specific_book_or_file_cue or has_explicit_file_pattern) and bool({'author', 'authors'} & tokens))
+            (has_doc_cue and bool({'author', 'authors', 'researcher', 'researchers', 'wrote', 'written', 'submitted', 'prepared'} & tokens) and not ('books' in tokens and 'by' in tokens))
+            or ('references' in tokens and (has_specific_book_or_file_cue or has_explicit_file_pattern or bool({'author', 'authors', 'researcher', 'researchers'} & tokens)))
+            or ('reference' in tokens and (has_specific_book_or_file_cue or has_explicit_file_pattern) and bool({'author', 'authors', 'researcher', 'researchers'} & tokens))
         )
 
-        is_book_topic_search = analyzed.intent == "book_topic_search" and not has_explicit_file_pattern
-        is_document_knowledge_query = not is_non_doc_topic and not is_book_topic_search and (
+        has_overview_of_phrase = 'overview of' in norm and not any(
+            non_doc in norm for non_doc in [
+                'online database', 'online databases', 'open access', 'library catalog',
+                'library services', 'physical setup', 'library interior', 'room reservation'
+            ]
+        )
+        has_tell_me_or_aspect_phrase = any(
+            p in norm
+            for p in (
+                'tell me about', 'overview on', 'what is in', 'whats in',
+                'summary of', 'summarize', 'summarise', 'author of', 'authors of',
+                'researcher of', 'researchers of', 'who is the researcher', 'who are the researchers',
+                'submitted by', 'prepared by', 'who wrote', 'written by',
+                'references of', 'bibliography of', 'chapters of', 'table of contents',
+            )
+        ) and not is_non_doc_topic
+
+        is_plural_books_topic_phrase = any(
+            p in norm
+            for p in (
+                'any books', 'books about', 'books on', 'what books',
+                'recommend books', 'suggest books', 'available books', 'books available',
+            )
+        )
+        has_explicit_doc_knowledge_cue = (
             any(p in norm for p in doc_knowledge_triggers)
-            or (has_doc_cue and has_doc_content_action)
+            or (has_doc_cue and has_doc_content_action and not is_plural_books_topic_phrase)
             or has_doc_author_or_ref_cue
             or has_explicit_file_pattern
+            or has_overview_of_phrase
+            or has_tell_me_or_aspect_phrase
         )
+        is_book_topic_search = (
+            analyzed.intent == "book_topic_search"
+            and not has_explicit_file_pattern
+            and not has_explicit_doc_knowledge_cue
+        )
+        is_document_knowledge_query = not is_non_doc_topic and not is_book_topic_search and has_explicit_doc_knowledge_cue
+
+        # ---------------------------------------------------------
+        # Intent 2.7: Specific Document & Book Content Knowledge Intent
+        # Runs BEFORE generic Intent 2 catalog list so specific thesis/book titles
+        # (including titles containing "Handbook", "Manual", "Study", or "Thesis")
+        # resolve directly to the targeted document.
+        # ---------------------------------------------------------
+        is_generic_ref_list_query = (
+            (has_ref_phrase or has_ref_token)
+            and bool({'list', 'all', 'available', 'show', 'any', 'how'} & tokens)
+            and not has_explicit_doc_knowledge_cue
+            and len(tokens) <= 7
+        )
+        can_probe_title_match = (
+            not is_non_doc_topic
+            and not is_generic_ref_list_query
+            and (
+                is_document_knowledge_query
+                or has_overview_of_phrase
+                or has_tell_me_or_aspect_phrase
+                or (not is_book_topic_search and len(tokens) >= 3)
+            )
+        )
+        if can_probe_title_match:
+            try:
+                candidate_files = []
+                if hasattr(self.eresource_file_repo, 'get_all_active'):
+                    candidate_files = list(self.eresource_file_repo.get_all_active())
+                elif hasattr(self.eresource_file_repo, 'get_all'):
+                    candidate_files = list(self.eresource_file_repo.get_all())
+
+                matched_doc, doc_score = AIReadViewHelper.find_targeted_document_with_score(
+                    candidate_files, user_message, tokens=tokens
+                )
+                if (not matched_doc or doc_score < 100.0) and compact_doc_query != user_message:
+                    alt_doc, alt_doc_score = AIReadViewHelper.find_targeted_document_with_score(
+                        candidate_files, compact_doc_query, tokens=tokens
+                    )
+                    if alt_doc and alt_doc_score > doc_score:
+                        matched_doc, doc_score = alt_doc, alt_doc_score
+
+                # Check ResearchReferences (Theses & Dissertations) and compare scores side-by-side
+                candidate_refs = []
+                if hasattr(self.reference_repo, 'get_all'):
+                    try:
+                        candidate_refs = list(self.reference_repo.get_all())
+                    except Exception as te:
+                        logger.warning(f"Thesis reference candidate retrieval warning: {te}")
+
+                matched_ref, ref_score = AIReadViewHelper.find_targeted_document_with_score(
+                    candidate_refs, user_message, tokens=tokens
+                )
+                if (not matched_ref or ref_score < 100.0) and compact_doc_query != user_message:
+                    alt_ref, alt_ref_score = AIReadViewHelper.find_targeted_document_with_score(
+                        candidate_refs, compact_doc_query, tokens=tokens
+                    )
+                    if alt_ref and alt_ref_score > ref_score:
+                        matched_ref, ref_score = alt_ref, alt_ref_score
+
+                min_required_score = (
+                    30.0
+                    if (is_document_knowledge_query or has_overview_of_phrase)
+                    else (60.0 if has_tell_me_or_aspect_phrase else 80.0)
+                )
+
+                if matched_ref and ref_score >= min_required_score and ref_score > doc_score:
+                    prepared_ref = self._prepare_targeted_doc_for_response(matched_ref, is_ref=True)
+                    return self._build_targeted_doc_response(prepared_ref, query=user_message)
+
+                if matched_doc and doc_score >= min_required_score:
+                    prepared_doc = self._prepare_targeted_doc_for_response(matched_doc, is_ref=False)
+                    return self._build_targeted_doc_response(prepared_doc, query=user_message)
+
+                if matched_ref and ref_score >= min_required_score:
+                    prepared_ref = self._prepare_targeted_doc_for_response(matched_ref, is_ref=True)
+                    return self._build_targeted_doc_response(prepared_ref, query=user_message)
+
+                # If query specifically targets an explicit filename pattern (e.g. .pdf or numbered prefix):
+                if ('.pdf' in raw_lower or 'pdf' in tokens) and bool(re.search(r'\b\d{1,3}\s*[\.\-_]', str(user_message))):
+                    audit = self.get_read_view_audit_summary()
+                    dept_cnt = audit.get('eresource_departments_total', 60)
+                    files_cnt = audit.get('eresource_files_total', 0)
+                    return (
+                        "I searched our digital E-Resources collection and Research References catalog, but could not find a document "
+                        f"matching that specific filename or title. You can browse our {dept_cnt} Academic Department Folders and {files_cnt} local books "
+                        "under 'Collection' -> 'Local Books' or search student theses under 'Collection' -> 'Research & Thesis References'. "
+                        "If you have the exact title or call number, please let me know!"
+                    )
+
+                if is_document_knowledge_query and analyzed.intent != "book_topic_search" and not (has_ref_phrase or has_ref_token):
+                    return None
+
+            except Exception as dke:
+                logger.warning(f"Document knowledge intent warning: {dke}")
 
         if (has_ref_phrase or has_ref_token) and not is_academic_reasoning_prompt and not is_document_knowledge_query:
             count = self._get_reference_count()
@@ -1305,7 +1462,8 @@ class AIService(IAIService):
                     else:
                         softcopy_status = "Physical Copy Only (Room Use inside Library)"
 
-                    lines.append(f"- '{r.title}' by {getattr(r, 'author', 'Unknown') or 'Unknown'} | Call No: {call_num} | Dept: {dept} | {softcopy_status}")
+                    author_val = AIReadViewHelper.extract_document_author(r) or getattr(r, 'author', None) or 'Unknown'
+                    lines.append(f"- '{r.title}' by {author_val} | Call No: {call_num} | Dept: {dept} | {softcopy_status}")
 
                 refs_list = "\n".join(lines) if lines else "No specific references found."
                 return (
@@ -1313,75 +1471,6 @@ class AIService(IAIService):
                     f"{refs_list}\n\n"
                     f"You can search and filter by college department under the 'Collection' -> 'Research & Thesis References' tab on our website!"
                 )
-
-        # ---------------------------------------------------------
-        # Intent 2.7: Specific Document & Book Content Knowledge Intent
-        # (Local Books TreeView, E-Resource Course Syllabi & Research References)
-        # Directly answers inquiries regarding what a specific book/file/handbook contains,
-        # its chapters, table of contents, executive summary, and key topics.
-        # ---------------------------------------------------------
-        has_overview_of_phrase = 'overview of' in norm and not any(
-            non_doc in norm for non_doc in [
-                'online database', 'online databases', 'open access', 'library catalog',
-                'library services', 'physical setup', 'library interior', 'room reservation'
-            ]
-        )
-        if is_document_knowledge_query or has_overview_of_phrase:
-            try:
-                candidate_files = []
-                if hasattr(self.eresource_file_repo, 'get_all_active'):
-                    candidate_files = list(self.eresource_file_repo.get_all_active())
-                elif hasattr(self.eresource_file_repo, 'get_all'):
-                    candidate_files = list(self.eresource_file_repo.get_all())
-
-                matched_doc = AIReadViewHelper.find_targeted_document(
-                    candidate_files, user_message, tokens=tokens
-                )
-                if not matched_doc and compact_doc_query != user_message:
-                    matched_doc = AIReadViewHelper.find_targeted_document(
-                        candidate_files, compact_doc_query, tokens=tokens
-                    )
-
-                if matched_doc:
-                    prepared_doc = self._prepare_targeted_doc_for_response(matched_doc, is_ref=False)
-                    return self._build_targeted_doc_response(prepared_doc, query=user_message)
-
-                # Check ResearchReferences (Theses & Dissertations)
-                candidate_refs = []
-                if hasattr(self.reference_repo, 'get_all'):
-                    try:
-                        candidate_refs = list(self.reference_repo.get_all())
-                    except Exception as te:
-                        logger.warning(f"Thesis reference candidate retrieval warning: {te}")
-
-                matched_ref = AIReadViewHelper.find_targeted_document(
-                    candidate_refs, user_message, tokens=tokens
-                )
-                if not matched_ref and compact_doc_query != user_message:
-                    matched_ref = AIReadViewHelper.find_targeted_document(
-                        candidate_refs, compact_doc_query, tokens=tokens
-                    )
-                if matched_ref:
-                    prepared_ref = self._prepare_targeted_doc_for_response(matched_ref, is_ref=True)
-                    return self._build_targeted_doc_response(prepared_ref, query=user_message)
-
-                # If query specifically targets an explicit filename pattern (e.g. .pdf or numbered prefix):
-                if ('.pdf' in raw_lower or 'pdf' in tokens) and bool(re.search(r'\b\d{1,3}\s*[\.\-_]', str(user_message))):
-                    audit = self.get_read_view_audit_summary()
-                    dept_cnt = audit.get('eresource_departments_total', 60)
-                    files_cnt = audit.get('eresource_files_total', 0)
-                    return (
-                        "I searched our digital E-Resources collection and Research References catalog, but could not find a document "
-                        f"matching that specific filename or title. You can browse our {dept_cnt} Academic Department Folders and {files_cnt} local books "
-                        "under 'Collection' -> 'Local Books' or search student theses under 'Collection' -> 'Research & Thesis References'. "
-                        "If you have the exact title or call number, please let me know!"
-                    )
-
-                if is_document_knowledge_query and analyzed.intent != "book_topic_search":
-                    return None
-
-            except Exception as dke:
-                logger.warning(f"Document knowledge intent warning: {dke}")
 
         # ---------------------------------------------------------
         # Intent 3: E-Resources, Course Folders & Online Databases Intent
@@ -2231,29 +2320,50 @@ class AIService(IAIService):
                 except Exception as e:
                     logger.warning(f"Targeted search warning: {e}")
 
-                # 1. DOCUMENT & BOOK CONTENT KNOWLEDGE (EResourceFile)
+                # 1. DOCUMENT & BOOK CONTENT KNOWLEDGE (EResourceFile — Ranked across all active files + Hydrated Top 3)
                 try:
                     candidate_files = []
+                    seen_file_ids = set()
                     if hasattr(self.eresource_file_repo, 'search_active_files'):
-                        candidate_files = list(self.eresource_file_repo.search_active_files(query_tokens, limit=15))
-                    if not candidate_files and hasattr(self.eresource_file_repo, 'get_all_active'):
-                        candidate_files = list(self.eresource_file_repo.get_all_active())
+                        for f_item in self.eresource_file_repo.search_active_files(query_tokens, limit=25):
+                            fid = getattr(f_item, 'id', None)
+                            if fid not in seen_file_ids:
+                                if fid is not None:
+                                    seen_file_ids.add(fid)
+                                candidate_files.append(f_item)
+                    if hasattr(self.eresource_file_repo, 'get_all_active'):
+                        for f_item in self.eresource_file_repo.get_all_active():
+                            fid = getattr(f_item, 'id', None)
+                            if fid is None or fid not in seen_file_ids:
+                                if fid is not None:
+                                    seen_file_ids.add(fid)
+                                candidate_files.append(f_item)
                     elif not candidate_files and hasattr(self.eresource_file_repo, 'get_all'):
                         candidate_files = list(self.eresource_file_repo.get_all())
 
-                    file_knowledge = AIReadViewHelper.match_and_format_file_knowledge(
+                    top_matched_files = AIReadViewHelper.match_eresource_files(
                         candidate_files, query_tokens, raw_query=user_message, limit=3
+                    )
+                    hydrated_top_files = [
+                        self._hydrate_doc_full_text(f_obj, is_ref=False) for f_obj in top_matched_files
+                    ]
+                    file_knowledge = AIReadViewHelper.match_and_format_file_knowledge(
+                        hydrated_top_files or candidate_files, query_tokens, raw_query=user_message, limit=3
                     )
                     if file_knowledge:
                         targeted_matches.append(file_knowledge)
                 except Exception as e:
                     logger.warning(f"File knowledge extraction warning: {e}")
 
-                # 2. THESIS & RESEARCH KNOWLEDGE (Methodology & Findings from ResearchReference)
+                # 2. THESIS & RESEARCH KNOWLEDGE (Methodology & Findings from ResearchReference — Hydrated Top 3)
                 try:
                     all_refs_for_knowledge = list(raw_refs)
-                    if not all_refs_for_knowledge and hasattr(self.reference_repo, 'get_all'):
-                        all_refs_for_knowledge = list(self.reference_repo.get_all()[:25])
+                    if hasattr(self.reference_repo, 'get_all'):
+                        seen_ids = {getattr(r, 'id', None) for r in all_refs_for_knowledge}
+                        for r in list(self.reference_repo.get_all()[:60]):
+                            if getattr(r, 'id', None) not in seen_ids:
+                                seen_ids.add(getattr(r, 'id', None))
+                                all_refs_for_knowledge.append(r)
                     elif len(all_refs_for_knowledge) < 5 and hasattr(self.reference_repo, 'get_recent'):
                         recent_pool = list(self.reference_repo.get_recent(25))
                         seen_ids = {getattr(r, 'id', None) for r in all_refs_for_knowledge}
@@ -2261,8 +2371,14 @@ class AIService(IAIService):
                             if getattr(r, 'id', None) not in seen_ids:
                                 all_refs_for_knowledge.append(r)
 
-                    thesis_knowledge = AIReadViewHelper.match_and_format_thesis_knowledge(
+                    ranked_refs_for_knowledge = AIReadViewHelper.rank_and_sort_references(
                         all_refs_for_knowledge, query_tokens, raw_query=user_message, limit=3
+                    )
+                    hydrated_top_refs = [
+                        self._hydrate_doc_full_text(r_obj, is_ref=True) for r_obj in ranked_refs_for_knowledge
+                    ]
+                    thesis_knowledge = AIReadViewHelper.match_and_format_thesis_knowledge(
+                        hydrated_top_refs or all_refs_for_knowledge, query_tokens, raw_query=user_message, limit=3
                     )
                     if thesis_knowledge:
                         targeted_matches.append(thesis_knowledge)
@@ -2493,8 +2609,25 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             logger.warning(f"Idempotency lock release warning: {e}")
 
     @staticmethod
-    def _commit_idempotency_result(idempotency_key: Optional[str], text: str) -> None:
+    def _is_negative_or_unindexed_response(text: str) -> bool:
+        """Prevents transient negative/unindexed/error messages from polluting Redis caches."""
+        if not text:
+            return True
+        lower = text.lower()
+        negative_markers = (
+            "not yet indexed in our database",
+            "could not find a document",
+            "0 research & thesis reference records",
+            "unable to reach my ai engines",
+            "no matching passage was found",
+        )
+        return any(m in lower for m in negative_markers)
+
+    @classmethod
+    def _commit_idempotency_result(cls, idempotency_key: Optional[str], text: str) -> None:
         if not idempotency_key or not text or not text.strip():
+            return
+        if cls._is_negative_or_unindexed_response(text):
             return
         clean_key = str(idempotency_key).strip()
         if not clean_key:
@@ -2523,7 +2656,11 @@ FINAL REMINDER: You are Rizal, the AI Assistant for JRMSU Katipunan Campus Libra
             sanitized,
             has_prior_complete_sentence=False,
         ).strip()
-        if not cleaned_text or self._is_incapability_dodge(cleaned_text):
+        if (
+            not cleaned_text
+            or self._is_incapability_dodge(cleaned_text)
+            or self._is_negative_or_unindexed_response(cleaned_text)
+        ):
             return
         payload = {
             "provider_id": str(provider_id or ""),
