@@ -1096,6 +1096,161 @@ class TestSpeculativeParallelHedgingAndShadowCache(unittest.TestCase):
         self.assertIn("Fast Local Ollama response", response)
         self.assertLess(elapsed, 0.50)
 
+    def test_tell_me_about_operating_system_concepts_matches_without_ebooks_and_returns_full_summary(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+        bscs_dept = SimpleNamespace(id=10, pk=10, name="CCS > BSCS", parent=None, order=1)
+        os_file = SimpleNamespace(
+            id=301,
+            pk=301,
+            name="Operating System Concepts and Basic Linux Commands",
+            file="e_resources/Operating System Concepts and Basic Linux Commands.pdf",
+            is_active=True,
+            department=bscs_dept,
+            summary="Covers operating system kernels, process scheduling, memory management, and basic Linux shell commands.",
+            table_of_contents="Chapter 1: Operating System Kernels\nChapter 2: Basic Linux Commands",
+            keywords="operating system, linux commands, system concepts, basic linux, shital",
+            extracted_text="Author: Dr. Shital Kumar\nOperating System Concepts and Basic Linux Commands.",
+            ocr_status="completed",
+        )
+        service.eresource_dept_repo.get_all.return_value = [bscs_dept]
+        service.eresource_dept_repo.get_all_with_parents.return_value = [bscs_dept]
+        service.eresource_file_repo.get_all_active.return_value = [os_file]
+        service.eresource_file_repo.get_all.return_value = [os_file]
+        service.eresource_file_repo.search_active_files.return_value = [os_file]
+
+        for q in (
+            "tell me about Operating System Concepts and Basic Linux Commands",
+            "tell me about these ebooks Operating System Concepts and Basic Linux Commands",
+        ):
+            cache.clear()
+            resp = "".join(service.generate_chat_stream(q)).strip()
+            lower = resp.lower()
+            self.assertIn("operating system concepts and basic linux commands", lower)
+            self.assertIn("process scheduling", lower)
+            self.assertIn("chapter 1", lower)
+            self.assertNotIn("not yet indexed in our database", lower)
+
+    def test_author_of_mushroom_thesis_matches_research_reference_over_quantitative_methods_local_book(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+        bsis_dept = SimpleNamespace(id=11, pk=11, name="CCS > BSIS > Quantitative Methods", parent=None, order=1)
+        quant_file = SimpleNamespace(
+            id=401,
+            pk=401,
+            name="Quantitative Methods Study Text",
+            file="e_resources/Quantitative Methods Study Text.pdf",
+            is_active=True,
+            department=bsis_dept,
+            summary="Study text on quantitative business methods.",
+            table_of_contents="Chapter 1: Statistics",
+            keywords="quantitative, methods, study",
+            extracted_text="Quantitative Methods Study Text.",
+            ocr_status="completed",
+        )
+        mushroom_ref = SimpleNamespace(
+            id=501,
+            pk=501,
+            title="Comparative Study on the Effects of Two Culture Methods and Bedding Materials on the Yield of Mushrooms(Volvariella Volvacea) under Local Conditions",
+            author="Maria Santos and Juan Dela Cruz",
+            department="College of Agriculture and Forestry (CAF)",
+            category="Agriculture",
+            call_number="TH-AGRI-2025-01",
+            access_type="file",
+            access_file="references/mushroom_study.pdf",
+            abstract="Evaluates two culture methods and bedding substrates on Volvariella volvacea mushroom yield.",
+            methodology="Randomized Complete Block Design (RCBD) across substrate treatments.",
+            findings_conclusion="Banana leaf bedding produced significantly higher biological efficiency and yield.",
+            extracted_text="Author: Maria Santos and Juan Dela Cruz\nComparative Study on the Effects of Two Culture Methods...",
+            ocr_status="completed",
+        )
+        service.eresource_file_repo.get_all_active.return_value = [quant_file]
+        service.eresource_file_repo.get_all.return_value = [quant_file]
+        service.reference_repo.get_all.return_value = [mushroom_ref]
+        service.reference_repo.get_count.return_value = 1
+
+        query = (
+            'author of "Comparative Study on the Effects of Two Culture Methods and Bedding Materials '
+            'on the Yield of Mushrooms(Volvariella Volvacea) under Local Conditions"'
+        )
+        resp = "".join(service.generate_chat_stream(query)).strip()
+        lower = resp.lower()
+
+        self.assertNotIn("quantitative methods study text", lower)
+        self.assertIn("volvariella volvacea", lower)
+        self.assertIn("maria santos", lower)
+        self.assertIn("overview:", lower)
+
+    def test_extreme_handbook_and_manual_titles_without_pdf_resolve_author_and_chapters(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+        caf_dept = SimpleNamespace(id=20, pk=20, name="CAF > BS Agriculture", parent=None, order=1)
+        organic_file = SimpleNamespace(
+            id=601,
+            pk=601,
+            name="16.-National-Organic-Farming-Handbook-author-USDA.pdf",
+            file="e_resources/16.-National-Organic-Farming-Handbook-author-USDA.pdf",
+            is_active=True,
+            department=caf_dept,
+            summary="Official USDA guide to organic crop rotation, composting, and biological pest control.",
+            table_of_contents="Chapter 1: Organic Soil Health\nChapter 2: Composting Systems",
+            keywords="organic farming, usda, soil health, composting",
+            extracted_text="National Organic Farming Handbook by USDA.",
+            ocr_status="completed",
+        )
+        service.eresource_file_repo.get_all_active.return_value = [organic_file]
+        service.eresource_file_repo.get_all.return_value = [organic_file]
+        service.eresource_file_repo.search_active_files.return_value = [organic_file]
+
+        author_resp = "".join(
+            service.generate_chat_stream("who is the author of National Organic Farming Handbook")
+        ).strip()
+        self.assertIn("usda", author_resp.lower())
+
+        cache.clear()
+        chapters_resp = "".join(
+            service.generate_chat_stream("what are the chapters of National Organic Farming Handbook")
+        ).strip()
+        self.assertIn("chapter 1: organic soil health", chapters_resp.lower())
+
+    def test_extreme_thesis_queries_with_researcher_and_multiline_cover_author(self):
+        service = _make_empty_ai_service(providers=[_FakeLLMProvider(["Fallback."])])
+        mushroom_ref = SimpleNamespace(
+            id=701,
+            pk=701,
+            title="Comparative Study on the Effects of Two Culture Methods and Bedding Materials on the Yield of Mushrooms(Volvariella Volvacea) under Local Conditions",
+            author="Admin",  # Placeholder DB author that must be bypassed in favor of cover-page text
+            department="College of Agriculture and Forestry (CAF)",
+            category="Thesis",
+            call_number="TH-AGRI-2025-01",
+            access_type="file",
+            access_file="references/mushroom_study.pdf",
+            abstract="Evaluates two culture methods and bedding substrates on Volvariella volvacea mushroom yield.",
+            methodology="Randomized Complete Block Design (RCBD) across substrate treatments.",
+            findings_conclusion="Banana leaf bedding produced significantly higher biological efficiency and yield.",
+            extracted_text="Comparative Study on the Effects of Two Culture Methods\nSubmitted by:\nElena R. Gomez\n\nBanana leaf bedding produced significantly higher yield.",
+            ocr_status="completed",
+        )
+        service.reference_repo.get_all.return_value = [mushroom_ref]
+        service.reference_repo.get_count.return_value = 1
+
+        researcher_resp = "".join(
+            service.generate_chat_stream(
+                "who is the researcher of the thesis Comparative Study on the Effects of Two Culture Methods and Bedding Materials on the Yield of Mushrooms"
+            )
+        ).strip()
+        self.assertIn("elena r. gomez", researcher_resp.lower())
+        self.assertNotIn("author: admin", researcher_resp.lower())
+
+    def test_extreme_negative_or_unindexed_responses_are_never_cached_in_redis(self):
+        service = _make_empty_ai_service()
+        query = "tell me about Operating System Concepts and Basic Linux Commands"
+        negative_text = 'However, the specific document contents for "Operating System Concepts" are not yet indexed in our database.'
+
+        service._store_late_shadow_cache(query, "ollama", negative_text)
+        self.assertIsNone(service._get_late_shadow_cache(query))
+
+        service._commit_idempotency_result("idem-neg-test", negative_text)
+        cached_idem, _, _ = service._acquire_idempotency_result if hasattr(service, "_acquire_idempotency_result") else service._acquire_idempotency_lease("idem-neg-test")
+        self.assertIsNone(cached_idem)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

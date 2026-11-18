@@ -35,3 +35,9 @@ class UserService(IUserService):
 
     def clear_user_sessions(self, user_id: int, current_session_key: str = None):
         self._repo.clear_user_sessions(user_id, current_session_key)
+
+    def clear_last_active(self, user_id: int) -> int:
+        return self._repo.clear_last_active(user_id)
+
+    def touch_heartbeat_if_active(self, user_id: int, now) -> int:
+        return self._repo.touch_heartbeat_if_active(user_id, now)

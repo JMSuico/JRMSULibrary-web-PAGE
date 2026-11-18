@@ -1444,7 +1444,11 @@ class AIReadViewHelper:
         for f in top_files:
             name_str = cls._extract_doc_name(f) or "Document"
             breadcrumb = cls._extract_file_breadcrumb(f)
-            entry_lines = [f"- File: '{name_str}' (Department: {breadcrumb})"]
+            author_str = cls.extract_document_author(f)
+            author_part = f" by {author_str}" if author_str else ""
+            entry_lines = [f"- File: '{name_str}'{author_part} (Department: {breadcrumb})"]
+            if author_str:
+                entry_lines.append(f"  Author: {author_str}")
 
             summary_str = str(
                 getattr(f, "summary", "")
@@ -1496,20 +1500,58 @@ class AIReadViewHelper:
 
         return "\n".join(lines)
 
+    GENERIC_ACADEMIC_TITLE_WORDS: Set[str] = {
+        "study",
+        "studies",
+        "methods",
+        "method",
+        "text",
+        "effects",
+        "effect",
+        "comparative",
+        "analysis",
+        "system",
+        "systems",
+        "basic",
+        "basics",
+        "general",
+        "introduction",
+        "introductory",
+        "principles",
+        "local",
+        "conditions",
+        "using",
+        "based",
+        "guide",
+        "handbook",
+        "manual",
+        "course",
+        "concepts",
+        "concept",
+        "science",
+        "technology",
+        "management",
+        "development",
+        "research",
+        "evaluation",
+        "assessment",
+    }
+
     @classmethod
-    def _resolve_targeted_document(
+    def _resolve_targeted_document_with_score(
         cls,
         files: List[Any],
         raw_query: str,
         tokens: Optional[Set[str]] = None,
-    ) -> Optional[Any]:
+    ) -> Tuple[Optional[Any], float]:
         """
         Locates the single most specifically referenced document (EResourceFile or ResearchReference)
-        from a user's inquiry. Evaluates exact filename, clean basename, extension-less title,
+        from a user's inquiry and returns `(best_doc, best_score)`.
+        Evaluates exact filename, clean basename, extension-less title,
         Unicode/whitespace/punctuation normalization, and high-confidence keyword overlap.
         """
         if not files or not raw_query:
-            return None
+            return None, 0.0
 
         clean_query = cls._normalize_doc_text(raw_query)
         clean_query_compact = cls._compact_doc_punctuation(clean_query)
@@ -1553,13 +1595,25 @@ class AIReadViewHelper:
             if len(name_clean.strip()) > 5 and name_clean.strip() in clean_query:
                 score += 100.0
 
-            # 4. High word overlap (including possessive-normalized terms like "Farmer’s" <-> "Farmers")
+            # 4. High word overlap (preventing generic 2-word academic collisions like "Study" + "Methods")
             common = query_words & name_words_all
             meaningful_common = [w for w in common if w not in cls.STOP_WORDS and len(w) > 2]
-            if len(meaningful_common) >= 3:
-                score += len(meaningful_common) * 20.0
-            elif len(meaningful_common) >= 2 and len(name_words) <= 5:
-                score += len(meaningful_common) * 15.0
+            meaningful_doc_words = [w for w in name_words if w not in cls.STOP_WORDS and len(w) > 2]
+            specific_common = [
+                w
+                for w in meaningful_common
+                if w not in cls.GENERIC_ACADEMIC_TITLE_WORDS and w not in cls.GENERIC_CATALOG_WORDS
+            ]
+            overlap_ratio = len(meaningful_common) / max(1, len(meaningful_doc_words))
+
+            if len(meaningful_common) >= 4:
+                score += len(meaningful_common) * 22.0 + len(specific_common) * 10.0
+            elif len(meaningful_common) == 3:
+                if len(specific_common) >= 1 or overlap_ratio >= 0.6:
+                    score += len(meaningful_common) * 20.0 + len(specific_common) * 8.0
+            elif len(meaningful_common) == 2 and len(name_words) <= 5:
+                if len(specific_common) >= 1 and overlap_ratio >= 0.6:
+                    score += len(meaningful_common) * 16.0 + len(specific_common) * 6.0
 
             # 5. Numbered prefix match (e.g., "01", "02", "16") and matches key title word
             prefix_match = re.search(r"\b0?([1-9]\d?)\b", clean_query)
@@ -1574,8 +1628,18 @@ class AIReadViewHelper:
                 best_doc = f
 
         if best_score >= 30.0:
-            return best_doc
-        return None
+            return best_doc, best_score
+        return None, 0.0
+
+    @classmethod
+    def _resolve_targeted_document(
+        cls,
+        files: List[Any],
+        raw_query: str,
+        tokens: Optional[Set[str]] = None,
+    ) -> Optional[Any]:
+        doc, _ = cls._resolve_targeted_document_with_score(files, raw_query, tokens=tokens)
+        return doc
 
     @classmethod
     def find_targeted_document(
@@ -1586,6 +1650,16 @@ class AIReadViewHelper:
     ) -> Optional[Any]:
         """Public alias delegating to _resolve_targeted_document."""
         return cls._resolve_targeted_document(files, raw_query, tokens=tokens)
+
+    @classmethod
+    def find_targeted_document_with_score(
+        cls,
+        files: List[Any],
+        raw_query: str,
+        tokens: Optional[Set[str]] = None,
+    ) -> Tuple[Optional[Any], float]:
+        """Returns `(matched_doc, score)` so callers can compare matches across EResourceFile and ResearchReference."""
+        return cls._resolve_targeted_document_with_score(files, raw_query, tokens=tokens)
 
     @staticmethod
     def _clean_summary_text(text: str) -> str:
@@ -1663,7 +1737,7 @@ class AIReadViewHelper:
 
     @staticmethod
     def _clean_author_candidate(raw: str) -> str:
-        """Validates and normalizes a candidate author/publisher string."""
+        """Validates and normalizes a candidate author/publisher string, rejecting generic/scanner placeholders."""
         cleaned = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n.,;:-–—\"'")
         if not cleaned or len(cleaned) < 2 or len(cleaned) > 120:
             return ""
@@ -1671,6 +1745,8 @@ class AIReadViewHelper:
             return ""
         if cleaned.lower() in {
             "unknown",
+            "unknown author",
+            "no author",
             "n/a",
             "na",
             "none",
@@ -1679,6 +1755,24 @@ class AIReadViewHelper:
             "unspecified",
             "not specified",
             "not available",
+            "jrmsu",
+            "jrmsu researcher",
+            "jrmsu researchers",
+            "student researcher",
+            "student researchers",
+            "campus library",
+            "jrmsu library",
+            "admin",
+            "administrator",
+            "user",
+            "windows user",
+            "owner",
+            "tba",
+            "tbd",
+            "pending",
+            "camscanner",
+            "microsoft word",
+            "scanner",
         }:
             return ""
         return cleaned
@@ -1742,23 +1836,46 @@ class AIReadViewHelper:
                 if cand:
                     return cand
 
-        # Tier 3: First ~2,500 chars of extracted_text for explicit author/publisher lines
+        # Tier 3: First ~2,500 chars of extracted_text for explicit or multi-line author/publisher lines
         raw_text = getattr(doc, "extracted_text", None)
         if isinstance(raw_text, str) and raw_text.strip():
             head_text = raw_text[:2500]
-            for raw_line in head_text.splitlines():
-                line = raw_line.strip()
-                if not line:
-                    continue
+            head_lines = [ln.strip() for ln in head_text.splitlines() if ln.strip()]
+            for idx, line in enumerate(head_lines):
+                val_str = ""
                 m = re.match(
-                    r"^(?:author\s*\(s\)|authors?|prepared\s+by|written\s+by|"
+                    r"^(?:author\s*\(s\)|authors?|researcher\s*\(s\)|researchers?|"
+                    r"submitted\s+by|prepared\s+by|written\s+by|by|"
                     r"published\s+by|compilers?|compiled\s+by)\s*[:\-]\s*(.+?)\s*$",
                     line,
                     flags=re.IGNORECASE,
                 )
-                if not m:
+                if m:
+                    val_str = m.group(1).strip()
+                elif re.match(
+                    r"^(?:author\s*\(s\)|authors?|researcher\s*\(s\)|researchers?|"
+                    r"submitted\s+by|prepared\s+by|written\s+by|by)\s*[:\-]?\s*$",
+                    line,
+                    flags=re.IGNORECASE,
+                ) and idx + 1 < len(head_lines):
+                    val_str = head_lines[idx + 1].strip()
+                else:
+                    m_honorific = re.match(
+                        r"^(?:by\s+)?((?:(?:dr|prof|mr|ms|mrs|engr)\.\s+)+[A-Z][a-zA-Z\.\-\s,]{3,60})$",
+                        line,
+                        flags=re.IGNORECASE,
+                    )
+                    if m_honorific:
+                        val_str = m_honorific.group(1).strip()
+                    else:
+                        m_by = re.match(
+                            r"^by\s+([A-Z][a-zA-Z\-]+(?:\s+(?:[A-Z]\.|[A-Z][a-zA-Z\-]+|and|&|,)){1,6})$",
+                            line,
+                        )
+                        if m_by:
+                            val_str = m_by.group(1).strip()
+                if not val_str:
                     continue
-                val_str = m.group(1).strip()
                 # Trim trailing inline metadata columns (e.g. " | Date: 2022")
                 val_str = re.split(r"\s+\|\s+|\t{1,}|\s{3,}", val_str)[0].strip()
                 words = val_str.split()
@@ -1947,7 +2064,7 @@ class AIReadViewHelper:
         aspects: Set[str] = set()
 
         if re.search(
-            r"\b(?:authors?|written\s+by|wrote|writer|prepared\s+by|compiled\s+by|compiler|publisher|published\s+by|creator)\b",
+            r"\b(?:authors?|researchers?|written\s+by|wrote|writer|submitted\s+by|prepared\s+by|compiled\s+by|compiler|publisher|published\s+by|creator)\b",
             intent_l,
         ):
             aspects.add("author")
@@ -2017,6 +2134,45 @@ class AIReadViewHelper:
                 aspects.add("summary")
 
         return aspects
+
+    @classmethod
+    def _strip_matched_doc_title_from_query(cls, query: str, doc: Any) -> str:
+        """
+        Strips the matched document's title/filename from `query` before aspect
+        classification so words inside the book/thesis title (e.g. 'Concepts' in
+        'Operating System Concepts and Basic Linux Commands' or 'Study'/'Methods'
+        in a thesis title) never trigger false narrow aspect flags.
+        """
+        text = str(query or "").strip()
+        if not text or doc is None:
+            return text
+
+        candidates: List[str] = []
+        for raw in (getattr(doc, "title", None), getattr(doc, "name", None), cls._extract_doc_name(doc)):
+            if isinstance(raw, str) and raw.strip():
+                s = raw.strip()
+                candidates.append(s)
+                base = re.sub(r"^(?:\d+[\.\-_]+)+", "", s)
+                base = re.sub(r"\.(?:pdf|docx|doc|txt|epub|pptx|xlsx)$", "", base, flags=re.I)
+                base_spaced = re.sub(r"[\.\-_]+", " ", base).strip()
+                if base and base not in candidates:
+                    candidates.append(base)
+                if base_spaced and base_spaced not in candidates:
+                    candidates.append(base_spaced)
+
+        candidates.sort(key=len, reverse=True)
+        cleaned = text
+        for cand in candidates:
+            if len(cand) < 4:
+                continue
+            pattern = re.compile(re.escape(cand), flags=re.IGNORECASE)
+            cleaned = pattern.sub(" ", cleaned)
+            cand_words = [re.escape(w) for w in re.findall(r"[a-zA-Z0-9]+", cand) if len(w) > 1]
+            if len(cand_words) >= 2:
+                seq_pattern = re.compile(r"\b" + r"[\s\W]+".join(cand_words) + r"\b", flags=re.IGNORECASE)
+                cleaned = seq_pattern.sub(" ", cleaned)
+
+        return re.sub(r"\s+", " ", cleaned).strip(" \t\r\n\"'?.!,;:-")
 
     @classmethod
     def build_targeted_document_knowledge_response(cls, doc: Any, query: str = "") -> str:
@@ -2100,10 +2256,23 @@ class AIReadViewHelper:
         )
 
         query_clean = str(query or "").strip()
-        aspects = cls.classify_document_query_aspects(query_clean) if query_clean else {"summary"}
+        query_without_title = cls._strip_matched_doc_title_from_query(query_clean, doc)
+        aspects = (
+            cls.classify_document_query_aspects(query_without_title or query_clean)
+            if query_clean
+            else {"summary"}
+        )
+        if re.search(
+            r"\b(?:tell\s+me\s+about|overview\s+(?:of|on)|summary\s+of|summarize|summarise|"
+            r"what\s+is\s+(?:this|it)\s+about|what\s+does\s+(?:this|the\s+\w+)\s+cover|"
+            r"about\s+(?:this|these|the)\s+(?:ebooks?|books?|files?|pdfs?|documents?|thesis|study))\b",
+            query_clean,
+            flags=re.IGNORECASE,
+        ):
+            aspects.add("summary")
 
         # ------------------------------------------------------------------
-        # Narrow, Question-Aware Concise Mode (no wall-of-text overview dump)
+        # Narrow, Question-Aware Concise Mode (accurate, short, and not too short)
         # ------------------------------------------------------------------
         if query_clean and "summary" not in aspects:
             display_title = title_str if is_ref else name_str
@@ -2125,13 +2294,29 @@ class AIReadViewHelper:
                 f"Location: {location_str}",
             ]
 
+            author_val = cls.extract_document_author(doc)
             if "author" in aspects:
-                author_val = cls.extract_document_author(doc)
                 answer_lines.append(
                     f"Author: {author_val}"
                     if author_val
                     else "Author: Not explicitly listed in the indexed document metadata or text."
                 )
+            elif author_val:
+                answer_lines.append(f"Author: {author_val}")
+
+            # Include a concise 1-2 sentence overview when answering author/keyword queries so it is not too short
+            if ("author" in aspects or "keywords" in aspects) and "specific_question" not in aspects:
+                raw_brief = (getattr(doc, "abstract", "") if is_ref else summary_str) or summary_str
+                if not raw_brief and full_text_str and ocr_cls:
+                    try:
+                        raw_brief = ocr_cls._generate_summary(full_text_str, min_chars=150, max_chars=320)
+                    except Exception:
+                        raw_brief = ""
+                brief_clean = cls._clean_summary_text(raw_brief if isinstance(raw_brief, str) else "")
+                if brief_clean:
+                    if len(brief_clean) > 280:
+                        brief_clean = brief_clean[:277].rstrip() + "..."
+                    answer_lines.append(f"Overview: {brief_clean}")
 
             if "references" in aspects:
                 refs_cap = 480 if len(aspects) > 1 else 650
@@ -2270,33 +2455,30 @@ class AIReadViewHelper:
 
             abstract_str = cls._clean_summary_text(abstract_str) or abstract_str
 
-            dept_line = f"🏛️ Academic Department / Program: {dept_str}\n" if dept_str else ""
-            author_line = f"✍️ Author / Researcher: {author_str}\n" if author_str else ""
-            call_line = f"🏷️ Call Number: {call_str}\n" if call_str != "N/A" else ""
-            method_section = f"\n🔬 Research Methodology:\n{method_str}\n" if method_str else ""
-            findings_section = f"\n💡 Key Findings & Conclusions:\n{findings_str}\n" if findings_str else ""
+            dept_line = f"Academic Department / Program: {dept_str}\n" if dept_str else ""
+            author_line = f"Author / Researcher: {author_str}\n" if author_str else ""
+            call_line = f"Call Number: {call_str}\n" if call_str != "N/A" else ""
+            method_section = f"\nResearch Methodology:\n{method_str}\n" if method_str else ""
+            findings_section = f"\nKey Findings & Conclusions:\n{findings_str}\n" if findings_str else ""
             excerpt_str = (
-                cls._extract_relevant_fulltext_excerpts(full_text_str, max_chars=900)
+                cls._extract_relevant_fulltext_excerpts(full_text_str, max_chars=650)
                 if len(full_text_str) > 300
                 else ""
             )
-            excerpt_section = f"\n📄 Document Full-Text Highlights:\n{excerpt_str}\n" if excerpt_str else ""
+            excerpt_section = f"\nDocument Full-Text Highlights:\n{excerpt_str}\n" if excerpt_str else ""
 
             return (
                 f"Here is the verified research knowledge for '{title_str}' from our library catalog:\n\n"
-                f"🎓 Research Title: {title_str}\n"
+                f"Research Title: {title_str}\n"
                 f"{author_line}"
                 f"{dept_line}"
                 f"{call_line}\n"
-                f"📋 Research Abstract:\n"
+                f"Research Abstract:\n"
                 f"{abstract_str}\n"
                 f"{method_section}"
                 f"{findings_section}"
                 f"{excerpt_section}\n"
-                f"🛡️ Catalog Access Policy:\n"
-                f"This academic research is cataloged under 'Collection' -> 'Research & Thesis References'. "
-                f"To protect student and institutional copyright, digital viewing is served in read-only protected mode, "
-                f"and bound physical copies are available inside the Research & Reference Section for on-site consultation."
+                f"Location: Collection -> Research & Thesis References (/collection)."
             )
 
         # Extract structured knowledge from actual extracted_text first before domain synthesis fallback
@@ -2361,30 +2543,28 @@ class AIReadViewHelper:
             formatted_toc = "\n".join([f"- {l}" if not l.startswith("-") and not re.match(r"^\d+\.", l) else l for l in lines])
 
         author_str = cls.extract_document_author(doc)
-        author_display = f"✍️ Author: {author_str}\n" if author_str else ""
-        dept_display = f"🏛️ Academic Department / Course: {breadcrumb}\n" if breadcrumb else ""
-        keywords_display = f"\n🏷️ Core Topics & Concepts Covered:\n{keywords_str}\n" if keywords_str else ""
+        author_display = f"Author: {author_str}\n" if author_str else ""
+        dept_display = f"Academic Department / Course: {breadcrumb}\n" if breadcrumb else ""
+        keywords_display = f"\nCore Topics & Concepts Covered:\n{keywords_str}\n" if keywords_str else ""
         fulltext_excerpt = (
-            cls._extract_relevant_fulltext_excerpts(eresource_full_text, max_chars=1100)
+            cls._extract_relevant_fulltext_excerpts(eresource_full_text, max_chars=700)
             if len(eresource_full_text) > 200
             else ""
         )
-        fulltext_display = f"\n📄 Document Full-Text Highlights:\n{fulltext_excerpt}\n" if fulltext_excerpt else ""
+        fulltext_display = f"\nDocument Full-Text Highlights:\n{fulltext_excerpt}\n" if fulltext_excerpt else ""
 
         return (
             f"Here is the verified document knowledge for '{name_str}' from our digital collection:\n\n"
-            f"📖 Document: {name_str}\n"
+            f"Document: {name_str}\n"
             f"{author_display}"
             f"{dept_display}\n"
-            f"📋 Executive Summary:\n"
+            f"Executive Summary:\n"
             f"{summary_str}\n\n"
-            f"📑 Table of Contents / Key Chapters:\n"
+            f"Table of Contents / Key Chapters:\n"
             f"{formatted_toc}\n"
             f"{keywords_display}"
             f"{fulltext_display}\n"
-            f"🛡️ Collection Reading Policy:\n"
-            f"This title is available for secure patron reading under our 'Collection' -> 'Local Books' TreeView. "
-            f"To protect intellectual property and collection integrity, the document is served via our read-only protected document viewer with anti-download protection."
+            f"Location: Collection -> Local Books (/collection)."
         )
 
     @classmethod
@@ -2418,7 +2598,8 @@ class AIReadViewHelper:
                 getattr(r, "methodology", None)
                 or getattr(r, "methods", None)
             )
-            if abstract or findings or methodology:
+            full_text = getattr(r, "extracted_text", None)
+            if abstract or findings or methodology or full_text:
                 knowledge_refs.append(r)
 
         if not knowledge_refs:
@@ -2505,7 +2686,7 @@ class AIReadViewHelper:
         lines: List[str] = ["[THESIS & RESEARCH KNOWLEDGE (Extracted Methodology & Findings)]"]
         for r in top_refs:
             title_str = str(getattr(r, "title", "") or "Untitled Research").strip()
-            author_str = str(getattr(r, "author", "") or "Unknown").strip()
+            author_str = cls.extract_document_author(r) or str(getattr(r, "author", "") or "Unknown").strip()
             dept_str = str(getattr(r, "department", "") or getattr(r, "category", "") or "General").strip()
             call_no = getattr(r, "call_number", None) or getattr(r, "acc_no", None)
             call_str = f" | Call No: {call_no}" if call_no else ""

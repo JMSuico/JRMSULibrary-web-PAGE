@@ -16,6 +16,12 @@ class ResearchReferenceRepository(IResearchReferenceRepository):
         except ResearchReference.DoesNotExist:
             return None
 
+    def get_by_id_with_full_text(self, reference_id):
+        try:
+            return ResearchReference.objects.get(id=reference_id)
+        except ResearchReference.DoesNotExist:
+            return None
+
     def get_count(self) -> int:
         return ResearchReference.objects.count()
 

@@ -5,16 +5,11 @@ import { apiClient } from '@/src/Libs/apiClient';
 
 // We dynamically import pdfjs to avoid bloating the main bundle
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-// Define worker source for pdfjs with graceful fallback
-try {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url
-  ).toString();
-} catch {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '6.4.299'}/pdf.worker.min.mjs`;
-}
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+const PDF_RANGE_CHUNK_BYTES = 524288; // 512 KB range chunks for fast sub-2s first-page display
 
 interface ReferenceFileViewerModalProps {
   referenceId: number;
@@ -42,6 +37,7 @@ const isRenderingCancelled = (err: unknown): boolean =>
 
 export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: ReferenceFileViewerModalProps) {
   const [loading, setLoading] = useState(true);
+  const [loadProgress, setLoadProgress] = useState<number>(18);
   const [error, setError] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const [securityWarning, setSecurityWarning] = useState<string | null>(null);
@@ -103,6 +99,9 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
     setPdfDoc(null);
 
     const loadPdf = async (url: string) => {
+      const progressTimer = window.setInterval(() => {
+        setLoadProgress((prev) => (prev < 88 ? prev + 12 : prev));
+      }, 220);
       try {
         if (loadingTaskRef.current) {
           try {
@@ -112,9 +111,25 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
           }
           loadingTaskRef.current = null;
         }
-        const loadingTask = pdfjsLib.getDocument({ url });
+        const loadingTask = pdfjsLib.getDocument({
+          url,
+          disableAutoFetch: true,
+          disableStream: false,
+          disableRange: false,
+          rangeChunkSize: PDF_RANGE_CHUNK_BYTES,
+        });
+        loadingTask.onProgress = (progressData: { loaded: number; total?: number }) => {
+          if (!isMounted) return;
+          if (progressData.total && progressData.total > 0) {
+            const pct = Math.min(92, Math.max(20, Math.round((progressData.loaded / progressData.total) * 100)));
+            setLoadProgress((prev) => Math.max(prev, pct));
+          } else if (progressData.loaded > 0) {
+            setLoadProgress((prev) => Math.min(90, prev + 10));
+          }
+        };
         loadingTaskRef.current = loadingTask;
         const pdf = await loadingTask.promise;
+        window.clearInterval(progressTimer);
         if (!isMounted) {
           try {
             Promise.resolve(loadingTask.destroy()).catch(() => {});
@@ -123,11 +138,12 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
           }
           return;
         }
+        setLoadProgress(95);
         setPdfDoc(pdf);
         setNumPages(pdf.numPages);
         setPageNumber(1);
-        setLoading(false);
       } catch {
+        window.clearInterval(progressTimer);
         if (!isMounted) return;
         setError('Failed to load PDF document.');
         setLoading(false);
@@ -229,7 +245,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
       canvas.width = viewport.width;
 
       const renderContext = {
-        canvas: null,
+        canvas,
         canvasContext: ctx,
         viewport: viewport
       };
@@ -238,6 +254,13 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
       renderTaskRef.current = renderTask;
       await renderTask.promise;
       if (isCancelled()) return;
+
+      setLoadProgress(100);
+      setLoading(false);
+
+      if (num < pdfDoc.numPages) {
+        pdfDoc.getPage(num + 1).catch(() => {});
+      }
 
       // Institutional Watermark directly drawn onto Canvas
       ctx.save();
@@ -328,10 +351,21 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
           }}
         >
           {loading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/80 z-10">
-              <Loader2 className="animate-spin text-[#002B7F] mb-4" size={40} />
-              <p className="text-gray-600 font-medium animate-pulse">Loading protected document...</p>
-              <p className="text-xs text-gray-400 mt-1">Preparing read-only secure view</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100/95 z-10 p-6">
+              <div className="bg-white border border-blue-100 shadow-xl rounded-2xl px-8 py-7 max-w-md w-full flex flex-col items-center text-center">
+                <Loader2 className="animate-spin text-[#002B7F] mb-3" size={38} />
+                <p className="text-gray-800 text-sm font-bold mb-1">Opening Protected Document...</p>
+                <p className="text-xs text-gray-500 line-clamp-2 mb-4 px-2">{fileName}</p>
+                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden mb-2">
+                  <div
+                    className="bg-gradient-to-r from-[#002B7F] to-blue-500 h-full rounded-full transition-all duration-200"
+                    style={{ width: `${Math.min(100, Math.max(15, loadProgress))}%` }}
+                  />
+                </div>
+                <p className="text-[11px] font-semibold text-[#002B7F]">
+                  Streaming first page ({Math.min(100, Math.max(15, loadProgress))}%) — Please wait a moment
+                </p>
+              </div>
             </div>
           )}
 
@@ -373,7 +407,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
           )}
 
           {/* PDF Preview */}
-          {pdfDoc && !loading && !error && (
+          {pdfDoc && !error && (
             <div className="flex flex-col items-center w-full">
               {/* PDF Toolbar */}
               <div className="flex items-center gap-4 bg-white px-5 py-2 rounded-full shadow-sm border border-gray-200 mb-4 sticky top-0 z-20">

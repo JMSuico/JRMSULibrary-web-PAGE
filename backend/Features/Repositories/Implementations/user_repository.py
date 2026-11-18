@@ -67,3 +67,9 @@ class UserRepository(IUserRepository):
         from django.contrib.sessions.models import Session
         User.objects.all().update(last_active=None)
         Session.objects.all().delete()
+
+    def clear_last_active(self, user_id: int) -> int:
+        return User.objects.filter(pk=user_id).update(last_active=None)
+
+    def touch_heartbeat_if_active(self, user_id: int, now) -> int:
+        return User.objects.filter(id=user_id, last_active__isnull=False).update(last_active=now)
