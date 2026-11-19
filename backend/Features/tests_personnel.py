@@ -139,6 +139,8 @@ class TestPersonnelRepositoryPersistenceAndCleanup(TestCase):
         )
         media_override.enable()
         self.addCleanup(media_override.disable)
+        # Clear default Personnel rows seeded by migration 0039 so repository assertions stay isolated
+        Personnel.objects.all().delete()
         self.repo = PersonnelRepository()
 
     def test_get_all_returns_fallback_only_when_database_is_completely_empty(self):
@@ -294,6 +296,8 @@ class TestPersonnelAPIEndpointsAndCacheHeaders(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.admin)
         self.anon_client = APIClient()
+        # Clear default Personnel rows seeded by migration 0039 so list count assertions stay deterministic
+        Personnel.objects.all().delete()
 
     def test_unauthenticated_write_requests_rejected_and_read_allowed(self):
         list_resp = self.anon_client.get('/api/personnel/')

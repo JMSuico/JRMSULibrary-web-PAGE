@@ -191,7 +191,7 @@ export const subscribeCacheKey = (
   };
 };
 
-export const invalidateCacheByPrefix = (prefix: string): void => {
+const collectMatchingKeys = (prefix: string): Set<string> => {
   const matchedKeys = new Set<string>();
 
   memoryCache.forEach((_, key) => {
@@ -210,21 +210,22 @@ export const invalidateCacheByPrefix = (prefix: string): void => {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const fullPrefix = `${STORAGE_PREFIX}${prefix}`;
-      const storageKeysToRemove: string[] = [];
       for (let i = 0; i < window.localStorage.length; i++) {
         const storageKey = window.localStorage.key(i);
         if (storageKey && storageKey.startsWith(fullPrefix)) {
-          storageKeysToRemove.push(storageKey);
+          matchedKeys.add(storageKey.slice(STORAGE_PREFIX.length));
         }
       }
-      storageKeysToRemove.forEach((storageKey) => {
-        window.localStorage.removeItem(storageKey);
-        matchedKeys.add(storageKey.slice(STORAGE_PREFIX.length));
-      });
     } catch {
       // Ignore storage scan errors
     }
   }
+
+  return matchedKeys;
+};
+
+export const invalidateCacheByPrefix = (prefix: string): void => {
+  const matchedKeys = collectMatchingKeys(prefix);
 
   matchedKeys.forEach((key) => {
     keyVersionMap.set(key, (keyVersionMap.get(key) ?? 0) + 1);
@@ -233,6 +234,38 @@ export const invalidateCacheByPrefix = (prefix: string): void => {
     errorMap.delete(key);
     removeStorageEntry(key);
     notifyChange(key);
+    notifyInvalidate(key);
+  });
+};
+
+/**
+ * Marks cached entries matching `prefix` as stale (updatedAt: 0) without deleting cached data,
+ * then notifies active query subscribers to background-revalidate cleanly without DOM collapse.
+ */
+export const revalidateCacheByPrefix = (prefix: string): void => {
+  const matchedKeys = collectMatchingKeys(prefix);
+
+  matchedKeys.forEach((key) => {
+    keyVersionMap.set(key, (keyVersionMap.get(key) ?? 0) + 1);
+    inFlightMap.delete(key);
+    errorMap.delete(key);
+
+    const memEntry = memoryCache.get(key);
+    if (memEntry) {
+      memoryCache.set(key, {
+        data: memEntry.data,
+        updatedAt: 0,
+      });
+    }
+
+    const storedEntry = readStorageEntry<unknown>(key);
+    if (storedEntry) {
+      writeStorageEntry(key, {
+        data: storedEntry.data,
+        updatedAt: 0,
+      });
+    }
+
     notifyInvalidate(key);
   });
 };

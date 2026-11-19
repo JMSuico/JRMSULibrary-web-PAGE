@@ -76,10 +76,14 @@ export const useScrollRestoration = ({
   );
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
+  const isReadyRef = useRef<boolean>(isReady);
+  isReadyRef.current = isReady;
   const isRestoringRef = useRef<boolean>(false);
   const hasRestoredOnReadyRef = useRef<boolean>(false);
   const throttleTimerRef = useRef<number | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
+  const restoreTimerRef = useRef<number | null>(null);
+  const restoreGenRef = useRef<number>(0);
   const lastAnchorRef = useRef<string | null>(lastAnchorId);
   lastAnchorRef.current = lastAnchorId;
 
@@ -121,6 +125,26 @@ export const useScrollRestoration = ({
         setLastAnchorIdState(nextAnchor);
       }
       const snap = readCurrentSnapshot(overrideAnchorId);
+      if (!isReadyRef.current && (typeof window === 'undefined' || window.scrollY === 0 || snap.containerTop === 0)) {
+        const existing = readPersistedValue<SavedScrollSnapshot>(
+          fullKey,
+          DEFAULT_SNAPSHOT,
+          storage,
+          isValidSnapshot,
+        );
+        if ((typeof window === 'undefined' || window.scrollY === 0) && existing.y > 0) {
+          snap.y = existing.y;
+        }
+        if (snap.containerTop === 0 && existing.containerTop > 0) {
+          snap.containerTop = existing.containerTop;
+        }
+        if (snap.containerLeft === 0 && existing.containerLeft > 0) {
+          snap.containerLeft = existing.containerLeft;
+        }
+        if (snap.horizontalLeft === 0 && existing.horizontalLeft > 0) {
+          snap.horizontalLeft = existing.horizontalLeft;
+        }
+      }
       writePersistedValue<SavedScrollSnapshot>(fullKey, snap, storage);
     },
     [fullKey, readCurrentSnapshot, storage],
@@ -140,9 +164,16 @@ export const useScrollRestoration = ({
   const applyRestoration = useCallback(
     (snap: SavedScrollSnapshot, preferAnchor: boolean) => {
       if (typeof window === 'undefined') return;
+      const currentGen = ++restoreGenRef.current;
+      if (restoreTimerRef.current !== null) {
+        window.clearTimeout(restoreTimerRef.current);
+        restoreTimerRef.current = null;
+      }
       isRestoringRef.current = true;
 
       const attemptRestore = (remainingTries: number) => {
+        if (restoreGenRef.current !== currentGen) return;
+
         if (horizontalRef?.current && snap.horizontalLeft > 0) {
           horizontalRef.current.scrollLeft = snap.horizontalLeft;
         }
@@ -175,15 +206,21 @@ export const useScrollRestoration = ({
             (!scrolledToAnchor && snap.y > 0 && Math.abs(window.scrollY - snap.y) > 48));
 
         if (needsRetry) {
-          window.setTimeout(() => window.requestAnimationFrame(() => attemptRestore(remainingTries - 1)), 60);
+          restoreTimerRef.current = window.setTimeout(
+            () => window.requestAnimationFrame(() => attemptRestore(remainingTries - 1)),
+            60,
+          );
         } else {
-          window.setTimeout(() => {
-            isRestoringRef.current = false;
-          }, 120);
+          restoreTimerRef.current = window.setTimeout(() => {
+            if (restoreGenRef.current === currentGen) {
+              isRestoringRef.current = false;
+              restoreTimerRef.current = null;
+            }
+          }, 180);
         }
       };
 
-      window.requestAnimationFrame(() => attemptRestore(6));
+      window.requestAnimationFrame(() => attemptRestore(8));
     },
     [anchorAttribute, containerRef, horizontalRef, triggerHighlight],
   );
@@ -220,9 +257,13 @@ export const useScrollRestoration = ({
     removePersistedValue(fullKey, storage);
   }, [fullKey, storage]);
 
-  // Restore once async data for the page becomes ready
+  // Restore once async data for the page becomes ready; re-arm if loading state returns
   useEffect(() => {
-    if (!isReady || hasRestoredOnReadyRef.current) return;
+    if (!isReady) {
+      hasRestoredOnReadyRef.current = false;
+      return;
+    }
+    if (hasRestoredOnReadyRef.current) return;
     hasRestoredOnReadyRef.current = true;
     const saved = readPersistedValue<SavedScrollSnapshot>(
       fullKey,
@@ -245,18 +286,18 @@ export const useScrollRestoration = ({
     if (typeof window === 'undefined') return;
 
     const scheduleCapture = () => {
-      if (!isReady || isRestoringRef.current) return;
+      if (!isReadyRef.current || isRestoringRef.current) return;
       if (throttleTimerRef.current !== null) return;
       throttleTimerRef.current = window.setTimeout(() => {
         throttleTimerRef.current = null;
-        if (!isRestoringRef.current && isReady) {
+        if (!isRestoringRef.current && isReadyRef.current) {
           captureNow();
         }
       }, 120);
     };
 
     const handlePageHide = () => {
-      if (isReady && !isRestoringRef.current) {
+      if (isReadyRef.current && !isRestoringRef.current) {
         captureNow();
       }
     };
@@ -273,7 +314,7 @@ export const useScrollRestoration = ({
         window.clearTimeout(throttleTimerRef.current);
         throttleTimerRef.current = null;
       }
-      if (isReady && !isRestoringRef.current) {
+      if (isReadyRef.current && !isRestoringRef.current) {
         captureNow();
       }
       window.removeEventListener('scroll', scheduleCapture);
@@ -287,6 +328,9 @@ export const useScrollRestoration = ({
     () => () => {
       if (highlightTimerRef.current !== null && typeof window !== 'undefined') {
         window.clearTimeout(highlightTimerRef.current);
+      }
+      if (restoreTimerRef.current !== null && typeof window !== 'undefined') {
+        window.clearTimeout(restoreTimerRef.current);
       }
     },
     [],

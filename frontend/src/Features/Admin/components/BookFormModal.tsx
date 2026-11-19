@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getImageUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { X, Pencil, Trash2, Plus } from 'lucide-react';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
+import { ScrollableSelect, ScrollableSelectOption } from '@/src/Components/Shared/ScrollableSelect';
 import { batchApi, BatchBook, BookCategoryItem } from '@/src/Endpoints/batchApi';
 import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
 import { useToast } from '@/src/Hooks/useToast';
@@ -47,6 +48,7 @@ export function BookFormModal({
   const [editCategoryError, setEditCategoryError] = useState('');
 
   const [deletingCategory, setDeletingCategory] = useState<BookCategoryItem | null>(null);
+  const submitSessionRef = useRef(0);
 
   const { showToast } = useToast();
   const {
@@ -66,8 +68,34 @@ export function BookFormModal({
     initialData?.category && !categories.some((c) => c.name === initialData.category),
   );
 
+  const categoryOptions = useMemo<ScrollableSelectOption[]>(() => {
+    const opts: ScrollableSelectOption[] = [];
+    if (categories.length === 0 && !hasTemporaryInitialCategory) {
+      opts.push({
+        value: '',
+        label: categoriesLoading ? 'Loading categories...' : 'No categories available',
+        disabled: true,
+      });
+    }
+    if (hasTemporaryInitialCategory && initialData?.category) {
+      opts.push({
+        value: initialData.category,
+        label: initialData.category,
+      });
+    }
+    for (const c of categories) {
+      opts.push({
+        value: c.name,
+        label: c.name,
+      });
+    }
+    return opts;
+  }, [categories, categoriesLoading, hasTemporaryInitialCategory, initialData?.category]);
+
   // Reset form fields whenever the modal opens or the book being edited changes
   useEffect(() => {
+    submitSessionRef.current += 1;
+    setIsSaving(false);
     if (isOpen) {
       setTitle(initialData?.title || '');
       setAuthor(initialData?.author || '');
@@ -199,6 +227,7 @@ export function BookFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
+    const sessionId = submitSessionRef.current;
     setIsSaving(true);
 
     const formData = new FormData();
@@ -212,7 +241,9 @@ export function BookFormModal({
     try {
       await onSubmit(formData);
     } finally {
-      setIsSaving(false);
+      if (submitSessionRef.current === sessionId) {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -273,29 +304,19 @@ export function BookFormModal({
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                 {!isAddingCategory ? (
                   <div className="flex items-center gap-2">
-                    <select
-                      required
-                      className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    <ScrollableSelect
                       value={category}
-                      onChange={(e) => {
-                        setCategory(e.target.value);
+                      options={categoryOptions}
+                      onChange={(nextCategory) => {
+                        setCategory(nextCategory);
                         setCategoryError('');
                       }}
-                    >
-                      {categories.length === 0 && !hasTemporaryInitialCategory && (
-                        <option value="" disabled>
-                          {categoriesLoading ? 'Loading categories...' : 'No categories available'}
-                        </option>
-                      )}
-                      {hasTemporaryInitialCategory && initialData?.category && (
-                        <option value={initialData.category}>{initialData.category}</option>
-                      )}
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={categoriesLoading ? 'Loading categories...' : 'No categories available'}
+                      required
+                      ariaLabel="Category"
+                      className="flex-1 min-w-0"
+                      menuMaxHeightClass="max-h-48"
+                    />
                     <button
                       type="button"
                       onClick={handleOpenEditCategory}
@@ -421,7 +442,6 @@ export function BookFormModal({
                   type="button"
                   onClick={onClose}
                   className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 rounded-lg transition-colors cursor-pointer"
-                  disabled={isSaving}
                 >
                   Cancel
                 </button>
