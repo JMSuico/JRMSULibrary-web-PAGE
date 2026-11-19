@@ -2,14 +2,20 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/cmsApi';
 import { Save, Plus, Trash2, Edit2, RefreshCw, X, Search, LayoutGrid, List } from 'lucide-react';
-import { useToast } from '@/src/Hooks/useToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
-import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import {
+  useCachedQuery,
+  invalidateCacheByPrefix,
+  usePagination,
+  usePersistentState,
+  useScrollRestoration,
+  useToast,
+  useUndoDelete,
+} from '@/src/Hooks';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { BlockTextEditor } from '@/src/Components/Shared/BlockTextEditor';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 import { ResearchReferencesManager } from './ResearchReferencesManager';
 import { PersonnelManager } from './PersonnelManager';
@@ -21,8 +27,10 @@ interface ContentBundle {
   files: ManagedFile[];
 }
 
+type ContentTab = 'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence' | 'research_references';
+
 export function ContentManager() {
-  const [activeTab, setActiveTab] = useState<'content' | 'links' | 'files' | 'org_structure' | 'personnel' | 'excellence' | 'research_references'>('content');
+  const [activeTab, setActiveTab] = usePersistentState<ContentTab>('admin:content:activeTab', 'content', { storage: 'session' });
   const { showToast, removeToast } = useToast();
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -68,7 +76,7 @@ export function ContentManager() {
   const [editingLink, setEditingLink] = useState<ManagedLink | null>(null);
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [draggedLinkId, setDraggedLinkId] = useState<number | null>(null);
-  const [linksViewMode, setLinksViewMode] = useState<'table' | 'card'>('table');
+  const [linksViewMode, setLinksViewMode] = usePersistentState<'table' | 'card'>('admin:content:links:viewMode', 'table', { storage: 'session' });
   const [selectedLinkIds, setSelectedLinkIds] = useState<Set<number>>(new Set());
 
   // File State
@@ -97,7 +105,13 @@ export function ContentManager() {
       return { contents, links, files };
     },
     staleTimeMs: 60_000,
+    persistStorage: true,
     listenCmsUpdate: true,
+  });
+
+  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
+    storageKey: 'admin:content',
+    isReady: !isLoading,
   });
 
   useEffect(() => {
@@ -118,6 +132,7 @@ export function ContentManager() {
     items: sortedLinks,
     pageSize: 10,
     storageKey: 'jrmsu_admin_content_links_page_size',
+    pageStorageKey: 'admin:content:links:page',
   });
 
   // --- Content Handlers ---
@@ -130,6 +145,9 @@ export function ContentManager() {
       invalidateCacheByPrefix('admin:content');
       showToast('Content saved successfully', 'success');
       await refetch();
+      const anchorId = `section:${slug}`;
+      setLastAnchorId(anchorId);
+      restoreNow(anchorId);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save content';
       showToast(message, 'error');
@@ -154,15 +172,18 @@ export function ContentManager() {
     setIsSavingLink(true);
     showToast('Saving link...', 'info');
     try {
-      if (editingLink) {
-        await cmsApi.updateLink(editingLink.id, payload);
-      } else {
-        await cmsApi.createLink(payload);
-      }
+      const savedLink = editingLink
+        ? await cmsApi.updateLink(editingLink.id, payload)
+        : await cmsApi.createLink(payload);
       invalidateCacheByPrefix('admin:content');
       showToast(`Link ${editingLink ? 'updated' : 'created'} successfully`, 'success');
       setIsLinkModalOpen(false);
       await refetch();
+      if (savedLink?.id != null) {
+        const anchorId = `link:${savedLink.id}`;
+        setLastAnchorId(anchorId);
+        restoreNow(anchorId);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save link';
       showToast(message, 'error');
@@ -314,12 +335,17 @@ export function ContentManager() {
     const fd = new FormData(e.currentTarget);
     fd.append('file', selectedFile);
     try {
-      await cmsApi.createFile(fd);
+      const savedFile = await cmsApi.createFile(fd);
       invalidateCacheByPrefix('admin:content');
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       setSelectedFile(null);
       await refetch();
+      if (savedFile?.id != null) {
+        const anchorId = `file:${savedFile.id}`;
+        setLastAnchorId(anchorId);
+        restoreNow(anchorId);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to upload file';
       showToast(message, 'error');
@@ -439,7 +465,12 @@ export function ContentManager() {
                 </button>
               </div>
               {contents.map((item) => (
-                <div key={item.id} style={{ border: '1px solid var(--color-surface-container-highest)', padding: '16px', borderRadius: '8px' }}>
+                <div
+                  key={item.id}
+                  data-cache-anchor-id={`section:${item.slug}`}
+                  className={highlightedId === `section:${item.slug}` ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                  style={{ border: '1px solid var(--color-surface-container-highest)', padding: '16px', borderRadius: '8px' }}
+                >
                   <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>{item.title}</h3>
                   <div className="mb-3">
                     {editingContentId === item.slug ? (
@@ -586,15 +617,18 @@ export function ContentManager() {
                         </tr>
                       </thead>
                       <tbody>
-                        {currentLinks.map((link) => (
+                        {currentLinks.map((link) => {
+                          const isHighlighted = highlightedId === `link:${link.id}`;
+                          return (
                           <tr
                             key={link.id}
+                            data-cache-anchor-id={`link:${link.id}`}
                             draggable
                             onDragStart={(e) => handleDragStart(e, link.id)}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, link.id)}
-                            style={{ cursor: 'move', backgroundColor: selectedLinkIds.has(link.id) ? 'var(--color-blue-50)' : (draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined) }}
-                            className={draggedLinkId === link.id ? 'opacity-50' : ''}
+                            style={{ cursor: 'move', backgroundColor: isHighlighted ? undefined : (selectedLinkIds.has(link.id) ? 'var(--color-blue-50)' : (draggedLinkId === link.id ? 'var(--color-blue-50)' : undefined)) }}
+                            className={`${draggedLinkId === link.id ? 'opacity-50' : ''} ${isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : ''}`.trim()}
                           >
                             <td style={{ textAlign: 'center' }}>
                               <input
@@ -628,7 +662,8 @@ export function ContentManager() {
                               <button onClick={() => handleDeleteLink(link.id)} style={{ padding: '6px', backgroundColor: 'var(--color-red-50)', color: 'var(--color-red-700)', borderRadius: '4px' }}><Trash2 size={16} /></button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -637,7 +672,8 @@ export function ContentManager() {
                     {currentLinks.map((link) => (
                       <div
                         key={link.id}
-                        className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all hover:shadow-md hover:border-blue-100 group"
+                        data-cache-anchor-id={`link:${link.id}`}
+                        className={`border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all hover:shadow-md hover:border-blue-100 group ${highlightedId === `link:${link.id}` ? 'ring-2 ring-amber-400 bg-amber-50/40' : ''}`}
                         style={{ border: selectedLinkIds.has(link.id) ? '2px solid var(--color-navy)' : undefined }}
                         draggable
                         onDragStart={(e) => handleDragStart(e, link.id)}
@@ -741,7 +777,11 @@ export function ContentManager() {
                     </thead>
                     <tbody>
                       {manualFiles.map((file) => (
-                        <tr key={file.id}>
+                        <tr
+                          key={file.id}
+                          data-cache-anchor-id={`file:${file.id}`}
+                          className={highlightedId === `file:${file.id}` ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                        >
                           <td style={{ fontWeight: 500 }}>{file.name}</td>
                           <td><a href={file.file} target="_blank" rel="noreferrer" style={{ color: 'var(--color-navy)' }}>Download</a></td>
                           <td>
@@ -802,7 +842,11 @@ export function ContentManager() {
                         </tr>
                       ) : (
                         orgFiles.map((file) => (
-                          <tr key={file.id}>
+                          <tr
+                            key={file.id}
+                            data-cache-anchor-id={`file:${file.id}`}
+                            className={highlightedId === `file:${file.id}` ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                          >
                             <td style={{ fontWeight: 500 }}>{file.name}</td>
                             <td>
                               <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -859,7 +903,11 @@ export function ContentManager() {
                     </thead>
                     <tbody>
                       {excellenceFiles.map((file) => (
-                        <tr key={file.id}>
+                        <tr
+                          key={file.id}
+                          data-cache-anchor-id={`file:${file.id}`}
+                          className={highlightedId === `file:${file.id}` ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                        >
                           <td style={{ fontWeight: 500 }}>{file.name}</td>
                           <td>
                             <img src={getImageUrl(file.file)} alt={file.name} className="h-16 w-auto object-contain rounded border border-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />

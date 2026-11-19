@@ -4,6 +4,7 @@ from .contact_attachment_model import ContactAttachment
 from .feedback_model import Feedback
 from .personnel_model import Personnel
 from .newly_acquired_book_model import NewlyAcquiredBook
+from .book_category_model import BookCategory
 from .library_interior_image_model import LibraryInteriorImage
 from .eresource_model import EResourceDepartment, EResourceFile
 from .page_content_model import PageContent
@@ -26,6 +27,7 @@ __all__ = [
     'Feedback',
     'Personnel',
     'NewlyAcquiredBook',
+    'BookCategory',
     'LibraryInteriorImage',
     'EResourceDepartment',
     'EResourceFile',

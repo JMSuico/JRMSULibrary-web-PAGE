@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BarChart3, Users, BookOpen, Mail, CalendarDays, Star, TrendingUp, Activity, Info, FileDown, Loader2 } from 'lucide-react';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ScatterChart, Scatter, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
@@ -6,7 +6,8 @@ import { reportApi, ReportSummary, RatingsSummary } from '@/src/Endpoints/report
 import { useToast } from '@/src/Hooks/useToast';
 import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 
 const NAVY = '#002B7F';
@@ -87,9 +88,21 @@ export function Analytics() {
   const [last, setLast] = useState<Date>(new Date());
   const { showToast } = useToast();
 
-  const [feedbackView, setFeedbackView] = useState<'card' | 'table'>('card');
-  const [feedbackSort, setFeedbackSort] = useState<'desc' | 'asc'>('desc');
-  const [feedbackStarFilter, setFeedbackStarFilter] = useState<'all' | 1 | 2 | 3 | 4 | 5>('all');
+  const [feedbackView, setFeedbackView] = usePersistentState<'card' | 'table'>(
+    'admin:analytics:feedbackView',
+    'card',
+    { storage: 'session' },
+  );
+  const [feedbackSort, setFeedbackSort] = usePersistentState<'desc' | 'asc'>(
+    'admin:analytics:feedbackSort',
+    'desc',
+    { storage: 'session' },
+  );
+  const [feedbackStarFilter, setFeedbackStarFilter] = usePersistentState<'all' | 1 | 2 | 3 | 4 | 5>(
+    'admin:analytics:feedbackStarFilter',
+    'all',
+    { storage: 'session' },
+  );
 
   const {
     data,
@@ -101,6 +114,12 @@ export function Analytics() {
     fetcher: () => reportApi.getSummary(),
     staleTimeMs: 30_000,
     listenCmsUpdate: true,
+    persistStorage: true,
+  });
+
+  useScrollRestoration({
+    storageKey: 'admin:analytics',
+    isReady: !loading && Boolean(data),
   });
 
   useEffect(() => {
@@ -144,10 +163,17 @@ export function Analytics() {
     items: processedFeedback,
     pageSize: 10,
     storageKey: 'jrmsu_admin_analytics_feedback_page_size',
+    pageStorageKey: 'admin:analytics:feedback:page',
   });
 
   const { setPage: setFeedbackPage } = feedbackPagination;
+  const prevFeedbackFiltersRef = useRef({ feedbackSort, feedbackStarFilter });
   useEffect(() => {
+    const prev = prevFeedbackFiltersRef.current;
+    if (prev.feedbackSort === feedbackSort && prev.feedbackStarFilter === feedbackStarFilter) {
+      return;
+    }
+    prevFeedbackFiltersRef.current = { feedbackSort, feedbackStarFilter };
     setFeedbackPage(1);
   }, [feedbackSort, feedbackStarFilter, setFeedbackPage]);
 
@@ -239,8 +265,9 @@ export function Analytics() {
 
       pdf.save(`JRMSU-Library-Analytics-${now.toISOString().slice(0, 10)}.pdf`);
       showToast('PDF saved successfully', 'success');
-    } catch (err: any) {
-      showToast('Failed to generate PDF: ' + (err.message || err), 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      showToast(`Failed to generate PDF: ${message}`, 'error');
     } finally {
       setIsPdfGenerating(false);
     }
@@ -674,6 +701,7 @@ export function Analytics() {
                     return (
                       <div
                         key={fb.id}
+                        data-cache-anchor-id={String(fb.id)}
                         style={{ opacity }}
                         className={`flex flex-col p-4 bg-gray-50 rounded-xl border transition-all shadow-sm ${isFading ? 'border-amber-200' : 'border-gray-100 hover:bg-gray-100/60'}`}
                       >
@@ -711,7 +739,7 @@ export function Analytics() {
                         const opacity = getFadeOpacity(daysOld);
                         const isFading = daysOld >= 20;
                         return (
-                          <tr key={fb.id} style={{ opacity }} className={`transition-all ${isFading ? 'bg-amber-50/40' : 'hover:bg-gray-50/80'}`}>
+                          <tr key={fb.id} data-cache-anchor-id={String(fb.id)} style={{ opacity }} className={`transition-all ${isFading ? 'bg-amber-50/40' : 'hover:bg-gray-50/80'}`}>
                             <td className="p-4 text-sm font-medium text-gray-800 whitespace-nowrap">{fb.name}</td>
                             <td className="p-4 text-sm whitespace-nowrap">
                               <span className="text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full">{fb.category}</span>

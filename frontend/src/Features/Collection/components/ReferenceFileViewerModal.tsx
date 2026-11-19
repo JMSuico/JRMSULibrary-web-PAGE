@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { apiClient } from '@/src/Libs/apiClient';
+import {
+  PDF_RANGE_CHUNK_BYTES,
+  isBlockedPdfShortcut,
+  isRenderingCancelled,
+} from '@/src/Libs/pdfViewerUtils';
 
 // We dynamically import pdfjs to avoid bloating the main bundle
 import * as pdfjsLib from 'pdfjs-dist';
@@ -9,31 +14,11 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-const PDF_RANGE_CHUNK_BYTES = 524288; // 512 KB range chunks for fast sub-2s first-page display
-
 interface ReferenceFileViewerModalProps {
   referenceId: number;
   fileName: string;
   onClose: () => void;
 }
-
-const isBlockedReferenceShortcut = (e: KeyboardEvent): boolean => {
-  const key = e.key.toLowerCase();
-  const hasPrimaryModifier = e.ctrlKey || e.metaKey;
-  return (
-    e.key === 'F12' ||
-    key === 'f12' ||
-    (hasPrimaryModifier && e.shiftKey && (key === 'i' || key === 'c' || key === 'j')) ||
-    (e.metaKey && e.altKey && (key === 'i' || key === 'c' || key === 'j')) ||
-    (hasPrimaryModifier && (key === 'u' || key === 's' || key === 'p'))
-  );
-};
-
-const isRenderingCancelled = (err: unknown): boolean =>
-  typeof err === 'object' &&
-  err !== null &&
-  'name' in err &&
-  (err as { name: unknown }).name === 'RenderingCancelledException';
 
 export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: ReferenceFileViewerModalProps) {
   const [loading, setLoading] = useState(true);
@@ -73,7 +58,7 @@ export function ReferenceFileViewerModal({ referenceId, fileName, onClose }: Ref
   // Defense-in-depth keyboard shortcut suppression for read-only viewer (Inspect, View-Source, Save, Print)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isBlockedReferenceShortcut(e)) {
+      if (isBlockedPdfShortcut(e)) {
         e.preventDefault();
         e.stopPropagation();
         setSecurityWarning('Inspect, save, and print shortcuts are disabled to protect JRMSU Library collection materials.');

@@ -1,7 +1,10 @@
 import React from 'react';
+import { useScrollRestoration } from '@/src/Hooks';
 import { ServicesSection } from '@/src/Features/Services/components/ServicesSection';
 
-export default function ServicesPage() {
+const ServicesPage = () => {
+  useScrollRestoration({ storageKey: 'public:page:services', isReady: true });
+
   return (
     <section className="pt-24 min-h-screen">
       <div className="max-w-max-width mx-auto px-4 md:px-gutter mb-6 pt-4">
@@ -18,4 +21,6 @@ export default function ServicesPage() {
       <ServicesSection />
     </section>
   );
-}
+};
+
+export default ServicesPage;

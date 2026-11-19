@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useScrollRestoration, usePersistentState } from '@/src/Hooks';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { useCmsUpdated } from '@/src/Hooks/useCmsUpdated';
 import { cmsApi, ManagedFile } from '@/src/Endpoints/cmsApi';
-import { Loader2, ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { Loader2, FileText } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { FileViewerModal } from '@/src/Components/Modals/FileViewerModal';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
@@ -17,40 +18,61 @@ const getFileUrl = (filePath: string) => {
   return `/media/${filePath}`;
 };
 
+const toTreeNodeData = (file: ManagedFile): TreeNodeData => {
+  const fileUrl = getFileUrl(file.file);
+  const lowerUrl = fileUrl.toLowerCase();
+  const nodeType = (
+    lowerUrl.endsWith('.pdf')
+      ? 'pdf'
+      : /\.(jpeg|jpg|gif|png|webp)$/.test(lowerUrl)
+        ? 'image'
+        : 'file'
+  ) as unknown as TreeNodeData['type'];
+
+  return {
+    id: String(file.id),
+    name: file.name,
+    path: fileUrl,
+    type: nodeType,
+  } as unknown as TreeNodeData;
+};
+
 const tabs = [
   { id: 'administration', label: 'Administration' },
   { id: 'manual', label: 'Manual' },
 ];
 
-export default function AdministrationPage() {
+const AdministrationPage = () => {
   const location = useLocation();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
-  const [activeTab, setActiveTab] = useState('administration');
-  const [orgImageOpen, setOrgImageOpen] = useState(false);
+  const [activeTab, setActiveTab] = usePersistentState<string>('public:administration:activeTab', 'administration');
+  const [orgImageOpen, setOrgImageOpen] = usePersistentState<boolean>('public:administration:orgImageOpen', false);
   const [orgChartUrl, setOrgChartUrl] = useState<string | null>(null);
   const [manualUrl, setManualUrl] = useState<string | null>(null);
   const [allFiles, setAllFiles] = useState<ManagedFile[]>([]);
-  const [expandedFileId, setExpandedFileId] = useState<number | null>(null);
+  const [expandedFileId, setExpandedFileId] = usePersistentState<number | null>('public:administration:expandedFileId', null);
   const [loading, setLoading] = useState(true);
+
+  useScrollRestoration({ storageKey: 'public:page:administration', isReady: !loading });
 
   useEffect(() => {
     if (location.hash) {
       const hash = location.hash.replace('#', '');
-      if (tabs.some(t => t.id === hash)) {
+      if (tabs.some((t) => t.id === hash)) {
         setActiveTab(hash);
       }
     }
-  }, [location.hash]);
+  }, [location.hash, setActiveTab]);
 
   const fetchAssets = async () => {
     try {
       const files = await cmsApi.getAllFiles();
-      const orgChart = files.find(f => f.category === 'OrgStructure') || files.find(f => f.name.toLowerCase().includes('org') || f.name.toLowerCase().includes('structure'));
-      const manual = files.find(f => f.category !== 'OrgStructure' && (f.name.toLowerCase().includes('manual') || f.name.toLowerCase().includes('policy')));
+      const orgChart = files.find((f) => f.category === 'OrgStructure') || files.find((f) => f.name.toLowerCase().includes('org') || f.name.toLowerCase().includes('structure'));
+      const manual = files.find((f) => f.category !== 'OrgStructure' && (f.name.toLowerCase().includes('manual') || f.name.toLowerCase().includes('policy')));
 
       if (orgChart) setOrgChartUrl(getFileUrl(orgChart.file));
       if (manual) setManualUrl(getFileUrl(manual.file));
-      setAllFiles(files.filter(f => f.is_active && (f.category === 'Manual' || !f.category)));
+      setAllFiles(files.filter((f) => f.is_active && (f.category === 'Manual' || !f.category)));
     } catch (e) {
       console.error('Failed to load administration assets from CMS', e);
     } finally {
@@ -65,7 +87,7 @@ export default function AdministrationPage() {
   useCmsUpdated(fetchAssets);
 
   return (
-    <section id="administration" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <section id="administration" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as React.RefObject<HTMLElement>}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-10">
           <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>Administration</h2>
@@ -204,26 +226,11 @@ export default function AdministrationPage() {
 
       {/* File Viewer Modal */}
       {expandedFileId && (() => {
-        const file = allFiles.find(f => f.id === expandedFileId);
+        const file = allFiles.find((f) => f.id === expandedFileId);
         if (!file) return null;
-        const fileUrl = getFileUrl(file.file);
-        
-        const treeFile: TreeNodeData = {
-          id: String(file.id),
-          name: file.name,
-          path: fileUrl,
-          type: (fileUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : fileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? 'image' : 'file') as any,
-        } as any;
 
-        const fileList: TreeNodeData[] = allFiles.map(f => {
-          const fUrl = getFileUrl(f.file);
-          return {
-            id: String(f.id),
-            name: f.name,
-            path: fUrl,
-            type: (fUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : fUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? 'image' : 'file') as any,
-          } as any;
-        });
+        const treeFile = toTreeNodeData(file);
+        const fileList = allFiles.map(toTreeNodeData);
 
         return (
           <FileViewerModal
@@ -234,7 +241,7 @@ export default function AdministrationPage() {
           />
         );
       })()}
-      {orgImageOpen && createPortal(
+      {orgImageOpen && orgChartUrl && createPortal(
         <div
           className="fixed backdrop-blur-sm inset-0 flex items-center justify-center bg-black/80 p-4 z-[9999] animate-modal-overlay"
           role="dialog"
@@ -248,17 +255,17 @@ export default function AdministrationPage() {
           >
             <span className="material-symbols-outlined text-4xl">close</span>
           </button>
-          {orgChartUrl && (
-            <img
-              src={orgChartUrl}
-              alt="JRMSU Library Organizational Structure Chart"
-              className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white animate-modal-card"
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
+          <img
+            src={orgChartUrl}
+            alt="JRMSU Library Organizational Structure Chart"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl bg-white animate-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>,
         document.body
       )}
     </section>
   );
-}
+};
+
+export default AdministrationPage;

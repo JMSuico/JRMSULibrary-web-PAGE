@@ -79,8 +79,13 @@ function PublicLayout() {
   // Poll for global CMS changes every 15 seconds. If detected, reload the page.
   useGlobalAutoRefresh(15000);
 
-  // Idle background preload of public route chunks after initial mount
-  useEffect(() => startPublicIdlePrefetch(), []);
+  // Idle background preload of public route chunks after initial mount & manual scroll restoration
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    return startPublicIdlePrefetch();
+  }, []);
 
   // Track visitor on every public page navigation
   useEffect(() => {

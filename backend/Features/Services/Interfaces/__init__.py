@@ -13,6 +13,7 @@ from .i_personnel_service import IPersonnelService
 from .i_analytics_service import ISiteVisitService
 from .i_recycle_bin_service import IRecycleBinService
 from .i_notification_service import INotificationService
+from .i_book_category_service import IBookCategoryService
 
 __all__ = [
     'ContactServiceInterface',
@@ -29,4 +30,5 @@ __all__ = [
     'ISiteVisitService',
     'IRecycleBinService',
     'INotificationService',
+    'IBookCategoryService',
 ]

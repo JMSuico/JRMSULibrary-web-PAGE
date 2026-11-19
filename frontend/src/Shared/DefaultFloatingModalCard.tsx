@@ -13,6 +13,7 @@ export interface DefaultFloatingModalCardProps {
   size?: ModalSize;
   showCloseButton?: boolean;
   className?: string;
+  overlayClassName?: string;
   closeOnOutsideClick?: boolean;
   closeOnEsc?: boolean;
 }
@@ -40,6 +41,7 @@ export function DefaultFloatingModalCard({
   size = 'md',
   showCloseButton = true,
   className = '',
+  overlayClassName = 'z-50',
   closeOnOutsideClick = true,
   closeOnEsc = true,
 }: DefaultFloatingModalCardProps) {
@@ -67,7 +69,7 @@ export function DefaultFloatingModalCard({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xs animate-modal-overlay"
+      className={`fixed inset-0 ${overlayClassName} flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xs animate-modal-overlay`}
       onClick={closeOnOutsideClick ? onClose : undefined}
       role="dialog"
       aria-modal="true"

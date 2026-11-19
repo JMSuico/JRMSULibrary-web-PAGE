@@ -1,6 +1,7 @@
 from .contact_repository_interface import ContactRepositoryInterface
 from .feedback_repository_interface import FeedbackRepositoryInterface
 from .i_book_repository import INewlyAcquiredBookRepository
+from .i_book_category_repository import IBookCategoryRepository
 from .i_cms_repository import (
     IPageContentRepository,
     IPageImageRepository,
@@ -18,6 +19,7 @@ __all__ = [
     'ContactRepositoryInterface',
     'FeedbackRepositoryInterface',
     'INewlyAcquiredBookRepository',
+    'IBookCategoryRepository',
     'IPageContentRepository',
     'IPageImageRepository',
     'IManagedLinkRepository',

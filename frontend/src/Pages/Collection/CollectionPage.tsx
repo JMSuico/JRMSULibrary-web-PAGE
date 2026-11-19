@@ -1,17 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
-import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
+import {
+  useIntersectionObserver,
+  usePersistentState,
+  useScrollRestoration,
+} from '@/src/Hooks';
 import { NewlyAcquiredBooks } from '@/src/Features/Collection/components/NewlyAcquiredBooks';
 import { ResearchReferencesTable } from '@/src/Features/Collection/components/ResearchReferencesTable';
 import { TreeView } from '@/src/Components/Shared/TreeView';
 import { FileViewerModal } from '@/src/Components/Modals/FileViewerModal';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
 import { ExternalIframeModal } from '@/src/Components/Modals/ExternalIframeModal';
-import { useCollectionData } from '@/src/Features/Collection/hooks/useCollectionData';
+import {
+  useCollectionData,
+  type CollectionSortOrder,
+} from '@/src/Features/Collection/hooks/useCollectionData';
 import { Loader2, BookOpen, GraduationCap } from 'lucide-react';
 import type { ManagedLink } from '@/src/Endpoints/cmsApi';
 
-const tabOptions = [
+const VALID_TABS = [
+  'newly-acquired',
+  'local-books',
+  'online',
+  'external-libraries',
+  'union-opac',
+  'research-references',
+] as const;
+
+type CollectionTab = (typeof VALID_TABS)[number];
+
+const isValidCollectionTab = (value: unknown): value is CollectionTab =>
+  typeof value === 'string' && (VALID_TABS as readonly string[]).includes(value);
+
+const isValidOnlineViewMode = (value: unknown): value is 'grid' | 'table' =>
+  value === 'grid' || value === 'table';
+
+const isValidSortOrder = (value: unknown): value is CollectionSortOrder =>
+  value === 'Folders First' || value === 'Files First' || value === 'A-Z' || value === 'Z-A';
+
+const tabOptions: { id: CollectionTab; label: string }[] = [
   { id: 'newly-acquired', label: 'Newly Acquired Books' },
   { id: 'local-books', label: 'Local Books' },
   { id: 'online', label: 'Online Access' },
@@ -20,17 +47,39 @@ const tabOptions = [
   { id: 'research-references', label: 'Research & Thesis References' },
 ];
 
-export default function CollectionPage() {
+const CollectionPage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
   const [selectedFile, setSelectedFile] = useState<TreeNodeData | null>(null);
-  const [onlineViewMode, setOnlineViewMode] = useState<'grid' | 'table'>('grid');
-  const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string; } | null>(null);
+  const [onlineViewMode, setOnlineViewMode] = usePersistentState<'grid' | 'table'>(
+    'public:collection:onlineViewMode',
+    'grid',
+    { validate: isValidOnlineViewMode },
+  );
+  const [externalService, setExternalService] = useState<{ title: string; url: string; proxyUrl: string } | null>(null);
+  const [lastTab, setLastTab] = usePersistentState<string>(
+    'public:collection:lastTab',
+    '',
+    { validate: (value): value is string => isValidCollectionTab(value) },
+  );
 
-  const validTabs = ['newly-acquired', 'local-books', 'online', 'external-libraries', 'union-opac', 'research-references'];
-  const activeTab = validTabs.includes(tab as string) ? (tab as string) : 'newly-acquired';
+  const activeTab: CollectionTab = isValidCollectionTab(tab)
+    ? tab
+    : isValidCollectionTab(lastTab)
+      ? lastTab
+      : 'newly-acquired';
+
+  useEffect(() => {
+    if (isValidCollectionTab(tab)) {
+      if (lastTab !== tab) {
+        setLastTab(tab);
+      }
+    } else if (isValidCollectionTab(lastTab)) {
+      navigate(`/collection/${lastTab}`, { replace: true });
+    }
+  }, [tab, lastTab, setLastTab, navigate]);
 
   const {
     displayLinks,
@@ -43,6 +92,11 @@ export default function CollectionPage() {
     allFiles,
     filteredTree,
   } = useCollectionData(activeTab);
+
+  useScrollRestoration({
+    storageKey: `public:collection:${activeTab}`,
+    isReady: !loadingResources,
+  });
 
   // Auto-open modal if search param specifies a service
   useEffect(() => {
@@ -67,12 +121,17 @@ export default function CollectionPage() {
     }
   }, [activeTab, location.search]);
 
-  const setActiveTab = (t: string) => {
+  const setActiveTab = (t: CollectionTab) => {
+    setLastTab(t);
     navigate(`/collection/${t}`, { replace: true });
   };
 
   return (
-    <section id="collection" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <section
+      id="collection"
+      className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`}
+      ref={ref as React.RefObject<HTMLElement>}
+    >
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-10">
           <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>Collection</h2>
@@ -203,7 +262,8 @@ export default function CollectionPage() {
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 sortOrder={sortOrder}
-                onSortChange={(s) => setSortOrder(s as any)}
+                onSortChange={(s) => setSortOrder(isValidSortOrder(s) ? s : 'Folders First')}
+                persistenceKey={`public:collection:${activeTab}:tree`}
               />
             ) : errorMsg ? (
               <div className="text-center text-red-500 py-12">
@@ -361,4 +421,6 @@ export default function CollectionPage() {
       )}
     </section>
   );
-}
+};
+
+export default CollectionPage;

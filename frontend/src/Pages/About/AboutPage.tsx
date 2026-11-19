@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useLocation } from 'react-router';
+import { useScrollRestoration, usePersistentState } from '@/src/Hooks';
 import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
 import { useAboutContent } from '@/src/Hooks/useAboutContent';
 import { Loader2 } from 'lucide-react';
@@ -9,23 +10,25 @@ const tabs = [
   { id: 'objectives', label: 'Quality Objectives' },
 ];
 
-export default function AboutPage() {
+const AboutPage = () => {
   const location = useLocation();
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
-  const [activeTab, setActiveTab] = useState('history');
+  const [activeTab, setActiveTab] = usePersistentState<string>('public:about:activeTab', 'history');
   const { historyContent, objectivesContent, loading, extractTextBlocksFromHtml } = useAboutContent();
+
+  useScrollRestoration({ storageKey: 'public:page:about', isReady: !loading });
 
   useEffect(() => {
     if (location.hash) {
       const hash = location.hash.replace('#', '');
-      if (tabs.some(t => t.id === hash)) {
+      if (tabs.some((t) => t.id === hash)) {
         setActiveTab(hash);
       }
     }
-  }, [location.hash]);
+  }, [location.hash, setActiveTab]);
 
   return (
-    <section id="about" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <section id="about" className={`pt-28 pb-20 reveal ${isVisible ? 'visible' : ''}`} ref={ref as React.RefObject<HTMLElement>}>
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-10">
           <h2 className="font-headline-lg font-bold text-2xl sm:text-3xl md:text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>About the Library</h2>
@@ -120,4 +123,6 @@ export default function AboutPage() {
       </div>
     </section>
   );
-}
+};
+
+export default AboutPage;

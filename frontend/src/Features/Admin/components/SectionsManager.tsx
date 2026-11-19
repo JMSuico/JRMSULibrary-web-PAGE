@@ -16,15 +16,20 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
-import { useToast } from '@/src/Hooks/useToast';
-
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
-import { useDebounce } from '@/src/Hooks/useDebounce';
-import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import {
+  useCachedQuery,
+  invalidateCacheByPrefix,
+  useDebounce,
+  usePagination,
+  usePersistentState,
+  useScrollRestoration,
+  useToast,
+  useUndoDelete,
+} from '@/src/Hooks';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
@@ -41,8 +46,8 @@ function handleThumbnailFallback(e: React.SyntheticEvent<HTMLImageElement>, rawI
 }
 
 export function SectionsManager() {
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = usePersistentState<ViewMode>('admin:sections:viewMode', 'grid', { storage: 'session' });
+  const [searchQuery, setSearchQuery] = usePersistentState<string>('admin:sections:search', '', { storage: 'session' });
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
   // Modal state
@@ -66,7 +71,13 @@ export function SectionsManager() {
     key: 'admin:sections',
     fetcher: () => galleryApi.getAllImages(),
     staleTimeMs: 30_000,
+    persistStorage: true,
     listenCmsUpdate: true,
+  });
+
+  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
+    storageKey: 'admin:sections',
+    isReady: !isLoading,
   });
 
   const images = cachedImages ?? [];
@@ -161,15 +172,17 @@ export function SectionsManager() {
     }
 
     try {
-      if (editingImage) {
-        await galleryApi.updateImage(editingImage.id, fd);
-      } else {
-        await galleryApi.createImage(fd);
-      }
+      const saved = editingImage
+        ? await galleryApi.updateImage(editingImage.id, fd)
+        : await galleryApi.createImage(fd);
       invalidateCacheByPrefix('admin:sections');
       showToast(`Image ${editingImage ? 'updated' : 'uploaded'} successfully`, 'success');
       setIsModalOpen(false);
       await refetch();
+      if (saved?.id != null) {
+        setLastAnchorId(saved.id);
+        restoreNow(saved.id);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An error occurred while saving image';
       showToast(message, 'error');
@@ -223,10 +236,15 @@ export function SectionsManager() {
     items: filtered,
     pageSize: 10,
     storageKey: 'jrmsu_admin_sections_page_size',
+    pageStorageKey: 'admin:sections:page',
   });
 
+  const prevSearchRef = useRef<string>(debouncedSearch);
   useEffect(() => {
-    setPage(1);
+    if (prevSearchRef.current !== debouncedSearch) {
+      prevSearchRef.current = debouncedSearch;
+      setPage(1);
+    }
   }, [debouncedSearch, setPage]);
 
   const activeCount = images.filter((i) => i.is_active).length;
@@ -348,8 +366,19 @@ export function SectionsManager() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedSections.map((img) => (
-                      <tr key={img.id} style={{ backgroundColor: selectedSectionIds.has(img.id) ? 'var(--color-blue-50)' : 'transparent' }}>
+                    {paginatedSections.map((img) => {
+                      const isHighlighted = highlightedId === String(img.id);
+                      return (
+                      <tr
+                        key={img.id}
+                        data-cache-anchor-id={String(img.id)}
+                        className={isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                        style={{
+                          backgroundColor: isHighlighted
+                            ? undefined
+                            : (selectedSectionIds.has(img.id) ? 'var(--color-blue-50)' : 'transparent'),
+                        }}
+                      >
                         <td style={{ textAlign: 'center' }}>
                           <input
                             type="checkbox"
@@ -400,7 +429,8 @@ export function SectionsManager() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -409,7 +439,12 @@ export function SectionsManager() {
             {viewMode === 'grid' && (
               <div className="admin-card-grid p-5">
                 {paginatedSections.map((img) => (
-                  <div className="admin-grid-card relative" key={img.id} style={{ border: selectedSectionIds.has(img.id) ? '2px solid var(--color-navy)' : '1px solid var(--color-gray-200)' }}>
+                  <div
+                    className={`admin-grid-card relative ${highlightedId === String(img.id) ? 'ring-2 ring-amber-400 bg-amber-50/40' : ''}`}
+                    data-cache-anchor-id={String(img.id)}
+                    key={img.id}
+                    style={{ border: selectedSectionIds.has(img.id) ? '2px solid var(--color-navy)' : '1px solid var(--color-gray-200)' }}
+                  >
                     <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
                       <input
                         type="checkbox"

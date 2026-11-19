@@ -1,44 +1,62 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { referenceApi, PaginatedReferences } from '@/src/Endpoints/referenceApi';
+import React, { useState } from 'react';
+import { referenceApi, type PaginatedReferences } from '@/src/Endpoints/referenceApi';
 import { Search, Link as LinkIcon, FileText } from 'lucide-react';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
-import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
-import { useDebounce } from '@/src/Hooks/useDebounce';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import {
+  useIntersectionObserver,
+  useDebounce,
+  useAutoRefresh,
+  useDraggableScroll,
+  useCachedQuery,
+  usePersistentState,
+  useScrollRestoration,
+} from '@/src/Hooks';
 import { ReferenceFileViewerModal } from '@/src/Features/Collection/components/ReferenceFileViewerModal';
-import { useDraggableScroll } from '@/src/Hooks/useDraggableScroll';
 
-export function ResearchReferencesTable() {
+const isPositiveInt = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1;
+
+const isStringValue = (value: unknown): value is string => typeof value === 'string';
+
+export const ResearchReferencesTable: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
-  const [data, setData] = useState<PaginatedReferences | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState<number>(50);
-  const [search, setSearch] = useState('');
+  const [page, setPage] = usePersistentState<number>('public:references:page', 1, {
+    validate: isPositiveInt,
+  });
+  const [limit, setLimit] = usePersistentState<number>('public:references:limit', 50, {
+    validate: isPositiveInt,
+  });
+  const [search, setSearch] = usePersistentState<string>('public:references:search', '', {
+    validate: isStringValue,
+  });
   const debouncedSearch = useDebounce(search, 500);
-  const [category, setCategory] = useState('All');
+  const [category, setCategory] = usePersistentState<string>('public:references:category', 'All', {
+    validate: isStringValue,
+  });
   const [selectedFileRef, setSelectedFileRef] = useState<{ id: number; name: string } | null>(null);
 
   const scrollRef = useDraggableScroll<HTMLDivElement>();
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await referenceApi.getAllReferences(page, limit, debouncedSearch, category);
-      setData(result);
-    } catch (err: any) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, debouncedSearch, category]);
+  const {
+    data,
+    isLoading: loading,
+    refetch,
+  } = useCachedQuery<PaginatedReferences>({
+    key: `public:references:p${page}:l${limit}:c${category}:q${debouncedSearch}`,
+    fetcher: () => referenceApi.getAllReferences(page, limit, debouncedSearch, category),
+    persistStorage: true,
+    listenCmsUpdate: true,
+  });
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useAutoRefresh(() => {
+    void refetch(true);
+  }, 30000);
 
-  useAutoRefresh(loadData, 30000);
+  const { setLastAnchorId, highlightedId } = useScrollRestoration({
+    storageKey: 'public:references',
+    isReady: !loading,
+  });
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
@@ -56,7 +74,10 @@ export function ResearchReferencesTable() {
   };
 
   return (
-    <div className={`max-w-max-width mx-auto pb-12 px-4 md:px-0 reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <div
+      className={`max-w-max-width mx-auto pb-12 px-4 md:px-0 reveal ${isVisible ? 'visible' : ''}`}
+      ref={ref as React.RefObject<HTMLDivElement>}
+    >
       <div className="bg-white/85 backdrop-blur-md rounded-2xl shadow-xl border border-white/50 p-6 md:p-8 mb-8 overflow-hidden">
         <div className="text-center mb-8">
           <h2 className="font-headline-md font-bold text-3xl mb-3" style={{ color: 'var(--color-primary)' }}>
@@ -122,55 +143,64 @@ export function ResearchReferencesTable() {
                   </td>
                 </tr>
               ) : (
-                data?.results.map((ref) => (
-                  <tr key={ref.id} className="transition-colors hover:bg-gold-light/10">
-                    <td className="px-6 py-5 text-sm whitespace-nowrap font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>{ref.call_number || '-'}</td>
+                data?.results.map((refItem) => (
+                  <tr
+                    key={refItem.id}
+                    data-cache-anchor-id={String(refItem.id)}
+                    onClick={() => setLastAnchorId(refItem.id)}
+                    className={`transition-colors hover:bg-gold-light/10 ${
+                      highlightedId === String(refItem.id) ? 'bg-gold-light/20' : ''
+                    }`}
+                  >
+                    <td className="px-6 py-5 text-sm whitespace-nowrap font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>{refItem.call_number || '-'}</td>
                     <td className="px-6 py-5">
-                      <div className="font-bold mb-1.5 leading-tight text-base" style={{ color: 'var(--color-primary)' }}>{ref.title}</div>
+                      <div className="font-bold mb-1.5 leading-tight text-base" style={{ color: 'var(--color-primary)' }}>{refItem.title}</div>
                       <div className="text-xs flex flex-wrap gap-2 items-center font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>
-                        <span className="bg-primary/5 px-2 py-1 rounded-md border border-primary/10">Acc No: {ref.acc_no || '-'}</span>
+                        <span className="bg-primary/5 px-2 py-1 rounded-md border border-primary/10">Acc No: {refItem.acc_no || '-'}</span>
                         <span
                           className={`px-2.5 py-1 rounded-md border ${
-                            ref.category === 'Thesis and Dissertation'
+                            refItem.category === 'Thesis and Dissertation'
                               ? 'bg-purple-50 text-purple-700 border-purple-200'
                               : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           }`}
                         >
-                          {ref.category === 'Thesis and Dissertation' ? 'Thesis' : 'Research'}
+                          {refItem.category === 'Thesis and Dissertation' ? 'Thesis' : 'Research'}
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-5 text-sm font-medium" style={{ color: 'var(--color-on-surface)' }}>{ref.author || '-'}</td>
-                    <td className="px-6 py-5 text-sm whitespace-nowrap font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>{ref.copyright || '-'}</td>
+                    <td className="px-6 py-5 text-sm font-medium" style={{ color: 'var(--color-on-surface)' }}>{refItem.author || '-'}</td>
+                    <td className="px-6 py-5 text-sm whitespace-nowrap font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>{refItem.copyright || '-'}</td>
                     <td className="px-6 py-5 whitespace-nowrap">
                       <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-bold" style={{ backgroundColor: 'var(--color-surface-container-highest)', color: 'var(--color-primary)' }}>
-                        {ref.resource_status || 'Available'}
+                        {refItem.resource_status || 'Available'}
                       </span>
                     </td>
                     <td className="px-6 py-5 whitespace-nowrap text-center">
-                      {ref.access_type === 'none' && (
+                      {refItem.access_type === 'none' && (
                         <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-gray-100 text-gray-500">
                           Unavailable
                         </span>
                       )}
-                      {ref.access_type === 'link' && ref.access_link && (
+                      {refItem.access_type === 'link' && refItem.access_link && (
                         <a
-                          href={ref.access_link}
+                          href={refItem.access_link}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={() => setLastAnchorId(refItem.id)}
                           className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200"
                         >
                           <LinkIcon size={12} /> Link Available
                         </a>
                       )}
-                      {ref.access_type === 'file' && ref.access_file && (
+                      {refItem.access_type === 'file' && refItem.access_file && (
                         <button
-                          onClick={() =>
+                          onClick={() => {
+                            setLastAnchorId(refItem.id);
                             setSelectedFileRef({
-                              id: ref.id,
-                              name: ref.access_file?.split('/').pop() || `${ref.title} Document`,
-                            })
-                          }
+                              id: refItem.id,
+                              name: refItem.access_file?.split('/').pop() || `${refItem.title} Document`,
+                            });
+                          }}
                           className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 cursor-pointer"
                         >
                           <FileText size={12} /> View File
@@ -209,4 +239,4 @@ export function ResearchReferencesTable() {
       )}
     </div>
   );
-}
+};

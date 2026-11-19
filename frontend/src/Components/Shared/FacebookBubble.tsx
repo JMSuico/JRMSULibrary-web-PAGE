@@ -18,7 +18,7 @@ export const FacebookBubble: React.FC<FacebookBubbleProps> = ({ isHidden = false
   const { ref, style, isDragging } = useDraggableBubble({
     storageKey: 'fb_bubble_pos',
     defaultSide: 'right',
-    defaultBottomPx: 120,
+    defaultBottomPx: 126,
   });
 
   useEffect(() => {

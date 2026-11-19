@@ -9,17 +9,22 @@ import {
 } from '@/src/Endpoints/referenceApi';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { Search, Plus, Edit2, Trash2, X, Save, Upload, Link, Loader2, CheckCircle2 } from 'lucide-react';
-import { useToast } from '@/src/Hooks/useToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
-import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
+import {
+  useCachedQuery,
+  invalidateCacheByPrefix,
+  useChunkedSync,
+  useDebounce,
+  useDraggableScroll,
+  usePersistentState,
+  useScrollRestoration,
+  useToast,
+  useUndoDelete,
+} from '@/src/Hooks';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
-import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { ExcelUploadModal } from '@/src/Features/Admin/components/ExcelUploadModal';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
-import { useDraggableScroll } from '@/src/Hooks/useDraggableScroll';
-import { useChunkedSync } from '@/src/Hooks/useChunkedSync';
 
 const DEPT_SHORT: Record<string, string> = {
   'Research of Bachelor of Science in Forestry (BSF)': 'BSF',
@@ -29,12 +34,12 @@ const DEPT_SHORT: Record<string, string> = {
 };
 
 export function ResearchReferencesManager() {
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState<number>(20);
-  const [search, setSearch] = useState('');
+  const [page, setPage] = usePersistentState<number>('admin:references:page', 1, { storage: 'session' });
+  const [limit, setLimit] = usePersistentState<number>('admin:references:limit', 20, { storage: 'session' });
+  const [search, setSearch] = usePersistentState<string>('admin:references:search', '', { storage: 'session' });
   const debouncedSearch = useDebounce(search, 500);
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterDepartment, setFilterDepartment] = useState('All');
+  const [filterCategory, setFilterCategory] = usePersistentState<string>('admin:references:category', 'All', { storage: 'session' });
+  const [filterDepartment, setFilterDepartment] = usePersistentState<string>('admin:references:department', 'All', { storage: 'session' });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -66,11 +71,24 @@ export function ResearchReferencesManager() {
     key: cacheKey,
     fetcher: () => referenceApi.getAllReferences(page, limit, debouncedSearch, filterCategory, filterDepartment),
     staleTimeMs: 30_000,
+    persistStorage: true,
     listenCmsUpdate: true,
+  });
+
+  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
+    storageKey: 'admin:references',
+    isReady: !loading,
+    horizontalRef: scrollRef,
   });
 
   const dataRef = useRef<PaginatedReferences | null>(data ?? null);
   dataRef.current = data ?? null;
+
+  useEffect(() => {
+    if (data && data.total_pages > 0 && page > data.total_pages) {
+      setPage(data.total_pages);
+    }
+  }, [data, page, setPage]);
 
   useEffect(() => {
     if (error) {
@@ -164,6 +182,10 @@ export function ResearchReferencesManager() {
       setIsModalOpen(false);
       invalidateCacheByPrefix('admin:references');
       await refetch();
+      if (savedRef?.id != null) {
+        setLastAnchorId(savedRef.id);
+        restoreNow(savedRef.id);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save reference';
       showToast(message, 'error');
@@ -391,7 +413,11 @@ export function ResearchReferencesManager() {
               <tr><td colSpan={12} className="text-center py-8 text-gray-500">No references found.</td></tr>
             ) : (
               data?.results.map((ref) => (
-                <tr key={ref.id} className="hover:bg-gray-50">
+                <tr
+                  key={ref.id}
+                  data-cache-anchor-id={String(ref.id)}
+                  className={`hover:bg-gray-50 ${highlightedId === String(ref.id) ? 'ring-2 ring-amber-400 bg-amber-50/40' : ''}`}
+                >
                   <td className="text-center">
                     <input
                       type="checkbox"

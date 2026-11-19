@@ -1,5 +1,12 @@
 import { apiClient } from '@/src/Libs/apiClient';
 
+export interface BookCategoryItem {
+  id: number;
+  name: string;
+}
+
+export type BatchHistoryEntry = Record<string, unknown>;
+
 export interface BatchBook {
   id: number;
   title: string;
@@ -24,7 +31,7 @@ export interface AcquisitionBatch {
   remarks: string;
   book_count: number;
   books?: BatchBook[]; // Present in detail view
-  history?: any[]; // Audit history
+  history?: BatchHistoryEntry[]; // Audit history
 }
 
 export const batchApi = {
@@ -41,8 +48,8 @@ export const batchApi = {
       const data = await apiClient(`/batches/current/`);
       if (data?.message) return null;
       return data;
-    } catch (err: any) {
-      if (err.message.includes('404')) return null;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('404')) return null;
       throw err;
     }
   },
@@ -107,7 +114,7 @@ export const batchApi = {
     });
   },
 
-  getBatchHistory: async (id: number): Promise<any[]> => {
+  getBatchHistory: async (id: number): Promise<BatchHistoryEntry[]> => {
     try {
       const data = await apiClient(`/batches/${id}/history/`);
       return Array.isArray(data) ? data : [];
@@ -115,4 +122,23 @@ export const batchApi = {
       return [];
     }
   },
+
+  getCategories: async (): Promise<BookCategoryItem[]> => apiClient('/batches/categories/'),
+
+  createCategory: async (name: string): Promise<BookCategoryItem> =>
+    apiClient('/batches/categories/', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  updateCategory: async (id: number, name: string): Promise<BookCategoryItem> =>
+    apiClient(`/batches/categories/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteCategory: async (id: number): Promise<void> =>
+    apiClient(`/batches/categories/${id}/`, {
+      method: 'DELETE',
+    }),
 };

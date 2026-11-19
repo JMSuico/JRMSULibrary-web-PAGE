@@ -287,13 +287,14 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoMode, setVideoMode] = useState<'waving' | 'reading'>('waving');
+  const [videoReady, setVideoReady] = useState(false);
   const [isClaudeGreenLight, setIsClaudeGreenLight] = useState<boolean>(true);
 
   // Draggable magnetic bubble
   const { ref: bubbleRef, style: bubbleStyle, isDragging, side, bottomPx } = useDraggableBubble({
     storageKey: 'rizal_bubble_pos',
     defaultSide: 'right',
-    defaultBottomPx: 24,
+    defaultBottomPx: 30,
     emitMoveEvent: true,
   });
 
@@ -443,6 +444,10 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
     ? '/assets/rizal waiving 2.mp4'
     : '/assets/rizal reading.mp4';
 
+  useEffect(() => {
+    setVideoReady(false);
+  }, [videoSrc]);
+
   const resetFormFields = () => {
     setFormName('');
     setFormEmail('');
@@ -481,11 +486,12 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
 
   // Listen for custom event from ExternalIframeModal or preview bubble
   useEffect(() => {
-    const handleOpenChat = (e: any) => {
+    const handleOpenChat = (e: Event) => {
       setIsExpanded(true);
 
-      const service = e.detail?.service;
-      const mode = e.detail?.mode;
+      const customDetail = (e as CustomEvent<{ service?: string; mode?: string }>).detail;
+      const service = customDetail?.service;
+      const mode = customDetail?.mode;
 
       // If general mode or no specific service requested, simply open the chat without adding dummy messages or forcing forms
       if (!service || mode === 'general') {
@@ -591,8 +597,8 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
         },
         controller.signal
       );
-    } catch (err: any) {
-      if (err.name === 'AbortError' || controller.signal.aborted) {
+    } catch (err: unknown) {
+      if ((err instanceof Error && err.name === 'AbortError') || controller.signal.aborted) {
         return;
       }
       console.error(err);
@@ -643,10 +649,11 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       }]);
       setChatFlowState('suggestions');
       resetFormFields();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      const isRateLimit = err.message?.toLowerCase().includes('throttle') || err.message?.toLowerCase().includes('too many');
-      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (err.message || 'Sorry, there was an error sending your email. Please try again.');
+      const errMessage = err instanceof Error ? err.message : '';
+      const isRateLimit = errMessage.toLowerCase().includes('throttle') || errMessage.toLowerCase().includes('too many');
+      const errorMessage = isRateLimit ? 'You have sent multiple requests! Please try again later.' : (errMessage || 'Sorry, there was an error sending your email. Please try again.');
       setChatMessages(prev => [...prev, { sender: 'rizal', text: errorMessage }]);
       setChatFlowState('suggestions');
     } finally {
@@ -720,13 +727,14 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       }]);
       setChatFlowState('suggestions');
       resetFormFields();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      const isRateLimit = err.message?.toLowerCase().includes('throttle') || err.message?.toLowerCase().includes('too many') || err.message?.toLowerCase().includes('already submitted');
+      const errMessage = err instanceof Error ? err.message : '';
+      const isRateLimit = errMessage.toLowerCase().includes('throttle') || errMessage.toLowerCase().includes('too many') || errMessage.toLowerCase().includes('already submitted');
       if (isRateLimit) {
         localStorage.setItem('has_rated_today', new Date().toDateString());
       }
-      const errorMessage = isRateLimit ? 'You have already submitted a rating today! Please try again tomorrow.' : (err.message || 'Sorry, there was an error submitting your rating. Please try again.');
+      const errorMessage = isRateLimit ? 'You have already submitted a rating today! Please try again tomorrow.' : (errMessage || 'Sorry, there was an error submitting your rating. Please try again.');
       setChatMessages(prev => [...prev, { sender: 'rizal', text: errorMessage }]);
       setChatFlowState('suggestions');
     } finally {
@@ -752,9 +760,10 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
       }]);
       setChatFlowState('suggestions');
       resetFormFields();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      const errorMessage = err.message || 'Sorry, there was an error sending your request. Please try again.';
+      const errMessage = err instanceof Error ? err.message : '';
+      const errorMessage = errMessage || 'Sorry, there was an error sending your request. Please try again.';
       setChatMessages(prev => [...prev, { sender: 'rizal', text: errorMessage }]);
       setChatFlowState('suggestions');
     } finally {
@@ -1204,15 +1213,25 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
 
       {/* AI Assistant Bubble */}
       <div
-        className="relative float-bubble bubble-3d-container w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-400 bg-white shadow-xl flex items-center justify-center shrink-0"
+        className="relative float-bubble bubble-3d-container w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-400 bg-gradient-to-br from-navy via-blue-700 to-navy-dark shadow-xl flex items-center justify-center shrink-0"
         style={{ width: '80px', height: '80px', maxWidth: '80px', maxHeight: '80px', flexShrink: 0 }}
       >
         <button
           onClick={() => !isDragging && setIsExpanded(!isExpanded)}
-          className="bubble-3d-btn w-full h-full rounded-full overflow-hidden cursor-pointer flex items-center justify-center"
+          className="relative bubble-3d-btn w-full h-full rounded-full overflow-hidden cursor-pointer flex items-center justify-center"
           style={{ width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', borderRadius: '9999px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           aria-label="Open RIZAL Assistant"
         >
+          {/* Styled crest backdrop shown immediately while video buffers */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-navy via-blue-700 to-navy-dark text-white select-none pointer-events-none"
+          >
+            <span className="flex items-center justify-center w-9 h-9 rounded-full border border-blue-300/50 bg-white/10 shadow-inner font-serif text-xl font-bold tracking-wider text-white">
+              R
+            </span>
+          </div>
+
           <video
             id="rizal-video"
             key={videoSrc}
@@ -1222,7 +1241,11 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
             playsInline
             width="80"
             height="80"
-            className="w-full h-full object-cover rounded-full"
+            onLoadedData={() => setVideoReady(true)}
+            onCanPlay={() => setVideoReady(true)}
+            className={`relative z-[1] w-full h-full object-cover rounded-full transition-opacity duration-300 ${
+              videoReady ? 'opacity-100' : 'opacity-0'
+            }`}
             style={{ width: '100%', height: '100%', maxWidth: '80px', maxHeight: '80px', objectFit: 'cover', borderRadius: '9999px', display: 'block' }}
           >
             <source src={videoSrc} type="video/mp4" />
@@ -1230,7 +1253,7 @@ export const RizalAssistant: React.FC<RizalAssistantProps> = ({ isHidden = false
         </button>
 
         {/* Name Badge */}
-        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full pointer-events-none shadow-sm z-10 whitespace-nowrap">
+        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full pointer-events-none shadow-sm z-10 whitespace-nowrap">
           RIZAL
         </span>
       </div>
