@@ -5,8 +5,8 @@ import { reportApi } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
-import { usePersistentState, useScrollRestoration } from '@/src/Hooks';
+import { useCachedQuery, revalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { useModalSafeCmsSync, usePersistentState, useScrollRestoration } from '@/src/Hooks';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ArchiveType = 'batches' | 'reports';
@@ -32,6 +32,7 @@ export function ArchivesManager({ active }: { active: boolean }) {
     data: cachedBatches,
     isLoading: batchesLoading,
     error: batchesError,
+    refetch: refetchBatches,
     mutate: mutateBatches,
   } = useCachedQuery<AcquisitionBatch[]>({
     key: 'admin:batches',
@@ -39,13 +40,14 @@ export function ArchivesManager({ active }: { active: boolean }) {
     staleTimeMs: 30_000,
     persistStorage: true,
     enabled: active,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
   });
 
   const {
     data: cachedArchivedReports,
     isLoading: reportsLoading,
     error: reportsError,
+    refetch: refetchArchivedReports,
     mutate: mutateArchivedReports,
   } = useCachedQuery<ArchivedReportsResponse>({
     key: 'admin:archives:reports',
@@ -53,7 +55,7 @@ export function ArchivesManager({ active }: { active: boolean }) {
     staleTimeMs: 30_000,
     persistStorage: true,
     enabled: active,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
   });
 
   const batchesRef = useRef<AcquisitionBatch[]>(cachedBatches ?? []);
@@ -81,6 +83,14 @@ export function ArchivesManager({ active }: { active: boolean }) {
   } = useScrollRestoration({
     storageKey: `admin:archives:${archiveType}`,
     isReady: active && !archivesLoading,
+  });
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    enabled: active,
+    isBusy: isRemoving || Boolean(undoState?.isOpen),
+    captureNow,
+    restoreNow,
+    onSync: () => Promise.all([refetchBatches(), refetchArchivedReports()]),
   });
 
   useEffect(() => {
@@ -116,8 +126,9 @@ export function ArchivesManager({ active }: { active: boolean }) {
         setIsRemoving(true);
         try {
           await processInChunks(ids, 10, (id: number) => batchApi.deleteBatch(id), () => {});
-          invalidateCacheByPrefix('admin:batch');
-          invalidateCacheByPrefix('admin:dashboard');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:batch');
+          revalidateCacheByPrefix('admin:dashboard');
           showToast(`Permanently removed ${count} batches`, 'success');
         } catch {
           mutateBatches(sortByCreatedDesc([...batchesRef.current, ...itemsToDelete]));
@@ -129,6 +140,11 @@ export function ArchivesManager({ active }: { active: boolean }) {
       () => {
         mutateBatches(sortByCreatedDesc([...batchesRef.current, ...itemsToDelete]));
         showToast('Bulk permanent removal undone', 'success');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow();
+          });
+        });
       }
     );
   };
@@ -156,7 +172,8 @@ export function ArchivesManager({ active }: { active: boolean }) {
         setIsRemoving(true);
         try {
           await processInChunks(ids, 10, (id: number) => reportApi.deleteReport(id), () => {});
-          invalidateCacheByPrefix('admin:archives');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:archives');
           showToast(`Permanently removed ${count} reports`, 'success');
         } catch {
           if (cachedArchivedReportsRef.current) {
@@ -184,6 +201,11 @@ export function ArchivesManager({ active }: { active: boolean }) {
           });
         }
         showToast('Bulk permanent removal undone', 'success');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow();
+          });
+        });
       }
     );
   };
@@ -202,10 +224,15 @@ export function ArchivesManager({ active }: { active: boolean }) {
 
     try {
       await processInChunks(ids, 10, (id: number) => batchApi.reopenBatch(id), (_, __, c) => showToast(`${c} items reopened.`, 'info'));
-      invalidateCacheByPrefix('admin:batch');
-      invalidateCacheByPrefix('admin:dashboard');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:batch');
+      revalidateCacheByPrefix('admin:dashboard');
       showToast(`Reopened ${count} batches`, 'success');
-      restoreNow();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow();
+        });
+      });
     } catch {
       mutateBatches(
         batchesRef.current.map((b) => (idSet.has(b.id) ? { ...b, status: 'archived' as const } : b)),
@@ -233,9 +260,14 @@ export function ArchivesManager({ active }: { active: boolean }) {
 
     try {
       await processInChunks(ids, 10, (id: number) => reportApi.unarchiveReport(id), (_, __, c) => showToast(`${c} items reopened.`, 'info'));
-      invalidateCacheByPrefix('admin:archives');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:archives');
       showToast(`Unarchived ${count} reports`, 'success');
-      restoreNow();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow();
+        });
+      });
     } catch {
       if (cachedArchivedReportsRef.current) {
         mutateArchivedReports({
@@ -378,20 +410,29 @@ export function ArchivesManager({ active }: { active: boolean }) {
                               captureNow(batch.id);
                               try {
                                 await batchApi.reopenBatch(batch.id);
+                                markLocalSave();
                                 mutateBatches(
                                   batchesRef.current.map((b) =>
                                     b.id === batch.id ? { ...b, status: 'open' as const } : b,
                                   ),
                                 );
-                                invalidateCacheByPrefix('admin:batch');
-                                invalidateCacheByPrefix('admin:dashboard');
+                                revalidateCacheByPrefix('admin:batch');
+                                revalidateCacheByPrefix('admin:dashboard');
                                 showToast('Batch reopened successfully', 'success');
-                                restoreNow();
+                                requestAnimationFrame(() => {
+                                  requestAnimationFrame(() => {
+                                    restoreNow();
+                                  });
+                                });
                               } catch (err: unknown) {
                                 const message = err instanceof Error ? err.message : 'Failed to reopen batch';
                                 showToast(message, 'error');
                                 setLastAnchorId(batch.id);
-                                restoreNow(batch.id);
+                                requestAnimationFrame(() => {
+                                  requestAnimationFrame(() => {
+                                    restoreNow(batch.id);
+                                  });
+                                });
                               }
                             }}
                           >
@@ -410,19 +451,28 @@ export function ArchivesManager({ active }: { active: boolean }) {
                                 async () => {
                                   try {
                                     await batchApi.deleteBatch(batch.id);
-                                    invalidateCacheByPrefix('admin:batch');
-                                    invalidateCacheByPrefix('admin:dashboard');
+                                    markLocalSave();
+                                    revalidateCacheByPrefix('admin:batch');
+                                    revalidateCacheByPrefix('admin:dashboard');
                                   } catch {
                                     mutateBatches(sortByCreatedDesc([...batchesRef.current, batch]));
                                     setLastAnchorId(batch.id);
-                                    restoreNow(batch.id);
+                                    requestAnimationFrame(() => {
+                                      requestAnimationFrame(() => {
+                                        restoreNow(batch.id);
+                                      });
+                                    });
                                     showToast('Failed to permanently remove batch', 'error');
                                   }
                                 },
                                 () => {
                                   mutateBatches(sortByCreatedDesc([...batchesRef.current, batch]));
                                   setLastAnchorId(batch.id);
-                                  restoreNow(batch.id);
+                                  requestAnimationFrame(() => {
+                                    requestAnimationFrame(() => {
+                                      restoreNow(batch.id);
+                                    });
+                                  });
                                   showToast('Batch permanent removal undone', 'success');
                                 }
                               );
@@ -515,6 +565,7 @@ export function ArchivesManager({ active }: { active: boolean }) {
                               captureNow(report.id);
                               try {
                                 await reportApi.unarchiveReport(report.id);
+                                markLocalSave();
                                 if (cachedArchivedReportsRef.current) {
                                   mutateArchivedReports({
                                     ...cachedArchivedReportsRef.current,
@@ -523,14 +574,22 @@ export function ArchivesManager({ active }: { active: boolean }) {
                                     ),
                                   });
                                 }
-                                invalidateCacheByPrefix('admin:archives');
+                                revalidateCacheByPrefix('admin:archives');
                                 showToast('Report unarchived successfully', 'success');
-                                restoreNow();
+                                requestAnimationFrame(() => {
+                                  requestAnimationFrame(() => {
+                                    restoreNow();
+                                  });
+                                });
                               } catch (err: unknown) {
                                 const message = err instanceof Error ? err.message : 'Failed to unarchive report';
                                 showToast(message, 'error');
                                 setLastAnchorId(report.id);
-                                restoreNow(report.id);
+                                requestAnimationFrame(() => {
+                                  requestAnimationFrame(() => {
+                                    restoreNow(report.id);
+                                  });
+                                });
                               }
                             }}
                           >
@@ -547,7 +606,8 @@ export function ArchivesManager({ active }: { active: boolean }) {
                                 async () => {
                                   try {
                                     await reportApi.deleteReport(report.id);
-                                    invalidateCacheByPrefix('admin:archives');
+                                    markLocalSave();
+                                    revalidateCacheByPrefix('admin:archives');
                                   } catch {
                                     if (cachedArchivedReportsRef.current) {
                                       mutateArchivedReports({
@@ -559,7 +619,11 @@ export function ArchivesManager({ active }: { active: boolean }) {
                                       });
                                     }
                                     setLastAnchorId(report.id);
-                                    restoreNow(report.id);
+                                    requestAnimationFrame(() => {
+                                      requestAnimationFrame(() => {
+                                        restoreNow(report.id);
+                                      });
+                                    });
                                     showToast('Failed to permanently remove report', 'error');
                                   }
                                 },
@@ -574,7 +638,11 @@ export function ArchivesManager({ active }: { active: boolean }) {
                                     });
                                   }
                                   setLastAnchorId(report.id);
-                                  restoreNow(report.id);
+                                  requestAnimationFrame(() => {
+                                    requestAnimationFrame(() => {
+                                      restoreNow(report.id);
+                                    });
+                                  });
                                   showToast('Report permanent removal undone', 'success');
                                 }
                               );

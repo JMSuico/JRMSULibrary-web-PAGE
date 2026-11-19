@@ -5,6 +5,7 @@ import { Edit2, Plus, Search, Trash2, X } from 'lucide-react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
+import { useModalSafeCmsSync, useScrollRestoration } from '@/src/Hooks';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import {
@@ -43,14 +44,33 @@ export function PersonnelManager({ active }: { active: boolean }) {
     data: personnelData,
     isLoading,
     error: personnelError,
+    refetch,
     mutate,
   } = useCachedQuery<Personnel[]>({
     key: PERSONNEL_CACHE_KEY,
     fetcher: () => personnelApi.getPersonnel({ fresh: true }),
     staleTimeMs: 15_000,
     persistStorage: true,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     enabled: active,
+  });
+
+  const {
+    captureNow,
+    restoreNow,
+    highlightedId,
+    setLastAnchorId,
+  } = useScrollRestoration({
+    storageKey: 'admin:content:personnel',
+    isReady: active && !isLoading,
+  });
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    enabled: active,
+    isBusy: isPersonnelModalOpen || isSavingPersonnel || Boolean(viewingPhoto) || Boolean(undoState?.isOpen),
+    captureNow,
+    restoreNow,
+    onSync: () => refetch(),
   });
 
   useEffect(() => {
@@ -102,6 +122,7 @@ export function PersonnelManager({ active }: { active: boolean }) {
     const personToDelete = personnelList.find((p) => p.id === id);
     if (!personToDelete) return;
 
+    captureNow(null);
     // Optimistic delete
     mutate((prev = []) => prev.filter((p) => p.id !== id));
 
@@ -110,14 +131,27 @@ export function PersonnelManager({ active }: { active: boolean }) {
       async () => {
         try {
           await personnelApi.deletePersonnel(id);
+          markLocalSave();
         } catch (err: unknown) {
           mutate((prev = []) => [...prev, personToDelete].sort((a, b) => a.order - b.order));
           showToast(getErrorMessage(err, 'Failed to delete personnel'), 'error');
+          setLastAnchorId(id);
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(id);
+            });
+          });
         }
       },
       () => {
         mutate((prev = []) => [...prev, personToDelete].sort((a, b) => a.order - b.order));
         showToast('Personnel restoration undone', 'success');
+        setLastAnchorId(id);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(id);
+          });
+        });
       }
     );
   };
@@ -125,6 +159,8 @@ export function PersonnelManager({ active }: { active: boolean }) {
   const handlePersonnelSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSavingPersonnel) return;
+    const targetAnchorId = editingPersonnelId ?? (editingChiefOrder ? chiefLibrarian.id ?? null : null);
+    captureNow(targetAnchorId);
     setIsSavingPersonnel(true);
     showToast('Saving personnel...', 'info');
 
@@ -135,8 +171,11 @@ export function PersonnelManager({ active }: { active: boolean }) {
         formData.append('photo', personnelPhoto);
       }
 
+      let savedId: number | undefined;
+
       if (editingPersonnelId !== null) {
         const updated = await personnelApi.updatePersonnel(editingPersonnelId, formData);
+        savedId = updated.id ?? editingPersonnelId;
         mutate((prev = []) =>
           prev
             .map((p) => (p.id === editingPersonnelId ? updated : p))
@@ -145,11 +184,21 @@ export function PersonnelManager({ active }: { active: boolean }) {
         showToast('Personnel updated successfully', 'success');
       } else {
         const created = await personnelApi.createPersonnel(formData);
+        savedId = created.id;
         mutate((prev = []) => [...prev, created].sort((a, b) => a.order - b.order));
         showToast('Personnel created successfully', 'success');
       }
 
+      markLocalSave();
       closePersonnelModal();
+      if (savedId !== undefined) {
+        setLastAnchorId(savedId);
+      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow(savedId ?? null);
+        });
+      });
     } catch (err: unknown) {
       showToast(getErrorMessage(err, 'Failed to save personnel'), 'error');
     } finally {
@@ -227,7 +276,12 @@ export function PersonnelManager({ active }: { active: boolean }) {
         <div className="flex flex-col items-center mt-12">
           <div className="w-full mb-6 md:mb-10 max-w-5xl mx-auto">
             <div
-              className="p-6 md:p-8 rounded-2xl shadow-lg border border-gold-light/20 hover-3d-tilt"
+              data-cache-anchor-id={chiefLibrarian.id ? String(chiefLibrarian.id) : undefined}
+              className={`p-6 md:p-8 rounded-2xl shadow-lg border hover-3d-tilt ${
+                chiefLibrarian.id && highlightedId === String(chiefLibrarian.id)
+                  ? 'border-amber-400 ring-2 ring-amber-400'
+                  : 'border-gold-light/20'
+              }`}
               style={{ background: 'var(--color-navy)', backdropFilter: 'blur(8px)' }}
             >
               <div className="flex flex-col items-center text-center">
@@ -330,7 +384,12 @@ export function PersonnelManager({ active }: { active: boolean }) {
                   )}
                   <div className="flex flex-col items-center w-full max-w-[260px] min-w-0">
                     <div
-                      className="border-2 border-gold-light/30 rounded-2xl p-4 text-center w-full shadow-md hover-3d-tilt flex-1 flex flex-col items-center justify-center relative overflow-hidden"
+                      data-cache-anchor-id={person.id ? String(person.id) : undefined}
+                      className={`border-2 rounded-2xl p-4 text-center w-full shadow-md hover-3d-tilt flex-1 flex flex-col items-center justify-center relative overflow-hidden ${
+                        person.id && highlightedId === String(person.id)
+                          ? 'border-amber-400 ring-2 ring-amber-400'
+                          : 'border-gold-light/30'
+                      }`}
                       style={{ background: 'var(--color-navy)', backdropFilter: 'blur(8px)', paddingTop: '40px' }}
                     >
                       <div className="absolute top-0 left-0 w-full border-b border-gold-light/20 bg-black/20 p-2 flex justify-start gap-3 z-10">

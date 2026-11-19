@@ -1,8 +1,10 @@
 # [Layer: Repositories/Implementations] — book_repository.py
 from typing import List, Optional, Any
+from django.db import transaction
 from django.db.models import Q, Count
 from django.db.models.functions import TruncMonth
 from Features.Data.Models import NewlyAcquiredBook, AcquisitionBatch
+from Features.Helpers.media_cleanup_helper import delete_stale_media_and_thumbnail
 from Features.Repositories.Interfaces import INewlyAcquiredBookRepository
 
 class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
@@ -109,16 +111,26 @@ class NewlyAcquiredBookRepository(INewlyAcquiredBookRepository):
         book.save()
         return book
 
-    def update(self, book_id: int, data: dict, files: dict = None) -> Optional[Any]:
+    def update(self, book_id: int, data: dict, files: dict = None) -> Optional[NewlyAcquiredBook]:
         book = self.get_by_id(book_id)
-        if book:
-            for key, value in data.items():
-                setattr(book, key, value)
-            if files and 'cover_image' in files:
-                book.cover_image = files['cover_image']
-            book.save()
-            return book
-        return None
+        if not book:
+            return None
+
+        old_cover_name = book.cover_image.name if getattr(book, 'cover_image', None) else ''
+        cover_replaced = bool(files and 'cover_image' in files and files['cover_image'])
+
+        for key, value in data.items():
+            setattr(book, key, value)
+        if cover_replaced:
+            book.cover_image = files['cover_image']
+        book.save()
+
+        if cover_replaced and old_cover_name:
+            new_cover_name = book.cover_image.name if getattr(book, 'cover_image', None) else ''
+            if new_cover_name != old_cover_name:
+                transaction.on_commit(lambda name=old_cover_name: delete_stale_media_and_thumbnail(name))
+
+        return book
 
     def delete(self, book_id: int) -> bool:
         book = self.get_by_id(book_id)

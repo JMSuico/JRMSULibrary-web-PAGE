@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { getImageUrl, getThumbnailUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 
@@ -19,8 +19,9 @@ import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 import { galleryApi, GalleryImage } from '@/src/Endpoints/galleryApi';
 import {
   useCachedQuery,
-  invalidateCacheByPrefix,
+  revalidateCacheByPrefix,
   useDebounce,
+  useModalSafeCmsSync,
   usePagination,
   usePersistentState,
   useScrollRestoration,
@@ -29,7 +30,7 @@ import {
 } from '@/src/Hooks';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { PAGE_SIZE_OPTIONS, findPageForItemIndex } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
@@ -72,17 +73,37 @@ export function SectionsManager() {
     fetcher: () => galleryApi.getAllImages(),
     staleTimeMs: 30_000,
     persistStorage: true,
-    listenCmsUpdate: true,
-  });
-
-  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
-    storageKey: 'admin:sections',
-    isReady: !isLoading,
+    listenCmsUpdate: false,
   });
 
   const images = cachedImages ?? [];
   const imagesRef = useRef<GalleryImage[]>(images);
   imagesRef.current = images;
+
+  const { captureNow, restoreNow, highlightedId, setLastAnchorId } = useScrollRestoration({
+    storageKey: 'admin:sections',
+    isReady: !isLoading || images.length > 0,
+  });
+
+  const pendingScrollSectionIdRef = useRef<number | null>(null);
+
+  const scheduleDoubleRafRestore = useCallback(
+    (anchorId?: string | number | null) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow(anchorId);
+        });
+      });
+    },
+    [restoreNow],
+  );
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: isModalOpen || Boolean(viewingImage) || isSaving || isRemoving,
+    captureNow,
+    restoreNow,
+    onSync: () => refetch(),
+  });
 
   useEffect(() => {
     if (error) {
@@ -93,22 +114,29 @@ export function SectionsManager() {
   const handleDelete = (id: number) => {
     const imgToDelete = imagesRef.current.find((img) => img.id === id);
     if (!imgToDelete) return;
+    captureNow(id);
 
     triggerDelete(
       imgToDelete.title || 'Image',
       async () => {
         try {
           await galleryApi.deleteImage(id);
-          invalidateCacheByPrefix('admin:sections');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:sections');
           showToast('Image permanently deleted', 'success');
+          await refetch();
+          scheduleDoubleRafRestore(null);
         } catch (err: unknown) {
           mutate([...imagesRef.current, imgToDelete]);
           const message = err instanceof Error ? err.message : 'Failed to delete image';
           showToast(message, 'error');
+          scheduleDoubleRafRestore(id);
         }
       },
       () => {
         mutate([...imagesRef.current, imgToDelete]);
+        setLastAnchorId(id);
+        pendingScrollSectionIdRef.current = id;
         showToast('Deletion undone', 'success');
       },
     );
@@ -119,6 +147,7 @@ export function SectionsManager() {
 
   const handleBulkDeleteSections = () => {
     if (selectedSectionIds.size === 0) return;
+    captureNow();
     const idsToDelete = Array.from<number>(selectedSectionIds);
     const count = idsToDelete.length;
     const imagesToDelete = imagesRef.current.filter((img) => selectedSectionIds.has(img.id));
@@ -139,11 +168,15 @@ export function SectionsManager() {
             (id: number) => galleryApi.deleteImage(id),
             () => {},
           );
-          invalidateCacheByPrefix('admin:sections');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:sections');
           showToast(`Permanently removed ${count} images`, 'success');
+          await refetch();
+          scheduleDoubleRafRestore(null);
         } catch {
           mutate([...imagesRef.current, ...imagesToDelete]);
           showToast('Failed to remove some images', 'error');
+          scheduleDoubleRafRestore(null);
         } finally {
           setIsRemoving(false);
           removeToast(toastId);
@@ -151,6 +184,7 @@ export function SectionsManager() {
       },
       () => {
         mutate([...imagesRef.current, ...imagesToDelete]);
+        scheduleDoubleRafRestore(null);
         showToast('Bulk deletion undone', 'success');
       },
     );
@@ -159,6 +193,7 @@ export function SectionsManager() {
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSaving) return;
+    captureNow(editingImage?.id ?? null);
     setIsSaving(true);
     showToast('Saving image...', 'info');
 
@@ -175,13 +210,17 @@ export function SectionsManager() {
       const saved = editingImage
         ? await galleryApi.updateImage(editingImage.id, fd)
         : await galleryApi.createImage(fd);
-      invalidateCacheByPrefix('admin:sections');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:sections');
       showToast(`Image ${editingImage ? 'updated' : 'uploaded'} successfully`, 'success');
       setIsModalOpen(false);
-      await refetch();
       if (saved?.id != null) {
         setLastAnchorId(saved.id);
-        restoreNow(saved.id);
+        pendingScrollSectionIdRef.current = saved.id;
+      }
+      await refetch();
+      if (saved?.id == null) {
+        scheduleDoubleRafRestore(null);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An error occurred while saving image';
@@ -192,6 +231,7 @@ export function SectionsManager() {
   };
 
   const openAddModal = () => {
+    captureNow(null);
     setEditingImage(null);
     setSelectedFile(null);
     setPreviewUrl(null);
@@ -199,6 +239,8 @@ export function SectionsManager() {
   };
 
   const openEditModal = (img: GalleryImage) => {
+    captureNow(img.id);
+    setLastAnchorId(img.id);
     setEditingImage(img);
     setSelectedFile(null);
     setPreviewUrl(getImageUrl(img.image));
@@ -246,6 +288,27 @@ export function SectionsManager() {
       setPage(1);
     }
   }, [debouncedSearch, setPage]);
+
+  useEffect(() => {
+    const targetId = pendingScrollSectionIdRef.current;
+    if (targetId === null || isModalOpen) return;
+
+    const matchIndex = filtered.findIndex((img) => img.id === targetId);
+    if (matchIndex === -1) {
+      pendingScrollSectionIdRef.current = null;
+      scheduleDoubleRafRestore(null);
+      return;
+    }
+
+    const targetPage = findPageForItemIndex(matchIndex, pageSize);
+    if (targetPage !== currentPage) {
+      setPage(targetPage);
+      return;
+    }
+
+    pendingScrollSectionIdRef.current = null;
+    scheduleDoubleRafRestore(targetId);
+  }, [filtered, isModalOpen, pageSize, currentPage, setPage, scheduleDoubleRafRestore]);
 
   const activeCount = images.filter((i) => i.is_active).length;
   const loading = isLoading && images.length === 0;
@@ -412,7 +475,15 @@ export function SectionsManager() {
                         </td>
                         <td>
                           <div className="admin-table__actions">
-                            <button className="admin-btn admin-btn--icon" aria-label={`View ${img.title}`} onClick={() => setViewingImage(img)}>
+                            <button
+                              className="admin-btn admin-btn--icon"
+                              aria-label={`View ${img.title}`}
+                              onClick={() => {
+                                captureNow(img.id);
+                                setLastAnchorId(img.id);
+                                setViewingImage(img);
+                              }}
+                            >
                               <Eye size={15} />
                             </button>
                             <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>
@@ -487,7 +558,15 @@ export function SectionsManager() {
                       </div>
                     </div>
                     <div className="admin-grid-card__actions">
-                      <button className="admin-btn admin-btn--icon" aria-label={`View ${img.title}`} onClick={() => setViewingImage(img)}>
+                      <button
+                        className="admin-btn admin-btn--icon"
+                        aria-label={`View ${img.title}`}
+                        onClick={() => {
+                          captureNow(img.id);
+                          setLastAnchorId(img.id);
+                          setViewingImage(img);
+                        }}
+                      >
                         <Eye size={15} />
                       </button>
                       <button className="admin-btn admin-btn--icon" aria-label={`Edit ${img.title}`} onClick={() => openEditModal(img)}>

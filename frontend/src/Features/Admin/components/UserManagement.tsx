@@ -17,10 +17,17 @@ import { MetricCard } from '@/src/Features/Admin/components/MetricCard';
 import { userApi, User } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import {
+  usePersistentState,
+  useScrollRestoration,
+  usePagination,
+  revalidateCacheByPrefix,
+  useModalSafeCmsSync,
+  findPageForItemIndex,
+} from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
@@ -35,6 +42,7 @@ export function UserManagement() {
     storage: 'session',
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -57,7 +65,7 @@ export function UserManagement() {
       return { users, me };
     },
     staleTimeMs: 30_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
@@ -65,6 +73,15 @@ export function UserManagement() {
     storageKey: 'admin:users',
     isReady: !isLoading && Boolean(cachedBundle),
   });
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: isModalOpen || Boolean(confirmModal?.isOpen) || isSaving || isUpdatingStatus,
+    onSync: () => refetch(true),
+    captureNow,
+    restoreNow,
+  });
+
+  const pendingRevealUserIdRef = useRef<number | null>(null);
 
   const bundle: UsersBundle = cachedBundle ?? { users: [], me: null };
   const bundleRef = useRef<UsersBundle>(bundle);
@@ -84,20 +101,25 @@ export function UserManagement() {
   }, [isModalOpen]);
 
   const handleDelete = (userToDelete: User) => {
+    captureNow();
     triggerDelete(
       `${userToDelete.first_name} ${userToDelete.last_name}`,
       async () => {
         try {
           await userApi.deleteUser(userToDelete.id);
-          invalidateCacheByPrefix('admin:users');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:users');
           showToast('User deleted successfully', 'success');
+          restoreNow();
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'Failed to delete user';
           showToast(message, 'error');
-          await refetch();
+          await refetch(true);
         }
       },
       () => {
+        pendingRevealUserIdRef.current = userToDelete.id;
+        setLastAnchorId(String(userToDelete.id));
         mutate({
           ...bundleRef.current,
           users: [...bundleRef.current.users, userToDelete].sort((a, b) => a.id - b.id),
@@ -146,12 +168,13 @@ export function UserManagement() {
         await userApi.uploadAvatar(savedUser.id, formData);
       }
 
+      pendingRevealUserIdRef.current = savedUser.id;
       setLastAnchorId(String(savedUser.id));
-      invalidateCacheByPrefix('admin:users');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:users');
       showToast(`User ${editingUser ? 'updated' : 'created'} successfully`, 'success');
       setIsModalOpen(false);
-      await refetch();
-      restoreNow();
+      await refetch(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An error occurred while saving user';
       showToast(message, 'error');
@@ -196,6 +219,23 @@ export function UserManagement() {
     prevSearchRef.current = debouncedSearch;
     setPage(1);
   }, [debouncedSearch, setPage]);
+
+  // Reveal newly created/updated/toggled user on its pagination page and restore scroll anchor
+  useEffect(() => {
+    const targetId = pendingRevealUserIdRef.current;
+    if (targetId === null) return;
+    const idx = filtered.findIndex((u) => u.id === targetId);
+    pendingRevealUserIdRef.current = null;
+    if (idx >= 0) {
+      const targetPage = findPageForItemIndex(idx, pageSize);
+      if (targetPage !== currentPage) {
+        setPage(targetPage);
+      }
+      restoreNow(String(targetId));
+    } else {
+      restoreNow();
+    }
+  }, [filtered, pageSize, currentPage, setPage, restoreNow]);
 
   const loading = isLoading && !cachedBundle;
 
@@ -304,17 +344,22 @@ export function UserManagement() {
                               title: user.is_active ? 'Suspend User' : 'Activate User',
                               message: `Are you sure you want to ${user.is_active ? 'suspend' : 'activate'} this user?`,
                               onConfirm: async () => {
+                                setIsUpdatingStatus(true);
                                 try {
                                   captureNow();
+                                  pendingRevealUserIdRef.current = user.id;
                                   setLastAnchorId(String(user.id));
                                   await userApi.updateUser(user.id, { is_active: !user.is_active });
-                                  invalidateCacheByPrefix('admin:users');
+                                  markLocalSave();
+                                  revalidateCacheByPrefix('admin:users');
                                   showToast(`User ${user.is_active ? 'suspended' : 'activated'} successfully`, 'success');
-                                  await refetch();
-                                  restoreNow();
+                                  await refetch(true);
                                 } catch (e: unknown) {
+                                  pendingRevealUserIdRef.current = null;
                                   const message = e instanceof Error ? e.message : 'Error updating user status';
                                   showToast(message, 'error');
+                                } finally {
+                                  setIsUpdatingStatus(false);
                                 }
                               },
                             });
@@ -332,17 +377,22 @@ export function UserManagement() {
                               title: 'Force Logout',
                               message: `Are you sure you want to force logout ${user.first_name}? They will be immediately disconnected.`,
                               onConfirm: async () => {
+                                setIsUpdatingStatus(true);
                                 try {
                                   captureNow();
+                                  pendingRevealUserIdRef.current = user.id;
                                   setLastAnchorId(String(user.id));
                                   await userApi.forceLogout(user.id);
-                                  invalidateCacheByPrefix('admin:users');
+                                  markLocalSave();
+                                  revalidateCacheByPrefix('admin:users');
                                   showToast('User has been forced logged out', 'success');
-                                  await refetch();
-                                  restoreNow();
+                                  await refetch(true);
                                 } catch (e: unknown) {
+                                  pendingRevealUserIdRef.current = null;
                                   const message = e instanceof Error ? e.message : 'Failed to force logout';
                                   showToast(message, 'error');
+                                } finally {
+                                  setIsUpdatingStatus(false);
                                 }
                               },
                             });

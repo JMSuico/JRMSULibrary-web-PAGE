@@ -1,14 +1,29 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, RotateCcw, Clock, Search } from 'lucide-react';
 import { recycleApi, RecycleBinItem } from '@/src/Endpoints/recycleApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { useCachedQuery, revalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { ScrollableSelect, type ScrollableSelectOption } from '@/src/Components/Shared/ScrollableSelect';
+import { usePersistentState, useScrollRestoration, usePagination, useModalSafeCmsSync } from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+
+const MODULE_FILTER_OPTIONS: ScrollableSelectOption[] = [
+  { value: 'ALL', label: 'All Modules' },
+  { value: 'BOOKS', label: 'Books' },
+  { value: 'BATCH', label: 'Batches (Newly Acquired)' },
+  { value: 'GALLERY', label: 'Sections' },
+  { value: 'PERSONNEL', label: 'Library Personnel' },
+  { value: 'RESEARCH_REF', label: 'Research References' },
+  { value: 'CMS_FILE', label: 'Manual Files' },
+  { value: 'CMS_LINK', label: 'External Links' },
+  { value: 'ERESOURCE_DEPT', label: 'E-Resource Departments' },
+  { value: 'ERESOURCE_FILE', label: 'E-Resource Files' },
+  { value: 'REPORT', label: 'Generated Reports' },
+];
 
 export function RecycleBin() {
   const [searchQuery, setSearchQuery] = usePersistentState<string>('admin:recycle:search', '', {
@@ -34,7 +49,7 @@ export function RecycleBin() {
     key: 'admin:recycle-bin',
     fetcher: () => recycleApi.getAll(),
     staleTimeMs: 30_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
@@ -44,9 +59,27 @@ export function RecycleBin() {
 
   const loading = isLoading && items.length === 0;
 
-  const { captureNow, restoreNow, highlightedId, setLastAnchorId } = useScrollRestoration({
+  const { captureNow, restoreNow, highlightedId } = useScrollRestoration({
     storageKey: 'admin:recycle-bin',
     isReady: !loading,
+  });
+
+  const scheduleDoubleRafRestore = useCallback(
+    (anchorId?: string | number | null) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow(anchorId);
+        });
+      });
+    },
+    [restoreNow],
+  );
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: Boolean(confirmModal?.isOpen) || isRemoving,
+    captureNow,
+    restoreNow,
+    onSync: () => fetchItems(),
   });
 
   useEffect(() => {
@@ -112,15 +145,17 @@ export function RecycleBin() {
       mutateItems(itemsRef.current.filter((i) => !selectedIds.includes(i.id)));
       const toastId = showToast(`${count} items restoring in background...`, 'loading');
       await bulkApi.restore(selectedIds);
-      invalidateCacheByPrefix('admin:');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:');
       showToast(`${count} items queued for restoration`, 'success');
       setSelectedIds([]);
       removeToast(toastId);
-      restoreNow();
+      await fetchItems();
+      scheduleDoubleRafRestore(null);
     } catch {
       showToast('Failed to queue restoration', 'error');
       await fetchItems();
-      restoreNow();
+      scheduleDoubleRafRestore(null);
     } finally {
       setIsRemoving(false);
     }
@@ -128,6 +163,7 @@ export function RecycleBin() {
 
   const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
+    captureNow();
     const idsSnapshot = [...selectedIds];
     setConfirmModal({
       isOpen: true,
@@ -141,15 +177,17 @@ export function RecycleBin() {
           mutateItems(itemsRef.current.filter((i) => !idsSnapshot.includes(i.id)));
           const toastId = showToast(`${count} items deleting in background...`, 'loading');
           await bulkApi.hardDelete(idsSnapshot);
-          invalidateCacheByPrefix('admin:recycle-bin');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:recycle-bin');
           showToast(`${count} items queued for permanent deletion`, 'success');
           setSelectedIds([]);
           removeToast(toastId);
-          restoreNow();
+          await fetchItems();
+          scheduleDoubleRafRestore(null);
         } catch {
           showToast('Failed to queue permanent deletion', 'error');
           await fetchItems();
-          restoreNow();
+          scheduleDoubleRafRestore(null);
         } finally {
           setIsRemoving(false);
         }
@@ -158,36 +196,39 @@ export function RecycleBin() {
   };
 
   const handleRestore = async (id: number) => {
-    captureNow();
-    setLastAnchorId(String(id));
+    captureNow(id);
     try {
       await recycleApi.restore(id);
-      invalidateCacheByPrefix('admin:');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:');
       showToast('Item restored successfully', 'success');
       await fetchItems();
-      restoreNow();
+      scheduleDoubleRafRestore(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to restore item';
       showToast(message, 'error');
+      scheduleDoubleRafRestore(id);
     }
   };
 
   const handleDelete = (id: number) => {
+    captureNow(id);
     setConfirmModal({
       isOpen: true,
       title: 'Delete Permanently',
       message: 'Are you sure you want to permanently delete this item? This action cannot be undone.',
       onConfirm: async () => {
-        captureNow();
-        setLastAnchorId(String(id));
+        captureNow(id);
         try {
           await recycleApi.deletePermanently(id);
-          invalidateCacheByPrefix('admin:recycle-bin');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:recycle-bin');
           showToast('Item deleted permanently', 'success');
           await fetchItems();
-          restoreNow();
+          scheduleDoubleRafRestore(null);
         } catch {
           showToast('Failed to delete item', 'error');
+          scheduleDoubleRafRestore(id);
         }
       },
     });
@@ -213,23 +254,14 @@ export function RecycleBin() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>
-            <select
+            <ScrollableSelect
               value={moduleFilter}
-              onChange={(e) => setModuleFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            >
-              <option value="ALL">All Modules</option>
-              <option value="BOOKS">Books</option>
-              <option value="BATCH">Batches (Newly Acquired)</option>
-              <option value="GALLERY">Sections</option>
-              <option value="PERSONNEL">Library Personnel</option>
-              <option value="RESEARCH_REF">Research References</option>
-              <option value="CMS_FILE">Manual Files</option>
-              <option value="CMS_LINK">External Links</option>
-              <option value="ERESOURCE_DEPT">E-Resource Departments</option>
-              <option value="ERESOURCE_FILE">E-Resource Files</option>
-              <option value="REPORT">Generated Reports</option>
-            </select>
+              options={MODULE_FILTER_OPTIONS}
+              onChange={(nextModule) => setModuleFilter(nextModule)}
+              ariaLabel="Filter deleted items by module"
+              menuMaxHeightClass="max-h-56"
+              className="h-[42px] min-w-[210px] max-w-[280px] rounded-lg"
+            />
           </div>
         </div>
 

@@ -2,12 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FileText, Printer, Download, Search, Eye, History, X, Loader2, Archive, Trash2 } from 'lucide-react';
 import { reportApi, ReportSummary, HistoricalReport } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePersistentState, useScrollRestoration } from '@/src/Hooks';
+import { ScrollableSelect } from '@/src/Components/Shared/ScrollableSelect';
+import {
+  usePersistentState,
+  useScrollRestoration,
+  revalidateCacheByPrefix,
+  useModalSafeCmsSync,
+} from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { usePdfExport } from '@/src/Hooks/usePdfExport';
@@ -75,13 +81,20 @@ export function Reports() {
     key: `admin:reports:history:p${page}:l${limit}:s${debouncedSearch}`,
     fetcher: () => reportApi.getHistory(debouncedSearch, limit, (page - 1) * limit),
     staleTimeMs: 30_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
   const { captureNow, restoreNow, highlightedId, setLastAnchorId } = useScrollRestoration({
     storageKey: 'admin:reports',
     isReady: !isLoadingHistory && Boolean(historyData),
+  });
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: isGenerating || isPdfGenerating || isRemoving,
+    onSync: () => fetchHistory(true),
+    captureNow,
+    restoreNow,
   });
 
   const history = historyData?.results ?? [];
@@ -105,7 +118,8 @@ export function Reports() {
         total: Math.max(0, historyDataRef.current.total - 1),
         results: historyDataRef.current.results.filter((h) => h.id !== id),
       });
-      invalidateCacheByPrefix('admin:reports');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:reports');
       showToast('Report archived successfully', 'success');
       restoreNow();
     } catch (err: unknown) {
@@ -119,13 +133,16 @@ export function Reports() {
   const handleDelete = (id: number) => {
     const reportToDelete = historyDataRef.current.results.find((h) => h.id === id);
     if (!reportToDelete) return;
+    captureNow();
 
     triggerDelete(
       `Report "${reportToDelete.title}"`,
       async () => {
         try {
           await reportApi.deleteReport(id);
-          invalidateCacheByPrefix('admin:reports');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:reports');
+          restoreNow();
         } catch {
           mutateHistory({
             total: historyDataRef.current.total + 1,
@@ -142,6 +159,7 @@ export function Reports() {
           ),
         });
         showToast('Report restoration undone', 'success');
+        restoreNow(String(id));
       },
     );
 
@@ -154,6 +172,7 @@ export function Reports() {
 
   const handleBulkDeleteReports = () => {
     if (selectedReportIds.size === 0) return;
+    captureNow();
     const idsToDelete = Array.from(selectedReportIds);
     const count = idsToDelete.length;
     const reportsToDelete = historyDataRef.current.results.filter((h) => selectedReportIds.has(h.id));
@@ -172,8 +191,10 @@ export function Reports() {
         const toastId = showToast(`${count} removing processing.`, 'loading');
         try {
           await processInChunks(idsToDelete, 10, (id: number) => reportApi.deleteReport(id), () => {});
-          invalidateCacheByPrefix('admin:reports');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:reports');
           showToast(`Removed ${count} reports successfully`, 'success');
+          restoreNow();
         } catch {
           await fetchHistory();
           showToast('Failed to permanently remove some reports', 'error');
@@ -190,6 +211,7 @@ export function Reports() {
           ),
         });
         showToast('Bulk report restoration undone', 'success');
+        restoreNow();
       },
     );
   };
@@ -201,7 +223,8 @@ export function Reports() {
       setReportData(res.data);
       setActiveReportInfo({ title: `Report - ${dateRange.replace('-', ' ').toUpperCase()}`, period: dateRange, type: reportType });
       showToast('Report generated successfully', 'success');
-      invalidateCacheByPrefix('admin:reports');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:reports');
       setPage(1);
       await fetchHistory();
       setTimeout(() => {
@@ -310,30 +333,36 @@ export function Reports() {
         <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-end">
           <div className="flex-1">
             <label className="block text-sm font-semibold text-gray-700 mb-1">Report Type</label>
-            <select
+            <ScrollableSelect
               value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-navy"
-            >
-              <option value="summary">Comprehensive Summary</option>
-              <option value="visitors">Visitor Analytics</option>
-              <option value="books">Acquired Books</option>
-              <option value="interactions">Emails & Reservations</option>
-            </select>
+              onChange={setReportType}
+              options={[
+                { value: 'summary', label: 'Comprehensive Summary' },
+                { value: 'visitors', label: 'Visitor Analytics' },
+                { value: 'books', label: 'Acquired Books' },
+                { value: 'interactions', label: 'Emails & Reservations' },
+              ]}
+              ariaLabel="Report Type"
+              menuMaxHeightClass="max-h-52"
+              className="w-full"
+            />
           </div>
           <div className="flex-1">
             <label className="block text-sm font-semibold text-gray-700 mb-1">Date Range</label>
-            <select
+            <ScrollableSelect
               value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-navy"
-            >
-              <option value="this-week">This Week</option>
-              <option value="this-month">This Month</option>
-              <option value="last-month">Last Month</option>
-              <option value="this-year">This Year</option>
-              <option value="all-time">All Time</option>
-            </select>
+              onChange={setDateRange}
+              options={[
+                { value: 'this-week', label: 'This Week' },
+                { value: 'this-month', label: 'This Month' },
+                { value: 'last-month', label: 'Last Month' },
+                { value: 'this-year', label: 'This Year' },
+                { value: 'all-time', label: 'All Time' },
+              ]}
+              ariaLabel="Date Range"
+              menuMaxHeightClass="max-h-52"
+              className="w-full"
+            />
           </div>
           <button
             onClick={handleGenerate}

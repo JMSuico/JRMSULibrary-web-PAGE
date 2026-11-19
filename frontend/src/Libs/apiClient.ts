@@ -220,13 +220,41 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
     // All requests must pass through the relative /api proxy to maintain the session.
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    // Only send session cookies to trusted API origins; never leak cookies externally
-    credentials: trustedOrigin ? 'include' : 'omit',
-    cache: 'no-store', // Fix: Prevent browser from caching API responses (which causes stale UI on edits)
-  });
+  const method = (options.method || 'GET').toUpperCase();
+  const isSafeRetryMethod = method === 'GET' || method === 'HEAD';
+
+  const executeFetch = async (): Promise<Response> =>
+    fetch(url, {
+      ...options,
+      headers,
+      // Only send session cookies to trusted API origins; never leak cookies externally
+      credentials: trustedOrigin ? 'include' : 'omit',
+      cache: 'no-store', // Fix: Prevent browser from caching API responses (which causes stale UI on edits)
+    });
+
+  let response: Response;
+  try {
+    response = await executeFetch();
+  } catch (networkErr: unknown) {
+    if (networkErr instanceof DOMException && networkErr.name === 'AbortError') {
+      throw networkErr;
+    }
+    if (isSafeRetryMethod) {
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      try {
+        response = await executeFetch();
+      } catch (retryErr: unknown) {
+        if (retryErr instanceof DOMException && retryErr.name === 'AbortError') {
+          throw retryErr;
+        }
+        throw new Error('Network connection lost while loading data. Please try again.');
+      }
+    } else {
+      throw new Error(
+        'Network connection lost while saving changes. Please refresh or check if your edit was applied before retrying.'
+      );
+    }
+  }
 
   const isSilentEndpoint = trustedOrigin && isSilentApiEndpoint(endpoint);
 
@@ -278,7 +306,6 @@ export const apiClient = async (endpoint: string, options: RequestInit = {}) => 
   // If this was a mutation (POST, PUT, PATCH, DELETE), instantly tell all components to refresh!
   // Exception: Do not refresh if status is 202 (Accepted), because it means the task is still processing in the background (Celery).
   // Triggering a refresh immediately would fetch stale data and ruin the optimistic UI.
-  const method = (options.method || 'GET').toUpperCase();
   if (trustedOrigin && method !== 'GET' && typeof window !== 'undefined' && response.status !== 202) {
     window.dispatchEvent(new CustomEvent('cms_updated'));
   }

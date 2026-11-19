@@ -4,8 +4,10 @@ import { cmsApi, PageContent, ManagedLink, ManagedFile } from '@/src/Endpoints/c
 import { Save, Plus, Trash2, Edit2, RefreshCw, X, Search, LayoutGrid, List } from 'lucide-react';
 import {
   useCachedQuery,
-  invalidateCacheByPrefix,
+  revalidateCacheByPrefix,
+  useModalSafeCmsSync,
   usePagination,
+  findPageForItemIndex,
   usePersistentState,
   useScrollRestoration,
   useToast,
@@ -106,12 +108,30 @@ export function ContentManager() {
     },
     staleTimeMs: 60_000,
     persistStorage: true,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
   });
 
-  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
+  const { captureNow, highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
     storageKey: 'admin:content',
     isReady: !isLoading,
+  });
+
+  const isCmsSyncBusy =
+    editingContentId !== null ||
+    isSavingContent ||
+    isLinkModalOpen ||
+    isSavingLink ||
+    isFileModalOpen ||
+    isUploadingFile ||
+    Boolean(viewingManualFile) ||
+    isRemoving ||
+    Boolean(undoState?.isOpen);
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: isCmsSyncBusy,
+    captureNow,
+    restoreNow,
+    onSync: () => refetch(),
   });
 
   useEffect(() => {
@@ -135,19 +155,64 @@ export function ContentManager() {
     pageStorageKey: 'admin:content:links:page',
   });
 
+  const pendingLinkScrollIdRef = useRef<number | null>(null);
+
+  const { setPage: setLinksPage, pageSize: linksPageSize, currentPage: linksCurrentPage } = linksPagination;
+
+  useEffect(() => {
+    const targetId = pendingLinkScrollIdRef.current;
+    if (targetId === null || isLinkModalOpen) return;
+
+    const matchIndex = sortedLinks.findIndex((l) => l.id === targetId);
+    if (matchIndex === -1) {
+      pendingLinkScrollIdRef.current = null;
+      return;
+    }
+
+    const targetPage = findPageForItemIndex(matchIndex, linksPageSize);
+    if (targetPage !== linksCurrentPage) {
+      setLinksPage(targetPage);
+      return;
+    }
+
+    pendingLinkScrollIdRef.current = null;
+    const anchorId = `link:${targetId}`;
+    setLastAnchorId(anchorId);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreNow(anchorId);
+      });
+    });
+  }, [
+    sortedLinks,
+    isLinkModalOpen,
+    linksPageSize,
+    linksCurrentPage,
+    setLinksPage,
+    setLastAnchorId,
+    restoreNow,
+  ]);
+
   // --- Content Handlers ---
   const handleSaveContent = async (slug: string, content: string) => {
     if (isSavingContent) return;
+    const anchorId = `section:${slug}`;
+    captureNow(anchorId);
     setIsSavingContent(true);
     showToast('Saving content...', 'info');
     try {
       await cmsApi.updateContent(slug, { content });
-      invalidateCacheByPrefix('admin:content');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:content');
+      setEditingContentId(null);
       showToast('Content saved successfully', 'success');
       await refetch();
-      const anchorId = `section:${slug}`;
       setLastAnchorId(anchorId);
-      restoreNow(anchorId);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow(anchorId);
+        });
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save content';
       showToast(message, 'error');
@@ -169,21 +234,21 @@ export function ContentManager() {
     };
 
     if (isSavingLink) return;
+    captureNow(editingLink ? `link:${editingLink.id}` : null);
     setIsSavingLink(true);
     showToast('Saving link...', 'info');
     try {
       const savedLink = editingLink
         ? await cmsApi.updateLink(editingLink.id, payload)
         : await cmsApi.createLink(payload);
-      invalidateCacheByPrefix('admin:content');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:content');
       showToast(`Link ${editingLink ? 'updated' : 'created'} successfully`, 'success');
+      if (savedLink?.id != null) {
+        pendingLinkScrollIdRef.current = savedLink.id;
+      }
       setIsLinkModalOpen(false);
       await refetch();
-      if (savedLink?.id != null) {
-        const anchorId = `link:${savedLink.id}`;
-        setLastAnchorId(anchorId);
-        restoreNow(anchorId);
-      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save link';
       showToast(message, 'error');
@@ -196,21 +261,33 @@ export function ContentManager() {
     const linkToDelete = bundleRef.current.links.find((l) => l.id === id);
     if (!linkToDelete) return;
 
+    captureNow(null);
     triggerDelete(
       linkToDelete.name,
       async () => {
         try {
           await cmsApi.deleteLink(id);
-          invalidateCacheByPrefix('admin:content');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:content');
         } catch (err: unknown) {
           mutate({ ...bundleRef.current, links: [...bundleRef.current.links, linkToDelete] });
           const message = err instanceof Error ? err.message : 'Failed to delete link';
           showToast(message, 'error');
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(`link:${id}`);
+            });
+          });
         }
       },
       () => {
         mutate({ ...bundleRef.current, links: [...bundleRef.current.links, linkToDelete] });
         showToast('Link restoration undone', 'success');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(`link:${id}`);
+          });
+        });
       },
     );
     mutate({ ...bundleRef.current, links: bundleRef.current.links.filter((l) => l.id !== id) });
@@ -222,6 +299,7 @@ export function ContentManager() {
     const count = idsToDelete.length;
     const linksToDelete = bundleRef.current.links.filter((l) => selectedLinkIds.has(l.id));
 
+    captureNow(null);
     mutate({ ...bundleRef.current, links: bundleRef.current.links.filter((l) => !selectedLinkIds.has(l.id)) });
     setSelectedLinkIds(new Set());
 
@@ -237,7 +315,8 @@ export function ContentManager() {
             (id: number) => cmsApi.deleteLink(id),
             () => {},
           );
-          invalidateCacheByPrefix('admin:content');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:content');
           showToast(`Removed ${count} links successfully`, 'success');
         } catch {
           mutate({ ...bundleRef.current, links: [...bundleRef.current.links, ...linksToDelete] });
@@ -256,11 +335,18 @@ export function ContentManager() {
 
   const handleSeedDefaultLinks = async () => {
     try {
+      captureNow(null);
       const res = await cmsApi.importDefaultLinks();
       showToast(res.message, res.imported > 0 ? 'success' : 'info');
       if (res.imported > 0) {
-        invalidateCacheByPrefix('admin:content');
+        markLocalSave();
+        revalidateCacheByPrefix('admin:content');
         await refetch();
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(null);
+          });
+        });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to import default links';
@@ -270,11 +356,18 @@ export function ContentManager() {
 
   const handleSeedDefaultTexts = async () => {
     try {
+      captureNow(null);
       const res = await cmsApi.importDefaultTexts();
       showToast(res.message, res.imported > 0 ? 'success' : 'info');
       if (res.imported > 0) {
-        invalidateCacheByPrefix('admin:content');
+        markLocalSave();
+        revalidateCacheByPrefix('admin:content');
         await refetch();
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(null);
+          });
+        });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to import default texts';
@@ -312,7 +405,8 @@ export function ContentManager() {
 
     try {
       await Promise.all(updatedLinks.map((l) => cmsApi.updateLink(l.id, { order: l.order })));
-      invalidateCacheByPrefix('admin:content');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:content');
       showToast('Sequence updated successfully', 'success');
     } catch {
       showToast('Failed to update sequence', 'error');
@@ -329,6 +423,7 @@ export function ContentManager() {
       return;
     }
     if (isUploadingFile) return;
+    captureNow(null);
     setIsUploadingFile(true);
     showToast('Uploading file...', 'info');
 
@@ -336,7 +431,8 @@ export function ContentManager() {
     fd.append('file', selectedFile);
     try {
       const savedFile = await cmsApi.createFile(fd);
-      invalidateCacheByPrefix('admin:content');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:content');
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       setSelectedFile(null);
@@ -344,7 +440,11 @@ export function ContentManager() {
       if (savedFile?.id != null) {
         const anchorId = `file:${savedFile.id}`;
         setLastAnchorId(anchorId);
-        restoreNow(anchorId);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(anchorId);
+          });
+        });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to upload file';
@@ -358,21 +458,33 @@ export function ContentManager() {
     const fileToDelete = bundleRef.current.files.find((f) => f.id === id);
     if (!fileToDelete) return;
 
+    captureNow(null);
     triggerDelete(
       fileToDelete.name,
       async () => {
         try {
           await cmsApi.deleteFile(id);
-          invalidateCacheByPrefix('admin:content');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:content');
         } catch (err: unknown) {
           mutate({ ...bundleRef.current, files: [...bundleRef.current.files, fileToDelete] });
           const message = err instanceof Error ? err.message : 'Failed to delete file';
           showToast(message, 'error');
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(`file:${id}`);
+            });
+          });
         }
       },
       () => {
         mutate({ ...bundleRef.current, files: [...bundleRef.current.files, fileToDelete] });
         showToast('File restoration undone', 'success');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(`file:${id}`);
+          });
+        });
       },
     );
     mutate({ ...bundleRef.current, files: bundleRef.current.files.filter((f) => f.id !== id) });
@@ -506,7 +618,6 @@ export function ContentManager() {
                           onClick={async () => {
                             const val = editedContents[item.slug] ?? item.content;
                             await handleSaveContent(item.slug, val);
-                            setEditingContentId(null);
                           }}
                         >
                           {isSavingContent ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <Save size={16} />} Save Changes
@@ -933,7 +1044,7 @@ export function ContentManager() {
           })()}
 
           {activeTab === 'research_references' && (
-            <ResearchReferencesManager />
+            <ResearchReferencesManager active={activeTab === 'research_references'} />
           )}
 
           <PersonnelManager active={activeTab === 'personnel'} />

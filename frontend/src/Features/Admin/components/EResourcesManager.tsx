@@ -4,7 +4,8 @@ import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoint
 import { Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   useCachedQuery,
-  invalidateCacheByPrefix,
+  revalidateCacheByPrefix,
+  useModalSafeCmsSync,
   usePersistentState,
   useScrollRestoration,
   useToast,
@@ -13,6 +14,7 @@ import {
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
+import { ScrollableSelect, type ScrollableSelectOption } from '@/src/Components/Shared/ScrollableSelect';
 
 export function EResourcesManager() {
   const [expandedFolderIds, setExpandedFolderIds] = usePersistentState<string[]>('admin:eresources:expanded', [], { storage: 'session' });
@@ -25,6 +27,7 @@ export function EResourcesManager() {
   // Modals
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<EResourceDepartment | null>(null);
+  const [deptParentId, setDeptParentId] = useState<string>('');
 
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -47,12 +50,25 @@ export function EResourcesManager() {
     fetcher: () => eresourceApi.getAllDepartments(),
     staleTimeMs: 30_000,
     persistStorage: true,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
   });
 
-  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
+  const { captureNow, highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
     storageKey: 'admin:eresources',
     isReady: !isLoading,
+  });
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy:
+      isDeptModalOpen ||
+      isFileModalOpen ||
+      isSavingDept ||
+      isUploadingFile ||
+      isRemoving ||
+      Boolean(undoState?.isOpen),
+    captureNow,
+    restoreNow,
+    onSync: () => loadData(),
   });
 
   const departments = cachedDepartments ?? [];
@@ -75,14 +91,14 @@ export function EResourcesManager() {
   const handleSaveDept = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSavingDept) return;
+    captureNow(editingDept ? `dept:${editingDept.id}` : null);
     setIsSavingDept(true);
     showToast('Saving department...', 'info');
 
     const fd = new FormData(e.currentTarget);
-    const parentIdStr = fd.get('parent') as string;
     const payload = {
       name: fd.get('name') as string,
-      parent: parentIdStr ? parseInt(parentIdStr, 10) : null,
+      parent: deptParentId ? parseInt(deptParentId, 10) : null,
     };
 
     try {
@@ -93,14 +109,19 @@ export function EResourcesManager() {
         const parentKey = String(payload.parent);
         setExpandedFolderIds((prev) => (prev.includes(parentKey) ? prev : [...prev, parentKey]));
       }
-      invalidateCacheByPrefix('admin:eresources');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:eresources');
       showToast(`Department ${editingDept ? 'updated' : 'created'} successfully`, 'success');
       setIsDeptModalOpen(false);
       await loadData();
       if (savedDept?.id != null) {
         const anchorId = `dept:${savedDept.id}`;
         setLastAnchorId(anchorId);
-        restoreNow(anchorId);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(anchorId);
+          });
+        });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save department';
@@ -136,21 +157,33 @@ export function EResourcesManager() {
 
     if (!deptToDelete) return;
 
+    captureNow(null);
     triggerDelete(
       (deptToDelete as EResourceDepartment).name,
       async () => {
         try {
           await eresourceApi.deleteDepartment(id);
-          invalidateCacheByPrefix('admin:eresources');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:eresources');
         } catch (err: unknown) {
           await loadData();
           const message = err instanceof Error ? err.message : 'Failed to delete department';
           showToast(message, 'error');
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(`dept:${id}`);
+            });
+          });
         }
       },
       () => {
         loadData();
         showToast('Department restoration undone', 'success');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(`dept:${id}`);
+          });
+        });
       },
     );
 
@@ -181,6 +214,7 @@ export function EResourcesManager() {
     const count = ids.length;
     const backup = [...departmentsRef.current];
 
+    captureNow(null);
     const filterDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
       return depts
         .filter((d) => !selectedDeptIds.has(d.id))
@@ -200,7 +234,8 @@ export function EResourcesManager() {
         const toastId = showToast(`${count} items processing in background...`, 'loading');
         try {
           await bulkApi.delete('ERESOURCE_DEPT', ids);
-          invalidateCacheByPrefix('admin:eresources');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:eresources');
           showToast(`${count} folders successfully queued for deletion`, 'success');
         } catch {
           await loadData();
@@ -225,6 +260,7 @@ export function EResourcesManager() {
       return;
     }
     if (isUploadingFile) return;
+    captureNow(null);
     setIsUploadingFile(true);
     showToast('Uploading file...', 'info');
 
@@ -234,7 +270,8 @@ export function EResourcesManager() {
 
     try {
       const savedFile = await eresourceApi.createFile(fd);
-      invalidateCacheByPrefix('admin:eresources');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:eresources');
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       setSelectedFile(null);
@@ -242,7 +279,11 @@ export function EResourcesManager() {
       if (savedFile?.id != null) {
         const anchorId = `file:${savedFile.id}`;
         setLastAnchorId(anchorId);
-        restoreNow(anchorId);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(anchorId);
+          });
+        });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to upload file';
@@ -266,21 +307,33 @@ export function EResourcesManager() {
     findFile(departmentsRef.current);
     if (!fileToDelete) return;
 
+    captureNow(null);
     triggerDelete(
       (fileToDelete as EResourceFile).name,
       async () => {
         try {
           await eresourceApi.deleteFile(id);
-          invalidateCacheByPrefix('admin:eresources');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:eresources');
         } catch (err: unknown) {
           await loadData();
           const message = err instanceof Error ? err.message : 'Failed to delete file';
           showToast(message, 'error');
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(`file:${id}`);
+            });
+          });
         }
       },
       () => {
         loadData();
         showToast('File restoration undone', 'success');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(`file:${id}`);
+          });
+        });
       },
     );
 
@@ -300,6 +353,7 @@ export function EResourcesManager() {
     const count = ids.length;
     const backup = [...departmentsRef.current];
 
+    captureNow(null);
     const removeFileFromDept = (depts: EResourceDepartment[]): EResourceDepartment[] => {
       return depts.map((d) => ({
         ...d,
@@ -318,7 +372,8 @@ export function EResourcesManager() {
         const toastId = showToast(`${count} items processing in background...`, 'loading');
         try {
           await bulkApi.delete('ERESOURCE_FILE', ids);
-          invalidateCacheByPrefix('admin:eresources');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:eresources');
           showToast(`${count} files successfully queued for deletion`, 'success');
         } catch {
           await loadData();
@@ -394,6 +449,7 @@ export function EResourcesManager() {
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditingDept(dept);
+                  setDeptParentId(dept.parent ? String(dept.parent) : '');
                   setIsDeptModalOpen(true);
                 }}
                 className="p-1 text-blue-600 hover:bg-blue-100 rounded cursor-pointer border-none bg-transparent"
@@ -425,6 +481,16 @@ export function EResourcesManager() {
 
   const selectedDept = selectedDeptId ? findDeptById(departments, selectedDeptId) : null;
   const loading = isLoading && departments.length === 0;
+  const parentFolderOptions = useMemo<ScrollableSelectOption[]>(
+    () => [
+      { value: '', label: '-- None (Root Folder) --' },
+      ...departments.map((d) => ({
+        value: String(d.id),
+        label: d.name,
+      })),
+    ],
+    [departments],
+  );
 
   return (
     <>
@@ -472,6 +538,7 @@ export function EResourcesManager() {
               <button
                 onClick={() => {
                   setEditingDept(null);
+                  setDeptParentId('');
                   setIsDeptModalOpen(true);
                 }}
                 className="text-sm flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded text-gray-700 hover:bg-gray-50"
@@ -644,12 +711,15 @@ export function EResourcesManager() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Parent Folder (Optional)</label>
-                <select name="parent" defaultValue={editingDept?.parent || ''} className="w-full px-3 py-2 border border-gray-200 rounded-lg">
-                  <option value="">-- None (Root Folder) --</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+                <ScrollableSelect
+                  value={deptParentId}
+                  options={parentFolderOptions}
+                  onChange={setDeptParentId}
+                  placeholder={loading ? 'Loading folders...' : '-- None (Root Folder) --'}
+                  ariaLabel="Parent Folder"
+                  menuMaxHeightClass="max-h-48"
+                  className="w-full"
+                />
                 <p className="text-xs text-gray-500 mt-1">Select a parent folder to nest this department inside it.</p>
               </div>
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">

@@ -170,9 +170,21 @@ services:
       - ./frontend/src/Assets/assets:/app/frontend_assets:ro
       - ./frontend/public/assets:/app/frontend_public_assets:ro
       - "./frontend/src/Assets/FAQ cache:/frontend/src/Assets/FAQ cache"
+    expose:
+      - "8000"
+      - "8001"
+    # Split HTTP (multi-worker Gunicorn :8000) from WebSockets (single Daphne :8001)
+    # so concurrent admin uploads/CPU image processing never starve event loops or /ws/.
     command: >
       sh -c "python manage.py migrate --noinput &&
-             daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+             { daphne -b 0.0.0.0 -p 8001 core.asgi:application &
+               exec gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4 --worker-class gthread --timeout 180 --graceful-timeout 30 --keep-alive 5; }"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; req=urllib.request.Request('http://127.0.0.1:8000/api/health/', headers={'Host':'localhost','X-Forwarded-Proto':'https'}); sys.exit(0 if urllib.request.urlopen(req, timeout=4).status == 200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     logging:
       driver: "json-file"
       options:
@@ -237,13 +249,15 @@ services:
         VITE_APP_MODE: webpage
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:80"
     volumes:
       - ./frontend/public/google2d437595507846a0.html:/usr/share/nginx/html/google2d437595507846a0.html:ro
       - ./frontend/public/sitemap.xml:/usr/share/nginx/html/sitemap.xml:ro
       - ./frontend/public/robots.txt:/usr/share/nginx/html/robots.txt:ro
+      - ./backend/media:/usr/share/nginx/media:ro
     logging:
       driver: "json-file"
       options:
@@ -260,9 +274,12 @@ services:
         VITE_APP_MODE: admin
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "${ADMIN_BIND_IP:-127.0.0.1}:3001:80"
+    volumes:
+      - ./backend/media:/usr/share/nginx/media:ro
     logging:
       driver: "json-file"
       options:
