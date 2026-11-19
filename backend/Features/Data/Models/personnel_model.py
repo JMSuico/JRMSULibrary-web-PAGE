@@ -7,6 +7,7 @@ class Personnel(models.Model):
     title = models.CharField(max_length=200)
     photo = models.ImageField(upload_to='personnel/', blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['order']

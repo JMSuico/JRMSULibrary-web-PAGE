@@ -22,17 +22,20 @@ import {
   Area,
 } from 'recharts';
 import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
-import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { createPortal } from 'react-dom';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 
 export function Dashboard() {
   const [showAllBooksModal, setShowAllBooksModal] = useState(false);
-  const [bookSearch, setBookSearch] = useState('');
+  const [bookSearch, setBookSearch] = usePersistentState<string>('admin:dashboard:modal:search', '', {
+    storage: 'session',
+  });
   const debouncedBookSearch = useDebounce(bookSearch, 400);
   const { showToast } = useToast();
 
@@ -41,6 +44,12 @@ export function Dashboard() {
     fetcher: () => reportApi.getSummary(),
     staleTimeMs: 30_000,
     listenCmsUpdate: true,
+    persistStorage: true,
+  });
+
+  useScrollRestoration({
+    storageKey: 'admin:dashboard',
+    isReady: !isLoading,
   });
 
   useEffect(() => {
@@ -73,16 +82,21 @@ export function Dashboard() {
     items: sortedRecentBooks,
     pageSize: 10,
     storageKey: 'jrmsu_admin_dashboard_recent_page_size',
+    pageStorageKey: 'admin:dashboard:recent:page',
   });
 
   const modalBooksPagination = usePagination<ReportSummary['recent_books'][number]>({
     items: filteredModalBooks,
     pageSize: 10,
     storageKey: 'jrmsu_admin_dashboard_modal_page_size',
+    pageStorageKey: 'admin:dashboard:modal:page',
   });
 
   const { setPage: setModalPage } = modalBooksPagination;
+  const prevModalSearchRef = useRef(debouncedBookSearch);
   useEffect(() => {
+    if (prevModalSearchRef.current === debouncedBookSearch) return;
+    prevModalSearchRef.current = debouncedBookSearch;
     setModalPage(1);
   }, [debouncedBookSearch, setModalPage]);
 

@@ -1,51 +1,72 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useIntersectionObserver } from '@/src/Hooks/useIntersectionObserver';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import React, { useMemo } from 'react';
+import {
+  useIntersectionObserver,
+  useAutoRefresh,
+  useCarouselStyle,
+  useCachedQuery,
+  usePersistentState,
+} from '@/src/Hooks';
 import { BookCarousel } from '@/src/Features/Collection/components/BookCarousel';
 import { ClassicHorizontalCarousel } from '@/src/Components/Shared/ClassicHorizontalCarousel';
 import { BookListModal } from '@/src/Components/Modals/BookListModal';
-import { batchApi } from '@/src/Endpoints/batchApi';
-import { useCarouselStyle } from '@/src/Hooks/useCarouselStyle';
+import { batchApi, type AcquisitionBatch } from '@/src/Endpoints/batchApi';
 import { getImageUrl } from '@/src/Libs/apiClient';
+
+interface NewlyAcquiredBookItem {
+  id: number;
+  title: string;
+  description: string;
+  category: string;
+  image?: string;
+  icon?: string;
+}
+
+const isBooleanValue = (value: unknown): value is boolean => typeof value === 'boolean';
 
 export const NewlyAcquiredBooks: React.FC = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.1 });
-  const [modalOpen, setModalOpen] = useState(false);
-  const [books, setBooks] = useState<any[]>([]);
-  const [batchName, setBatchName] = useState('Newly Acquired Books');
-  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = usePersistentState<boolean>(
+    'public:collection:bookListOpen',
+    false,
+    { validate: isBooleanValue },
+  );
   const carouselStyle = useCarouselStyle();
 
-  const fetchBooks = useCallback(async () => {
-    try {
-      const batch = await batchApi.getCurrentDisplayBatch();
-      if (batch && batch.books) {
-        setBatchName(`Newly Acquired Books – ${batch.name}`);
-        setBooks(batch.books.map(b => ({
-          title: b.title,
-          description: `${b.author ? `By ${b.author} ` : ''}(${b.category})`,
-          image: b.cover_image ? getImageUrl(b.cover_image) : undefined,
-          icon: !b.cover_image ? 'book' : undefined
-        })));
-      } else {
-        setBooks([]);
-        setBatchName('Newly Acquired Books');
-      }
-    } catch (error) {
-      console.error('Error fetching batch', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data: batch,
+    isLoading: loading,
+    refetch,
+  } = useCachedQuery<AcquisitionBatch | null>({
+    key: 'public:display-batch',
+    fetcher: () => batchApi.getCurrentDisplayBatch(),
+    persistStorage: true,
+    listenCmsUpdate: true,
+  });
 
-  useEffect(() => {
-    fetchBooks();
-  }, [fetchBooks]);
+  const batchName = batch && batch.books ? `Newly Acquired Books – ${batch.name}` : 'Newly Acquired Books';
 
-  useAutoRefresh(fetchBooks, 30000);
+  const books = useMemo<NewlyAcquiredBookItem[]>(() => {
+    if (!batch || !batch.books) return [];
+    return batch.books.map((b) => ({
+      id: b.id,
+      title: b.title,
+      description: `${b.author ? `By ${b.author} ` : ''}(${b.category})`,
+      category: b.category,
+      image: b.cover_image ? getImageUrl(b.cover_image) : undefined,
+      icon: !b.cover_image ? 'book' : undefined,
+    }));
+  }, [batch]);
+
+  useAutoRefresh(() => {
+    void refetch(true);
+  }, 30000);
 
   return (
-    <div id="new-books" className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`} ref={ref as any}>
+    <div
+      id="new-books"
+      className={`py-section-py-desktop reveal ${isVisible ? 'visible' : ''}`}
+      ref={ref as React.RefObject<HTMLDivElement>}
+    >
       <div className="max-w-max-width mx-auto px-4 md:px-gutter">
         <div className="text-center mb-8">
           <h2 className="font-headline-lg font-bold text-4xl mb-4" style={{ color: 'var(--color-primary)', textShadow: '0 2px 8px var(--color-black-alpha-60)' }}>

@@ -3,6 +3,11 @@ import { createPortal } from 'react-dom';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
+import {
+  PDF_RANGE_CHUNK_BYTES,
+  isBlockedPdfShortcut,
+  isRenderingCancelled,
+} from '@/src/Libs/pdfViewerUtils';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -15,7 +20,6 @@ interface FileViewerModalProps {
 
 type PdfViewMode = 'single' | 'vertical' | 'horizontal';
 
-const PDF_RANGE_CHUNK_BYTES = 524288; // 512 KB range chunks for sub-2s first-page load
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.2;
 const ZOOM_STEP = 0.2;
@@ -36,24 +40,6 @@ const normalizeSafePdfUrl = (rawPath: string): string | null => {
     return null;
   }
 };
-
-const isBlockedViewerShortcut = (e: KeyboardEvent): boolean => {
-  const key = e.key.toLowerCase();
-  const hasPrimaryModifier = e.ctrlKey || e.metaKey;
-  return (
-    e.key === 'F12' ||
-    key === 'f12' ||
-    (hasPrimaryModifier && e.shiftKey && (key === 'i' || key === 'c' || key === 'j')) ||
-    (e.metaKey && e.altKey && (key === 'i' || key === 'c' || key === 'j')) ||
-    (hasPrimaryModifier && (key === 'u' || key === 's' || key === 'p'))
-  );
-};
-
-const isRenderingCancelled = (err: unknown): boolean =>
-  typeof err === 'object' &&
-  err !== null &&
-  'name' in err &&
-  (err as { name: unknown }).name === 'RenderingCancelledException';
 
 const setsEqual = (a: Set<number>, b: Set<number>): boolean => {
   if (a.size !== b.size) return false;
@@ -318,7 +304,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ file, fileList
 
   // Defense-in-depth read-only keyboard guard: block Inspect, View-Source, Save, and Print shortcuts.
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (isBlockedViewerShortcut(e)) {
+    if (isBlockedPdfShortcut(e)) {
       e.preventDefault();
       e.stopPropagation();
       return;

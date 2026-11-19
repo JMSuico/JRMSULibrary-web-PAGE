@@ -1,4 +1,5 @@
 import { apiClient } from '@/src/Libs/apiClient';
+import { clearAllAdminCaches } from '@/src/Libs/statePersistence';
 
 export interface User {
   id: number;
@@ -22,7 +23,11 @@ export const userApi = {
   },
 
   logout: async (): Promise<void> => {
-    return apiClient(`/users/logout/`, { method: 'POST' });
+    try {
+      await apiClient(`/users/logout/`, { method: 'POST' });
+    } finally {
+      clearAllAdminCaches();
+    }
   },
 
   forceLogout: async (id: number): Promise<void> => {

@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TreeNodeData } from '@/src/Libs/Assets/treeData';
+import { usePersistentState } from '@/src/Hooks';
+import { readPersistedValue } from '@/src/Libs/statePersistence';
 
 interface TreeViewProps {
   nodes: TreeNodeData[];
@@ -8,16 +10,33 @@ interface TreeViewProps {
   onSearchChange?: (q: string) => void;
   sortOrder?: string;
   onSortChange?: (s: string) => void;
+  persistenceKey?: string;
 }
 
 interface TreeNodeProps {
   node: TreeNodeData;
   depth: number;
+  parentPath: string;
   onFileSelect: (node: TreeNodeData) => void;
+  expandedSet?: Set<string>;
+  onTogglePath?: (path: string) => void;
 }
 
-const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, onFileSelect }) => {
-  const [isOpen, setIsOpen] = useState(depth < 1);
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+const TreeNode: React.FC<TreeNodeProps> = ({
+  node,
+  depth,
+  parentPath,
+  onFileSelect,
+  expandedSet,
+  onTogglePath,
+}) => {
+  const [localOpen, setLocalOpen] = useState(depth < 1);
+  const nodePath = parentPath ? `${parentPath}/${node.name}` : node.name;
+  const isControlled = expandedSet !== undefined && onTogglePath !== undefined;
+  const isOpen = isControlled ? expandedSet.has(nodePath) : localOpen;
 
   if (node.type === 'file') {
     return (
@@ -37,13 +56,22 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, onFileSelect }) => {
     );
   }
 
-  const hasChildren = node.children && node.children.length > 0;
+  const hasChildren = Boolean(node.children && node.children.length > 0);
+
+  const handleToggle = () => {
+    if (!hasChildren) return;
+    if (isControlled) {
+      onTogglePath(nodePath);
+    } else {
+      setLocalOpen((prev) => !prev);
+    }
+  };
 
   return (
     <div className="tree-node">
       <div
         className="tree-node-header"
-        onClick={() => hasChildren && setIsOpen(!isOpen)}
+        onClick={handleToggle}
         style={{ paddingLeft: `${12 + depth * 20}px` }}
       >
         <span className={`tree-icon expand material-symbols-outlined ${isOpen ? 'open' : ''}`}>
@@ -65,7 +93,15 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, onFileSelect }) => {
           style={{ maxHeight: isOpen ? '10000px' : '0' }}
         >
           {node.children!.map((child, idx) => (
-            <TreeNode key={idx} node={child} depth={depth + 1} onFileSelect={onFileSelect} />
+            <TreeNode
+              key={`${nodePath}/${child.name}-${idx}`}
+              node={child}
+              depth={depth + 1}
+              parentPath={nodePath}
+              onFileSelect={onFileSelect}
+              expandedSet={expandedSet}
+              onTogglePath={onTogglePath}
+            />
           ))}
         </div>
       )}
@@ -80,7 +116,39 @@ export const TreeView: React.FC<TreeViewProps> = ({
   onSearchChange,
   sortOrder = 'Folders First',
   onSortChange,
+  persistenceKey,
 }) => {
+  const [persistedPaths, setPersistedPaths] = usePersistentState<string[]>(
+    persistenceKey ?? '__treeview_ephemeral__',
+    [],
+    { validate: isStringArray },
+  );
+
+  useEffect(() => {
+    if (!persistenceKey || nodes.length === 0) return;
+    const existing = readPersistedValue<string[] | null>(persistenceKey, null, 'session');
+    if (existing === null) {
+      const defaultOpen = nodes
+        .filter((node) => node.type === 'folder')
+        .map((node) => node.name);
+      setPersistedPaths(defaultOpen);
+    }
+  }, [persistenceKey, nodes, setPersistedPaths]);
+
+  const expandedSet = useMemo(
+    () => (persistenceKey ? new Set<string>(persistedPaths) : undefined),
+    [persistenceKey, persistedPaths],
+  );
+
+  const handleTogglePath = useCallback(
+    (path: string) => {
+      if (!persistenceKey) return;
+      setPersistedPaths((prev) =>
+        prev.includes(path) ? prev.filter((item) => item !== path) : [...prev, path],
+      );
+    },
+    [persistenceKey, setPersistedPaths],
+  );
   return (
     <div className="border border-outline-variant rounded-xl bg-white overflow-hidden">
       {/* Header */}
@@ -141,7 +209,15 @@ export const TreeView: React.FC<TreeViewProps> = ({
       <div className="p-2 max-h-[500px] overflow-y-auto">
         {nodes.length > 0 ? (
           nodes.map((node, idx) => (
-            <TreeNode key={idx} node={node} depth={0} onFileSelect={onFileSelect} />
+            <TreeNode
+              key={`${node.name}-${idx}`}
+              node={node}
+              depth={0}
+              parentPath=""
+              onFileSelect={onFileSelect}
+              expandedSet={expandedSet}
+              onTogglePath={persistenceKey ? handleTogglePath : undefined}
+            />
           ))
         ) : (
           <div className="text-center py-8">

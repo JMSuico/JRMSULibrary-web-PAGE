@@ -14,13 +14,27 @@ import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQu
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
 
+const isNullableNumber = (value: unknown): value is number | null =>
+  value === null || (typeof value === 'number' && Number.isFinite(value));
+
+const isViewMode = (value: unknown): value is ViewMode =>
+  value === 'table' || value === 'grid';
+
+const isString = (value: unknown): value is string =>
+  typeof value === 'string';
+
 export function BooksManager() {
-  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = usePersistentState<number | null>(
+    'admin:books:selectedBatchId',
+    null,
+    { validate: isNullableNumber },
+  );
   const [actionLoading, setActionLoading] = useState(false);
 
   // Modals
@@ -37,9 +51,21 @@ export function BooksManager() {
   const [isRemoving, setIsRemoving] = useState(false);
 
   // View state
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [viewMode, setViewMode] = usePersistentState<ViewMode>(
+    'admin:books:viewMode',
+    'table',
+    { validate: isViewMode },
+  );
+  const [searchQuery, setSearchQuery] = usePersistentState<string>(
+    'admin:books:search',
+    '',
+    { validate: isString },
+  );
+  const [selectedCategory, setSelectedCategory] = usePersistentState<string>(
+    'admin:books:category',
+    'All',
+    { validate: isString },
+  );
 
   const { showToast, removeToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
@@ -53,6 +79,7 @@ export function BooksManager() {
     key: 'admin:batches',
     fetcher: () => batchApi.getAllBatches(),
     staleTimeMs: 30_000,
+    persistStorage: true,
     listenCmsUpdate: true,
   });
 
@@ -71,6 +98,7 @@ export function BooksManager() {
 
   const {
     data: currentBatchData,
+    isLoading: currentBatchLoading,
     refetch: refetchCurrentBatch,
     mutate: mutateCurrentBatch,
   } = useCachedQuery<AcquisitionBatch | null>({
@@ -78,6 +106,7 @@ export function BooksManager() {
     fetcher: () => (effectiveBatchId !== null ? batchApi.getBatchById(effectiveBatchId) : Promise.resolve(null)),
     enabled: effectiveBatchId !== null,
     staleTimeMs: 30_000,
+    persistStorage: effectiveBatchId !== null,
     listenCmsUpdate: true,
   });
 
@@ -87,6 +116,16 @@ export function BooksManager() {
 
   // Mouse Drag to Scroll for Recent Batches
   const recentBatchesRef = useRef<HTMLDivElement>(null);
+  const {
+    captureNow,
+    restoreNow,
+    highlightedId,
+    setLastAnchorId,
+  } = useScrollRestoration({
+    storageKey: 'admin:books',
+    isReady: !batchesLoading && !currentBatchLoading && !actionLoading,
+    horizontalRef: recentBatchesRef,
+  });
   const [isDraggingBatches, setIsDraggingBatches] = useState(false);
   const [startXBatches, setStartXBatches] = useState(0);
   const [scrollLeftBatches, setScrollLeftBatches] = useState(0);
@@ -126,8 +165,9 @@ export function BooksManager() {
       setIsCreateBatchOpen(false);
       showToast('Batch created successfully', 'success');
       await refreshAll();
-    } catch (error: any) {
-      showToast(error.message || 'Failed to create batch', 'error');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Failed to create batch';
+      showToast(msg, 'error');
     }
   };
 
@@ -149,8 +189,9 @@ export function BooksManager() {
       }
       showToast(`Batch ${action}d successfully`, 'success');
       await refreshAll();
-    } catch (error: any) {
-      showToast(error.message || `Failed to ${action} batch`, 'error');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : `Failed to ${action} batch`;
+      showToast(msg, 'error');
     }
   };
 
@@ -164,8 +205,9 @@ export function BooksManager() {
       invalidateCacheByPrefix('admin:batch');
       invalidateCacheByPrefix('admin:dashboard');
       showToast('Batch updated successfully', 'success');
-    } catch (error: any) {
-      showToast(error.message || 'Failed to update batch', 'error');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Failed to update batch';
+      showToast(msg, 'error');
     }
   };
 
@@ -178,9 +220,10 @@ export function BooksManager() {
           if (selectedBatchId === batch.id) setSelectedBatchId(null);
           invalidateCacheByPrefix('admin:batch');
           invalidateCacheByPrefix('admin:dashboard');
-        } catch (error: any) {
+        } catch (error: unknown) {
           mutateBatches([...batchesRef.current, batch]);
-          showToast(error.message || 'Failed to delete batch', 'error');
+          const msg = error instanceof Error ? error.message : 'Failed to delete batch';
+          showToast(msg, 'error');
         }
       },
       () => {
@@ -203,8 +246,9 @@ export function BooksManager() {
         setAuditBatch({ ...batch, history });
       }
       await refreshAll();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load audit trail', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load audit trail';
+      showToast(msg, 'error');
     } finally {
       setActionLoading(false);
     }
@@ -237,6 +281,7 @@ export function BooksManager() {
     setActionLoading(true);
     try {
       await batchApi.touchBatch(id);
+      setLastAnchorId(null);
       setSelectedBatchId(id);
       // Reset book-level filters so stale search/category doesn't carry over to a different batch
       setSearchQuery('');
@@ -251,12 +296,27 @@ export function BooksManager() {
     }
   };
 
+  const handleCategoriesChanged = async () => {
+    captureNow(editingBook?.id ?? null);
+    invalidateCacheByPrefix('admin:batch');
+    invalidateCacheByPrefix('admin:batches');
+    await Promise.all([
+      refetchBatches(),
+      effectiveBatchId !== null ? refetchCurrentBatch() : Promise.resolve(),
+    ]);
+    restoreNow(editingBook?.id ?? null);
+  };
+
   const handleAddOrUpdateBook = async (data: FormData) => {
     const activeBatch = currentBatchRef.current;
     if (!activeBatch) return;
     try {
+      let targetBookId: number;
       if (editingBook) {
+        captureNow(editingBook.id);
         const updatedBook = await batchApi.updateBook(activeBatch.id, editingBook.id, data);
+        targetBookId = updatedBook.id;
+        setLastAnchorId(targetBookId);
         // Optimistic update: replace the edited book in cached state
         mutateCurrentBatch({
           ...activeBatch,
@@ -264,7 +324,10 @@ export function BooksManager() {
         });
         showToast('Book updated successfully', 'success');
       } else {
+        captureNow(null);
         const newBook = await batchApi.addBookToBatch(activeBatch.id, data);
+        targetBookId = newBook.id;
+        setLastAnchorId(targetBookId);
         // Optimistic update: append new book to cached state
         mutateCurrentBatch({
           ...activeBatch,
@@ -277,8 +340,10 @@ export function BooksManager() {
       invalidateCacheByPrefix('admin:dashboard');
       setIsBookFormOpen(false);
       setEditingBook(undefined);
-    } catch (error: any) {
-      showToast(error.message || 'Failed to save book', 'error');
+      restoreNow(targetBookId);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to save book';
+      showToast(message, 'error');
       await refetchCurrentBatch();
     }
   };
@@ -303,7 +368,7 @@ export function BooksManager() {
           await batchApi.deleteBook(activeBatch.id, bookId);
           invalidateCacheByPrefix('admin:batch');
           invalidateCacheByPrefix('admin:dashboard');
-        } catch (error: any) {
+        } catch (error: unknown) {
           const latest = currentBatchRef.current;
           if (latest) {
             mutateCurrentBatch({
@@ -312,7 +377,8 @@ export function BooksManager() {
               book_count: (latest.book_count || 0) + 1,
             });
           }
-          showToast(error.message || 'Failed to delete book', 'error');
+          const msg = error instanceof Error ? error.message : 'Failed to delete book';
+          showToast(msg, 'error');
         }
       },
       () => {
@@ -412,12 +478,37 @@ export function BooksManager() {
     items: filteredBooks,
     pageSize: 10,
     storageKey: 'jrmsu_admin_books_page_size',
+    pageStorageKey: 'admin:books:page',
   });
   const paginatedBooks = booksPagination.paginatedItems;
 
   const { setPage: setBooksPage } = booksPagination;
+  const prevBookFilterRef = useRef<{
+    search: string;
+    category: string;
+    batchId: number;
+  } | null>(null);
+
   useEffect(() => {
-    setBooksPage(1);
+    if (currentBatch?.id === undefined) return;
+    const nextFilter = {
+      search: debouncedSearch,
+      category: selectedCategory,
+      batchId: currentBatch.id,
+    };
+    if (prevBookFilterRef.current === null) {
+      prevBookFilterRef.current = nextFilter;
+      return;
+    }
+    const prev = prevBookFilterRef.current;
+    if (
+      prev.search !== nextFilter.search ||
+      prev.category !== nextFilter.category ||
+      prev.batchId !== nextFilter.batchId
+    ) {
+      prevBookFilterRef.current = nextFilter;
+      setBooksPage(1);
+    }
   }, [debouncedSearch, selectedCategory, currentBatch?.id, setBooksPage]);
 
   // Batches sorted ascending for View All modal
@@ -559,7 +650,14 @@ export function BooksManager() {
                 </button>
               )}
               {currentBatch.status === 'open' && (
-                <button className="admin-btn admin-btn--primary" onClick={() => { setEditingBook(undefined); setIsBookFormOpen(true); }}>
+                <button
+                  className="admin-btn admin-btn--primary"
+                  onClick={() => {
+                    captureNow(null);
+                    setEditingBook(undefined);
+                    setIsBookFormOpen(true);
+                  }}
+                >
                   <Plus size={16} /> Add Book
                 </button>
               )}
@@ -620,34 +718,59 @@ export function BooksManager() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedBooks.map((book) => (
-                    <tr key={book.id} style={{ backgroundColor: selectedBookIds.has(book.id) ? 'var(--color-blue-50)' : 'transparent' }}>
-                      <td style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={selectedBookIds.has(book.id)}
-                          disabled={isRemoving}
-                          onChange={(e) => {
-                            const newSelected = new Set(selectedBookIds);
-                            if (e.target.checked) newSelected.add(book.id);
-                            else newSelected.delete(book.id);
-                            setSelectedBookIds(newSelected);
-                          }}
-                        />
-                      </td>
-                      <td style={{ fontWeight: 500 }}>{book.title}</td>
-                      <td>{book.author}</td>
-                      <td style={{ fontFamily: 'monospace' }}>{book.accession_number || 'N/A'}</td>
-                      <td><span className="admin-badge admin-badge--info">{book.category}</span></td>
-                      <td style={{ color: 'var(--color-gray-500)' }}>{new Date(book.date_encoded).toLocaleDateString()}</td>
-                      <td>
-                        <div className="admin-table__actions">
-                          <button className="admin-btn admin-btn--icon" onClick={() => { setEditingBook(book); setIsBookFormOpen(true); }}><Pencil size={15} /></button>
-                          <button className="admin-btn admin-btn--icon" style={{ color: 'var(--color-red-600)' }} onClick={() => handleDeleteBook(book.id)}><Trash2 size={15} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {paginatedBooks.map((book) => {
+                    const isHighlighted = highlightedId === String(book.id);
+                    const isSelected = selectedBookIds.has(book.id);
+                    return (
+                      <tr
+                        key={book.id}
+                        data-cache-anchor-id={String(book.id)}
+                        className={isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                        style={{
+                          backgroundColor: isSelected
+                            ? 'var(--color-blue-50)'
+                            : isHighlighted
+                              ? undefined
+                              : 'transparent',
+                        }}
+                      >
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isRemoving}
+                            onChange={(e) => {
+                              const newSelected = new Set(selectedBookIds);
+                              if (e.target.checked) newSelected.add(book.id);
+                              else newSelected.delete(book.id);
+                              setSelectedBookIds(newSelected);
+                            }}
+                          />
+                        </td>
+                        <td style={{ fontWeight: 500 }}>{book.title}</td>
+                        <td>{book.author}</td>
+                        <td style={{ fontFamily: 'monospace' }}>{book.accession_number || 'N/A'}</td>
+                        <td><span className="admin-badge admin-badge--info">{book.category}</span></td>
+                        <td style={{ color: 'var(--color-gray-500)' }}>{new Date(book.date_encoded).toLocaleDateString()}</td>
+                        <td>
+                          <div className="admin-table__actions">
+                            <button
+                              className="admin-btn admin-btn--icon"
+                              onClick={() => {
+                                captureNow(book.id);
+                                setLastAnchorId(book.id);
+                                setEditingBook(book);
+                                setIsBookFormOpen(true);
+                              }}
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button className="admin-btn admin-btn--icon" style={{ color: 'var(--color-red-600)' }} onClick={() => handleDeleteBook(book.id)}><Trash2 size={15} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {filteredBooks.length === 0 && (
                     <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No books in this batch match the filter.</td></tr>
                   )}
@@ -669,70 +792,83 @@ export function BooksManager() {
 
           {viewMode === 'grid' && (
             <div className="admin-card-grid" style={{ padding: 20 }}>
-              {paginatedBooks.map((book) => (
-                <div className="admin-grid-card relative" key={book.id}>
-                  {/* Kebab Menu */}
-                  <div className="absolute top-2 right-2 z-10">
-                    <div className="relative inline-block text-left">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(activeBookDropdown === book.id ? null : book.id); }}
-                        className="p-1.5 rounded-full bg-white/90 hover:bg-white text-gray-600 shadow-sm transition-colors border border-gray-100 cursor-pointer"
-                        aria-label="Book actions"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
+              {paginatedBooks.map((book) => {
+                const isHighlighted = highlightedId === String(book.id);
+                return (
+                  <div
+                    key={book.id}
+                    data-cache-anchor-id={String(book.id)}
+                    className={`admin-grid-card relative ${isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : ''}`}
+                  >
+                    {/* Kebab Menu */}
+                    <div className="absolute top-2 right-2 z-10">
+                      <div className="relative inline-block text-left">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(activeBookDropdown === book.id ? null : book.id); }}
+                          className="p-1.5 rounded-full bg-white/90 hover:bg-white text-gray-600 shadow-sm transition-colors border border-gray-100 cursor-pointer"
+                          aria-label="Book actions"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
 
-                      {activeBookDropdown === book.id && (
-                        <>
-                          <div className="fixed inset-0 z-[9999] animate-modal-overlay" onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(null); }}></div>
-                          <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1 animate-modal-card" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
-                              onClick={() => { setEditingBook(book); setIsBookFormOpen(true); setActiveBookDropdown(null); }}
-                            >
-                              <Pencil size={14} /> Edit
-                            </button>
-                            <button
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
-                              onClick={() => { handleDeleteBook(book.id); setActiveBookDropdown(null); }}
-                            >
-                              <Trash2 size={14} /> Delete
-                            </button>
-                          </div>
-                        </>
+                        {activeBookDropdown === book.id && (
+                          <>
+                            <div className="fixed inset-0 z-[9999] animate-modal-overlay" onClick={(e) => { e.stopPropagation(); setActiveBookDropdown(null); }}></div>
+                            <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-100 z-[10000] py-1 animate-modal-card" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
+                                onClick={() => {
+                                  captureNow(book.id);
+                                  setLastAnchorId(book.id);
+                                  setEditingBook(book);
+                                  setIsBookFormOpen(true);
+                                  setActiveBookDropdown(null);
+                                }}
+                              >
+                                <Pencil size={14} /> Edit
+                              </button>
+                              <button
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer border-none bg-transparent"
+                                onClick={() => { handleDeleteBook(book.id); setActiveBookDropdown(null); }}
+                              >
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12, position: 'relative' }}>
+                      <BookOpen size={40} color="var(--color-gray-400)" />
+                      {book.cover_image && (
+                        <img
+                          src={getThumbnailUrl(book.cover_image)}
+                          alt={book.title}
+                          loading="lazy"
+                          decoding="async"
+                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            const fallbackUrl = getImageUrl(book.cover_image);
+                            if (img.dataset.fallbackApplied !== '1' && fallbackUrl) {
+                              img.dataset.fallbackApplied = '1';
+                              img.src = fallbackUrl;
+                            } else {
+                              img.style.display = 'none';
+                            }
+                          }}
+                        />
                       )}
                     </div>
+                    <div className="admin-grid-card__body">
+                      <div className="admin-grid-card__title">{book.title}</div>
+                      <div className="admin-grid-card__meta">{book.author}</div>
+                      <div style={{ marginTop: 8 }}><span className="admin-badge admin-badge--info">{book.category}</span></div>
+                    </div>
                   </div>
-
-                  <div style={{ height: 140, background: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12, position: 'relative' }}>
-                    <BookOpen size={40} color="var(--color-gray-400)" />
-                    {book.cover_image && (
-                      <img
-                        src={getThumbnailUrl(book.cover_image)}
-                        alt={book.title}
-                        loading="lazy"
-                        decoding="async"
-                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          const fallbackUrl = getImageUrl(book.cover_image);
-                          if (img.dataset.fallbackApplied !== '1' && fallbackUrl) {
-                            img.dataset.fallbackApplied = '1';
-                            img.src = fallbackUrl;
-                          } else {
-                            img.style.display = 'none';
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div className="admin-grid-card__body">
-                    <div className="admin-grid-card__title">{book.title}</div>
-                    <div className="admin-grid-card__meta">{book.author}</div>
-                    <div style={{ marginTop: 8 }}><span className="admin-badge admin-badge--info">{book.category}</span></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {booksPagination.totalItems > 0 && (
                 <div className="col-span-full">
                   <Pagination
@@ -770,6 +906,7 @@ export function BooksManager() {
         onClose={() => { setIsBookFormOpen(false); setEditingBook(undefined); }}
         onSubmit={handleAddOrUpdateBook}
         initialData={editingBook}
+        onCategoriesChanged={handleCategoriesChanged}
       />
 
       {/* View All Batches Modal */}

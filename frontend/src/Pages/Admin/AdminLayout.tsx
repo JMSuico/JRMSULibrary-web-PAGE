@@ -9,7 +9,7 @@ import { ensureCsrfToken } from '@/src/Libs/apiClient';
 import { Loader2 } from 'lucide-react';
 import { PageTransition } from '@/src/Components/Shared/PageTransition';
 import { useGlobalAutoRefresh } from '@/src/Hooks/useGlobalAutoRefresh';
-import { invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { clearAllAdminCaches } from '@/src/Libs/statePersistence';
 
 /** Map route paths to human-readable page titles */
 const PAGE_TITLES: Record<string, string> = {
@@ -35,7 +35,7 @@ const useAuth = () => {
     const checkAuth = async () => {
       // Retry up to 2 times with a 600ms delay between attempts.
       // A single brief 401 during page navigation should NOT immediately kick the user out.
-      let lastError: any = null;
+      let lastError: unknown = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const currentUser = await userApi.me();
@@ -122,11 +122,18 @@ export default function AdminLayout() {
   // Monitor server connection: if server drops and reconnects, force reload. (Ignores normal CMS updates)
   useGlobalAutoRefresh(15000, false);
 
+  // Disable browser native scroll jump so module-level useScrollRestoration controls exact Y & anchor resume
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+  }, []);
+
   const handleAutoLogout = useCallback(async () => {
     if (isLoggingOutRef.current) return;
     isLoggingOutRef.current = true;
     localStorage.removeItem('admin_last_activity');
-    invalidateCacheByPrefix('admin:');
+    clearAllAdminCaches();
     try {
       await ensureCsrfToken();
       await userApi.logout();

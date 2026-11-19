@@ -1,35 +1,49 @@
 import { apiClient } from '@/src/Libs/apiClient';
+import { invalidateCacheByPrefix } from '@/src/Libs/swrCache';
+
+export const PERSONNEL_CACHE_KEY = 'public:personnel';
 
 export interface Personnel {
-  id: number;
+  id?: number;
   name: string;
   title: string;
   photo?: string | null;
+  photo_version?: string;
   order: number;
+  updated_at?: string;
 }
 
 export const personnelApi = {
-  getPersonnel: async (): Promise<Personnel[]> => {
-    return apiClient(`/personnel/`);
+  getPersonnel: async (options?: { fresh?: boolean }): Promise<Personnel[]> => {
+    const useFresh = options?.fresh ?? true;
+    return apiClient(
+      `/personnel/`,
+      useFresh ? { headers: { 'Cache-Control': 'no-cache' } } : undefined
+    );
   },
-  
+
   createPersonnel: async (data: Partial<Personnel> | FormData): Promise<Personnel> => {
-    return apiClient(`/personnel/`, {
+    const created = await apiClient(`/personnel/`, {
       method: 'POST',
       body: data instanceof FormData ? data : JSON.stringify(data),
     });
+    invalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
+    return created;
   },
 
   updatePersonnel: async (id: number, data: Partial<Personnel> | FormData): Promise<Personnel> => {
-    return apiClient(`/personnel/${id}/`, {
+    const updated = await apiClient(`/personnel/${id}/`, {
       method: 'PUT',
       body: data instanceof FormData ? data : JSON.stringify(data),
     });
+    invalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
+    return updated;
   },
 
   deletePersonnel: async (id: number): Promise<void> => {
-    return apiClient(`/personnel/${id}/`, {
+    await apiClient(`/personnel/${id}/`, {
       method: 'DELETE',
     });
-  }
+    invalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
+  },
 };

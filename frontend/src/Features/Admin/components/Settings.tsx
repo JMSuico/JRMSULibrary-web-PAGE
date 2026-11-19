@@ -7,11 +7,14 @@ import { settingsApi, SiteSettings } from '@/src/Endpoints/settingsApi';
 import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { usePersistentState, useScrollRestoration } from '@/src/Hooks';
 import { ArchivesManager } from './ArchivesManager';
 
 export function Settings() {
   const { user, setUser } = useOutletContext<AdminOutletContext>();
-  const [activeTab, setActiveTab] = useState<'profile' | 'general' | 'carousel' | 'security' | 'archives'>('profile');
+  const [activeTab, setActiveTab] = usePersistentState<
+    'profile' | 'general' | 'carousel' | 'security' | 'archives'
+  >('admin:settings:activeTab', 'profile', { storage: 'session' });
   const [saving, setSaving] = useState(false);
   const [savedStatus, setSavedStatus] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -73,8 +76,14 @@ export function Settings() {
       setIsEditing(false);
       showToast('Profile updated successfully', 'success');
       setTimeout(() => setSavedStatus(false), 3000);
-    } catch (err: any) {
-      showToast(err.message || err.error || 'Failed to update profile', 'error');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'error' in err
+            ? String((err as { error?: unknown }).error ?? 'Failed to update profile')
+            : 'Failed to update profile';
+      showToast(message, 'error');
     } finally {
       setSaving(false);
     }
@@ -116,6 +125,14 @@ export function Settings() {
     fetcher: () => settingsApi.getSettings(),
     staleTimeMs: 60_000,
     listenCmsUpdate: true,
+    persistStorage: true,
+  });
+
+  const loading = isLoading && !cachedSettings;
+
+  useScrollRestoration({
+    storageKey: 'admin:settings',
+    isReady: activeTab === 'archives' || !loading,
   });
 
   useEffect(() => {
@@ -133,7 +150,7 @@ export function Settings() {
     }
   }, [cachedSettings, isEditing]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -159,31 +176,34 @@ export function Settings() {
 
     if (activeTab === 'general' || activeTab === 'carousel') {
       try {
-        let payload: any = formData;
+        let payload: FormData | Partial<SiteSettings>;
 
         if (bgImageFile) {
           const formDataObj = new FormData();
-          Object.keys(formData).forEach((key) => {
-            if (key !== 'background_image' && (formData as any)[key] !== undefined && (formData as any)[key] !== null) {
-              formDataObj.append(key, (formData as any)[key]);
-            }
-          });
+          (Object.entries(formData) as [keyof SiteSettings, SiteSettings[keyof SiteSettings]][]).forEach(
+            ([key, val]) => {
+              if (key !== 'background_image' && val !== undefined && val !== null) {
+                formDataObj.append(key, String(val));
+              }
+            },
+          );
           formDataObj.append('background_image', bgImageFile);
           payload = formDataObj;
         } else {
-          payload = { ...formData };
-          if (typeof payload.background_image === 'string') {
-            delete payload.background_image;
+          const jsonPayload: Partial<SiteSettings> = { ...formData };
+          if (typeof jsonPayload.background_image === 'string') {
+            delete jsonPayload.background_image;
           }
+          payload = jsonPayload;
         }
 
         const updated = await settingsApi.updateSettings(payload);
-        setFormData(updated as any);
+        setFormData(updated);
         mutateSettings(updated);
         invalidateCacheByPrefix('admin:settings');
         setBgImageFile(null);
-        if ((updated as any).background_image) {
-          setBgImagePreview((updated as any).background_image);
+        if (updated.background_image) {
+          setBgImagePreview(updated.background_image);
         }
 
         if (updated.carousel_style) {
@@ -194,8 +214,9 @@ export function Settings() {
         setIsEditing(false);
         showToast('Settings saved successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
-      } catch (err: any) {
-        showToast(err.message || 'Failed to save settings', 'error');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to save settings';
+        showToast(message, 'error');
       }
     } else if (activeTab === 'security') {
       if (passwords.newPass !== passwords.confirm) {
@@ -213,15 +234,15 @@ export function Settings() {
         setIsEditing(false);
         showToast('Password updated successfully', 'success');
         setTimeout(() => setSavedStatus(false), 3000);
-      } catch (err: any) {
-        showToast(err.message || 'Failed to update password', 'error');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to update password';
+        showToast(message, 'error');
       }
     }
 
     setSaving(false);
   };
 
-  const loading = isLoading && !cachedSettings;
   const inputClass = 'w-full border border-gray-300 rounded-lg px-4 py-2.5 mt-1 focus:ring-2 focus:ring-navy focus:border-transparent outline-none transition-all';
   const labelClass = 'block text-sm font-semibold text-gray-700';
 
@@ -413,14 +434,14 @@ export function Settings() {
                       </div>
                       <div>
                         <label className={labelClass}>Saturday</label>
-                        <select name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange as any} className={inputClass} required disabled={!isEditing}>
+                        <select name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange} className={inputClass} required disabled={!isEditing}>
                           <option value="Open">Open</option>
                           <option value="Closed">Closed</option>
                         </select>
                       </div>
                       <div>
                         <label className={labelClass}>Sunday</label>
-                        <select name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange as any} className={inputClass} required disabled={!isEditing}>
+                        <select name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} required disabled={!isEditing}>
                           <option value="Open">Open</option>
                           <option value="Closed">Closed</option>
                         </select>

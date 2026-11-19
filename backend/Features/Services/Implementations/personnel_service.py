@@ -1,40 +1,42 @@
 # [Layer: Services/Implementations] — personnel_service.py
-from typing import List, Optional, Any
+from typing import Dict, List, Optional
+from Features.Data.Models import Personnel
 from Features.Services.Interfaces import IPersonnelService
 from Features.Repositories.Interfaces import IPersonnelRepository
 from Features.Repositories.Implementations.recycle_bin_repository import RecycleBinRepository
 from Features.Api.Serializers.personnel_serializer import PersonnelSerializer
 
+
 class PersonnelService(IPersonnelService):
-    def __init__(self, repo: IPersonnelRepository = None):
+    def __init__(self, repo: Optional[IPersonnelRepository] = None):
         if repo is None:
             from Features.Repositories.Implementations.personnel_repository import PersonnelRepository
             repo = PersonnelRepository()
         self._repo = repo
 
-    def get_personnel_list(self) -> List[Any]:
+    def get_personnel_list(self) -> List[Personnel]:
         return self._repo.get_all()
 
-    def get_personnel_by_id(self, personnel_id: int) -> Optional[Any]:
+    def get_personnel_by_id(self, personnel_id: int) -> Optional[Personnel]:
         return self._repo.get_by_id(personnel_id)
 
-    def create_personnel(self, data: dict) -> Any:
+    def create_personnel(self, data: Dict[str, object]) -> Personnel:
         from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
         if 'photo' in data and data['photo']:
             MalwareScannerHelper.verify_image_safety(data['photo'])
         return self._repo.create(data)
 
-    def update_personnel(self, personnel_id: int, data: dict) -> Optional[Any]:
+    def update_personnel(self, personnel_id: int, data: Dict[str, object]) -> Optional[Personnel]:
         from Features.Helpers.malware_scanner_helper import MalwareScannerHelper
         if 'photo' in data and data['photo']:
             MalwareScannerHelper.verify_image_safety(data['photo'])
         return self._repo.update(personnel_id, data)
 
-    def delete_personnel(self, personnel_id: int, user_id: int = None) -> bool:
+    def delete_personnel(self, personnel_id: int, user_id: Optional[int] = None) -> bool:
         personnel = self._repo.get_by_id(personnel_id)
         if not personnel:
             return False
-            
+
         snapshot = PersonnelSerializer(personnel).data
         recycle_repo = RecycleBinRepository()
         recycle_repo.create(
@@ -42,6 +44,6 @@ class PersonnelService(IPersonnelService):
             source_module='PERSONNEL',
             item_name=personnel.name or f"Personnel {personnel_id}",
             data_snapshot=snapshot,
-            user_id=user_id
+            user_id=user_id,
         )
         return self._repo.delete(personnel_id)

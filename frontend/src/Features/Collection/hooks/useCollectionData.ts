@@ -1,11 +1,27 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useMemo, useCallback } from 'react';
 import { eBooksTree, type TreeNodeData } from '@/src/Libs/Assets/treeData';
-import { eresourceApi, EResourceDepartment } from '@/src/Endpoints/eresourceApi';
-import { cmsApi, ManagedLink } from '@/src/Endpoints/cmsApi';
+import { eresourceApi, type EResourceDepartment } from '@/src/Endpoints/eresourceApi';
+import { cmsApi, type ManagedLink } from '@/src/Endpoints/cmsApi';
 import { defaultExternalLinks } from '@/src/Libs/Assets/defaultLinks';
-import { useAutoRefresh } from '@/src/Hooks/useAutoRefresh';
+import { useAutoRefresh, useCachedQuery, usePersistentState } from '@/src/Hooks';
 
-export function collectFiles(nodes: TreeNodeData[]): TreeNodeData[] {
+export type CollectionSortOrder = 'Folders First' | 'Files First' | 'A-Z' | 'Z-A';
+
+const isStringValue = (value: unknown): value is string => typeof value === 'string';
+
+const isCollectionSortOrder = (value: unknown): value is CollectionSortOrder =>
+  value === 'Folders First' || value === 'Files First' || value === 'A-Z' || value === 'Z-A';
+
+const fallbackLinks: ManagedLink[] = defaultExternalLinks.map((link, idx) => ({
+  id: -(idx + 1),
+  name: link.name,
+  url: link.url,
+  category: link.category,
+  order: idx,
+  is_active: true,
+}));
+
+export const collectFiles = (nodes: TreeNodeData[]): TreeNodeData[] => {
   const files: TreeNodeData[] = [];
   for (const node of nodes) {
     if (node.type === 'file' && node.path) {
@@ -129,50 +145,60 @@ export function sortTree(nodes: TreeNodeData[], order: 'A-Z' | 'Z-A' | 'Folders 
   });
 }
 
-export function useCollectionData(activeTab: string) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState<'Folders First' | 'Files First' | 'A-Z' | 'Z-A'>('Folders First');
-  const [departments, setDepartments] = useState<EResourceDepartment[]>([]);
-  const [onlineLinks, setOnlineLinks] = useState<ManagedLink[]>([]);
-  const [loadingResources, setLoadingResources] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+export const useCollectionData = (activeTab: string) => {
+  const [searchQuery, setSearchQuery] = usePersistentState<string>(
+    `public:collection:${activeTab}:search`,
+    '',
+    { validate: isStringValue },
+  );
+  const [sortOrder, setSortOrder] = usePersistentState<CollectionSortOrder>(
+    `public:collection:${activeTab}:sort`,
+    'Folders First',
+    { validate: isCollectionSortOrder },
+  );
 
-  const displayLinks = onlineLinks.length > 0 ? onlineLinks : (defaultExternalLinks as any as ManagedLink[]);
+  const {
+    data: departmentsData,
+    isLoading: loadingDepartments,
+    refetch: refetchDepartments,
+  } = useCachedQuery<EResourceDepartment[]>({
+    key: 'public:eresources',
+    fetcher: async () => {
+      const res = await eresourceApi.getAllDepartments();
+      return Array.isArray(res) ? res : [];
+    },
+    persistStorage: true,
+    listenCmsUpdate: true,
+  });
 
-  const load = async () => {
-    setLoadingResources(true);
-    setErrorMsg(null);
-    try {
-      console.log('Fetching Collection resources...');
-      const [depsRes, linksRes] = await Promise.allSettled([
-        eresourceApi.getAllDepartments(),
-        cmsApi.getAllLinks()
-      ]);
-      
-      if (depsRes.status === 'fulfilled' && Array.isArray(depsRes.value)) {
-        setDepartments(depsRes.value);
-      }
-      
-      if (linksRes.status === 'fulfilled' && Array.isArray(linksRes.value)) {
-        setOnlineLinks(linksRes.value.filter(l => l.is_active));
-      }
+  const {
+    data: linksData,
+    isLoading: loadingLinks,
+    refetch: refetchLinks,
+  } = useCachedQuery<ManagedLink[]>({
+    key: 'public:links',
+    fetcher: async () => {
+      const res = await cmsApi.getAllLinks();
+      return Array.isArray(res) ? res.filter((l) => l.is_active) : [];
+    },
+    persistStorage: true,
+    listenCmsUpdate: true,
+  });
 
-      // If backend is unreachable or returning 502, smoothly fallback to bundled catalog
-      if (depsRes.status === 'rejected' && linksRes.status === 'rejected') {
-        console.warn('Backend currently offline/restarting, smoothly serving bundled offline library catalog.');
-      }
-    } catch (e: any) {
-      console.warn('Failed to load Collection resources, using offline fallback', e);
-    } finally {
-      setLoadingResources(false);
-    }
-  };
+  const departments = useMemo(() => departmentsData ?? [], [departmentsData]);
+  const onlineLinks = useMemo(() => linksData ?? [], [linksData]);
+  const loadingResources = loadingDepartments || loadingLinks;
+  const errorMsg: string | null = null;
 
-  useEffect(() => {
-    load();
-  }, []);
+  const displayLinks = onlineLinks.length > 0 ? onlineLinks : fallbackLinks;
 
-  useAutoRefresh(load, 30000);
+  const load = useCallback(async () => {
+    await Promise.allSettled([refetchDepartments(true), refetchLinks(true)]);
+  }, [refetchDepartments, refetchLinks]);
+
+  useAutoRefresh(() => {
+    void load();
+  }, 30000);
 
   const localTree = useMemo(() => {
     const dynamic = mapDepartmentsToTree(departments);
@@ -201,4 +227,4 @@ export function useCollectionData(activeTab: string) {
     filteredTree,
     load,
   };
-}
+};

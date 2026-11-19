@@ -1,6 +1,7 @@
 from .contact_repository import ContactRepository
 from .feedback_repository import FeedbackRepository
 from .book_repository import NewlyAcquiredBookRepository
+from .book_category_repository import BookCategoryRepository
 from .cms_repository import (
     PageContentRepository,
     PageImageRepository,
@@ -18,6 +19,7 @@ __all__ = [
     'ContactRepository',
     'FeedbackRepository',
     'NewlyAcquiredBookRepository',
+    'BookCategoryRepository',
     'PageContentRepository',
     'PageImageRepository',
     'ManagedLinkRepository',

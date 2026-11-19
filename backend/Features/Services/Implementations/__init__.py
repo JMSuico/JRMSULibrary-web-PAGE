@@ -13,6 +13,7 @@ from .personnel_service import PersonnelService
 from .analytics_service import SiteVisitService
 from .recycle_bin_service import RecycleBinService
 from .notification_service import NotificationService
+from .book_category_service import BookCategoryService
 
 __all__ = [
     'ContactService',
@@ -29,4 +30,5 @@ __all__ = [
     'SiteVisitService',
     'RecycleBinService',
     'NotificationService',
+    'BookCategoryService',
 ]

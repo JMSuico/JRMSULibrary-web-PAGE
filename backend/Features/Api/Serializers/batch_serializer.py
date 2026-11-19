@@ -2,8 +2,16 @@
 # Data shaping for Batch API
 
 from rest_framework import serializers
-from Features.Data.Models import AcquisitionBatch, BatchHistory, NewlyAcquiredBook
+from Features.Data.Models import AcquisitionBatch, BatchHistory, NewlyAcquiredBook, BookCategory
 from Features.Data.Enums.batch_status import BatchStatus
+
+
+class BookCategorySerializer(serializers.ModelSerializer):
+    """Serializer for BookCategory items."""
+
+    class Meta:
+        model = BookCategory
+        fields = ['id', 'name']
 
 class BatchBookSerializer(serializers.ModelSerializer):
     cover_image = serializers.SerializerMethodField()

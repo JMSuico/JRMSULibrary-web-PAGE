@@ -9,6 +9,7 @@ interface ConfirmModalProps {
   confirmText?: string;
   cancelText?: string;
   type?: 'danger' | 'warning' | 'info';
+  overlayClassName?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -20,6 +21,7 @@ export function ConfirmModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   type = 'danger',
+  overlayClassName = 'z-[9999]',
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -48,7 +50,7 @@ export function ConfirmModal({
   const colors = getColors();
 
   return createPortal(
-    <div className="fixed backdrop-blur-sm inset-0 ] flex items-center justify-center p-4 bg-black/60 animate-modal-overlay z-[9999]">
+    <div className={`fixed backdrop-blur-sm inset-0 flex items-center justify-center p-4 bg-black/60 animate-modal-overlay ${overlayClassName}`}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-modal-card">
         <div className="flex justify-between items-start p-4">
           <div className={`p-2 rounded-full ${colors.icon} mr-3 shrink-0`}>
@@ -58,23 +60,25 @@ export function ConfirmModal({
             <h3 className="text-lg font-semibold text-gray-900 m-0">{title}</h3>
             <p className="text-sm text-gray-500 mt-2">{message}</p>
           </div>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
+          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 cursor-pointer">
             <X size={20} />
           </button>
         </div>
         <div className="p-4 bg-gray-50 flex justify-end gap-3 rounded-b-xl border-t border-gray-100">
           <button
+            type="button"
             onClick={onCancel}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 text-sm font-medium transition-colors"
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 text-sm font-medium transition-colors cursor-pointer"
           >
             {cancelText}
           </button>
           <button
+            type="button"
             onClick={() => {
               onConfirm();
               onCancel();
             }}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${colors.button}`}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${colors.button}`}
           >
             {confirmText}
           </button>

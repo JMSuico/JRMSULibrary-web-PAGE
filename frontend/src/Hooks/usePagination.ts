@@ -1,4 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import {
+  readPersistedValue,
+  writePersistedValue,
+  type StorageKind,
+} from '../Libs/statePersistence';
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100] as const;
 
@@ -7,6 +12,8 @@ export interface UsePaginationOptions<T> {
   initialPage?: number;
   pageSize?: number;
   storageKey?: string;
+  pageStorageKey?: string;
+  pageStorageKind?: StorageKind;
 }
 
 export interface UsePaginationResult<T> {
@@ -26,7 +33,10 @@ export interface UsePaginationResult<T> {
   canPrevPage: boolean;
 }
 
-function readStoredPageSize(storageKey: string | undefined, fallback: number): number {
+const isPositiveInt = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1;
+
+const readStoredPageSize = (storageKey: string | undefined, fallback: number): number => {
   if (!storageKey || typeof window === 'undefined') return fallback;
   try {
     const raw = window.localStorage.getItem(storageKey);
@@ -43,20 +53,33 @@ function readStoredPageSize(storageKey: string | undefined, fallback: number): n
     // Ignore storage access errors (private mode / blocked storage)
   }
   return fallback;
-}
+};
+
+const readStoredPageNumber = (
+  pageStorageKey: string | undefined,
+  fallback: number,
+  kind: StorageKind,
+): number => {
+  if (!pageStorageKey) return fallback;
+  return readPersistedValue<number>(pageStorageKey, fallback, kind, isPositiveInt);
+};
 
 /**
  * GLOBAL CALLING HOOK: usePagination
  * Universal table and list pagination calculation hook.
- * Handles slice math, page size selection/persistence, page clamping, and windowed page numbers.
+ * Handles slice math, page size selection/persistence, page number persistence, and clamping.
  */
-export function usePagination<T>({
+export const usePagination = <T>({
   items,
   initialPage = 1,
   pageSize: initialPageSize = 10,
   storageKey,
-}: UsePaginationOptions<T>): UsePaginationResult<T> {
-  const [currentPage, setCurrentPage] = useState<number>(initialPage);
+  pageStorageKey,
+  pageStorageKind = 'session',
+}: UsePaginationOptions<T>): UsePaginationResult<T> => {
+  const [currentPage, setCurrentPage] = useState<number>(() =>
+    readStoredPageNumber(pageStorageKey, initialPage, pageStorageKind),
+  );
   const [pageSizeState, setPageSizeState] = useState<number>(() =>
     readStoredPageSize(storageKey, initialPageSize),
   );
@@ -66,12 +89,15 @@ export function usePagination<T>({
 
   const safePage = totalItems === 0 ? 1 : Math.min(Math.max(1, currentPage), totalPages);
 
-  // Clamp currentPage after render if totalItems or pageSize shrinks
+  // Clamp currentPage after render ONLY once items actually exist (prevents wiping restored page during loading)
   useEffect(() => {
     if (safePage !== currentPage && totalItems > 0) {
       setCurrentPage(safePage);
+      if (pageStorageKey) {
+        writePersistedValue<number>(pageStorageKey, safePage, pageStorageKind);
+      }
     }
-  }, [safePage, currentPage, totalItems]);
+  }, [safePage, currentPage, totalItems, pageStorageKey, pageStorageKind]);
 
   const startItem = totalItems === 0 ? 0 : (safePage - 1) * pageSizeState + 1;
   const endItem = Math.min(safePage * pageSizeState, totalItems);
@@ -106,8 +132,11 @@ export function usePagination<T>({
     (page: number) => {
       const target = Math.max(1, Math.min(page, totalPages));
       setCurrentPage(target);
+      if (pageStorageKey) {
+        writePersistedValue<number>(pageStorageKey, target, pageStorageKind);
+      }
     },
-    [totalPages],
+    [totalPages, pageStorageKey, pageStorageKind],
   );
 
   const setPageSize = useCallback(
@@ -122,8 +151,11 @@ export function usePagination<T>({
           // Ignore storage write errors
         }
       }
+      if (pageStorageKey) {
+        writePersistedValue<number>(pageStorageKey, 1, pageStorageKind);
+      }
     },
-    [storageKey],
+    [storageKey, pageStorageKey, pageStorageKind],
   );
 
   const nextPage = useCallback(() => {
@@ -150,4 +182,4 @@ export function usePagination<T>({
     canNextPage: safePage < totalPages,
     canPrevPage: safePage > 1,
   };
-}
+};

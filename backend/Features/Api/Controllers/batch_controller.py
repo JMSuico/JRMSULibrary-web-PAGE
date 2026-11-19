@@ -1,22 +1,26 @@
 # [Layer: Api/Controllers] — batch_controller.py
 # Endpoints for Batch management
 
+from collections.abc import Mapping
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from Features.Services.Implementations.batch_service import BatchService
+from Features.Services.Implementations.book_category_service import BookCategoryService
 from Features.Api.Serializers.batch_serializer import (
     AcquisitionBatchSerializer,
     AcquisitionBatchDetailSerializer,
     BatchHistorySerializer,
-    BatchBookSerializer
+    BatchBookSerializer,
+    BookCategorySerializer
 )
 
 class AcquisitionBatchViewSet(viewsets.ViewSet):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = BatchService()
+        self.category_service = BookCategoryService()
 
     def get_permissions(self):
         if self.action == 'current':
@@ -161,3 +165,42 @@ class AcquisitionBatchViewSet(viewsets.ViewSet):
             return Response({'error': 'Batch not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @staticmethod
+    def _extract_category_name(data: object) -> object:
+        """Safely read category name from dict-like payloads; non-mappings yield None for 400 validation."""
+        return data.get('name') if isinstance(data, Mapping) else None
+
+    @action(detail=False, methods=['get', 'post'], url_path='categories')
+    def categories(self, request):
+        """List all book categories or create a new book category."""
+        if request.method == 'GET':
+            items = self.category_service.get_all_categories()
+            serializer = BookCategorySerializer(items, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        try:
+            category = self.category_service.create_category(self._extract_category_name(request.data))
+            serializer = BookCategorySerializer(category)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['patch', 'delete'], url_path='categories/(?P<category_id>[0-9]+)')
+    def category_detail(self, request, category_id=None):
+        """Rename or permanently delete a book category."""
+        cat_id = int(category_id)
+        if request.method == 'PATCH':
+            try:
+                updated = self.category_service.rename_category(cat_id, self._extract_category_name(request.data))
+                if updated is None:
+                    return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
+                serializer = BookCategorySerializer(updated)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        deleted = self.category_service.delete_category_permanently(cat_id)
+        if not deleted:
+            return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)

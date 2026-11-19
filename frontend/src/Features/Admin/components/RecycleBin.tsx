@@ -7,11 +7,16 @@ import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQu
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 
 export function RecycleBin() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [moduleFilter, setModuleFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = usePersistentState<string>('admin:recycle:search', '', {
+    storage: 'session',
+  });
+  const [moduleFilter, setModuleFilter] = usePersistentState<string>('admin:recycle:module', 'ALL', {
+    storage: 'session',
+  });
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isRemoving, setIsRemoving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
@@ -30,11 +35,19 @@ export function RecycleBin() {
     fetcher: () => recycleApi.getAll(),
     staleTimeMs: 30_000,
     listenCmsUpdate: true,
+    persistStorage: true,
   });
 
   const items = cachedItems ?? [];
   const itemsRef = useRef<RecycleBinItem[]>(items);
   itemsRef.current = items;
+
+  const loading = isLoading && items.length === 0;
+
+  const { captureNow, restoreNow, highlightedId, setLastAnchorId } = useScrollRestoration({
+    storageKey: 'admin:recycle-bin',
+    isReady: !loading,
+  });
 
   useEffect(() => {
     if (error) {
@@ -63,9 +76,16 @@ export function RecycleBin() {
     items: filteredItems,
     pageSize: 10,
     storageKey: 'jrmsu_admin_recycle_page_size',
+    pageStorageKey: 'admin:recycle:page',
   });
 
+  const prevRecycleFiltersRef = useRef({ debouncedSearch, moduleFilter });
   useEffect(() => {
+    const prev = prevRecycleFiltersRef.current;
+    if (prev.debouncedSearch === debouncedSearch && prev.moduleFilter === moduleFilter) {
+      return;
+    }
+    prevRecycleFiltersRef.current = { debouncedSearch, moduleFilter };
     setPage(1);
   }, [debouncedSearch, moduleFilter, setPage]);
 
@@ -85,6 +105,7 @@ export function RecycleBin() {
 
   const handleBulkRestore = async () => {
     if (selectedIds.length === 0) return;
+    captureNow();
     try {
       setIsRemoving(true);
       const count = selectedIds.length;
@@ -95,9 +116,11 @@ export function RecycleBin() {
       showToast(`${count} items queued for restoration`, 'success');
       setSelectedIds([]);
       removeToast(toastId);
+      restoreNow();
     } catch {
       showToast('Failed to queue restoration', 'error');
       await fetchItems();
+      restoreNow();
     } finally {
       setIsRemoving(false);
     }
@@ -111,6 +134,7 @@ export function RecycleBin() {
       title: 'Delete Permanently',
       message: `Are you sure you want to permanently delete ${idsSnapshot.length} items? This action cannot be undone.`,
       onConfirm: async () => {
+        captureNow();
         try {
           setIsRemoving(true);
           const count = idsSnapshot.length;
@@ -121,9 +145,11 @@ export function RecycleBin() {
           showToast(`${count} items queued for permanent deletion`, 'success');
           setSelectedIds([]);
           removeToast(toastId);
+          restoreNow();
         } catch {
           showToast('Failed to queue permanent deletion', 'error');
           await fetchItems();
+          restoreNow();
         } finally {
           setIsRemoving(false);
         }
@@ -132,11 +158,14 @@ export function RecycleBin() {
   };
 
   const handleRestore = async (id: number) => {
+    captureNow();
+    setLastAnchorId(String(id));
     try {
       await recycleApi.restore(id);
       invalidateCacheByPrefix('admin:');
       showToast('Item restored successfully', 'success');
       await fetchItems();
+      restoreNow();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to restore item';
       showToast(message, 'error');
@@ -149,19 +178,20 @@ export function RecycleBin() {
       title: 'Delete Permanently',
       message: 'Are you sure you want to permanently delete this item? This action cannot be undone.',
       onConfirm: async () => {
+        captureNow();
+        setLastAnchorId(String(id));
         try {
           await recycleApi.deletePermanently(id);
           invalidateCacheByPrefix('admin:recycle-bin');
           showToast('Item deleted permanently', 'success');
           await fetchItems();
+          restoreNow();
         } catch {
           showToast('Failed to delete item', 'error');
         }
       },
     });
   };
-
-  const loading = isLoading && items.length === 0;
 
   return (
     <>
@@ -261,8 +291,19 @@ export function RecycleBin() {
               <tbody>
                 {paginatedItems.map((item) => {
                   const sourceModule: string = item.source_module;
+                  const isAnchored = highlightedId === String(item.id);
                   return (
-                  <tr key={item.id} className={selectedIds.includes(item.id) ? 'bg-blue-50/50' : ''}>
+                  <tr
+                    key={item.id}
+                    data-cache-anchor-id={String(item.id)}
+                    className={
+                      selectedIds.includes(item.id)
+                        ? 'bg-blue-50/50'
+                        : isAnchored
+                          ? 'bg-blue-50/70 transition-colors'
+                          : ''
+                    }
+                  >
                     <td className="text-center">
                       <input
                         type="checkbox"

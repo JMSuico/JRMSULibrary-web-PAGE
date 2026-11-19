@@ -1,17 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Archive, RotateCcw, RefreshCw } from 'lucide-react';
 import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
-import { reportApi, HistoricalReport } from '@/src/Endpoints/reportApi';
+import { reportApi } from '@/src/Endpoints/reportApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
+import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { usePersistentState, useScrollRestoration } from '@/src/Hooks';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
+type ArchiveType = 'batches' | 'reports';
+type ArchivedReportsResponse = Awaited<ReturnType<typeof reportApi.getArchivedReports>>;
+
+const isArchiveType = (value: unknown): value is ArchiveType =>
+  value === 'batches' || value === 'reports';
+
 export function ArchivesManager({ active }: { active: boolean }) {
-  const [archivedBatches, setArchivedBatches] = useState<AcquisitionBatch[]>([]);
-  const [archivedReports, setArchivedReports] = useState<HistoricalReport[]>([]);
-  const [archivesLoading, setArchivesLoading] = useState(false);
-  const [archiveType, setArchiveType] = useState<'batches' | 'reports'>('batches');
+  const [archiveType, setArchiveType] = usePersistentState<ArchiveType>(
+    'admin:archives:type',
+    'batches',
+    { validate: isArchiveType },
+  );
   const [selectedArchivedBatchIds, setSelectedArchivedBatchIds] = useState<Set<number>>(new Set());
   const [selectedArchivedReportIds, setSelectedArchivedReportIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
@@ -19,23 +28,86 @@ export function ArchivesManager({ active }: { active: boolean }) {
   const { showToast } = useToast();
   const { undoState, triggerDelete, cancelDelete, executeNow } = useUndoDelete();
 
+  const {
+    data: cachedBatches,
+    isLoading: batchesLoading,
+    error: batchesError,
+    mutate: mutateBatches,
+  } = useCachedQuery<AcquisitionBatch[]>({
+    key: 'admin:batches',
+    fetcher: () => batchApi.getAllBatches(),
+    staleTimeMs: 30_000,
+    persistStorage: true,
+    enabled: active,
+    listenCmsUpdate: true,
+  });
+
+  const {
+    data: cachedArchivedReports,
+    isLoading: reportsLoading,
+    error: reportsError,
+    mutate: mutateArchivedReports,
+  } = useCachedQuery<ArchivedReportsResponse>({
+    key: 'admin:archives:reports',
+    fetcher: () => reportApi.getArchivedReports(),
+    staleTimeMs: 30_000,
+    persistStorage: true,
+    enabled: active,
+    listenCmsUpdate: true,
+  });
+
+  const batchesRef = useRef<AcquisitionBatch[]>(cachedBatches ?? []);
+  batchesRef.current = cachedBatches ?? [];
+
+  const cachedArchivedReportsRef = useRef<ArchivedReportsResponse | undefined>(cachedArchivedReports);
+  cachedArchivedReportsRef.current = cachedArchivedReports;
+
+  const archivedBatches = useMemo(
+    () => (cachedBatches ?? []).filter((b) => b.status === 'archived'),
+    [cachedBatches],
+  );
+  const archivedReports = useMemo(
+    () => cachedArchivedReports?.results ?? [],
+    [cachedArchivedReports],
+  );
+  const archivesLoading =
+    (batchesLoading && !cachedBatches) || (reportsLoading && !cachedArchivedReports);
+
+  const {
+    captureNow,
+    restoreNow,
+    highlightedId,
+    setLastAnchorId,
+  } = useScrollRestoration({
+    storageKey: `admin:archives:${archiveType}`,
+    isReady: active && !archivesLoading,
+  });
+
   useEffect(() => {
-    if (!active) return;
-    setArchivesLoading(true);
-    
-    Promise.all([
-      batchApi.getAllBatches().then(data => setArchivedBatches(data.filter(b => b.status === 'archived'))).catch(() => showToast('Failed to load archived batches', 'error')),
-      reportApi.getArchivedReports().then(data => setArchivedReports(data.results)).catch(() => showToast('Failed to load archived reports', 'error'))
-    ]).finally(() => setArchivesLoading(false));
-  }, [active, showToast]);
+    if (batchesError) {
+      showToast('Failed to load archived batches', 'error');
+    }
+  }, [batchesError, showToast]);
+
+  useEffect(() => {
+    if (reportsError) {
+      showToast('Failed to load archived reports', 'error');
+    }
+  }, [reportsError, showToast]);
+
+  const sortByCreatedDesc = <T extends { created_at?: string }>(items: T[]): T[] =>
+    [...items].sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+    );
 
   const handleBulkDeleteArchivedBatches = () => {
     if (selectedArchivedBatchIds.size === 0) return;
     const count = selectedArchivedBatchIds.size;
     const ids = Array.from(selectedArchivedBatchIds);
-    const itemsToDelete = archivedBatches.filter(b => selectedArchivedBatchIds.has(b.id));
+    const itemsToDelete = archivedBatches.filter((b) => selectedArchivedBatchIds.has(b.id));
 
-    setArchivedBatches(prev => prev.filter(b => !selectedArchivedBatchIds.has(b.id)));
+    captureNow(null);
+    mutateBatches(batchesRef.current.filter((b) => !selectedArchivedBatchIds.has(b.id)));
     setSelectedArchivedBatchIds(new Set());
 
     triggerDelete(
@@ -43,17 +115,19 @@ export function ArchivesManager({ active }: { active: boolean }) {
       async () => {
         setIsRemoving(true);
         try {
-          await processInChunks(ids, 10, (id: number) => batchApi.deleteBatch(id), (_, __, c) => {});
+          await processInChunks(ids, 10, (id: number) => batchApi.deleteBatch(id), () => {});
+          invalidateCacheByPrefix('admin:batch');
+          invalidateCacheByPrefix('admin:dashboard');
           showToast(`Permanently removed ${count} batches`, 'success');
-        } catch (err) {
-          setArchivedBatches(prev => [...prev, ...itemsToDelete].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+        } catch {
+          mutateBatches(sortByCreatedDesc([...batchesRef.current, ...itemsToDelete]));
           showToast('Failed to permanently remove some batches', 'error');
         } finally {
           setIsRemoving(false);
         }
       },
       () => {
-        setArchivedBatches(prev => [...prev, ...itemsToDelete].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+        mutateBatches(sortByCreatedDesc([...batchesRef.current, ...itemsToDelete]));
         showToast('Bulk permanent removal undone', 'success');
       }
     );
@@ -63,9 +137,17 @@ export function ArchivesManager({ active }: { active: boolean }) {
     if (selectedArchivedReportIds.size === 0) return;
     const count = selectedArchivedReportIds.size;
     const ids = Array.from(selectedArchivedReportIds);
-    const itemsToDelete = archivedReports.filter(r => selectedArchivedReportIds.has(r.id));
+    const itemsToDelete = archivedReports.filter((r) => selectedArchivedReportIds.has(r.id));
 
-    setArchivedReports(prev => prev.filter(r => !selectedArchivedReportIds.has(r.id)));
+    captureNow(null);
+    if (cachedArchivedReportsRef.current) {
+      mutateArchivedReports({
+        ...cachedArchivedReportsRef.current,
+        results: (cachedArchivedReportsRef.current.results || []).filter(
+          (r) => !selectedArchivedReportIds.has(r.id),
+        ),
+      });
+    }
     setSelectedArchivedReportIds(new Set());
 
     triggerDelete(
@@ -73,17 +155,34 @@ export function ArchivesManager({ active }: { active: boolean }) {
       async () => {
         setIsRemoving(true);
         try {
-          await processInChunks(ids, 10, (id: number) => reportApi.deleteReport(id), (_, __, c) => {});
+          await processInChunks(ids, 10, (id: number) => reportApi.deleteReport(id), () => {});
+          invalidateCacheByPrefix('admin:archives');
           showToast(`Permanently removed ${count} reports`, 'success');
-        } catch (err) {
-          setArchivedReports(prev => [...prev, ...itemsToDelete].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+        } catch {
+          if (cachedArchivedReportsRef.current) {
+            mutateArchivedReports({
+              ...cachedArchivedReportsRef.current,
+              results: sortByCreatedDesc([
+                ...(cachedArchivedReportsRef.current.results || []),
+                ...itemsToDelete,
+              ]),
+            });
+          }
           showToast('Failed to permanently remove some reports', 'error');
         } finally {
           setIsRemoving(false);
         }
       },
       () => {
-        setArchivedReports(prev => [...prev, ...itemsToDelete].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+        if (cachedArchivedReportsRef.current) {
+          mutateArchivedReports({
+            ...cachedArchivedReportsRef.current,
+            results: sortByCreatedDesc([
+              ...(cachedArchivedReportsRef.current.results || []),
+              ...itemsToDelete,
+            ]),
+          });
+        }
         showToast('Bulk permanent removal undone', 'success');
       }
     );
@@ -93,16 +192,24 @@ export function ArchivesManager({ active }: { active: boolean }) {
     if (selectedArchivedBatchIds.size === 0) return;
     const count = selectedArchivedBatchIds.size;
     const ids = Array.from(selectedArchivedBatchIds);
-    const itemsToRestore = archivedBatches.filter(b => selectedArchivedBatchIds.has(b.id));
+    const idSet = new Set(ids);
 
-    setArchivedBatches(prev => prev.filter(b => !selectedArchivedBatchIds.has(b.id)));
+    captureNow(null);
+    mutateBatches(
+      batchesRef.current.map((b) => (idSet.has(b.id) ? { ...b, status: 'open' as const } : b)),
+    );
     setSelectedArchivedBatchIds(new Set());
 
     try {
       await processInChunks(ids, 10, (id: number) => batchApi.reopenBatch(id), (_, __, c) => showToast(`${c} items reopened.`, 'info'));
+      invalidateCacheByPrefix('admin:batch');
+      invalidateCacheByPrefix('admin:dashboard');
       showToast(`Reopened ${count} batches`, 'success');
-    } catch (err) {
-      setArchivedBatches(prev => [...prev, ...itemsToRestore]);
+      restoreNow();
+    } catch {
+      mutateBatches(
+        batchesRef.current.map((b) => (idSet.has(b.id) ? { ...b, status: 'archived' as const } : b)),
+      );
       showToast('Failed to reopen some batches', 'error');
     }
   };
@@ -111,16 +218,31 @@ export function ArchivesManager({ active }: { active: boolean }) {
     if (selectedArchivedReportIds.size === 0) return;
     const count = selectedArchivedReportIds.size;
     const ids = Array.from(selectedArchivedReportIds);
-    const itemsToRestore = archivedReports.filter(r => selectedArchivedReportIds.has(r.id));
+    const itemsToRestore = archivedReports.filter((r) => selectedArchivedReportIds.has(r.id));
 
-    setArchivedReports(prev => prev.filter(r => !selectedArchivedReportIds.has(r.id)));
+    captureNow(null);
+    if (cachedArchivedReportsRef.current) {
+      mutateArchivedReports({
+        ...cachedArchivedReportsRef.current,
+        results: (cachedArchivedReportsRef.current.results || []).filter(
+          (r) => !selectedArchivedReportIds.has(r.id),
+        ),
+      });
+    }
     setSelectedArchivedReportIds(new Set());
 
     try {
       await processInChunks(ids, 10, (id: number) => reportApi.unarchiveReport(id), (_, __, c) => showToast(`${c} items reopened.`, 'info'));
+      invalidateCacheByPrefix('admin:archives');
       showToast(`Unarchived ${count} reports`, 'success');
-    } catch (err) {
-      setArchivedReports(prev => [...prev, ...itemsToRestore]);
+      restoreNow();
+    } catch {
+      if (cachedArchivedReportsRef.current) {
+        mutateArchivedReports({
+          ...cachedArchivedReportsRef.current,
+          results: [...(cachedArchivedReportsRef.current.results || []), ...itemsToRestore],
+        });
+      }
       showToast('Failed to unarchive some reports', 'error');
     }
   };
@@ -216,12 +338,22 @@ export function ArchivesManager({ active }: { active: boolean }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {archivedBatches.map(batch => (
-                    <tr key={batch.id} style={{ backgroundColor: selectedArchivedBatchIds.has(batch.id) ? 'var(--color-blue-50)' : undefined }}>
+                  {archivedBatches.map((batch) => {
+                    const isHighlighted = highlightedId === String(batch.id);
+                    const isSelected = selectedArchivedBatchIds.has(batch.id);
+                    return (
+                    <tr
+                      key={batch.id}
+                      data-cache-anchor-id={String(batch.id)}
+                      className={isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                      style={{
+                        backgroundColor: isSelected ? 'var(--color-blue-50)' : undefined,
+                      }}
+                    >
                       <td style={{ textAlign: 'center' }}>
                         <input 
                           type="checkbox"
-                          checked={selectedArchivedBatchIds.has(batch.id)}
+                          checked={isSelected}
                           disabled={isRemoving}
                           className="disabled:opacity-50"
                           onChange={(e) => {
@@ -243,12 +375,23 @@ export function ArchivesManager({ active }: { active: boolean }) {
                             className="admin-btn admin-btn--secondary"
                             style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                             onClick={async () => {
+                              captureNow(batch.id);
                               try {
                                 await batchApi.reopenBatch(batch.id);
-                                setArchivedBatches(prev => prev.filter(b => b.id !== batch.id));
+                                mutateBatches(
+                                  batchesRef.current.map((b) =>
+                                    b.id === batch.id ? { ...b, status: 'open' as const } : b,
+                                  ),
+                                );
+                                invalidateCacheByPrefix('admin:batch');
+                                invalidateCacheByPrefix('admin:dashboard');
                                 showToast('Batch reopened successfully', 'success');
-                              } catch (err: any) {
-                                showToast(err.message || 'Failed to reopen batch', 'error');
+                                restoreNow();
+                              } catch (err: unknown) {
+                                const message = err instanceof Error ? err.message : 'Failed to reopen batch';
+                                showToast(message, 'error');
+                                setLastAnchorId(batch.id);
+                                restoreNow(batch.id);
                               }
                             }}
                           >
@@ -259,6 +402,7 @@ export function ArchivesManager({ active }: { active: boolean }) {
                             disabled={isRemoving}
                             style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                             onClick={() => {
+                              captureNow(batch.id);
                               const newSet = new Set([batch.id]);
                               setSelectedArchivedBatchIds(newSet);
                               triggerDelete(
@@ -266,17 +410,23 @@ export function ArchivesManager({ active }: { active: boolean }) {
                                 async () => {
                                   try {
                                     await batchApi.deleteBatch(batch.id);
-                                  } catch (err) {
-                                    setArchivedBatches(prev => [...prev, batch].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+                                    invalidateCacheByPrefix('admin:batch');
+                                    invalidateCacheByPrefix('admin:dashboard');
+                                  } catch {
+                                    mutateBatches(sortByCreatedDesc([...batchesRef.current, batch]));
+                                    setLastAnchorId(batch.id);
+                                    restoreNow(batch.id);
                                     showToast('Failed to permanently remove batch', 'error');
                                   }
                                 },
                                 () => {
-                                  setArchivedBatches(prev => [...prev, batch].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+                                  mutateBatches(sortByCreatedDesc([...batchesRef.current, batch]));
+                                  setLastAnchorId(batch.id);
+                                  restoreNow(batch.id);
                                   showToast('Batch permanent removal undone', 'success');
                                 }
                               );
-                              setArchivedBatches(prev => prev.filter(b => b.id !== batch.id));
+                              mutateBatches(batchesRef.current.filter((b) => b.id !== batch.id));
                             }}
                           >
                             <Archive size={14} /> Remove
@@ -284,7 +434,8 @@ export function ArchivesManager({ active }: { active: boolean }) {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -324,12 +475,22 @@ export function ArchivesManager({ active }: { active: boolean }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {archivedReports.map(report => (
-                    <tr key={report.id} style={{ backgroundColor: selectedArchivedReportIds.has(report.id) ? 'var(--color-blue-50)' : undefined }}>
+                  {archivedReports.map((report) => {
+                    const isHighlighted = highlightedId === String(report.id);
+                    const isSelected = selectedArchivedReportIds.has(report.id);
+                    return (
+                    <tr
+                      key={report.id}
+                      data-cache-anchor-id={String(report.id)}
+                      className={isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                      style={{
+                        backgroundColor: isSelected ? 'var(--color-blue-50)' : undefined,
+                      }}
+                    >
                       <td style={{ textAlign: 'center' }}>
                         <input 
                           type="checkbox"
-                          checked={selectedArchivedReportIds.has(report.id)}
+                          checked={isSelected}
                           disabled={isRemoving}
                           className="disabled:opacity-50"
                           onChange={(e) => {
@@ -351,12 +512,25 @@ export function ArchivesManager({ active }: { active: boolean }) {
                             className="admin-btn admin-btn--secondary"
                             style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                             onClick={async () => {
+                              captureNow(report.id);
                               try {
                                 await reportApi.unarchiveReport(report.id);
-                                setArchivedReports(prev => prev.filter(r => r.id !== report.id));
+                                if (cachedArchivedReportsRef.current) {
+                                  mutateArchivedReports({
+                                    ...cachedArchivedReportsRef.current,
+                                    results: (cachedArchivedReportsRef.current.results || []).filter(
+                                      (r) => r.id !== report.id,
+                                    ),
+                                  });
+                                }
+                                invalidateCacheByPrefix('admin:archives');
                                 showToast('Report unarchived successfully', 'success');
-                              } catch (err: any) {
-                                showToast(err.message || 'Failed to unarchive report', 'error');
+                                restoreNow();
+                              } catch (err: unknown) {
+                                const message = err instanceof Error ? err.message : 'Failed to unarchive report';
+                                showToast(message, 'error');
+                                setLastAnchorId(report.id);
+                                restoreNow(report.id);
                               }
                             }}
                           >
@@ -367,22 +541,51 @@ export function ArchivesManager({ active }: { active: boolean }) {
                             disabled={isRemoving}
                             style={{ background: isRemoving ? 'var(--color-gray-400)' : 'var(--color-red-600)', color: 'white', border: 'none', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                             onClick={() => {
+                              captureNow(report.id);
                               triggerDelete(
                                 `Archived report "${report.title}"`,
                                 async () => {
                                   try {
                                     await reportApi.deleteReport(report.id);
-                                  } catch (err) {
-                                    setArchivedReports(prev => [...prev, report].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+                                    invalidateCacheByPrefix('admin:archives');
+                                  } catch {
+                                    if (cachedArchivedReportsRef.current) {
+                                      mutateArchivedReports({
+                                        ...cachedArchivedReportsRef.current,
+                                        results: sortByCreatedDesc([
+                                          ...(cachedArchivedReportsRef.current.results || []),
+                                          report,
+                                        ]),
+                                      });
+                                    }
+                                    setLastAnchorId(report.id);
+                                    restoreNow(report.id);
                                     showToast('Failed to permanently remove report', 'error');
                                   }
                                 },
                                 () => {
-                                  setArchivedReports(prev => [...prev, report].sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+                                  if (cachedArchivedReportsRef.current) {
+                                    mutateArchivedReports({
+                                      ...cachedArchivedReportsRef.current,
+                                      results: sortByCreatedDesc([
+                                        ...(cachedArchivedReportsRef.current.results || []),
+                                        report,
+                                      ]),
+                                    });
+                                  }
+                                  setLastAnchorId(report.id);
+                                  restoreNow(report.id);
                                   showToast('Report permanent removal undone', 'success');
                                 }
                               );
-                              setArchivedReports(prev => prev.filter(r => r.id !== report.id));
+                              if (cachedArchivedReportsRef.current) {
+                                mutateArchivedReports({
+                                  ...cachedArchivedReportsRef.current,
+                                  results: (cachedArchivedReportsRef.current.results || []).filter(
+                                    (r) => r.id !== report.id,
+                                  ),
+                                });
+                              }
                             }}
                           >
                             <Archive size={14} /> Remove
@@ -390,7 +593,8 @@ export function ArchivesManager({ active }: { active: boolean }) {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

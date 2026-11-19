@@ -7,6 +7,7 @@ import { useDebounce } from '@/src/Hooks/useDebounce';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 import { Pagination } from '@/src/Components/Shared/Pagination';
+import { usePersistentState, useScrollRestoration } from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { usePdfExport } from '@/src/Hooks/usePdfExport';
@@ -37,17 +38,27 @@ interface ReportsHistoryResponse {
 }
 
 export function Reports() {
-  const [reportType, setReportType] = useState('summary');
-  const [dateRange, setDateRange] = useState('this-month');
+  const [reportType, setReportType] = usePersistentState<string>('admin:reports:type', 'summary', {
+    storage: 'session',
+  });
+  const [dateRange, setDateRange] = usePersistentState<string>('admin:reports:dateRange', 'this-month', {
+    storage: 'session',
+  });
   const [isGenerating, setIsGenerating] = useState(false);
   const { isPdfGenerating, exportPdf } = usePdfExport();
   const [reportData, setReportData] = useState<ReportSummary | null>(null);
   const [activeReportInfo, setActiveReportInfo] = useState<{ title: string; period: string; type: string } | null>(null);
 
   // History Table State
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState<number>(10);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = usePersistentState<number>('admin:reports:page', 1, {
+    storage: 'session',
+  });
+  const [limit, setLimit] = usePersistentState<number>('admin:reports:limit', 10, {
+    storage: 'session',
+  });
+  const [searchQuery, setSearchQuery] = usePersistentState<string>('admin:reports:search', '', {
+    storage: 'session',
+  });
   const [selectedReportIds, setSelectedReportIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -65,6 +76,12 @@ export function Reports() {
     fetcher: () => reportApi.getHistory(debouncedSearch, limit, (page - 1) * limit),
     staleTimeMs: 30_000,
     listenCmsUpdate: true,
+    persistStorage: true,
+  });
+
+  const { captureNow, restoreNow, highlightedId, setLastAnchorId } = useScrollRestoration({
+    storageKey: 'admin:reports',
+    isReady: !isLoadingHistory && Boolean(historyData),
   });
 
   const history = historyData?.results ?? [];
@@ -80,6 +97,8 @@ export function Reports() {
   }, [historyError, showToast]);
 
   const handleArchive = async (id: number) => {
+    captureNow();
+    setLastAnchorId(String(id));
     try {
       await reportApi.archiveReport(id);
       mutateHistory({
@@ -88,6 +107,7 @@ export function Reports() {
       });
       invalidateCacheByPrefix('admin:reports');
       showToast('Report archived successfully', 'success');
+      restoreNow();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to archive report';
       showToast(message, 'error');
@@ -398,7 +418,12 @@ export function Reports() {
                 </tr>
               ) : (
                 history.map((h) => (
-                  <tr key={h.id} style={{ backgroundColor: selectedReportIds.has(h.id) ? 'var(--color-blue-50)' : undefined }}>
+                  <tr
+                    key={h.id}
+                    data-cache-anchor-id={String(h.id)}
+                    className={highlightedId === String(h.id) ? 'bg-blue-50/70 transition-colors' : undefined}
+                    style={{ backgroundColor: selectedReportIds.has(h.id) ? 'var(--color-blue-50)' : undefined }}
+                  >
                     <td style={{ textAlign: 'center' }}>
                       <input
                         type="checkbox"

@@ -9,12 +9,23 @@ import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePagination, PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
+const isString = (value: unknown): value is string => typeof value === 'string';
+
 export function BatchHistory() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedYear, setSelectedYear] = useState('All');
+  const [searchQuery, setSearchQuery] = usePersistentState<string>(
+    'admin:batchHistory:search',
+    '',
+    { validate: isString },
+  );
+  const [selectedYear, setSelectedYear] = usePersistentState<string>(
+    'admin:batchHistory:year',
+    'All',
+    { validate: isString },
+  );
   const [auditBatch, setAuditBatch] = useState<AcquisitionBatch | null>(null);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<number>>(new Set());
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
@@ -32,12 +43,23 @@ export function BatchHistory() {
     key: 'admin:batches',
     fetcher: () => batchApi.getAllBatches(),
     staleTimeMs: 30_000,
+    persistStorage: true,
     listenCmsUpdate: true,
   });
 
   const batches = cachedBatches ?? [];
   const batchesRef = useRef<AcquisitionBatch[]>(batches);
   batchesRef.current = batches;
+
+  const {
+    captureNow,
+    restoreNow,
+    highlightedId,
+    setLastAnchorId,
+  } = useScrollRestoration({
+    storageKey: 'admin:batchHistory',
+    isReady: !isLoading || batches.length > 0,
+  });
 
   useEffect(() => {
     if (error) {
@@ -47,6 +69,7 @@ export function BatchHistory() {
 
   const handleArchive = (batch: AcquisitionBatch) => {
     const previous = batchesRef.current;
+    captureNow(batch.id);
     triggerDelete(
       batch.name,
       async () => {
@@ -58,7 +81,8 @@ export function BatchHistory() {
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'Failed to archive batch';
           showToast(message, 'error');
-          refetch();
+          await refetch();
+          restoreNow(batch.id);
         }
       },
       () => {
@@ -67,6 +91,8 @@ export function BatchHistory() {
             (a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime(),
           ),
         );
+        setLastAnchorId(batch.id);
+        restoreNow(batch.id);
         showToast('Batch archive undone', 'success');
       },
     );
@@ -147,11 +173,24 @@ export function BatchHistory() {
     items: filteredBatches,
     pageSize: 20,
     storageKey: 'jrmsu_admin_batch_history_page_size',
+    pageStorageKey: 'admin:batchHistory:page',
   });
 
-  // Reset to page 1 if filter changes
+  // Reset to page 1 only when user actively changes filters after hydration
+  const prevFilterRef = useRef<{ search: string; year: string } | null>(null);
   useEffect(() => {
-    setPage(1);
+    const nextFilter = { search: debouncedSearch, year: selectedYear };
+    if (prevFilterRef.current === null) {
+      prevFilterRef.current = nextFilter;
+      return;
+    }
+    if (
+      prevFilterRef.current.search !== nextFilter.search ||
+      prevFilterRef.current.year !== nextFilter.year
+    ) {
+      prevFilterRef.current = nextFilter;
+      setPage(1);
+    }
   }, [debouncedSearch, selectedYear, setPage]);
 
   const loading = isLoading && batches.length === 0;
@@ -244,12 +283,26 @@ export function BatchHistory() {
               {loading ? (
                 <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>Loading...</td></tr>
               ) : paginatedBatches.length > 0 ? (
-                paginatedBatches.map((batch) => (
-                  <tr key={batch.id} style={{ backgroundColor: selectedBatchIds.has(batch.id) ? 'var(--color-blue-50)' : 'transparent' }}>
+                paginatedBatches.map((batch) => {
+                  const isHighlighted = highlightedId === String(batch.id);
+                  const isSelected = selectedBatchIds.has(batch.id);
+                  return (
+                  <tr
+                    key={batch.id}
+                    data-cache-anchor-id={String(batch.id)}
+                    className={isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : undefined}
+                    style={{
+                      backgroundColor: isSelected
+                        ? 'var(--color-blue-50)'
+                        : isHighlighted
+                          ? undefined
+                          : 'transparent',
+                    }}
+                  >
                     <td style={{ textAlign: 'center' }}>
                       <input
                         type="checkbox"
-                        checked={selectedBatchIds.has(batch.id)}
+                        checked={isSelected}
                         disabled={isRemoving}
                         onChange={(e) => {
                           const newSelected = new Set(selectedBatchIds);
@@ -279,7 +332,11 @@ export function BatchHistory() {
                           className="admin-btn admin-btn--secondary"
                           title="View Audit Trail"
                           style={{ color: 'var(--color-indigo)' }}
-                          onClick={() => setAuditBatch(batch)}
+                          onClick={() => {
+                            captureNow(batch.id);
+                            setLastAnchorId(batch.id);
+                            setAuditBatch(batch);
+                          }}
                         >
                           <ClipboardList size={14} /> View Audit
                         </button>
@@ -301,17 +358,22 @@ export function BatchHistory() {
                             title="Restore Batch"
                             style={{ color: 'var(--color-success)' }}
                             onClick={() => {
+                              captureNow(batch.id);
+                              setLastAnchorId(batch.id);
                               setConfirmModal({
                                 isOpen: true,
                                 title: 'Restore Batch',
                                 message: `Are you sure you want to restore "${batch.name}"? It will become open.`,
                                 onConfirm: async () => {
                                   try {
+                                    captureNow(batch.id);
                                     await batchApi.reopenBatch(batch.id);
+                                    setLastAnchorId(batch.id);
                                     invalidateCacheByPrefix('admin:batch');
                                     invalidateCacheByPrefix('admin:dashboard');
                                     showToast('Batch restored successfully', 'success');
-                                    refetch();
+                                    await refetch();
+                                    restoreNow(batch.id);
                                   } catch (err: unknown) {
                                     const message = err instanceof Error ? err.message : 'Failed to restore batch';
                                     showToast(message, 'error');
@@ -326,7 +388,8 @@ export function BatchHistory() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               ) : (
                 <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--color-gray-500)' }}>No historical batches found.</td></tr>
               )}

@@ -1,17 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { eresourceApi, EResourceDepartment, EResourceFile } from '@/src/Endpoints/eresourceApi';
 import { Plus, Trash2, Edit2, FolderOpen, FileText, ChevronRight, ChevronDown } from 'lucide-react';
-import { useToast } from '@/src/Hooks/useToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import {
+  useCachedQuery,
+  invalidateCacheByPrefix,
+  usePersistentState,
+  useScrollRestoration,
+  useToast,
+  useUndoDelete,
+} from '@/src/Hooks';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
-import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
 
 export function EResourcesManager() {
-  const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
-  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [expandedFolderIds, setExpandedFolderIds] = usePersistentState<string[]>('admin:eresources:expanded', [], { storage: 'session' });
+  const expandedFolders = useMemo(() => new Set<string>(expandedFolderIds), [expandedFolderIds]);
+  const [selectedDeptId, setSelectedDeptId] = usePersistentState<number | null>('admin:eresources:selectedDeptId', null, { storage: 'session' });
 
   const [selectedDeptIds, setSelectedDeptIds] = useState<Set<number>>(new Set());
   const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(new Set());
@@ -40,7 +46,13 @@ export function EResourcesManager() {
     key: 'admin:eresources',
     fetcher: () => eresourceApi.getAllDepartments(),
     staleTimeMs: 30_000,
+    persistStorage: true,
     listenCmsUpdate: true,
+  });
+
+  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
+    storageKey: 'admin:eresources',
+    isReady: !isLoading,
   });
 
   const departments = cachedDepartments ?? [];
@@ -54,10 +66,10 @@ export function EResourcesManager() {
   }, [error, showToast]);
 
   const toggleFolder = (id: number) => {
-    const newSet = new Set(expandedFolders);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setExpandedFolders(newSet);
+    const key = String(id);
+    setExpandedFolderIds((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key],
+    );
   };
 
   const handleSaveDept = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -74,15 +86,22 @@ export function EResourcesManager() {
     };
 
     try {
-      if (editingDept) {
-        await eresourceApi.updateDepartment(editingDept.id, payload);
-      } else {
-        await eresourceApi.createDepartment(payload);
+      const savedDept = editingDept
+        ? await eresourceApi.updateDepartment(editingDept.id, payload)
+        : await eresourceApi.createDepartment(payload);
+      if (payload.parent !== null) {
+        const parentKey = String(payload.parent);
+        setExpandedFolderIds((prev) => (prev.includes(parentKey) ? prev : [...prev, parentKey]));
       }
       invalidateCacheByPrefix('admin:eresources');
       showToast(`Department ${editingDept ? 'updated' : 'created'} successfully`, 'success');
       setIsDeptModalOpen(false);
       await loadData();
+      if (savedDept?.id != null) {
+        const anchorId = `dept:${savedDept.id}`;
+        setLastAnchorId(anchorId);
+        restoreNow(anchorId);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save department';
       showToast(message, 'error');
@@ -214,12 +233,17 @@ export function EResourcesManager() {
     fd.append('file', selectedFile);
 
     try {
-      await eresourceApi.createFile(fd);
+      const savedFile = await eresourceApi.createFile(fd);
       invalidateCacheByPrefix('admin:eresources');
       showToast('File uploaded successfully', 'success');
       setIsFileModalOpen(false);
       setSelectedFile(null);
       await loadData();
+      if (savedFile?.id != null) {
+        const anchorId = `file:${savedFile.id}`;
+        setLastAnchorId(anchorId);
+        restoreNow(anchorId);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to upload file';
       showToast(message, 'error');
@@ -313,19 +337,21 @@ export function EResourcesManager() {
 
   const renderTree = (depts: EResourceDepartment[], level = 0) => {
     return depts.map((dept) => {
-      const isExpanded = expandedFolders.has(dept.id);
+      const isExpanded = expandedFolders.has(String(dept.id));
       const isSelected = selectedDeptId === dept.id;
+      const isHighlighted = highlightedId === `dept:${dept.id}`;
       const hasChildren = dept.children && dept.children.length > 0;
 
       return (
         <div key={dept.id} style={{ marginLeft: `${level * 16}px`, marginBottom: '2px' }}>
           <div
+            data-cache-anchor-id={`dept:${dept.id}`}
             className={`flex items-center justify-between p-2 rounded-lg cursor-pointer group transition-colors ${
               isSelected ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'
-            }`}
+            } ${isHighlighted ? 'ring-2 ring-amber-400 bg-amber-50/40' : ''}`}
             onClick={() => {
               setSelectedDeptId(dept.id);
-              if (hasChildren && !expandedFolders.has(dept.id)) {
+              if (hasChildren && !expandedFolders.has(String(dept.id))) {
                 toggleFolder(dept.id);
               }
             }}
@@ -530,9 +556,10 @@ export function EResourcesManager() {
                       return (
                         <div
                           key={file.id}
+                          data-cache-anchor-id={`file:${file.id}`}
                           className={`border rounded-xl p-3 flex items-start gap-3 group transition-all hover:shadow-md relative ${
                             file.is_active ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'
-                          }`}
+                          } ${highlightedId === `file:${file.id}` ? 'ring-2 ring-amber-400 bg-amber-50/40' : ''}`}
                           style={{ border: selectedFileIds.has(file.id) ? '2px solid var(--color-navy)' : undefined }}
                         >
                           <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>

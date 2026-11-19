@@ -28,3 +28,13 @@ export {
   type UseCachedQueryOptions,
   type UseCachedQueryResult,
 } from './useCachedQuery';
+export {
+  usePersistentState,
+  type UsePersistentStateOptions,
+} from './usePersistentState';
+export {
+  useScrollRestoration,
+  type SavedScrollSnapshot,
+  type UseScrollRestorationOptions,
+  type UseScrollRestorationResult,
+} from './useScrollRestoration';
