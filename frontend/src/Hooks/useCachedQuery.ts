@@ -6,6 +6,7 @@ import {
   invalidateCacheByPrefix,
   isCacheInFlight,
   mutateCacheEntry,
+  revalidateCacheByPrefix,
   subscribeCacheKey,
 } from '@/src/Libs/swrCache';
 
@@ -27,7 +28,7 @@ export interface UseCachedQueryResult<T> {
   mutate: (updater: T | ((prev: T | undefined) => T)) => void;
 }
 
-export { invalidateCacheByPrefix };
+export { invalidateCacheByPrefix, revalidateCacheByPrefix };
 
 export const useCachedQuery = <T>(
   options: UseCachedQueryOptions<T>

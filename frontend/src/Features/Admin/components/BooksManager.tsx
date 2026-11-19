@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { getImageUrl, getThumbnailUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Pencil, Trash2, X, ListOrdered, MoreVertical } from 'lucide-react';
@@ -9,13 +9,14 @@ import { CreateBatchModal } from '@/src/Features/Admin/components/CreateBatchMod
 import { EditBatchModal } from '@/src/Features/Admin/components/EditBatchModal';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { BookFormModal } from '@/src/Features/Admin/components/BookFormModal';
+import { ScrollableSelect, type ScrollableSelectOption } from '@/src/Components/Shared/ScrollableSelect';
 import { useToast } from '@/src/Hooks/useToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { useCachedQuery, revalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { Pagination } from '@/src/Components/Shared/Pagination';
 import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
-import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { PAGE_SIZE_OPTIONS, findPageForItemIndex } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 type ViewMode = 'table' | 'grid';
@@ -80,21 +81,32 @@ export function BooksManager() {
     fetcher: () => batchApi.getAllBatches(),
     staleTimeMs: 30_000,
     persistStorage: true,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
   });
 
   const batches = cachedBatches ?? [];
   const batchesRef = useRef<AcquisitionBatch[]>(batches);
   batchesRef.current = batches;
+  const lastValidBatchIdRef = useRef<number | null>(selectedBatchId);
 
   const effectiveBatchId = useMemo(() => {
     if (selectedBatchId !== null && batches.some((b) => b.id === selectedBatchId)) {
+      lastValidBatchIdRef.current = selectedBatchId;
       return selectedBatchId;
     }
     const displayBatch = batches.find((b) => b.is_display_batch);
     const openBatch = batches.find((b) => b.status === 'open');
-    return openBatch?.id ?? displayBatch?.id ?? (batches.length > 0 ? batches[0].id : null);
-  }, [batches, selectedBatchId]);
+    const resolved = openBatch?.id ?? displayBatch?.id ?? (batches.length > 0 ? batches[0].id : null);
+    if (resolved !== null) {
+      lastValidBatchIdRef.current = resolved;
+      return resolved;
+    }
+    if ((batchesLoading || cachedBatches === undefined) && lastValidBatchIdRef.current !== null) {
+      return lastValidBatchIdRef.current;
+    }
+    lastValidBatchIdRef.current = null;
+    return null;
+  }, [batches, batchesLoading, cachedBatches, selectedBatchId]);
 
   const {
     data: currentBatchData,
@@ -107,7 +119,7 @@ export function BooksManager() {
     enabled: effectiveBatchId !== null,
     staleTimeMs: 30_000,
     persistStorage: effectiveBatchId !== null,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
   });
 
   const currentBatch = effectiveBatchId !== null ? (currentBatchData ?? null) : null;
@@ -126,6 +138,91 @@ export function BooksManager() {
     isReady: !batchesLoading && !currentBatchLoading && !actionLoading,
     horizontalRef: recentBatchesRef,
   });
+
+  const isBookFormOpenRef = useRef<boolean>(isBookFormOpen);
+  isBookFormOpenRef.current = isBookFormOpen;
+  const wasBookFormOpenRef = useRef<boolean>(isBookFormOpen);
+  const isSavingBookRef = useRef<boolean>(false);
+  const pendingRemoteSyncRef = useRef<boolean>(false);
+  const isSyncingRemoteRef = useRef<boolean>(false);
+  const lastLocalSaveAtRef = useRef<number>(0);
+  const lastSavedBookIdRef = useRef<number | null>(null);
+  const pendingScrollBookIdRef = useRef<number | null>(null);
+
+  const effectiveBatchIdRef = useRef<number | null>(effectiveBatchId);
+  effectiveBatchIdRef.current = effectiveBatchId;
+  const refetchBatchesRef = useRef(refetchBatches);
+  refetchBatchesRef.current = refetchBatches;
+  const refetchCurrentBatchRef = useRef(refetchCurrentBatch);
+  refetchCurrentBatchRef.current = refetchCurrentBatch;
+  const captureNowRef = useRef(captureNow);
+  captureNowRef.current = captureNow;
+  const restoreNowRef = useRef(restoreNow);
+  restoreNowRef.current = restoreNow;
+
+  const syncRemoteUpdate = useCallback(async (overrideAnchorId?: string | number | null) => {
+    if (isSyncingRemoteRef.current) {
+      pendingRemoteSyncRef.current = true;
+      return;
+    }
+    isSyncingRemoteRef.current = true;
+    try {
+      captureNowRef.current(overrideAnchorId);
+      await Promise.all([
+        refetchBatchesRef.current(),
+        effectiveBatchIdRef.current !== null ? refetchCurrentBatchRef.current() : Promise.resolve(),
+      ]);
+      if (typeof overrideAnchorId === 'number') {
+        pendingScrollBookIdRef.current = overrideAnchorId;
+      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (
+            typeof overrideAnchorId === 'number' &&
+            pendingScrollBookIdRef.current === overrideAnchorId
+          ) {
+            pendingScrollBookIdRef.current = null;
+          }
+          restoreNowRef.current(overrideAnchorId);
+        });
+      });
+    } finally {
+      isSyncingRemoteRef.current = false;
+      if (pendingRemoteSyncRef.current && !isBookFormOpenRef.current && !isSavingBookRef.current) {
+        pendingRemoteSyncRef.current = false;
+        void syncRemoteUpdate();
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleCmsUpdated = () => {
+      if (isBookFormOpenRef.current || isSavingBookRef.current) {
+        pendingRemoteSyncRef.current = true;
+        return;
+      }
+      if (Date.now() - lastLocalSaveAtRef.current < 1500) {
+        return;
+      }
+      void syncRemoteUpdate();
+    };
+
+    window.addEventListener('cms_updated', handleCmsUpdated);
+    return () => window.removeEventListener('cms_updated', handleCmsUpdated);
+  }, [syncRemoteUpdate]);
+
+  useEffect(() => {
+    const wasOpen = wasBookFormOpenRef.current;
+    wasBookFormOpenRef.current = isBookFormOpen;
+    if (wasOpen && !isBookFormOpen && !isSavingBookRef.current) {
+      const savedBookId = lastSavedBookIdRef.current;
+      lastSavedBookIdRef.current = null;
+      if (pendingRemoteSyncRef.current) {
+        pendingRemoteSyncRef.current = false;
+        void syncRemoteUpdate(savedBookId ?? undefined);
+      }
+    }
+  }, [isBookFormOpen, syncRemoteUpdate]);
   const [isDraggingBatches, setIsDraggingBatches] = useState(false);
   const [startXBatches, setStartXBatches] = useState(0);
   const [scrollLeftBatches, setScrollLeftBatches] = useState(0);
@@ -154,8 +251,8 @@ export function BooksManager() {
   };
 
   const refreshAll = async () => {
-    invalidateCacheByPrefix('admin:batch');
-    invalidateCacheByPrefix('admin:dashboard');
+    revalidateCacheByPrefix('admin:batch');
+    revalidateCacheByPrefix('admin:dashboard');
     await Promise.all([refetchBatches(), effectiveBatchId !== null ? refetchCurrentBatch() : Promise.resolve()]);
   };
 
@@ -202,8 +299,8 @@ export function BooksManager() {
       if (currentBatchRef.current?.id === id) {
         mutateCurrentBatch({ ...currentBatchRef.current, ...updated });
       }
-      invalidateCacheByPrefix('admin:batch');
-      invalidateCacheByPrefix('admin:dashboard');
+      revalidateCacheByPrefix('admin:batch');
+      revalidateCacheByPrefix('admin:dashboard');
       showToast('Batch updated successfully', 'success');
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to update batch';
@@ -218,8 +315,8 @@ export function BooksManager() {
         try {
           await batchApi.deleteBatch(batch.id);
           if (selectedBatchId === batch.id) setSelectedBatchId(null);
-          invalidateCacheByPrefix('admin:batch');
-          invalidateCacheByPrefix('admin:dashboard');
+          revalidateCacheByPrefix('admin:batch');
+          revalidateCacheByPrefix('admin:dashboard');
         } catch (error: unknown) {
           mutateBatches([...batchesRef.current, batch]);
           const msg = error instanceof Error ? error.message : 'Failed to delete batch';
@@ -287,7 +384,7 @@ export function BooksManager() {
       setSearchQuery('');
       setSelectedCategory('All');
       booksPagination.setPage(1);
-      invalidateCacheByPrefix('admin:batch');
+      revalidateCacheByPrefix('admin:batch');
       await refetchBatches();
     } catch (error) {
       console.error(error);
@@ -298,53 +395,84 @@ export function BooksManager() {
 
   const handleCategoriesChanged = async () => {
     captureNow(editingBook?.id ?? null);
-    invalidateCacheByPrefix('admin:batch');
-    invalidateCacheByPrefix('admin:batches');
+    revalidateCacheByPrefix('admin:batch');
+    revalidateCacheByPrefix('admin:batches');
     await Promise.all([
       refetchBatches(),
       effectiveBatchId !== null ? refetchCurrentBatch() : Promise.resolve(),
     ]);
-    restoreNow(editingBook?.id ?? null);
+    const anchorId = editingBook?.id ?? null;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreNow(anchorId);
+      });
+    });
   };
 
   const handleAddOrUpdateBook = async (data: FormData) => {
     const activeBatch = currentBatchRef.current;
     if (!activeBatch) return;
+    const targetEditingBook = editingBook;
+    isSavingBookRef.current = true;
     try {
+      captureNow(targetEditingBook?.id ?? null);
       let targetBookId: number;
-      if (editingBook) {
-        captureNow(editingBook.id);
-        const updatedBook = await batchApi.updateBook(activeBatch.id, editingBook.id, data);
+      let nextBooks: BatchBook[];
+      if (targetEditingBook) {
+        const updatedBook = await batchApi.updateBook(activeBatch.id, targetEditingBook.id, data);
         targetBookId = updatedBook.id;
         setLastAnchorId(targetBookId);
+        const latestBatch = currentBatchRef.current ?? activeBatch;
+        nextBooks = (latestBatch.books || []).map((b) =>
+          b.id === targetEditingBook.id ? updatedBook : b,
+        );
         // Optimistic update: replace the edited book in cached state
         mutateCurrentBatch({
-          ...activeBatch,
-          books: (activeBatch.books || []).map((b) => (b.id === editingBook.id ? updatedBook : b)),
+          ...latestBatch,
+          books: nextBooks,
         });
         showToast('Book updated successfully', 'success');
       } else {
-        captureNow(null);
         const newBook = await batchApi.addBookToBatch(activeBatch.id, data);
         targetBookId = newBook.id;
         setLastAnchorId(targetBookId);
+        const latestBatch = currentBatchRef.current ?? activeBatch;
+        const existingBooks = latestBatch.books || [];
+        const alreadyExists = existingBooks.some((b) => b.id === newBook.id);
+        nextBooks = alreadyExists ? existingBooks : [...existingBooks, newBook];
         // Optimistic update: append new book to cached state
         mutateCurrentBatch({
-          ...activeBatch,
-          books: [...(activeBatch.books || []), newBook],
-          book_count: (activeBatch.book_count || 0) + 1,
+          ...latestBatch,
+          books: nextBooks,
+          book_count: alreadyExists
+            ? (latestBatch.book_count ?? nextBooks.length)
+            : (latestBatch.book_count || 0) + 1,
         });
         showToast('Book added successfully', 'success');
       }
-      invalidateCacheByPrefix('admin:batches');
-      invalidateCacheByPrefix('admin:dashboard');
+
+      lastLocalSaveAtRef.current = Date.now();
+      lastSavedBookIdRef.current = targetBookId;
+      revalidateCacheByPrefix('admin:batches');
+      revalidateCacheByPrefix('admin:dashboard');
+      isSavingBookRef.current = false;
       setIsBookFormOpen(false);
       setEditingBook(undefined);
-      restoreNow(targetBookId);
+      pendingScrollBookIdRef.current = targetBookId;
+      if (pendingRemoteSyncRef.current) {
+        pendingRemoteSyncRef.current = false;
+        lastSavedBookIdRef.current = null;
+        void syncRemoteUpdate(targetBookId);
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to save book';
       showToast(message, 'error');
       await refetchCurrentBatch();
+      isSavingBookRef.current = false;
+      if (pendingRemoteSyncRef.current && !isBookFormOpenRef.current) {
+        pendingRemoteSyncRef.current = false;
+        void syncRemoteUpdate();
+      }
     }
   };
 
@@ -366,8 +494,8 @@ export function BooksManager() {
       async () => {
         try {
           await batchApi.deleteBook(activeBatch.id, bookId);
-          invalidateCacheByPrefix('admin:batch');
-          invalidateCacheByPrefix('admin:dashboard');
+          revalidateCacheByPrefix('admin:batch');
+          revalidateCacheByPrefix('admin:dashboard');
         } catch (error: unknown) {
           const latest = currentBatchRef.current;
           if (latest) {
@@ -422,8 +550,8 @@ export function BooksManager() {
             (id: number) => batchApi.deleteBook(activeBatch.id, id),
             () => {},
           );
-          invalidateCacheByPrefix('admin:batch');
-          invalidateCacheByPrefix('admin:dashboard');
+          revalidateCacheByPrefix('admin:batch');
+          revalidateCacheByPrefix('admin:dashboard');
           showToast(`Successfully removed ${count} books`, 'success');
         } catch {
           const latest = currentBatchRef.current;
@@ -474,6 +602,17 @@ export function BooksManager() {
     [displayBooks],
   );
 
+  const categoryFilterOptions = useMemo<ScrollableSelectOption[]>(() => {
+    const opts = uniqueCategories.map((cat) => ({
+      value: cat,
+      label: cat,
+    }));
+    if (selectedCategory && !uniqueCategories.includes(selectedCategory)) {
+      opts.push({ value: selectedCategory, label: selectedCategory });
+    }
+    return opts;
+  }, [uniqueCategories, selectedCategory]);
+
   const booksPagination = usePagination<BatchBook>({
     items: filteredBooks,
     pageSize: 10,
@@ -510,6 +649,42 @@ export function BooksManager() {
       setBooksPage(1);
     }
   }, [debouncedSearch, selectedCategory, currentBatch?.id, setBooksPage]);
+
+  useEffect(() => {
+    const targetId = pendingScrollBookIdRef.current;
+    if (targetId === null || isBookFormOpen) return;
+
+    const matchIndex = filteredBooks.findIndex((b) => b.id === targetId);
+    if (matchIndex === -1) {
+      pendingScrollBookIdRef.current = null;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow(null);
+        });
+      });
+      return;
+    }
+
+    const targetPage = findPageForItemIndex(matchIndex, booksPagination.pageSize);
+    if (targetPage !== booksPagination.currentPage) {
+      setBooksPage(targetPage);
+      return;
+    }
+
+    pendingScrollBookIdRef.current = null;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreNow(targetId);
+      });
+    });
+  }, [
+    filteredBooks,
+    isBookFormOpen,
+    booksPagination.pageSize,
+    booksPagination.currentPage,
+    setBooksPage,
+    restoreNow,
+  ]);
 
   // Batches sorted ascending for View All modal
   const batchesAscending = useMemo(
@@ -674,11 +849,14 @@ export function BooksManager() {
               />
             </div>
             <div className="admin-table-toolbar__actions">
-              <select className="admin-btn admin-btn--secondary" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
-                {uniqueCategories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+              <ScrollableSelect
+                value={selectedCategory}
+                options={categoryFilterOptions}
+                onChange={(nextCategory) => setSelectedCategory(nextCategory)}
+                ariaLabel="Filter books by category"
+                menuMaxHeightClass="max-h-56"
+                className="h-9 min-w-[150px] max-w-[240px] rounded-lg font-medium"
+              />
               <button className="admin-btn admin-btn--icon" onClick={() => setViewMode('grid')} style={viewMode === 'grid' ? { background: 'var(--color-navy)', color: 'var(--color-white)' } : {}}>
                 <LayoutGrid size={16} />
               </button>

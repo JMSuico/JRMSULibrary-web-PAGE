@@ -7,6 +7,16 @@ import {
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100] as const;
 
+/**
+ * Computes the 1-based page number containing a 0-based item index for a given page size.
+ */
+export const findPageForItemIndex = (itemIndex: number, pageSize: number): number => {
+  if (itemIndex < 0 || !Number.isFinite(itemIndex) || !Number.isFinite(pageSize) || pageSize <= 0) {
+    return 1;
+  }
+  return Math.floor(itemIndex / pageSize) + 1;
+};
+
 export interface UsePaginationOptions<T> {
   items: T[];
   initialPage?: number;
