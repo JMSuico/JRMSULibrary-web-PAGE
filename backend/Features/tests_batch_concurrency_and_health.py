@@ -8,12 +8,13 @@ from unittest.mock import MagicMock, patch
 from PIL import Image
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import DatabaseError, connection
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from Features.Data.Enums.batch_status import BatchStatus
 from Features.Data.Models import AcquisitionBatch, NewlyAcquiredBook
+from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
 from Features.Repositories.Implementations.book_repository import NewlyAcquiredBookRepository
 from Features.Services.Implementations.batch_service import BatchService
 from Features.Services.Implementations.health_service import HealthService
@@ -54,46 +55,69 @@ class TestHealthEndpointAndService(TestCase):
         self.assertEqual(fail_response.data["status"], "unhealthy")
 
 
-class TestBatchServiceConcurrencyAndMediaCleanup(TestCase):
+class TestBatchServiceTransactionBoundary(TransactionTestCase):
     def test_update_book_prepares_images_outside_atomic_block(self):
-        batch = AcquisitionBatch.objects.create(
-            name="Concurrency Batch",
-            status=BatchStatus.OPEN,
-            is_display_batch=True,
-        )
-        book = NewlyAcquiredBook.objects.create(
-            batch=batch,
-            title="Initial Title",
-            author="Author One",
-            category="Computer Science",
-        )
-        service = BatchService()
-        observed_in_atomic = []
-
-        original_prepare = BatchService._prepare_cover_files
-
-        def spying_prepare(files):
-            observed_in_atomic.append(connection.in_atomic_block)
-            return original_prepare(files)
-
-        upload = _make_png_upload("updated_cover.png")
-        with patch.object(BatchService, "_prepare_cover_files", side_effect=spying_prepare):
-            with patch(
-                "Features.Helpers.image_optimizer_helper.ImageOptimizerHelper.ensure_thumbnail_for_field",
-                side_effect=RuntimeError("simulated non-fatal thumbnail error"),
-            ):
-                updated = service.update_book_in_batch(
-                    batch.id,
-                    book.id,
-                    {"title": "Updated Concurrent Title"},
-                    {"cover_image": upload},
-                    user_id=None,
+        with tempfile.TemporaryDirectory() as tmp_media:
+            with override_settings(MEDIA_ROOT=tmp_media, USE_S3_STORAGE=False):
+                batch = AcquisitionBatch.objects.create(
+                    name="Concurrency Batch",
+                    status=BatchStatus.OPEN,
+                    is_display_batch=True,
                 )
+                book = NewlyAcquiredBook.objects.create(
+                    batch=batch,
+                    title="Initial Title",
+                    author="Author One",
+                    category="Computer Science",
+                )
+                service = BatchService()
+                observed_prepare_atomic = []
+                observed_repo_atomic = []
 
-        self.assertIsNotNone(updated)
-        self.assertEqual(updated.title, "Updated Concurrent Title")
-        # _prepare_cover_files must run BEFORE entering transaction.atomic()
-        self.assertEqual(observed_in_atomic, [False])
+                original_prepare = BatchService._prepare_cover_files
+                original_repo_update = service.book_repo.update
+
+                def spying_prepare(files):
+                    observed_prepare_atomic.append(connection.in_atomic_block)
+                    return original_prepare(files)
+
+                def spying_repo_update(book_id, data, files=None):
+                    observed_repo_atomic.append(connection.in_atomic_block)
+                    return original_repo_update(book_id, data, files)
+
+                upload = _make_png_upload("updated_cover.png")
+                with patch.object(BatchService, "_prepare_cover_files", side_effect=spying_prepare):
+                    with patch.object(service.book_repo, "update", side_effect=spying_repo_update):
+                        with patch(
+                            "Features.Helpers.image_optimizer_helper.ImageOptimizerHelper.ensure_thumbnail_for_field",
+                            side_effect=RuntimeError("simulated non-fatal thumbnail error"),
+                        ):
+                            updated = service.update_book_in_batch(
+                                batch.id,
+                                book.id,
+                                {"title": "Updated Concurrent Title"},
+                                {"cover_image": upload},
+                                user_id=None,
+                            )
+
+                self.assertIsNotNone(updated)
+                self.assertEqual(updated.title, "Updated Concurrent Title")
+                # Heavy CPU image prep must run OUTSIDE transaction.atomic(); DB write runs INSIDE.
+                self.assertEqual(observed_prepare_atomic, [False])
+                self.assertEqual(observed_repo_atomic, [True])
+
+
+class TestBatchServiceConcurrencyAndMediaCleanup(TestCase):
+    def test_atomic_save_image_sets_nginx_readable_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source_path = os.path.join(tmp_dir, "cover.png")
+            Image.new("RGB", (64, 64), color=(15, 45, 90)).save(source_path, format="PNG")
+            created = ImageOptimizerHelper.generate_thumbnail_on_disk(source_path, force=True)
+            self.assertTrue(created)
+            thumb_path = ImageOptimizerHelper.get_thumbnail_path(source_path)
+            self.assertTrue(os.path.isfile(thumb_path))
+            if os.name != "nt":
+                self.assertEqual(os.stat(thumb_path).st_mode & 0o777, 0o644)
 
     def test_book_repository_cleans_up_replaced_cover_and_thumbnail_after_commit(self):
         with tempfile.TemporaryDirectory() as tmp_media:

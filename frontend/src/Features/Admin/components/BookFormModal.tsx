@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getImageUrl } from '@/src/Libs/apiClient';
+import { compressUploadImageIfNeeded } from '@/src/Libs/imageUploadCompression';
 import { createPortal } from 'react-dom';
 import { X, Pencil, Trash2, Plus } from 'lucide-react';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
@@ -236,7 +237,8 @@ export function BookFormModal({
     formData.append('accession_number', accessionNumber);
     formData.append('category', category);
     if (coverImage) {
-      formData.append('cover_image', coverImage);
+      const preparedCover = await compressUploadImageIfNeeded(coverImage);
+      formData.append('cover_image', preparedCover);
     }
     try {
       await onSubmit(formData);

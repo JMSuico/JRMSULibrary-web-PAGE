@@ -129,6 +129,8 @@ class ImageOptimizerHelper:
             fd, tmp_path = tempfile.mkstemp(prefix='.opt_', suffix=ext or '.tmp', dir=dir_name)
             os.close(fd)
             img.save(tmp_path, format=image_format, **save_kwargs)
+            # Ensure Nginx static media workers (non-appuser) can read generated thumbnails/images
+            os.chmod(tmp_path, 0o644)
             os.replace(tmp_path, target_path)
         except Exception:
             if tmp_path and os.path.exists(tmp_path):

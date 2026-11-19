@@ -431,6 +431,8 @@ if USE_S3_STORAGE:
 # File Upload Security Limits (Prevent DoS via disk exhaustion)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520  # 20 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20971520  # 20 MB
+FILE_UPLOAD_PERMISSIONS = 0o644
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 
 # --- Python 3.14 Django Template Context Monkeypatch ---
 try:
