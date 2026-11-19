@@ -105,6 +105,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      HOME: "/tmp"
       DB_ENGINE: postgresql
       DB_NAME: jrmsu_library
       DB_USER: jrmsu_admin
@@ -152,9 +153,16 @@ services:
     # Split HTTP (multi-worker Gunicorn :8000) from WebSockets (single Daphne :8001)
     # to eliminate request serialization while preserving in-memory CHANNEL_LAYERS.
     command: >
-      sh -c "python manage.py migrate --noinput &&
+      sh -c "chmod -R a+rX /app/media 2>/dev/null || true &&
+             python manage.py migrate --noinput &&
              { daphne -b 0.0.0.0 -p 8001 core.asgi:application &
                exec gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4 --worker-class gthread --timeout 180 --graceful-timeout 30 --keep-alive 5; }"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; req=urllib.request.Request('http://127.0.0.1:8000/api/health/', headers={'Host':'localhost','X-Forwarded-Proto':'https'}); sys.exit(0 if urllib.request.urlopen(req, timeout=4).status == 200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   celery-worker:
     build:
@@ -169,6 +177,7 @@ services:
       redis:
         condition: service_healthy
     environment:
+      HOME: "/tmp"
       DB_ENGINE: postgresql
       DB_NAME: jrmsu_library
       DB_USER: jrmsu_admin
