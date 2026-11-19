@@ -1,16 +1,17 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Archive, Search, History, X, ClipboardList, FileArchive } from 'lucide-react';
 import { batchApi, AcquisitionBatch } from '@/src/Endpoints/batchApi';
 import { useToast } from '@/src/Hooks/useToast';
 import { ConfirmModal } from '@/src/Features/Admin/components/ConfirmModal';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { useCachedQuery, revalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
+import { ScrollableSelect, type ScrollableSelectOption } from '@/src/Components/Shared/ScrollableSelect';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
-import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
+import { usePersistentState, useScrollRestoration, usePagination, useModalSafeCmsSync } from '@/src/Hooks';
+import { PAGE_SIZE_OPTIONS, findPageForItemIndex } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
 const isString = (value: unknown): value is string => typeof value === 'string';
@@ -44,7 +45,7 @@ export function BatchHistory() {
     fetcher: () => batchApi.getAllBatches(),
     staleTimeMs: 30_000,
     persistStorage: true,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
   });
 
   const batches = cachedBatches ?? [];
@@ -61,6 +62,26 @@ export function BatchHistory() {
     isReady: !isLoading || batches.length > 0,
   });
 
+  const pendingScrollBatchIdRef = useRef<number | null>(null);
+
+  const scheduleDoubleRafRestore = useCallback(
+    (anchorId?: string | number | null) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          restoreNow(anchorId);
+        });
+      });
+    },
+    [restoreNow],
+  );
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: Boolean(auditBatch) || Boolean(confirmModal?.isOpen) || isRemoving,
+    captureNow,
+    restoreNow,
+    onSync: () => refetch(),
+  });
+
   useEffect(() => {
     if (error) {
       showToast(error.message || 'Failed to load batch history', 'error');
@@ -75,14 +96,17 @@ export function BatchHistory() {
       async () => {
         try {
           await batchApi.archiveBatch(batch.id);
-          invalidateCacheByPrefix('admin:batch');
-          invalidateCacheByPrefix('admin:dashboard');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:batch');
+          revalidateCacheByPrefix('admin:dashboard');
           showToast('Batch archived successfully', 'success');
+          pendingScrollBatchIdRef.current = batch.id;
+          await refetch();
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'Failed to archive batch';
           showToast(message, 'error');
           await refetch();
-          restoreNow(batch.id);
+          scheduleDoubleRafRestore(batch.id);
         }
       },
       () => {
@@ -92,7 +116,7 @@ export function BatchHistory() {
           ),
         );
         setLastAnchorId(batch.id);
-        restoreNow(batch.id);
+        pendingScrollBatchIdRef.current = batch.id;
         showToast('Batch archive undone', 'success');
       },
     );
@@ -102,6 +126,7 @@ export function BatchHistory() {
 
   const handleBulkArchive = () => {
     if (selectedBatchIds.size === 0) return;
+    captureNow();
     const idsToArchive = Array.from<number>(selectedBatchIds);
     const count = idsToArchive.length;
     const batchesToArchive = batchesRef.current.filter((b) => selectedBatchIds.has(b.id));
@@ -122,12 +147,16 @@ export function BatchHistory() {
             (id: number) => batchApi.archiveBatch(id),
             () => {},
           );
-          invalidateCacheByPrefix('admin:batch');
-          invalidateCacheByPrefix('admin:dashboard');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:batch');
+          revalidateCacheByPrefix('admin:dashboard');
           showToast(`Archived ${count} batches successfully`, 'success');
+          await refetch();
+          scheduleDoubleRafRestore(null);
         } catch {
           showToast('Failed to archive some batches', 'error');
-          refetch();
+          await refetch();
+          scheduleDoubleRafRestore(null);
         } finally {
           setIsRemoving(false);
           removeToast(toastId);
@@ -139,6 +168,7 @@ export function BatchHistory() {
             (a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime(),
           ),
         );
+        scheduleDoubleRafRestore(null);
         showToast('Bulk archive undone', 'success');
       },
     );
@@ -148,6 +178,17 @@ export function BatchHistory() {
     () => ['All', ...new Set(batches.map((b) => new Date(b.opened_at).getFullYear().toString()))],
     [batches],
   );
+
+  const yearOptions = useMemo<ScrollableSelectOption[]>(() => {
+    const opts = years.map((y) => ({
+      value: y,
+      label: y === 'All' ? 'All Years' : y,
+    }));
+    if (selectedYear && !years.includes(selectedYear)) {
+      opts.push({ value: selectedYear, label: selectedYear });
+    }
+    return opts;
+  }, [years, selectedYear]);
 
   const debouncedSearch = useDebounce(searchQuery, 400);
 
@@ -193,6 +234,35 @@ export function BatchHistory() {
     }
   }, [debouncedSearch, selectedYear, setPage]);
 
+  useEffect(() => {
+    const targetId = pendingScrollBatchIdRef.current;
+    if (targetId === null || Boolean(confirmModal?.isOpen) || Boolean(auditBatch)) return;
+
+    const matchIndex = filteredBatches.findIndex((b) => b.id === targetId);
+    if (matchIndex === -1) {
+      pendingScrollBatchIdRef.current = null;
+      scheduleDoubleRafRestore(null);
+      return;
+    }
+
+    const targetPage = findPageForItemIndex(matchIndex, pageSize);
+    if (targetPage !== currentPage) {
+      setPage(targetPage);
+      return;
+    }
+
+    pendingScrollBatchIdRef.current = null;
+    scheduleDoubleRafRestore(targetId);
+  }, [
+    filteredBatches,
+    confirmModal?.isOpen,
+    auditBatch,
+    pageSize,
+    currentPage,
+    setPage,
+    scheduleDoubleRafRestore,
+  ]);
+
   const loading = isLoading && batches.length === 0;
 
   return (
@@ -237,17 +307,14 @@ export function BatchHistory() {
                 <FileArchive size={16} /> Archive Selected ({selectedBatchIds.size})
               </button>
             )}
-            <select
-              className="admin-btn admin-btn--secondary"
+            <ScrollableSelect
               value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y === 'All' ? 'All Years' : y}
-                </option>
-              ))}
-            </select>
+              options={yearOptions}
+              onChange={(nextYear) => setSelectedYear(nextYear)}
+              ariaLabel="Filter batches by year"
+              menuMaxHeightClass="max-h-56"
+              className="h-9 min-w-[130px] max-w-[200px] rounded-lg font-medium"
+            />
           </div>
         </div>
 
@@ -368,12 +435,13 @@ export function BatchHistory() {
                                   try {
                                     captureNow(batch.id);
                                     await batchApi.reopenBatch(batch.id);
+                                    markLocalSave();
                                     setLastAnchorId(batch.id);
-                                    invalidateCacheByPrefix('admin:batch');
-                                    invalidateCacheByPrefix('admin:dashboard');
+                                    revalidateCacheByPrefix('admin:batch');
+                                    revalidateCacheByPrefix('admin:dashboard');
                                     showToast('Batch restored successfully', 'success');
+                                    pendingScrollBatchIdRef.current = batch.id;
                                     await refetch();
-                                    restoreNow(batch.id);
                                   } catch (err: unknown) {
                                     const message = err instanceof Error ? err.message : 'Failed to restore batch';
                                     showToast(message, 'error');

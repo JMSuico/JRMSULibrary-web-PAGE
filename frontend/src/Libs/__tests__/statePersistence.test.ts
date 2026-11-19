@@ -15,6 +15,10 @@ import {
   revalidateCacheByPrefix,
 } from '../swrCache';
 import { findPageForItemIndex } from '../../Hooks/usePagination';
+import {
+  evaluateCmsSyncAction,
+  type CmsSyncDecision,
+} from '../../Hooks/useModalSafeCmsSync';
 
 class MockStorage implements Storage {
   private store = new Map<string, string>();
@@ -169,4 +173,157 @@ assert.equal(findPageForItemIndex(15, 0), 1);
 assert.equal(findPageForItemIndex(15, -5), 1);
 assert.equal(findPageForItemIndex(-1, 0), 1);
 
-console.log('ALL_9_STATE_PERSISTENCE_AND_ADVERSARIAL_TESTS_PASSED');
+// 10. Multi-prefix non-destructive revalidation across all Admin prefixes + public:personnel
+const multiModulePrefixes = [
+  'admin:batches',
+  'admin:batch-history',
+  'admin:sections',
+  'admin:content',
+  'admin:eresources',
+  'admin:email',
+  'admin:users',
+  'admin:analytics',
+  'admin:reports',
+  'admin:settings',
+  'admin:recycle',
+  'admin:dashboard',
+  'public:personnel',
+] as const;
+
+const sentinelKey = 'public:sentinel:keep';
+const sentinelData = [{ id: 777, label: 'Unchanged' }];
+const sentinelBefore = setCacheEntry(sentinelKey, sentinelData, true);
+assert.ok(sentinelBefore.updatedAt > 0);
+
+let sentinelChangeCalls = 0;
+let sentinelInvalidateCalls = 0;
+const unsubSentinel = subscribeCacheKey(
+  sentinelKey,
+  () => { sentinelChangeCalls += 1; },
+  () => { sentinelInvalidateCalls += 1; },
+);
+
+const prefixState = multiModulePrefixes.map((prefix, idx) => {
+  const key = `${prefix}:items`;
+  const payload = [{ id: idx + 1, prefix }];
+  const initialEntry = setCacheEntry(key, payload, true);
+  assert.ok(initialEntry.updatedAt > 0);
+
+  let changeCount = 0;
+  let invalidateCount = 0;
+  let dataAtInvalidate: typeof payload | undefined;
+  let updatedAtAtInvalidate = -1;
+
+  const unsubscribe = subscribeCacheKey(
+    key,
+    () => { changeCount += 1; },
+    () => {
+      invalidateCount += 1;
+      const snap = getCacheEntry<typeof payload>(key, true);
+      dataAtInvalidate = snap?.data;
+      updatedAtAtInvalidate = snap?.updatedAt ?? -1;
+    },
+  );
+
+  return {
+    prefix,
+    key,
+    payload,
+    unsubscribe,
+    getCounts: () => ({ changeCount, invalidateCount, dataAtInvalidate, updatedAtAtInvalidate }),
+  };
+});
+
+for (const { prefix } of prefixState) {
+  revalidateCacheByPrefix(prefix);
+}
+
+for (const item of prefixState) {
+  const counts = item.getCounts();
+  assert.equal(counts.invalidateCount, 1, `Expected 1 invalidate for ${item.prefix}`);
+  assert.equal(counts.changeCount, 0, `Expected 0 onChange calls for ${item.prefix}`);
+  assert.deepEqual(counts.dataAtInvalidate, item.payload);
+  assert.equal(counts.updatedAtAtInvalidate, 0);
+
+  const memAfter = getCacheEntry<typeof item.payload>(item.key, true);
+  assert.ok(memAfter !== undefined, `Expected memory cache retained for ${item.key}`);
+  assert.deepEqual(memAfter.data, item.payload);
+  assert.equal(memAfter.updatedAt, 0);
+
+  const rawStored = mockLocal.getItem(`jrmsu_swr:${item.key}`);
+  assert.ok(rawStored !== null, `Expected storage entry retained for ${item.key}`);
+  const parsedStored = JSON.parse(rawStored) as { data: unknown; updatedAt: number };
+  assert.deepEqual(parsedStored.data, item.payload);
+  assert.equal(parsedStored.updatedAt, 0);
+
+  item.unsubscribe();
+}
+
+assert.equal(sentinelChangeCalls, 0);
+assert.equal(sentinelInvalidateCalls, 0);
+const sentinelAfter = getCacheEntry<typeof sentinelData>(sentinelKey, true);
+assert.ok(sentinelAfter !== undefined);
+assert.deepEqual(sentinelAfter.data, sentinelData);
+assert.equal(sentinelAfter.updatedAt, sentinelBefore.updatedAt);
+unsubSentinel();
+
+// 11. Modal-safe CMS sync decision contract (busy deferral, self-echo window, boundary checks)
+const expectDecision = (actual: CmsSyncDecision, expected: CmsSyncDecision): void => {
+  assert.equal(actual, expected);
+};
+
+// Disabled always defers (even outside or inside self-echo window)
+expectDecision(
+  evaluateCmsSyncAction({ enabled: false, isBusy: false, lastLocalSaveAt: 0, nowMs: 50_000, selfEchoWindowMs: 2_500 }),
+  'defer',
+);
+expectDecision(
+  evaluateCmsSyncAction({ enabled: false, isBusy: false, lastLocalSaveAt: 10_000, nowMs: 10_100, selfEchoWindowMs: 2_500 }),
+  'defer',
+);
+
+// Busy modal/save always defers (takes precedence over skip_echo and sync)
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: true, lastLocalSaveAt: 0, nowMs: 50_000, selfEchoWindowMs: 2_500 }),
+  'defer',
+);
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: true, lastLocalSaveAt: 10_000, nowMs: 10_100, selfEchoWindowMs: 2_500 }),
+  'defer',
+);
+
+// Self-echo window suppresses immediate echo when enabled and not busy
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: false, lastLocalSaveAt: 10_000, nowMs: 10_000, selfEchoWindowMs: 2_500 }),
+  'skip_echo',
+);
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: false, lastLocalSaveAt: 10_000, nowMs: 12_499, selfEchoWindowMs: 2_500 }),
+  'skip_echo',
+);
+
+// Exact boundary (nowMs - lastLocalSaveAt === selfEchoWindowMs) and past window trigger sync
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: false, lastLocalSaveAt: 10_000, nowMs: 12_500, selfEchoWindowMs: 2_500 }),
+  'sync',
+);
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: false, lastLocalSaveAt: 10_000, nowMs: 15_000, selfEchoWindowMs: 2_500 }),
+  'sync',
+);
+
+// No prior local save (<= 0) or zero echo window triggers sync when enabled and idle
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: false, lastLocalSaveAt: 0, nowMs: 100, selfEchoWindowMs: 2_500 }),
+  'sync',
+);
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: false, lastLocalSaveAt: -1, nowMs: 0, selfEchoWindowMs: 2_500 }),
+  'sync',
+);
+expectDecision(
+  evaluateCmsSyncAction({ enabled: true, isBusy: false, lastLocalSaveAt: 10_000, nowMs: 10_000, selfEchoWindowMs: 0 }),
+  'sync',
+);
+
+console.log('ALL_11_STATE_PERSISTENCE_AND_ADVERSARIAL_TESTS_PASSED');

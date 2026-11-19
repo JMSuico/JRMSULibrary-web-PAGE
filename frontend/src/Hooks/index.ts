@@ -3,7 +3,12 @@
  * Universal hook primitives shared across the JRMSU Library system.
  */
 
-export { usePagination, type UsePaginationOptions, type UsePaginationResult } from './usePagination';
+export {
+  usePagination,
+  findPageForItemIndex,
+  type UsePaginationOptions,
+  type UsePaginationResult,
+} from './usePagination';
 export { useFluidResponsiveness, type FluidResponsiveness, type Breakpoint } from './useFluidResponsiveness';
 export { useDebounce } from './useDebounce';
 export { useToast, ToastProvider, type ToastType } from './useToast';
@@ -25,6 +30,7 @@ export { useCarouselStyle } from './useCarouselStyle';
 export {
   useCachedQuery,
   invalidateCacheByPrefix,
+  revalidateCacheByPrefix,
   type UseCachedQueryOptions,
   type UseCachedQueryResult,
 } from './useCachedQuery';
@@ -38,3 +44,10 @@ export {
   type UseScrollRestorationOptions,
   type UseScrollRestorationResult,
 } from './useScrollRestoration';
+export {
+  useModalSafeCmsSync,
+  evaluateCmsSyncAction,
+  type CmsSyncDecision,
+  type UseModalSafeCmsSyncOptions,
+  type UseModalSafeCmsSyncResult,
+} from './useModalSafeCmsSync';

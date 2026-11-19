@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { getImageUrl, getThumbnailUrl } from '@/src/Libs/apiClient';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Tag, RefreshCw, LayoutGrid, List, Pencil, Trash2, X, ListOrdered, MoreVertical } from 'lucide-react';
@@ -15,7 +15,7 @@ import { useCachedQuery, revalidateCacheByPrefix } from '@/src/Hooks/useCachedQu
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { usePersistentState, useScrollRestoration, usePagination, useModalSafeCmsSync } from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS, findPageForItemIndex } from '@/src/Hooks/usePagination';
 import { processInChunks } from '@/src/Libs/chunkUtils';
 
@@ -139,90 +139,18 @@ export function BooksManager() {
     horizontalRef: recentBatchesRef,
   });
 
-  const isBookFormOpenRef = useRef<boolean>(isBookFormOpen);
-  isBookFormOpenRef.current = isBookFormOpen;
-  const wasBookFormOpenRef = useRef<boolean>(isBookFormOpen);
   const isSavingBookRef = useRef<boolean>(false);
-  const pendingRemoteSyncRef = useRef<boolean>(false);
-  const isSyncingRemoteRef = useRef<boolean>(false);
-  const lastLocalSaveAtRef = useRef<number>(0);
-  const lastSavedBookIdRef = useRef<number | null>(null);
   const pendingScrollBookIdRef = useRef<number | null>(null);
 
-  const effectiveBatchIdRef = useRef<number | null>(effectiveBatchId);
-  effectiveBatchIdRef.current = effectiveBatchId;
-  const refetchBatchesRef = useRef(refetchBatches);
-  refetchBatchesRef.current = refetchBatches;
-  const refetchCurrentBatchRef = useRef(refetchCurrentBatch);
-  refetchCurrentBatchRef.current = refetchCurrentBatch;
-  const captureNowRef = useRef(captureNow);
-  captureNowRef.current = captureNow;
-  const restoreNowRef = useRef(restoreNow);
-  restoreNowRef.current = restoreNow;
-
-  const syncRemoteUpdate = useCallback(async (overrideAnchorId?: string | number | null) => {
-    if (isSyncingRemoteRef.current) {
-      pendingRemoteSyncRef.current = true;
-      return;
-    }
-    isSyncingRemoteRef.current = true;
-    try {
-      captureNowRef.current(overrideAnchorId);
-      await Promise.all([
-        refetchBatchesRef.current(),
-        effectiveBatchIdRef.current !== null ? refetchCurrentBatchRef.current() : Promise.resolve(),
-      ]);
-      if (typeof overrideAnchorId === 'number') {
-        pendingScrollBookIdRef.current = overrideAnchorId;
-      }
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (
-            typeof overrideAnchorId === 'number' &&
-            pendingScrollBookIdRef.current === overrideAnchorId
-          ) {
-            pendingScrollBookIdRef.current = null;
-          }
-          restoreNowRef.current(overrideAnchorId);
-        });
-      });
-    } finally {
-      isSyncingRemoteRef.current = false;
-      if (pendingRemoteSyncRef.current && !isBookFormOpenRef.current && !isSavingBookRef.current) {
-        pendingRemoteSyncRef.current = false;
-        void syncRemoteUpdate();
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleCmsUpdated = () => {
-      if (isBookFormOpenRef.current || isSavingBookRef.current) {
-        pendingRemoteSyncRef.current = true;
-        return;
-      }
-      if (Date.now() - lastLocalSaveAtRef.current < 1500) {
-        return;
-      }
-      void syncRemoteUpdate();
-    };
-
-    window.addEventListener('cms_updated', handleCmsUpdated);
-    return () => window.removeEventListener('cms_updated', handleCmsUpdated);
-  }, [syncRemoteUpdate]);
-
-  useEffect(() => {
-    const wasOpen = wasBookFormOpenRef.current;
-    wasBookFormOpenRef.current = isBookFormOpen;
-    if (wasOpen && !isBookFormOpen && !isSavingBookRef.current) {
-      const savedBookId = lastSavedBookIdRef.current;
-      lastSavedBookIdRef.current = null;
-      if (pendingRemoteSyncRef.current) {
-        pendingRemoteSyncRef.current = false;
-        void syncRemoteUpdate(savedBookId ?? undefined);
-      }
-    }
-  }, [isBookFormOpen, syncRemoteUpdate]);
+  const { markLocalSave, triggerSync } = useModalSafeCmsSync({
+    isBusy: isBookFormOpen || isCreateBatchOpen || Boolean(editBatch) || Boolean(auditBatch) || isSavingBookRef.current,
+    captureNow,
+    restoreNow,
+    onSync: () => Promise.all([
+      refetchBatches(),
+      effectiveBatchId !== null ? refetchCurrentBatch() : Promise.resolve(),
+    ]),
+  });
   const [isDraggingBatches, setIsDraggingBatches] = useState(false);
   const [startXBatches, setStartXBatches] = useState(0);
   const [scrollLeftBatches, setScrollLeftBatches] = useState(0);
@@ -259,6 +187,7 @@ export function BooksManager() {
   const handleCreateBatch = async (data: Partial<AcquisitionBatch>) => {
     try {
       await batchApi.createBatch(data);
+      markLocalSave();
       setIsCreateBatchOpen(false);
       showToast('Batch created successfully', 'success');
       await refreshAll();
@@ -284,6 +213,7 @@ export function BooksManager() {
           await batchApi.reopenBatch(id);
           break;
       }
+      markLocalSave();
       showToast(`Batch ${action}d successfully`, 'success');
       await refreshAll();
     } catch (error: unknown) {
@@ -295,6 +225,7 @@ export function BooksManager() {
   const handleEditBatch = async (id: number, data: Partial<AcquisitionBatch>) => {
     try {
       const updated = await batchApi.updateBatch(id, data);
+      markLocalSave();
       mutateBatches(batchesRef.current.map((b) => (b.id === id ? { ...b, ...updated } : b)));
       if (currentBatchRef.current?.id === id) {
         mutateCurrentBatch({ ...currentBatchRef.current, ...updated });
@@ -314,6 +245,7 @@ export function BooksManager() {
       async () => {
         try {
           await batchApi.deleteBatch(batch.id);
+          markLocalSave();
           if (selectedBatchId === batch.id) setSelectedBatchId(null);
           revalidateCacheByPrefix('admin:batch');
           revalidateCacheByPrefix('admin:dashboard');
@@ -356,6 +288,7 @@ export function BooksManager() {
     try {
       const status = (action === 'CLOSE' ? 'closed' : 'open') as 'open' | 'closed';
       await Promise.all(Array.from<number>(selectedBatchIds).map((id) => batchApi.updateBatch(id, { status })));
+      markLocalSave();
       showToast(`Successfully updated ${selectedBatchIds.size} batches`, 'success');
       setSelectedBatchIds(new Set());
       await refreshAll();
@@ -367,6 +300,7 @@ export function BooksManager() {
   const updateBatchStatus = async (id: number, status: 'open' | 'closed') => {
     try {
       await batchApi.updateBatch(id, { status });
+      markLocalSave();
       showToast(`Batch ${status === 'open' ? 'reopened' : 'closed'} successfully`, 'success');
       await refreshAll();
     } catch {
@@ -394,19 +328,10 @@ export function BooksManager() {
   };
 
   const handleCategoriesChanged = async () => {
-    captureNow(editingBook?.id ?? null);
+    markLocalSave();
     revalidateCacheByPrefix('admin:batch');
     revalidateCacheByPrefix('admin:batches');
-    await Promise.all([
-      refetchBatches(),
-      effectiveBatchId !== null ? refetchCurrentBatch() : Promise.resolve(),
-    ]);
-    const anchorId = editingBook?.id ?? null;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        restoreNow(anchorId);
-      });
-    });
+    await triggerSync(editingBook?.id ?? null);
   };
 
   const handleAddOrUpdateBook = async (data: FormData) => {
@@ -451,28 +376,18 @@ export function BooksManager() {
         showToast('Book added successfully', 'success');
       }
 
-      lastLocalSaveAtRef.current = Date.now();
-      lastSavedBookIdRef.current = targetBookId;
+      markLocalSave();
       revalidateCacheByPrefix('admin:batches');
       revalidateCacheByPrefix('admin:dashboard');
       isSavingBookRef.current = false;
       setIsBookFormOpen(false);
       setEditingBook(undefined);
       pendingScrollBookIdRef.current = targetBookId;
-      if (pendingRemoteSyncRef.current) {
-        pendingRemoteSyncRef.current = false;
-        lastSavedBookIdRef.current = null;
-        void syncRemoteUpdate(targetBookId);
-      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to save book';
       showToast(message, 'error');
       await refetchCurrentBatch();
       isSavingBookRef.current = false;
-      if (pendingRemoteSyncRef.current && !isBookFormOpenRef.current) {
-        pendingRemoteSyncRef.current = false;
-        void syncRemoteUpdate();
-      }
     }
   };
 
@@ -494,6 +409,7 @@ export function BooksManager() {
       async () => {
         try {
           await batchApi.deleteBook(activeBatch.id, bookId);
+          markLocalSave();
           revalidateCacheByPrefix('admin:batch');
           revalidateCacheByPrefix('admin:dashboard');
         } catch (error: unknown) {
@@ -550,6 +466,7 @@ export function BooksManager() {
             (id: number) => batchApi.deleteBook(activeBatch.id, id),
             () => {},
           );
+          markLocalSave();
           revalidateCacheByPrefix('admin:batch');
           revalidateCacheByPrefix('admin:dashboard');
           showToast(`Successfully removed ${count} books`, 'success');

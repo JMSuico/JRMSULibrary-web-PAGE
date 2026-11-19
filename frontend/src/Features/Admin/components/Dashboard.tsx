@@ -25,7 +25,12 @@ import { reportApi, ReportSummary } from '@/src/Endpoints/reportApi';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useToast } from '@/src/Hooks/useToast';
 import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
-import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import {
+  usePersistentState,
+  useScrollRestoration,
+  usePagination,
+  useModalSafeCmsSync,
+} from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { createPortal } from 'react-dom';
@@ -39,17 +44,24 @@ export function Dashboard() {
   const debouncedBookSearch = useDebounce(bookSearch, 400);
   const { showToast } = useToast();
 
-  const { data, isLoading, error } = useCachedQuery<ReportSummary>({
+  const { data, isLoading, error, refetch } = useCachedQuery<ReportSummary>({
     key: 'admin:dashboard:summary',
     fetcher: () => reportApi.getSummary(),
     staleTimeMs: 30_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
-  useScrollRestoration({
+  const { captureNow, restoreNow } = useScrollRestoration({
     storageKey: 'admin:dashboard',
     isReady: !isLoading,
+  });
+
+  useModalSafeCmsSync({
+    isBusy: showAllBooksModal,
+    onSync: () => refetch(true),
+    captureNow,
+    restoreNow,
   });
 
   useEffect(() => {

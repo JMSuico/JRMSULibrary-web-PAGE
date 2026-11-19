@@ -18,10 +18,18 @@ import { contactApi, ContactMessage } from '@/src/Endpoints/contactApi';
 import { useUndoDelete } from '@/src/Hooks/useUndoDelete';
 import { UndoDeleteToast } from '@/src/Components/Shared/UndoDeleteToast';
 import { useToast } from '@/src/Hooks/useToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
+import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
 import { useDebounce } from '@/src/Hooks/useDebounce';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { ScrollableSelect } from '@/src/Components/Shared/ScrollableSelect';
+import {
+  usePersistentState,
+  useScrollRestoration,
+  usePagination,
+  revalidateCacheByPrefix,
+  useModalSafeCmsSync,
+  findPageForItemIndex,
+} from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { aiApi } from '@/src/Endpoints/aiApi';
@@ -156,7 +164,7 @@ export function EmailMessage() {
     key: 'admin:email',
     fetcher: () => contactApi.getAllMessages(),
     staleTimeMs: 15_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
@@ -175,11 +183,11 @@ export function EmailMessage() {
     }
   }, [error, showToast]);
 
-  const { data: cachedSettings } = useCachedQuery<SiteSettings>({
+  const { data: cachedSettings, refetch: refetchSettings } = useCachedQuery<SiteSettings>({
     key: 'admin:settings',
     fetcher: () => settingsApi.getSettings(),
     staleTimeMs: 60_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
@@ -205,7 +213,8 @@ export function EmailMessage() {
     try {
       const saved = await settingsApi.updateSettings({ room_availability: updatedMap });
       setRoomAvailability(normalizeRoomAvailability(saved.room_availability ?? updatedMap));
-      invalidateCacheByPrefix('admin:settings');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:settings');
       showToast(
         `${selectedRoom} is now ${nextAvailable ? 'Available' : 'Unavailable'}`,
         nextAvailable ? 'success' : 'info',
@@ -260,6 +269,28 @@ export function EmailMessage() {
     currentIds: number[];
     body: string;
   }>({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentIds: [], body: '' });
+
+  const isCmsSyncBusy = Boolean(
+    replyModal ||
+      bulkReplyModal ||
+      viewMessageModal ||
+      actionLoading ||
+      isSendingReply ||
+      isBulkUpdating ||
+      isUpdatingRoom ||
+      isRemoving ||
+      queueState.isActive ||
+      backgroundSends.length > 0,
+  );
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: isCmsSyncBusy,
+    onSync: () => Promise.all([refetch(true), refetchSettings(true)]),
+    captureNow,
+    restoreNow,
+  });
+
+  const pendingAnchorIdRef = useRef<number | null>(null);
 
   // Listen for online/offline events to pause/resume queue
   useEffect(() => {
@@ -335,13 +366,15 @@ export function EmailMessage() {
     if (queueState.isActive && !queueState.isPaused && queueState.pendingIds.length > 0 && queueState.currentIds.length === 0) {
       processQueue();
     } else if (queueState.isActive && queueState.pendingIds.length === 0 && queueState.currentIds.length === 0) {
+      captureNow();
       showToast(`Bulk reply completed. ${queueState.successIds.length} sent, ${queueState.failedIds.length} failed.`, 'success');
       setQueueState({ isActive: false, isPaused: false, pendingIds: [], successIds: [], failedIds: [], currentIds: [], body: '' });
       setBulkReplyModal(null);
       setSelectedIds(new Set());
-      invalidateCacheByPrefix('admin:email');
-      invalidateCacheByPrefix('admin:dashboard');
-      refetch();
+      markLocalSave();
+      revalidateCacheByPrefix('admin:email');
+      revalidateCacheByPrefix('admin:dashboard');
+      void refetch(true).then(() => restoreNow());
     }
   }, [queueState, bulkReplyModal]);
 
@@ -353,23 +386,25 @@ export function EmailMessage() {
   }, [messages, expandedGroups.size]);
 
   const updateStatus = async (id: number, newStatus: ContactMessage['status']) => {
-    captureNow();
+    captureNow(String(id));
+    pendingAnchorIdRef.current = id;
     setSelectedMessageId(id);
     setLastAnchorId(String(id));
     setActionLoading({ id, action: newStatus });
     try {
       await contactApi.updateMessageStatus(id, newStatus);
-      invalidateCacheByPrefix('admin:email');
-      invalidateCacheByPrefix('admin:dashboard');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:email');
+      revalidateCacheByPrefix('admin:dashboard');
       showToast(`Message marked as ${newStatus}`, 'success');
-      await refetch();
-      restoreNow();
+      await refetch(true);
       if (selectedIds.has(id)) {
         const newSet = new Set(selectedIds);
         newSet.delete(id);
         setSelectedIds(newSet);
       }
     } catch (err: unknown) {
+      pendingAnchorIdRef.current = null;
       const errorMessage = err instanceof Error ? err.message : 'Failed to update message status';
       showToast(errorMessage, 'error');
     } finally {
@@ -380,19 +415,22 @@ export function EmailMessage() {
   const deleteMessage = (id: number) => {
     const msgToDelete = messagesRef.current.find((m) => m.id === id);
     if (!msgToDelete) return;
+    captureNow();
 
     triggerDelete(
       msgToDelete.subject || `Message from ${msgToDelete.email}`,
       async () => {
         try {
           await contactApi.deleteMessage(id);
-          invalidateCacheByPrefix('admin:email');
-          invalidateCacheByPrefix('admin:dashboard');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:email');
+          revalidateCacheByPrefix('admin:dashboard');
           if (selectedIds.has(id)) {
             const newSet = new Set(selectedIds);
             newSet.delete(id);
             setSelectedIds(newSet);
           }
+          restoreNow();
         } catch (err: unknown) {
           mutate([...messagesRef.current, msgToDelete]);
           const message = err instanceof Error ? err.message : 'Failed to delete message';
@@ -400,6 +438,9 @@ export function EmailMessage() {
         }
       },
       () => {
+        pendingAnchorIdRef.current = id;
+        setSelectedMessageId(id);
+        setLastAnchorId(String(id));
         mutate([...messagesRef.current, msgToDelete]);
         showToast('Message restoration undone', 'success');
       },
@@ -416,6 +457,7 @@ export function EmailMessage() {
       const idsToDelete = Array.from<number>(selectedIds);
       const msgsToDelete = messagesRef.current.filter((m) => selectedIds.has(m.id));
       if (msgsToDelete.length === 0) return;
+      captureNow();
 
       triggerDelete(
         `${msgsToDelete.length} messages`,
@@ -425,9 +467,11 @@ export function EmailMessage() {
           try {
             await bulkApi.delete('CONTACT', idsToDelete);
             setSelectedIds(new Set());
-            invalidateCacheByPrefix('admin:email');
-            invalidateCacheByPrefix('admin:dashboard');
+            markLocalSave();
+            revalidateCacheByPrefix('admin:email');
+            revalidateCacheByPrefix('admin:dashboard');
             showToast(`${msgsToDelete.length} messages successfully queued for deletion`, 'success');
+            restoreNow();
           } catch {
             mutate([...messagesRef.current, ...msgsToDelete]);
             showToast('Failed to queue deletion', 'error');
@@ -439,6 +483,7 @@ export function EmailMessage() {
         () => {
           mutate([...messagesRef.current, ...msgsToDelete]);
           showToast('Bulk removal undone', 'success');
+          restoreNow();
         },
       );
 
@@ -446,13 +491,16 @@ export function EmailMessage() {
       mutate(messagesRef.current.filter((m) => !selectedIds.has(m.id)));
     } else {
       try {
+        captureNow();
         setIsBulkUpdating(true);
         await Promise.all(Array.from<number>(selectedIds).map((id) => contactApi.updateMessageStatus(id, action)));
-        invalidateCacheByPrefix('admin:email');
-        invalidateCacheByPrefix('admin:dashboard');
+        markLocalSave();
+        revalidateCacheByPrefix('admin:email');
+        revalidateCacheByPrefix('admin:dashboard');
         showToast(`Bulk action completed for ${selectedIds.size} messages`, 'success');
         setSelectedIds(new Set());
-        await refetch();
+        await refetch(true);
+        restoreNow();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to perform bulk action';
         showToast(message, 'error');
@@ -565,14 +613,60 @@ export function EmailMessage() {
     ) {
       return;
     }
+    const onlySearchChanged =
+      prev.debouncedSearch !== debouncedSearch &&
+      prev.filterType === filterType &&
+      prev.showArchived === showArchived &&
+      prev.emailSortDir === emailSortDir;
     prevEmailFiltersRef.current = {
       debouncedSearch,
       filterType,
       showArchived,
       emailSortDir,
     };
+
+    if (selectedMessageId !== null) {
+      const idx = groupedArray.findIndex((g) => g.messages.some((m) => m.id === selectedMessageId));
+      if (idx >= 0) {
+        const targetPage = findPageForItemIndex(idx, pageSize);
+        if (targetPage !== currentPage) {
+          setPage(targetPage);
+        }
+        if (!onlySearchChanged) {
+          restoreNow(String(selectedMessageId));
+        }
+        return;
+      }
+    }
     setPage(1);
-  }, [debouncedSearch, filterType, showArchived, emailSortDir, setPage]);
+  }, [
+    debouncedSearch,
+    filterType,
+    showArchived,
+    emailSortDir,
+    groupedArray,
+    pageSize,
+    currentPage,
+    selectedMessageId,
+    setPage,
+    restoreNow,
+  ]);
+
+  useEffect(() => {
+    const targetId = pendingAnchorIdRef.current;
+    if (targetId === null) return;
+    pendingAnchorIdRef.current = null;
+    const idx = groupedArray.findIndex((g) => g.messages.some((m) => m.id === targetId));
+    if (idx >= 0) {
+      const targetPage = findPageForItemIndex(idx, pageSize);
+      if (targetPage !== currentPage) {
+        setPage(targetPage);
+      }
+      restoreNow(String(targetId));
+    } else {
+      restoreNow();
+    }
+  }, [groupedArray, pageSize, currentPage, setPage, restoreNow]);
 
   const loading = (isLoading && messages.length === 0) || isBulkUpdating;
 
@@ -654,28 +748,36 @@ export function EmailMessage() {
             {/* Sort direction dropdown */}
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Sort:</label>
-              <select
+              <ScrollableSelect
                 value={emailSortDir}
-                onChange={(e) => { setEmailSortDir(e.target.value as 'desc' | 'asc'); setPage(1); }}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
-              >
-                <option value="desc">Latest to Oldest</option>
-                <option value="asc">Oldest to Latest</option>
-              </select>
+                onChange={(val) => setEmailSortDir(val as 'desc' | 'asc')}
+                options={[
+                  { value: 'desc', label: 'Latest to Oldest' },
+                  { value: 'asc', label: 'Oldest to Latest' },
+                ]}
+                ariaLabel="Sort messages"
+                menuMaxHeightClass="max-h-52"
+                className="min-w-[165px]"
+              />
             </div>
 
             {/* Message type dropdown */}
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Type:</label>
-              <select
+              <ScrollableSelect
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value as 'ALL' | 'EMAIL' | 'RESERVATION' | 'CREDENTIAL_REQUEST')}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
-              >
-                <option value="ALL">All Types</option>
-                <option value="EMAIL">Email Only</option>
-                <option value="RESERVATION">Reservation Only</option>
-              </select>
+                onChange={(val) =>
+                  setFilterType(val as 'ALL' | 'EMAIL' | 'RESERVATION' | 'CREDENTIAL_REQUEST')
+                }
+                options={[
+                  { value: 'ALL', label: 'All Types' },
+                  { value: 'EMAIL', label: 'Email Only' },
+                  { value: 'RESERVATION', label: 'Reservation Only' },
+                ]}
+                ariaLabel="Filter message type"
+                menuMaxHeightClass="max-h-52"
+                className="min-w-[165px]"
+              />
             </div>
 
             {/* Vertical divider */}
@@ -697,24 +799,17 @@ export function EmailMessage() {
 
             {/* Room/Table Availability Switcher */}
             <div className="flex flex-wrap items-center gap-2">
-              <label
-                htmlFor="admin-room-availability-select"
-                className="text-xs font-semibold text-gray-500 whitespace-nowrap"
-              >
+              <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">
                 Room/Table:
-              </label>
-              <select
-                id="admin-room-availability-select"
+              </span>
+              <ScrollableSelect
                 value={selectedRoom}
-                onChange={(e) => setSelectedRoom(e.target.value as ReservationRoomName)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
-              >
-                {RESERVATION_ROOMS.map((room) => (
-                  <option key={room} value={room}>
-                    {room}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedRoom(val as ReservationRoomName)}
+                options={RESERVATION_ROOMS.map((room) => ({ value: room, label: room }))}
+                ariaLabel="Room or table availability"
+                menuMaxHeightClass="max-h-52"
+                className="min-w-[210px]"
+              />
               <button
                 type="button"
                 onClick={handleToggleRoomAvailability}
@@ -1141,10 +1236,11 @@ export function EmailMessage() {
                     if (result.success) {
                       showToast(`Reply sent to ${emailPayload.email}`, 'success');
                       setBackgroundSends((prev) => prev.filter((s) => s.id !== sendId));
-                      invalidateCacheByPrefix('admin:email');
-                      invalidateCacheByPrefix('admin:dashboard');
-                      await refetch();
-                      restoreNow();
+                      pendingAnchorIdRef.current = emailPayload.id;
+                      markLocalSave();
+                      revalidateCacheByPrefix('admin:email');
+                      revalidateCacheByPrefix('admin:dashboard');
+                      await refetch(true);
                     } else {
                       setBackgroundSends((prev) => prev.map((s) => (s.id === sendId ? { ...s, isError: true, errorMessage: result.detail || 'Failed to send' } : s)));
                     }

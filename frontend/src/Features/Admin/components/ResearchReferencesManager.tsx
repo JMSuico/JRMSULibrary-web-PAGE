@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   referenceApi,
@@ -11,10 +11,11 @@ import { bulkApi } from '@/src/Endpoints/bulkApi';
 import { Search, Plus, Edit2, Trash2, X, Save, Upload, Link, Loader2, CheckCircle2 } from 'lucide-react';
 import {
   useCachedQuery,
-  invalidateCacheByPrefix,
+  revalidateCacheByPrefix,
   useChunkedSync,
   useDebounce,
   useDraggableScroll,
+  useModalSafeCmsSync,
   usePersistentState,
   useScrollRestoration,
   useToast,
@@ -25,6 +26,7 @@ import { Pagination } from '@/src/Components/Shared/Pagination';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { ExcelUploadModal } from '@/src/Features/Admin/components/ExcelUploadModal';
 import { DragDropFileUpload } from '@/src/Components/Shared/DragDropFileUpload';
+import { ScrollableSelect, type ScrollableSelectOption } from '@/src/Components/Shared/ScrollableSelect';
 
 const DEPT_SHORT: Record<string, string> = {
   'Research of Bachelor of Science in Forestry (BSF)': 'BSF',
@@ -33,7 +35,7 @@ const DEPT_SHORT: Record<string, string> = {
   'Narrative Report of Secondary Education': 'Secondary Ed.',
 };
 
-export function ResearchReferencesManager() {
+export function ResearchReferencesManager({ active = true }: { active?: boolean }) {
   const [page, setPage] = usePersistentState<number>('admin:references:page', 1, { storage: 'session' });
   const [limit, setLimit] = usePersistentState<number>('admin:references:limit', 20, { storage: 'session' });
   const [search, setSearch] = usePersistentState<string>('admin:references:search', '', { storage: 'session' });
@@ -46,8 +48,9 @@ export function ResearchReferencesManager() {
   const [editingRef, setEditingRef] = useState<ResearchReference | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Controlled category inside the Add/Edit form (to drive department enable/disable)
+  // Controlled category & department inside the Add/Edit form (to drive department enable/disable)
   const [formCategory, setFormCategory] = useState<string>('Research for College Student in JRMSU');
+  const [formDepartment, setFormDepartment] = useState<string>('');
 
   // Access type fields
   const [accessType, setAccessType] = useState<'none' | 'link' | 'file'>('none');
@@ -72,12 +75,13 @@ export function ResearchReferencesManager() {
     fetcher: () => referenceApi.getAllReferences(page, limit, debouncedSearch, filterCategory, filterDepartment),
     staleTimeMs: 30_000,
     persistStorage: true,
-    listenCmsUpdate: true,
+    enabled: active,
+    listenCmsUpdate: false,
   });
 
-  const { highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
+  const { captureNow, highlightedId, setLastAnchorId, restoreNow } = useScrollRestoration({
     storageKey: 'admin:references',
-    isReady: !loading,
+    isReady: active && !loading,
     horizontalRef: scrollRef,
   });
 
@@ -101,7 +105,8 @@ export function ResearchReferencesManager() {
   }, [page, limit, debouncedSearch, filterCategory, filterDepartment]);
 
   const { state: syncState, startSync, cancelSync, resetSync } = useChunkedSync(() => {
-    invalidateCacheByPrefix('admin:references');
+    markLocalSave();
+    revalidateCacheByPrefix('admin:references');
     refetch();
     setTimeout(() => {
       resetSync();
@@ -109,19 +114,33 @@ export function ResearchReferencesManager() {
     }, 3000);
   });
 
+  const { markLocalSave } = useModalSafeCmsSync({
+    enabled: active,
+    isBusy:
+      isModalOpen ||
+      isUploadModalOpen ||
+      isSaving ||
+      isDeletingBulk ||
+      syncState.isActive ||
+      Boolean(undoState?.isOpen),
+    captureNow,
+    restoreNow,
+    onSync: () => refetch(),
+  });
+
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
     setPage(1);
   };
 
-  const handleFilterCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilterCategory(e.target.value);
+  const handleFilterCategoryChange = (nextCategory: string) => {
+    setFilterCategory(nextCategory);
     setFilterDepartment('All');
     setPage(1);
   };
 
-  const handleFilterDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilterDepartment(e.target.value);
+  const handleFilterDepartmentChange = (nextDepartment: string) => {
+    setFilterDepartment(nextDepartment);
     setPage(1);
   };
 
@@ -133,12 +152,13 @@ export function ResearchReferencesManager() {
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSaving) return;
+    captureNow(editingRef?.id ?? null);
     setIsSaving(true);
     showToast('Saving reference...', 'info');
 
     const fd = new FormData(e.currentTarget);
-    const catValue = fd.get('category') as string;
-    const deptValue = fd.get('department') as string;
+    const catValue = formCategory;
+    const deptValue = formDepartment;
 
     const payload: Partial<ResearchReference> = {
       category: catValue as ResearchReference['category'],
@@ -180,11 +200,18 @@ export function ResearchReferencesManager() {
       }
 
       setIsModalOpen(false);
-      invalidateCacheByPrefix('admin:references');
-      await refetch();
+      markLocalSave();
+      revalidateCacheByPrefix('admin:references');
+      const refreshed = await refetch();
       if (savedRef?.id != null) {
+        const results = refreshed?.results ?? dataRef.current?.results ?? [];
+        const isOnCurrentPage = results.some((r) => r.id === savedRef.id);
         setLastAnchorId(savedRef.id);
-        restoreNow(savedRef.id);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreNow(isOnCurrentPage ? savedRef.id : null);
+          });
+        });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save reference';
@@ -195,6 +222,7 @@ export function ResearchReferencesManager() {
   };
 
   const handleDelete = (ref: ResearchReference) => {
+    captureNow(null);
     if (dataRef.current) {
       mutate({
         ...dataRef.current,
@@ -207,17 +235,34 @@ export function ResearchReferencesManager() {
       async () => {
         try {
           await referenceApi.deleteReference(ref.id);
-          invalidateCacheByPrefix('admin:references');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:references');
           await refetch();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(null);
+            });
+          });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'Failed to delete reference';
           showToast(message, 'error');
           await refetch();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(ref.id);
+            });
+          });
         }
       },
       () => {
         showToast('Deletion undone', 'success');
-        refetch();
+        refetch().then(() => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreNow(ref.id);
+            });
+          });
+        });
       },
     );
   };
@@ -242,6 +287,7 @@ export function ResearchReferencesManager() {
     const idsToDelete = Array.from<number>(selectedIds);
     const count = idsToDelete.length;
 
+    captureNow(null);
     if (dataRef.current) {
       mutate({
         ...dataRef.current,
@@ -257,7 +303,8 @@ export function ResearchReferencesManager() {
         try {
           await bulkApi.delete('RESEARCH_REF', idsToDelete);
           setSelectedIds(new Set());
-          invalidateCacheByPrefix('admin:references');
+          markLocalSave();
+          revalidateCacheByPrefix('admin:references');
           showToast(`${count} references successfully queued for deletion`, 'success');
           await refetch();
         } catch {
@@ -278,12 +325,52 @@ export function ResearchReferencesManager() {
   const openModal = (ref: ResearchReference | null = null) => {
     setEditingRef(ref);
     setFormCategory(ref?.category || 'Research for College Student in JRMSU');
+    setFormDepartment(ref?.department || '');
     setAccessType(ref?.access_type || 'none');
     setSelectedFile(null);
     setIsModalOpen(true);
   };
 
   const isStudentResearch = formCategory === 'Research for College Student in JRMSU';
+
+  const filterCategoryOptions = useMemo<ScrollableSelectOption[]>(
+    () => [
+      { value: 'All', label: 'All Categories' },
+      { value: 'Research for College Student in JRMSU', label: 'Student Research' },
+      { value: 'Thesis and Dissertation', label: 'Thesis & Dissertation' },
+    ],
+    [],
+  );
+
+  const filterDepartmentOptions = useMemo<ScrollableSelectOption[]>(
+    () => [
+      { value: 'All', label: 'All Departments' },
+      ...RESEARCH_DEPARTMENTS.map((d) => ({
+        value: d,
+        label: DEPT_SHORT[d] ?? d,
+      })),
+    ],
+    [],
+  );
+
+  const modalCategoryOptions = useMemo<ScrollableSelectOption[]>(
+    () => [
+      { value: 'Research for College Student in JRMSU', label: 'Research for College Student in JRMSU' },
+      { value: 'Thesis and Dissertation', label: 'Thesis and Dissertation' },
+    ],
+    [],
+  );
+
+  const modalDepartmentOptions = useMemo<ScrollableSelectOption[]>(
+    () => [
+      { value: '', label: 'Select department...', disabled: true },
+      ...RESEARCH_DEPARTMENTS.map((d) => ({
+        value: d,
+        label: d,
+      })),
+    ],
+    [],
+  );
 
   return (
     <div>
@@ -302,30 +389,27 @@ export function ResearchReferencesManager() {
             />
           </div>
 
-          <select
+          <ScrollableSelect
             value={filterCategory}
+            options={filterCategoryOptions}
             onChange={handleFilterCategoryChange}
-            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          >
-            <option value="All">All Categories</option>
-            <option value="Research for College Student in JRMSU">Student Research</option>
-            <option value="Thesis and Dissertation">Thesis & Dissertation</option>
-          </select>
+            ariaLabel="Filter by category"
+            menuMaxHeightClass="max-h-56"
+            className="w-full sm:w-auto min-w-[160px]"
+          />
 
           {/* Department filter — only meaningful when category is Student Research */}
-          <select
+          <ScrollableSelect
             value={filterDepartment}
+            options={filterDepartmentOptions}
             onChange={handleFilterDepartmentChange}
             disabled={filterCategory === 'Thesis and Dissertation'}
-            className={`px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-opacity ${
-              filterCategory === 'Thesis and Dissertation' ? 'opacity-40 cursor-not-allowed' : ''
+            ariaLabel="Filter by department"
+            menuMaxHeightClass="max-h-56"
+            className={`w-full sm:w-auto min-w-[160px] transition-opacity ${
+              filterCategory === 'Thesis and Dissertation' ? 'opacity-40' : ''
             }`}
-          >
-            <option value="All">All Departments</option>
-            {RESEARCH_DEPARTMENTS.map((d) => (
-              <option key={d} value={d}>{DEPT_SHORT[d] ?? d}</option>
-            ))}
-          </select>
+          />
         </div>
 
         {/* Action buttons */}
@@ -518,16 +602,20 @@ export function ResearchReferencesManager() {
                 {/* Category */}
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
-                  <select
-                    name="category"
+                  <ScrollableSelect
                     value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
+                    options={modalCategoryOptions}
+                    onChange={(nextCategory) => {
+                      setFormCategory(nextCategory);
+                      if (nextCategory !== 'Research for College Student in JRMSU') {
+                        setFormDepartment('');
+                      }
+                    }}
                     required
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm"
-                  >
-                    <option value="Research for College Student in JRMSU">Research for College Student in JRMSU</option>
-                    <option value="Thesis and Dissertation">Thesis and Dissertation</option>
-                  </select>
+                    ariaLabel="Category"
+                    menuMaxHeightClass="max-h-48"
+                    className="w-full"
+                  />
                 </div>
 
                 {/* Department — enabled only for student research */}
@@ -535,22 +623,17 @@ export function ResearchReferencesManager() {
                   <label className={`block text-sm font-semibold mb-2 transition-colors ${isStudentResearch ? 'text-gray-700' : 'text-gray-300'}`}>
                     Department {isStudentResearch ? '*' : '(not applicable for Thesis)'}
                   </label>
-                  <select
-                    name="department"
-                    defaultValue={editingRef?.department || ''}
+                  <ScrollableSelect
+                    value={formDepartment}
+                    options={modalDepartmentOptions}
+                    onChange={setFormDepartment}
+                    placeholder="Select department..."
                     disabled={!isStudentResearch}
                     required={isStudentResearch}
-                    className={`w-full px-4 py-2.5 border rounded-lg outline-none text-sm transition-all ${
-                      isStudentResearch
-                        ? 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900'
-                        : 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed opacity-50'
-                    }`}
-                  >
-                    <option value="">Select department...</option>
-                    {RESEARCH_DEPARTMENTS.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
+                    ariaLabel="Department"
+                    menuMaxHeightClass="max-h-48"
+                    className={`w-full transition-all ${!isStudentResearch ? 'opacity-50' : ''}`}
+                  />
                   {!isStudentResearch && (
                     <p className="text-xs text-gray-400 mt-1">Department is only available for student research records.</p>
                   )}

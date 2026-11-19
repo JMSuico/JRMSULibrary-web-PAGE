@@ -6,7 +6,13 @@ import { reportApi, ReportSummary, RatingsSummary } from '@/src/Endpoints/report
 import { useToast } from '@/src/Hooks/useToast';
 import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
 import { Pagination } from '@/src/Components/Shared/Pagination';
-import { usePersistentState, useScrollRestoration, usePagination } from '@/src/Hooks';
+import { ScrollableSelect } from '@/src/Components/Shared/ScrollableSelect';
+import {
+  usePersistentState,
+  useScrollRestoration,
+  usePagination,
+  useModalSafeCmsSync,
+} from '@/src/Hooks';
 import { PAGE_SIZE_OPTIONS } from '@/src/Hooks/usePagination';
 import { dynamicAxis, extractValues } from '@/src/Libs/chartUtils';
 
@@ -113,13 +119,20 @@ export function Analytics() {
     key: 'admin:analytics:summary',
     fetcher: () => reportApi.getSummary(),
     staleTimeMs: 30_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
-  useScrollRestoration({
+  const { captureNow, restoreNow } = useScrollRestoration({
     storageKey: 'admin:analytics',
     isReady: !loading && Boolean(data),
+  });
+
+  useModalSafeCmsSync({
+    isBusy: isPdfGenerating,
+    onSync: () => refetch(true),
+    captureNow,
+    restoreNow,
   });
 
   useEffect(() => {
@@ -134,16 +147,17 @@ export function Analytics() {
     }
   }, [data]);
 
-  // Guard 30s polling so hidden tabs do not fire redundant requests
+  // Guard 30s polling so hidden tabs or active PDF export do not fire redundant requests
   useEffect(() => {
     const timerId = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return;
       }
+      if (isPdfGenerating) return;
       refetch();
     }, 30000);
     return () => clearInterval(timerId);
-  }, [refetch]);
+  }, [refetch, isPdfGenerating]);
 
   const processedFeedback = useMemo(() => {
     const raw = data?.ratings_summary.recent_feedback ?? [];
@@ -653,35 +667,38 @@ export function Analytics() {
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
                 <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Sort:</label>
-                <select
+                <ScrollableSelect
                   value={feedbackSort}
-                  onChange={(e) => {
-                    setFeedbackSort(e.target.value as 'desc' | 'asc');
-                  }}
-                  className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
-                >
-                  <option value="desc">Latest to Oldest</option>
-                  <option value="asc">Oldest to Latest</option>
-                </select>
+                  onChange={(val) => setFeedbackSort(val as 'desc' | 'asc')}
+                  options={[
+                    { value: 'desc', label: 'Latest to Oldest' },
+                    { value: 'asc', label: 'Oldest to Latest' },
+                  ]}
+                  ariaLabel="Sort feedback"
+                  menuMaxHeightClass="max-h-52"
+                  className="min-w-[165px]"
+                />
               </div>
 
               <div className="flex items-center gap-2">
                 <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Rating:</label>
-                <select
-                  value={feedbackStarFilter}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setFeedbackStarFilter(v === 'all' ? 'all' : (Number(v) as 1 | 2 | 3 | 4 | 5));
-                  }}
-                  className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 outline-none cursor-pointer hover:border-navy focus:border-navy transition-colors"
-                >
-                  <option value="all">All Stars</option>
-                  <option value="1">1 Star</option>
-                  <option value="2">2 Stars</option>
-                  <option value="3">3 Stars</option>
-                  <option value="4">4 Stars</option>
-                  <option value="5">5 Stars</option>
-                </select>
+                <ScrollableSelect
+                  value={String(feedbackStarFilter)}
+                  onChange={(val) =>
+                    setFeedbackStarFilter(val === 'all' ? 'all' : (Number(val) as 1 | 2 | 3 | 4 | 5))
+                  }
+                  options={[
+                    { value: 'all', label: 'All Stars' },
+                    { value: '1', label: '1 Star' },
+                    { value: '2', label: '2 Stars' },
+                    { value: '3', label: '3 Stars' },
+                    { value: '4', label: '4 Stars' },
+                    { value: '5', label: '5 Stars' },
+                  ]}
+                  ariaLabel="Filter feedback by rating"
+                  menuMaxHeightClass="max-h-52"
+                  className="min-w-[130px]"
+                />
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { apiClient } from '@/src/Libs/apiClient';
-import { invalidateCacheByPrefix } from '@/src/Libs/swrCache';
+import { revalidateCacheByPrefix } from '@/src/Libs/swrCache';
 
 export const PERSONNEL_CACHE_KEY = 'public:personnel';
 
@@ -27,7 +27,7 @@ export const personnelApi = {
       method: 'POST',
       body: data instanceof FormData ? data : JSON.stringify(data),
     });
-    invalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
+    revalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
     return created;
   },
 
@@ -36,7 +36,7 @@ export const personnelApi = {
       method: 'PUT',
       body: data instanceof FormData ? data : JSON.stringify(data),
     });
-    invalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
+    revalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
     return updated;
   },
 
@@ -44,6 +44,6 @@ export const personnelApi = {
     await apiClient(`/personnel/${id}/`, {
       method: 'DELETE',
     });
-    invalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
+    revalidateCacheByPrefix(PERSONNEL_CACHE_KEY);
   },
 };

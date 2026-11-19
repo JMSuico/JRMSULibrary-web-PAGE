@@ -19,6 +19,7 @@ import threading
 from typing import Any, Optional, Set, Tuple
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -220,43 +221,15 @@ def handle_research_reference_post_save(sender: Any, instance: Any, created: boo
 # --------------------------------------------------------------------------
 # 3. Global Timestamp & WebSocket Broadcaster
 # --------------------------------------------------------------------------
-def update_global_timestamp(sender: Any, **kwargs: Any) -> None:
-    """
-    Catch save/delete on any model in Features app by connecting dynamically in apps.py.
-    Broadcasting database update notifications to client dashboards via WebSockets.
-    """
-    # We only care about models in our specific app
-    if getattr(sender._meta, "app_label", None) != "Features":
-        return
-
-    # Don't track SiteSettings itself to prevent loops, and exclude analytics models
-    excluded_models = {
-        "SiteSettings",
-        "SiteVisit",
-        "ContactMessage",
-        "Feedback",
-        "GeneratedReport",
-        "AIFaqCache",  # EXCLUDE to prevent AI chat questions from triggering admin screen reload storms!
-    }
-    if sender.__name__ in excluded_models:
-        return
-
-    # Clear institutional context cache when core library entities change
-    if sender.__name__ in {
-        "Personnel",
-        "ManagedLink",
-        "NewlyAcquiredBook",
-        "ResearchReference",
-        "LibraryInteriorImage",
-        "EResourceFile",
-    }:
+def _flush_global_update_signal(invalidate_ai_context: bool) -> None:
+    """Persist SiteSettings updated_at and push WebSocket update after transaction commit."""
+    if invalidate_ai_context:
         try:
             from django.core.cache import cache
             cache.delete("rizal_institution_context")
         except Exception:
             pass
 
-    # Update the timestamp
     try:
         rows_updated = SiteSettings.objects.all().update(updated_at=timezone.now())
         if rows_updated == 0:
@@ -264,7 +237,6 @@ def update_global_timestamp(sender: Any, **kwargs: Any) -> None:
     except Exception:
         pass
 
-    # Broadcast via WebSockets
     try:
         from asgiref.sync import async_to_sync
         from channels.layers import get_channel_layer
@@ -280,3 +252,36 @@ def update_global_timestamp(sender: Any, **kwargs: Any) -> None:
     except Exception:
         # Silently fail if redis/channels is not configured yet
         pass
+
+
+def update_global_timestamp(sender: Any, **kwargs: Any) -> None:
+    """
+    Catch save/delete on any model in Features app by connecting dynamically in apps.py.
+    Schedules post-commit SiteSettings timestamp update & WebSocket broadcast so open
+    transactions never contend on the single SiteSettings row lock.
+    """
+    if getattr(sender._meta, "app_label", None) != "Features":
+        return
+
+    excluded_models = {
+        "SiteSettings",
+        "SiteVisit",
+        "ContactMessage",
+        "Feedback",
+        "GeneratedReport",
+        "AIFaqCache",  # EXCLUDE to prevent AI chat questions from triggering admin screen reload storms!
+    }
+    if sender.__name__ in excluded_models:
+        return
+
+    invalidate_ai_context = sender.__name__ in {
+        "Personnel",
+        "ManagedLink",
+        "NewlyAcquiredBook",
+        "ResearchReference",
+        "LibraryInteriorImage",
+        "EResourceFile",
+    }
+
+    # Execute only after the surrounding DB transaction commits (or immediately if autocommit)
+    transaction.on_commit(lambda inv=invalidate_ai_context: _flush_global_update_signal(inv))

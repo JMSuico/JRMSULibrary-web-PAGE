@@ -48,46 +48,65 @@ class BatchService(IBatchService):
             )
         return files_copy
 
-    @transaction.atomic
-    def add_book_to_batch(self, batch_id: int, data: dict, files: dict, user_id: int) -> Any:
+    @staticmethod
+    def _ensure_book_thumbnail_safely(book: Any) -> None:
+        """Generate thumbnail after DB transaction commit so Pillow CPU never holds DB row locks."""
+        if not book or not getattr(book, 'cover_image', None):
+            return
         from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
+        try:
+            ImageOptimizerHelper.ensure_thumbnail_for_field(book.cover_image)
+        except Exception:
+            # Non-fatal: full WebP cover is already committed and readable
+            pass
 
+    def add_book_to_batch(self, batch_id: int, data: dict, files: dict, user_id: int) -> Any:
         batch = self.batch_repo.get_batch_by_id(batch_id)
         if not batch:
             raise ValueError("Batch not found")
         if batch.status != BatchStatus.OPEN:
             raise ValueError("Cannot add books to a closed or archived batch")
 
+        # Validate & optimize cover image BEFORE opening any database transaction lock
         files_copy = self._prepare_cover_files(files)
-
         data_copy = dict(data)
         data_copy['batch_id'] = batch_id
-        book = self.book_repo.create(data_copy, files_copy)
-        if book and getattr(book, 'cover_image', None):
-            ImageOptimizerHelper.ensure_thumbnail_for_field(book.cover_image)
-        self.batch_repo.record_history(batch_id, "Book Added", f"Added book: {book.title}", user_id)
+
+        with transaction.atomic():
+            book = self.book_repo.create(data_copy, files_copy)
+            self.batch_repo.record_history(batch_id, "Book Added", f"Added book: {book.title}", user_id)
+
+        self._ensure_book_thumbnail_safely(book)
         return book
 
-    @transaction.atomic
     def update_book_in_batch(self, batch_id: int, book_id: int, data: dict, files: dict, user_id: int) -> Optional[Any]:
-        from Features.Helpers.image_optimizer_helper import ImageOptimizerHelper
-
         batch = self.batch_repo.get_batch_by_id(batch_id)
         if not batch:
             raise ValueError("Batch not found")
         # Allow editing books in any batch status — admins must be able to
         # correct data errors in imported/migrated books even in closed batches.
 
-        book = self.book_repo.get_by_id(book_id)
-        if not book or str(book.batch_id) != str(batch_id):
+        existing = self.book_repo.get_by_id(book_id)
+        if not existing or str(existing.batch_id) != str(batch_id):
             return None
 
+        # Validate & optimize cover image OUTSIDE @transaction.atomic so concurrent admin edits
+        # do not hold open PostgreSQL locks while Pillow resizes/encodes images.
         files_copy = self._prepare_cover_files(files)
 
-        updated_book = self.book_repo.update(book_id, data, files_copy)
-        if updated_book and getattr(updated_book, 'cover_image', None) and 'cover_image' in files_copy:
-            ImageOptimizerHelper.ensure_thumbnail_for_field(updated_book.cover_image)
-        self.batch_repo.record_history(batch_id, "Book Updated", f"Updated book: {updated_book.title}", user_id)
+        with transaction.atomic():
+            updated_book = self.book_repo.update(book_id, data, files_copy)
+            if not updated_book:
+                return None
+            self.batch_repo.record_history(
+                batch_id,
+                "Book Updated",
+                f"Updated book: {updated_book.title}",
+                user_id,
+            )
+
+        if 'cover_image' in files_copy:
+            self._ensure_book_thumbnail_safely(updated_book)
         return updated_book
 
     @transaction.atomic

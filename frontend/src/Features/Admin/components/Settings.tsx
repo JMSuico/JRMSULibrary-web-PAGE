@@ -6,8 +6,14 @@ import type { AdminOutletContext } from '@/src/Pages/Admin/AdminLayout';
 import { settingsApi, SiteSettings } from '@/src/Endpoints/settingsApi';
 import { userApi } from '@/src/Endpoints/userApi';
 import { useToast } from '@/src/Hooks/useToast';
-import { useCachedQuery, invalidateCacheByPrefix } from '@/src/Hooks/useCachedQuery';
-import { usePersistentState, useScrollRestoration } from '@/src/Hooks';
+import { useCachedQuery } from '@/src/Hooks/useCachedQuery';
+import {
+  usePersistentState,
+  useScrollRestoration,
+  revalidateCacheByPrefix,
+  useModalSafeCmsSync,
+} from '@/src/Hooks';
+import { ScrollableSelect } from '@/src/Components/Shared/ScrollableSelect';
 import { ArchivesManager } from './ArchivesManager';
 
 export function Settings() {
@@ -50,6 +56,7 @@ export function Settings() {
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    captureNow();
     setSaving(true);
     try {
       const payload: Record<string, string> = {};
@@ -71,10 +78,12 @@ export function Settings() {
       }
 
       setUser(updatedUser);
-      invalidateCacheByPrefix('admin:users');
+      markLocalSave();
+      revalidateCacheByPrefix('admin:users');
       setSavedStatus(true);
       setIsEditing(false);
       showToast('Profile updated successfully', 'success');
+      restoreNow();
       setTimeout(() => setSavedStatus(false), 3000);
     } catch (err: unknown) {
       const message =
@@ -119,20 +128,40 @@ export function Settings() {
     data: cachedSettings,
     isLoading,
     error: settingsError,
+    refetch: refetchSettings,
     mutate: mutateSettings,
   } = useCachedQuery<SiteSettings>({
     key: 'admin:settings',
     fetcher: () => settingsApi.getSettings(),
     staleTimeMs: 60_000,
-    listenCmsUpdate: true,
+    listenCmsUpdate: false,
     persistStorage: true,
   });
 
   const loading = isLoading && !cachedSettings;
 
-  useScrollRestoration({
+  const { captureNow, restoreNow } = useScrollRestoration({
     storageKey: 'admin:settings',
     isReady: activeTab === 'archives' || !loading,
+  });
+
+  const hasUnsavedPassword = Boolean(passwords.current || passwords.newPass || passwords.confirm);
+  const hasUnsavedProfile =
+    Boolean(avatarFile) ||
+    (user
+      ? firstName !== user.first_name ||
+        lastName !== user.last_name ||
+        email !== user.email ||
+        username !== user.username
+      : false);
+  const isCmsSyncBusy =
+    saving || isEditing || Boolean(bgImageFile) || hasUnsavedPassword || hasUnsavedProfile;
+
+  const { markLocalSave } = useModalSafeCmsSync({
+    isBusy: isCmsSyncBusy,
+    onSync: () => refetchSettings(true),
+    captureNow,
+    restoreNow,
   });
 
   useEffect(() => {
@@ -170,6 +199,7 @@ export function Settings() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving) return;
+    captureNow();
     setSaving(true);
     setSavedStatus(false);
     showToast('Saving settings...', 'info');
@@ -200,7 +230,8 @@ export function Settings() {
         const updated = await settingsApi.updateSettings(payload);
         setFormData(updated);
         mutateSettings(updated);
-        invalidateCacheByPrefix('admin:settings');
+        markLocalSave();
+        revalidateCacheByPrefix('admin:settings');
         setBgImageFile(null);
         if (updated.background_image) {
           setBgImagePreview(updated.background_image);
@@ -213,6 +244,7 @@ export function Settings() {
         setSavedStatus(true);
         setIsEditing(false);
         showToast('Settings saved successfully', 'success');
+        restoreNow();
         setTimeout(() => setSavedStatus(false), 3000);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to save settings';
@@ -230,9 +262,11 @@ export function Settings() {
           new_password: passwords.newPass,
         });
         setPasswords({ current: '', newPass: '', confirm: '' });
+        markLocalSave();
         setSavedStatus(true);
         setIsEditing(false);
         showToast('Password updated successfully', 'success');
+        restoreNow();
         setTimeout(() => setSavedStatus(false), 3000);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update password';
@@ -434,17 +468,39 @@ export function Settings() {
                       </div>
                       <div>
                         <label className={labelClass}>Saturday</label>
-                        <select name="opening_hours_sat" value={formData.opening_hours_sat} onChange={handleChange} className={inputClass} required disabled={!isEditing}>
-                          <option value="Open">Open</option>
-                          <option value="Closed">Closed</option>
-                        </select>
+                        <ScrollableSelect
+                          value={formData.opening_hours_sat}
+                          onChange={(val) =>
+                            setFormData((prev) => ({ ...prev, opening_hours_sat: val }))
+                          }
+                          options={[
+                            { value: 'Open', label: 'Open' },
+                            { value: 'Closed', label: 'Closed' },
+                          ]}
+                          disabled={!isEditing}
+                          required
+                          ariaLabel="Saturday opening hours"
+                          menuMaxHeightClass="max-h-52"
+                          className="w-full mt-1"
+                        />
                       </div>
                       <div>
                         <label className={labelClass}>Sunday</label>
-                        <select name="opening_hours_sun" value={formData.opening_hours_sun} onChange={handleChange} className={inputClass} required disabled={!isEditing}>
-                          <option value="Open">Open</option>
-                          <option value="Closed">Closed</option>
-                        </select>
+                        <ScrollableSelect
+                          value={formData.opening_hours_sun}
+                          onChange={(val) =>
+                            setFormData((prev) => ({ ...prev, opening_hours_sun: val }))
+                          }
+                          options={[
+                            { value: 'Open', label: 'Open' },
+                            { value: 'Closed', label: 'Closed' },
+                          ]}
+                          disabled={!isEditing}
+                          required
+                          ariaLabel="Sunday opening hours"
+                          menuMaxHeightClass="max-h-52"
+                          className="w-full mt-1"
+                        />
                       </div>
                     </div>
 
